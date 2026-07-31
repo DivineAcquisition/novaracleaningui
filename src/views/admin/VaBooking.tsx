@@ -113,7 +113,7 @@ import {
 
 // ─── Types & constants ─────────────────────────────────────────────────
 
-type ServiceType = "standard" | "deep" | "moveInOut" | "combo";
+type ServiceType = "standard" | "deep" | "moveInOut" | "combo" | "focused";
 type InvoiceMode =
   | "deposit_plus_remaining"
   | "deposit_plus_preauth"
@@ -126,6 +126,12 @@ const SERVICE_TYPE_OPTIONS: {
   subline: string;
   multiplier: number;
 }[] = [
+  {
+    id: "focused",
+    label: "Focused / Single-Area",
+    subline: "Per-area flat rates · pay in full",
+    multiplier: SERVICE_TIER_PRICING.focused.multiplier,
+  },
   {
     id: "standard",
     label: "Standard Clean",
@@ -480,6 +486,10 @@ export default function VaBooking() {
   // Service
   const [homeSizeId, setHomeSizeId] = useState("1501_2000");
   const [serviceType, setServiceType] = useState<ServiceType>("standard");
+  // Focused cleans are always paid in full at booking.
+  useEffect(() => {
+    if (serviceType === "focused") setInvoiceMode("full_now");
+  }, [serviceType]);
   const [addOns, setAddOns] = useState<string[]>([]);
   const [deepClean, setDeepClean] = useState<DeepCleanChoice>({ deepCleanedBefore: "", includeDeepClean: true });
   const [bedrooms, setBedrooms] = useState("");

@@ -48,13 +48,15 @@ export const HOME_SIZE_RANGES: HomeSizeRange[] = [
 ];
 
 // ─── Service tier multipliers (applied to the standard-clean base) ───────
-export type ServiceType = "standard" | "deep" | "combo" | "moveInOut";
+export type ServiceType = "standard" | "deep" | "combo" | "moveInOut" | "focused";
 
 export const SERVICE_TIER_PRICING: Record<ServiceType, { label: string; multiplier: number }> = {
   standard:  { label: "Standard Clean",          multiplier: 1.0 },
   deep:      { label: "Deep Clean",              multiplier: 1.5 },
   combo:     { label: "Deep + Standard Combo",   multiplier: 2.5 }, // = standard (1.0) + deep (1.5)
   moveInOut: { label: "Move-In / Move-Out",      multiplier: 2.0 },
+  // Focused cleans do NOT use the sqft multiplier — see focused-same-day.ts.
+  focused:   { label: "Focused / Single-Area Clean", multiplier: 0 },
 };
 
 // ─── Zones ───────────────────────────────────────────────────────────────
@@ -157,6 +159,7 @@ export const SERVICE_DISCOUNT_RATES: Record<ServiceType, number> = {
                    // applied separately in computeServicePrice() — NOT as a flat
                    // percentage on the bundle subtotal.
   moveInOut: 0,    // No additional discount on Move-In/Out.
+  focused:   0,    // Flat per-area rates — no acquisition discount.
 };
 
 // ─── Deposit ─────────────────────────────────────────────────────────────
@@ -178,6 +181,7 @@ export function getServiceListPrice(
   serviceType: ServiceType | string,
   zone: ZoneId = "B",
 ): number {
+  if (serviceType === "focused") return 0; // per-area flat rates — see focused-same-day.ts
   const home = getHomeSize(homeSizeId);
   if (!home || home.standardPrice === 0) return 0;
   const tier = SERVICE_TIER_PRICING[serviceType as ServiceType];

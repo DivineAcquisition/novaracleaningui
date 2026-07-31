@@ -34,6 +34,8 @@ interface SchedulePickerProps {
    * admin — any date from today, including weekends, up to 1 year out.
    */
   mode?: "customer" | "admin";
+  /** When true (same-day service selected before cutoff), customer can pick today. */
+  allowSameDay?: boolean;
 }
 
 // Extended time windows - more granular slots
@@ -71,9 +73,12 @@ export function SchedulePicker({
   continueDisabled = false,
   isProcessing = false,
   mode = "customer",
+  allowSameDay = false,
 }: SchedulePickerProps) {
   const isAdminMode = mode === "admin";
-  const minDate = isAdminMode ? startOfDay(new Date()) : addDays(new Date(), 3);
+  const minDate = isAdminMode || allowSameDay
+    ? startOfDay(new Date())
+    : addDays(new Date(), 3);
   const endDate = addDays(new Date(), isAdminMode ? 365 : 60);
   const [currentMonth, setCurrentMonth] = useState(startOfMonth(minDate));
 
@@ -99,6 +104,8 @@ export function SchedulePicker({
   const isDateDisabled = (date: Date) => {
     if (isBefore(startOfDay(date), startOfDay(minDate))) return true;
     if (isAdminMode) return false;
+    // Same-day may land on a weekend; still allow that one day.
+    if (allowSameDay && isSameDay(date, new Date())) return false;
     return isWeekend(date);
   };
 

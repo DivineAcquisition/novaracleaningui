@@ -39,6 +39,13 @@ import { BottomNavigation } from "@/components/booking/BottomNavigation";
 // card below (original strikethrough + discounts + 50% deposit + remaining).
 import { Skeleton } from "@/components/ui/skeleton";
 import { calculatePrice, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, MEMBERSHIP_PLANS, getEstimatedHours } from "@/lib/pricing-system";
+import {
+  FOCUSED_SAME_DAY_DEFAULTS,
+  calculateFocusedPrice,
+  formatFocusedAreasLabel,
+  withSameDayUpcharge,
+  type FocusedCondition,
+} from "@/lib/focused-same-day";
 import { findBestPromoCode, formatPromoSavings, getPromoRecommendation, type EligiblePromo } from "@/lib/promo-auto-apply";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
@@ -211,10 +218,10 @@ export default function BookingCheckout() {
   const [showPromoSuggestions, setShowPromoSuggestions] = useState(false);
   const [discountSectionOpen, setDiscountSectionOpen] = useState(false);
   const isScheduleSelected = !!bookingData.serviceDate && !!bookingData.timeSlot;
-  // Customers always pay a 50% deposit at checkout — the pay-in-full
-  // option has been retired. The remaining 50% is auto-charged to the
-  // saved card when the cleaner marks the service complete.
-  const effectivePaymentOption: 'deposit' = 'deposit';
+  // Focused cleans are paid in full. Everything else (including same-day
+  // on a whole-home service) keeps the 50% deposit.
+  const isFocused = bookingData.serviceType === "focused";
+  const effectivePaymentOption: "deposit" | "full" = isFocused ? "full" : "deposit";
   const isNewMembershipSignup = bookingData.membershipPlan !== 'none' && !bookingData.useCredit;
   const isMemberUsingCredit = bookingData.useCredit === true;
   const [deepClean, setDeepClean] = useState<DeepCleanChoice>({ deepCleanedBefore: '', includeDeepClean: true });
@@ -225,8 +232,9 @@ export default function BookingCheckout() {
   useEffect(() => {
     setCurrentStep(4);
 
-    if (bookingData.paymentOption !== "deposit") {
-      updateBookingData({ paymentOption: "deposit" });
+    const desired = bookingData.serviceType === "focused" ? "full" : "deposit";
+    if (bookingData.paymentOption !== desired) {
+      updateBookingData({ paymentOption: desired });
     }
 
     if (hasCheckoutPrerequisites(bookingData)) {
@@ -265,6 +273,9 @@ export default function BookingCheckout() {
     bookingData.phone,
     bookingData.addOns,
     bookingData.membershipPlan,
+    bookingData.focusedAreas,
+    bookingData.conditionLevel,
+    bookingData.isSameDay,
   ]);
 
   // If schedule fields disappear while still on checkout, restore from
@@ -352,8 +363,40 @@ export default function BookingCheckout() {
   const homeSize = HOME_SIZE_RANGES.find(h => h.id === bookingData.homeSizeId);
   const serviceTier = SERVICE_TIER_PRICING[bookingData.serviceType as keyof typeof SERVICE_TIER_PRICING];
   const membership = MEMBERSHIP_PLANS[bookingData.membershipPlan as keyof typeof MEMBERSHIP_PLANS];
-  const depositPricing = calculatePrice(bookingData.homeSizeId, bookingData.serviceType, bookingData.addOns, bookingData.membershipPlan, bookingData.useCredit, isNewCustomer, promoDiscount + referralDiscount);
-  // fullPaymentPricing removed — pay-in-full is no longer a customer option.
+  const basePricing = isFocused
+    ? (() => {
+        const f = calculateFocusedPrice(
+          bookingData.focusedAreas || [],
+          (bookingData.conditionLevel as FocusedCondition) || "normal",
+          Boolean(bookingData.isSameDay),
+          FOCUSED_SAME_DAY_DEFAULTS,
+        );
+        return {
+          basePrice: f.areasSubtotal,
+          serviceAddition: 0,
+          addOnsTotal: 0,
+          subtotal: f.serviceTotal,
+          membershipDiscount: 0,
+          newCustomerDiscount: 0,
+          total: f.total,
+          deposit: f.deposit,
+          balanceDue: f.balanceDue,
+          hours: f.hours,
+          sameDayUpcharge: f.sameDayUpcharge,
+        };
+      })()
+    : (() => {
+        const p = calculatePrice(bookingData.homeSizeId, bookingData.serviceType, bookingData.addOns, bookingData.membershipPlan, bookingData.useCredit, isNewCustomer, promoDiscount + referralDiscount);
+        const withSd = withSameDayUpcharge(p.total, Boolean(bookingData.isSameDay), FOCUSED_SAME_DAY_DEFAULTS);
+        return {
+          ...p,
+          total: withSd.total,
+          deposit: withSd.deposit,
+          balanceDue: withSd.balanceDue,
+          sameDayUpcharge: withSd.sameDayUpcharge,
+        };
+      })();
+  const depositPricing = basePricing;
 
   // Handle Referral Code
   const handleApplyReferral = async () => {
@@ -541,15 +584,16 @@ export default function BookingCheckout() {
     const tracking = getStoredTrackingData();
     const trackingPayload = getTrackingPayload();
 
-    // Build payload with both email fields for compatibility.
-    // Hard-pin paymentOption to 'deposit' so a stale 'full' value in
-    // BookingContext (from before the Pay-in-Full UI was retired) can't
-    // make the server charge the full amount.
+    // Focused = pay in full; everything else stays deposit.
     const payload = {
       ...bookingData,
       email,
       customerEmail: email, // Also send as customerEmail for backward compatibility
-      paymentOption: 'deposit' as const,
+      paymentOption: (bookingData.serviceType === "focused" ? "full" : "deposit") as "full" | "deposit",
+      focusedAreas: bookingData.focusedAreas || [],
+      conditionLevel: bookingData.conditionLevel || "normal",
+      isSameDay: Boolean(bookingData.isSameDay),
+      sameDayAcknowledgedAt: bookingData.sameDayAcknowledgedAt || null,
       tracking: trackingPayload,
       utmSource: tracking.utm_source || undefined,
       utmMedium: tracking.utm_medium || undefined,
@@ -720,13 +764,19 @@ export default function BookingCheckout() {
       paymentInitStarted.current = false;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [depositPricing.deposit, isNewCustomer, applyWallet, walletBalanceCents]);
+  }, [depositPricing.deposit, isNewCustomer, applyWallet, walletBalanceCents, bookingData.isSameDay, bookingData.focusedAreas, bookingData.conditionLevel]);
   const currentAmount = depositPricing.deposit;
   const totalSavings = (depositPricing.newCustomerDiscount || 0) + (depositPricing.membershipDiscount || 0) + promoDiscount + referralDiscount;
   const addOnLabels = bookingData.addOns?.map(id => ADD_ONS[id as keyof typeof ADD_ONS]?.label).filter(Boolean) || [];
   return <PageTransition direction="forward">
       <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8">
-        <SEO title="Checkout" description="Complete your booking with a secure 50% deposit. Balance auto-charged after service." noindex />
+        <SEO
+          title="Checkout"
+          description={isFocused
+            ? "Pay in full to lock in your focused clean."
+            : "Complete your booking with a secure 50% deposit. Balance auto-charged after service."}
+          noindex
+        />
         <BookingHeader currentStep={currentStep} totalSteps={6} stepLabel="Checkout" />
         
         <div className="container max-w-2xl mx-auto px-4 py-6 space-y-6">
@@ -740,7 +790,9 @@ export default function BookingCheckout() {
               Review &amp; Reserve
             </h1>
             <p className="text-base md:text-lg text-muted-foreground max-w-xl mx-auto">
-              Lock in your cleaning with a 50% deposit today. Your card is securely saved on file — the remaining 50% is automatically charged after your cleaning is complete.
+              {isFocused
+                ? "Focused cleans are paid in full at booking — we schedule and dispatch only after payment succeeds."
+                : "Lock in your cleaning with a 50% deposit today. Your card is securely saved on file — the remaining 50% is automatically charged after your cleaning is complete."}
             </p>
             <div className="flex justify-center pt-1">
               <GoogleGuaranteedBadge variant="compact" />
@@ -873,20 +925,34 @@ export default function BookingCheckout() {
                 </div>
               )}
 
+              {isFocused && (bookingData.focusedAreas?.length || 0) > 0 ? (
+                <div className="text-xs text-muted-foreground">
+                  Areas: {formatFocusedAreasLabel(bookingData.focusedAreas || [], FOCUSED_SAME_DAY_DEFAULTS)}
+                  {bookingData.conditionLevel ? ` · ${bookingData.conditionLevel} condition` : ""}
+                </div>
+              ) : null}
+
               {/* Service total after discounts */}
               <div className="flex items-baseline justify-between text-sm">
                 <span className="font-semibold">Service total</span>
-                <span className="font-semibold">${depositPricing.total.toFixed(2)}</span>
+                <span className="font-semibold">${(depositPricing.total - (depositPricing.sameDayUpcharge || 0)).toFixed(2)}</span>
               </div>
+
+              {(depositPricing.sameDayUpcharge || 0) > 0 ? (
+                <div className="flex items-baseline justify-between text-sm text-amber-800">
+                  <span className="font-medium">Same-day service</span>
+                  <span className="font-semibold">+${depositPricing.sameDayUpcharge.toFixed(2)}</span>
+                </div>
+              ) : null}
 
               <Separator />
 
-              {/* PAY NOW — 50% deposit, headline */}
+              {/* PAY NOW — full for focused, 50% deposit otherwise */}
               <div className="flex items-baseline justify-between">
                 <div>
                   <div className="flex items-center gap-2">
                     <Badge className="bg-gradient-primary text-white text-[10px] uppercase tracking-wider px-2 py-0.5">
-                      50% Deposit
+                      {isFocused ? "Paid in full" : "50% Deposit"}
                     </Badge>
                     <span className="font-bold text-base">Pay now</span>
                   </div>
@@ -899,18 +965,19 @@ export default function BookingCheckout() {
                 </span>
               </div>
 
-              {/* Balance after service completion */}
-              <div className="flex items-baseline justify-between rounded-md bg-background/60 border border-primary/15 px-3 py-2">
-                <div>
-                  <div className="font-semibold text-sm">Remaining balance</div>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Auto-charged after your cleaning is complete
-                  </p>
+              {!isFocused ? (
+                <div className="flex items-baseline justify-between rounded-md bg-background/60 border border-primary/15 px-3 py-2">
+                  <div>
+                    <div className="font-semibold text-sm">Remaining balance</div>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Auto-charged after your cleaning is complete
+                    </p>
+                  </div>
+                  <span className="text-lg md:text-xl font-bold text-foreground">
+                    ${depositPricing.balanceDue.toFixed(2)}
+                  </span>
                 </div>
-                <span className="text-lg md:text-xl font-bold text-foreground">
-                  ${depositPricing.balanceDue.toFixed(2)}
-                </span>
-              </div>
+              ) : null}
             </CardContent>
           </Card>
 
@@ -1140,7 +1207,9 @@ export default function BookingCheckout() {
                 Payment Details
               </CardTitle>
               <CardDescription>
-                {`Pay $${currentAmount.toFixed(2)} deposit now • $${depositPricing.balanceDue.toFixed(2)} auto-charged after service`}
+                {isFocused
+                  ? `Pay $${currentAmount.toFixed(2)} in full now`
+                  : `Pay $${currentAmount.toFixed(2)} deposit now • $${depositPricing.balanceDue.toFixed(2)} auto-charged after service`}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">

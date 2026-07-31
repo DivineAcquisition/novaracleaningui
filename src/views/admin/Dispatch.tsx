@@ -54,6 +54,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { FocusedChecklistEditor } from "@/components/admin/FocusedChecklistEditor";
 
 const RAMP = "linear-gradient(135deg,#5C0FFE 0%,#8F7BFD 100%)";
 const CONTRACTOR_BASE = "https://contractor.novaracleaning.com";
@@ -604,6 +605,8 @@ export default function AdminDispatch() {
           )}
         </>
       )}
+
+      <FocusedChecklistEditor />
     </div>
   );
 }

@@ -10,9 +10,19 @@
 // src/lib/checklists.ts so the customer promise and the crew execution
 // list stay in lock-step.
 
+import {
+  focusedChecklistSections,
+  FOCUSED_SAME_DAY_DEFAULTS,
+  type FocusedAreaSelection,
+  type FocusedSameDaySettings,
+} from "./focused-same-day.ts";
+
 export interface ContractorChecklistSection {
   title: string;
   items: string[];
+  /** Focused cleans only — area type id for photo / conditions tying. */
+  areaId?: string;
+  instance?: number;
 }
 
 export interface ContractorChecklist {
@@ -278,6 +288,20 @@ const CHECKLISTS: Record<string, ContractorChecklist> = {
   turnover: { key: "turnover", name: "STR Turnover — Guest-Ready", sections: TURNOVER_SECTIONS },
   commercial: { key: "commercial", name: "Commercial Site Service", sections: COMMERCIAL_SECTIONS },
   office: { key: "office", name: "Office Clean (After-Hours)", sections: OFFICE_SECTIONS },
+  focused: {
+    key: "focused",
+    name: "Focused / Single-Area Clean",
+    sections: [
+      {
+        title: "Focused clean",
+        items: [
+          "Clean ONLY the areas listed on this job — do not expand to a whole-home clean",
+          "Take BEFORE and AFTER photos of each selected area",
+          "Report blocked access or damage before leaving",
+        ],
+      },
+    ],
+  },
 };
 
 /** Normalize a booking/job service_type to a checklist key. */
@@ -290,11 +314,21 @@ export function normalizeServiceType(serviceType: string | null | undefined): st
   if (raw === "turnover" || raw === "str_turnover" || raw === "str") return "turnover";
   if (raw === "commercial") return "commercial";
   if (raw === "office") return "office";
+  if (raw === "focused" || raw === "single_area" || raw === "singlearea") return "focused";
   return CHECKLISTS[raw] ? raw : "standard";
 }
 
-export function getContractorChecklist(serviceType: string | null | undefined): ContractorChecklist {
-  return CHECKLISTS[normalizeServiceType(serviceType)] || CHECKLISTS.standard;
+export function getContractorChecklist(
+  serviceType: string | null | undefined,
+  focusedAreas?: FocusedAreaSelection[] | null,
+  focusedSettings: FocusedSameDaySettings = FOCUSED_SAME_DAY_DEFAULTS,
+): ContractorChecklist {
+  const key = normalizeServiceType(serviceType);
+  if (key === "focused") {
+    const sections = focusedChecklistSections(focusedAreas || [], focusedSettings);
+    return { key: "focused", name: "Focused / Single-Area Clean", sections };
+  }
+  return CHECKLISTS[key] || CHECKLISTS.standard;
 }
 
 export function countChecklistItems(checklist: ContractorChecklist): number {

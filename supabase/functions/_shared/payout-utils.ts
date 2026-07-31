@@ -163,6 +163,7 @@ export function getEstimatedHours(homeSizeId: string): number {
 // windows so a cleaner who accepts a deep clean isn't double-booked on
 // a window sized for a standard clean.
 const SERVICE_DURATION_MULTIPLIERS: Record<string, number> = {
+  focused: 0.4,
   standard: 1.0,
   deep: 1.5,
   moveinout: 2.0,
@@ -172,6 +173,7 @@ const SERVICE_DURATION_MULTIPLIERS: Record<string, number> = {
 /** Normalize the many service_type spellings to a multiplier key. */
 function normalizeServiceKey(serviceType: string | null | undefined): string {
   const s = String(serviceType || "").toLowerCase().replace(/[\s_-]+/g, "");
+  if (s.includes("focused") || s.includes("singlearea")) return "focused";
   if (s.includes("move")) return "moveinout";
   if (s.includes("combo")) return "combo";
   if (s.includes("deep")) return "deep";
