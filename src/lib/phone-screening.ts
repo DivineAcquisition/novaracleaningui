@@ -1,17 +1,26 @@
 // ─── Contractor Phone Screening — form definition (single source of truth) ────
 //
-// Mirrors the Contractor Phone Screening Guide, TRIMMED to run in 15 minutes
-// or less (3–5 minutes for a fast disqualification): compound hard-qualifier
-// prompts, a lean availability set, Systems & Legal as single spoken blocks
-// with one confirmation each, and two high-signal scenario questions. The
-// six consents remain INDIVIDUAL — never collapsed into a blanket ack.
+// The condensed screen: four hard qualifiers, availability, ONE spoken
+// acknowledgment block, and two scenario questions. A qualified call runs in
+// well under 10 minutes; a disqualifying one ends in about a minute.
+//
+// What this deliberately does NOT ask, and why:
+//   · Driver's license / auto insurance / "room to carry a vacuum" — not
+//     screening signal; verified at onboarding if it matters.
+//   · Smartphone, data plan, app comfort — they are on the phone with us.
+//   · Work authorization as its own question — the acknowledgment covers the
+//     contractor terms, and onboarding collects the W-9.
+// The formal, individually-signed consents (contractor agreement, background
+// check authorization, W-9) still happen at onboarding. This call captures
+// VERBAL agreement, not the legal record — so nothing legally required is
+// lost by collapsing them into one acknowledgment here.
 //
 // This file defines every section, question, and read-aloud script for the
-// live-call form, the individual consent items, the standardized decline
-// reasons, and the shared validation used on both the client (to block
-// inconsistent submissions in the UI) and the server (authoritative). The
-// screening-record PDF renders from these same definitions so the record
-// always matches the form.
+// live-call form, the acknowledgment, the standardized decline reasons, and
+// the shared validation used on both the client (to block inconsistent
+// submissions in the UI) and the server (authoritative). The screening-record
+// PDF renders from these same definitions so the record always matches the
+// form.
 //
 // Pure data + pure functions — safe to import from client components and
 // from Next.js API routes.
@@ -41,6 +50,8 @@ export interface ScreeningQuestion {
   placeholder?: string;
   /** Gates only: can be marked "pending" (fixable) instead of a hard fail. */
   fixable?: boolean;
+  /** Gates only: label for the pending option, when "fixable" needs wording. */
+  pendingLabel?: string;
   /** Optional captures (notes) don't count toward section progress. */
   optional?: boolean;
 }
@@ -50,8 +61,8 @@ export interface ScreeningSection {
   title: string;
   /** Read-aloud intro for the section. */
   intro?: string;
-  /** The consents section renders from CONSENT_ITEMS instead of questions. */
-  isConsents?: boolean;
+  /** The acknowledgment section renders from ACKNOWLEDGMENT, not questions. */
+  isAcknowledgment?: boolean;
   questions: ScreeningQuestion[];
 }
 
@@ -68,6 +79,11 @@ export interface ConsentCapture {
   by_name?: string;
 }
 
+/**
+ * Shape of the `phone_screenings.consents` column. The condensed form writes a
+ * single entry under ACKNOWLEDGMENT_KEY; rows from the older six-consent form
+ * still carry their original keys and are rendered as-is on the PDF.
+ */
 export type ScreeningConsents = Record<string, ConsentCapture>;
 
 export interface ScreeningScorecard {
@@ -79,12 +95,26 @@ export interface ScreeningScorecard {
 
 // ─── Sections ──────────────────────────────────────────────────────────────────
 
+/**
+ * Age is the one gate with no fixable path and no override: a minor cannot
+ * sign a contractor agreement, so a failed age gate can only end in Decline.
+ * Enforced in hardQualifierState() and validateScreeningOutcome(), on both the
+ * client and the server.
+ */
+export const AGE_GATE_KEY = "age_18";
+
+/** Passing this gate is what feeds cleaners.max_travel_miles downstream. */
+export const TRAVEL_GATE_KEY = "travel_30_40";
+
+/** Miles credited to the contractor record when the travel gate passes. */
+export const TRAVEL_GATE_MILES = 40;
+
 export const SCREENING_SECTIONS: ScreeningSection[] = [
   {
     id: "opening",
     title: "Call Opening",
     intro:
-      "Hi, may I speak with {name}? This is {screener} calling from Novara Cleaning about the cleaning contractor application you submitted. Do you have about 15 minutes for a quick screen?",
+      "Hi, may I speak with {name}? This is {screener} calling from Novara Cleaning about the cleaning contractor application you submitted. Do you have about 10 minutes for a quick screen?",
     questions: [
       { key: "identity_confirmed", label: "Confirmed speaking with the applicant", kind: "yesno" },
       {
@@ -107,71 +137,40 @@ export const SCREENING_SECTIONS: ScreeningSection[] = [
     id: "qualifiers",
     title: "Hard Qualifiers",
     intro:
-      "First I need to run through a few quick requirements — every contractor has to meet these before we can move forward, so I'll get them out of the way up front.",
+      "First I need to run through four quick requirements — every contractor has to meet these before we can move forward, so I'll get them out of the way up front.",
     questions: [
       {
-        key: "age_work_auth",
-        label: "18+ and authorized to work in the U.S.",
+        key: AGE_GATE_KEY,
+        label: "18 or older",
         kind: "gate",
-        script: "Are you 18 or older and legally authorized to work in the US?",
+        script: "Are you 18 or older?",
+        guidance:
+          "Hard stop, no exceptions — a minor cannot sign a contractor agreement. Under 18 is the one answer that can only end in Decline.",
         fixable: false,
       },
       {
         key: "photo_id",
-        label: "Valid government-issued photo ID",
+        label: "Valid photo ID",
         kind: "gate",
-        script: "Do you have a valid government-issued photo ID?",
+        script: "Do you have a valid photo ID?",
+        guidance:
+          "\"I can get one\" is not a pass — mark it fixable and route to Hold with a follow-up date.",
         fixable: true,
+        pendingLabel: "Can get one — Hold",
       },
       {
-        key: "vehicle",
-        label: "Own vehicle + license + insurance + capacity",
+        key: "own_car",
+        label: "Own car",
         kind: "gate",
-        script:
-          "Do you have your own reliable vehicle with a valid license and current insurance, and room to carry a vacuum and supplies?",
-        fixable: true,
+        script: "Do you have your own car?",
+        fixable: false,
       },
       {
-        key: "own_products",
-        label: "Able to bring own products & equipment",
+        key: TRAVEL_GATE_KEY,
+        label: "Can travel 30–40 miles for a job",
         kind: "gate",
-        script: "Are you able to bring your own cleaning products and equipment to jobs?",
-        fixable: true,
-      },
-      {
-        key: "supplies_note",
-        label: "Supplies note (optional)",
-        kind: "text",
-        placeholder: "e.g. Already stocked · Needs to buy basics first",
-        optional: true,
-      },
-      {
-        key: "phone_app",
-        label: "Smartphone with data + app-ready",
-        kind: "gate",
-        script:
-          "Do you have a smartphone with data and are you comfortable using an app to accept jobs, follow the checklist, and upload photos?",
-        fixable: true,
-      },
-      {
-        key: "home_base",
-        label: "Home base (city / ZIP)",
-        kind: "text",
-        script: "Where are you based, and how far will you travel?",
-        placeholder: "e.g. Rockville, 20850",
-      },
-      {
-        key: "travel_radius",
-        label: "Travel radius (miles)",
-        kind: "text",
-        placeholder: "e.g. 20",
-      },
-      {
-        key: "no_serve_note",
-        label: "Areas they won't serve (optional)",
-        kind: "text",
-        placeholder: "e.g. DC proper, anything past Baltimore",
-        optional: true,
+        script: "Are you able to travel up to 30–40 miles for a job?",
+        fixable: false,
       },
     ],
   },
@@ -202,6 +201,8 @@ export const SCREENING_SECTIONS: ScreeningSection[] = [
         kind: "text",
         script:
           "Is there a hard cutoff — a time of day after which you can never work? For example, needing to be done by school pickup.",
+        guidance:
+          "Capture this verbatim if they state one. Hard cutoffs are written to the contractor record and read by dispatch and the risk layer — leave blank only if they genuinely have none.",
         placeholder: "e.g. 3pm",
         optional: true,
       },
@@ -220,48 +221,13 @@ export const SCREENING_SECTIONS: ScreeningSection[] = [
         script: "How much notice do you need to accept a job — tomorrow, or a few days?",
         placeholder: "e.g. 1 day",
       },
-      {
-        key: "punctuality_ack",
-        label: "Commits to punctuality + early notification",
-        kind: "yesno",
-        script:
-          "One expectation I want to set now: arriving on time matters a lot here, and if something ever comes up, we need to hear from you as early as possible — never a no-show. Can you commit to that?",
-      },
     ],
   },
   {
-    id: "consents",
-    title: "Consents",
-    isConsents: true,
-    intro:
-      "Now the important part — I'm going to walk you through how this role works legally and how pay works, and I need a clear yes or no from you on each item. Stop me any time you have a question.",
+    id: "acknowledgment",
+    title: "Acknowledgment",
+    isAcknowledgment: true,
     questions: [],
-  },
-  {
-    id: "systems",
-    title: "Systems & Expectations",
-    intro:
-      "Let me walk you through how day-to-day work actually runs, so nothing is a surprise. Jobs come through our contractor portal — offers show up with the date, location, and pay, and you accept or decline each one; nothing is forced onto your schedule. Before-and-after photos are mandatory on every job — they protect you as much as the client. Your work builds a performance score, the Novara Score, from reliability, quality, and client ratings; a higher score means the best jobs first and tier advancement that raises your pay percentage. If a quality issue comes up we handle it through a documented accountability process — coaching first, formal warnings if it repeats — and nothing is ever taken out of your pay. Any tip a client leaves is 100% yours. And on job days we need you reachable — confirm the job, message through the app if anything comes up, and always give early notice of a problem.",
-    questions: [
-      {
-        key: "systems_ack",
-        label: "Confirmed they understand and accept",
-        kind: "yesno",
-      },
-    ],
-  },
-  {
-    id: "legal",
-    title: "Legal Terms",
-    intro:
-      "A few legal ground rules that will also be in your written agreement. Clients you meet through Novara are Novara clients — no side arrangements and no taking clients direct, during or after your time with us. Client privacy is strict: no posting client homes, addresses, or job photos on social media, and nothing about clients shared outside the app. The person who accepts the job is the person who shows up — no sending a friend, family member, or substitute in your place, ever. In a client's home we expect professional conduct — respectful, careful with property, nothing touched that isn't part of the job. And if you ever arrive to something out of scope — biohazards, hoarding, anything unsafe — you stop and contact us before doing anything; you'll never be penalized for stopping and reporting.",
-    questions: [
-      {
-        key: "legal_ack",
-        label: "Confirmed they understand and accept",
-        kind: "yesno",
-      },
-    ],
   },
   {
     id: "scenarios",
@@ -315,55 +281,31 @@ export const SCENARIO_PAIRS: Array<{
   },
 ];
 
-// ─── Consents (each captured individually — the legal record) ─────────────────
-// Six items. W-9 / payout setup is intentionally NOT here — onboarding already
-// gates first payment on those, so the verbal consent was redundant. Do NOT
-// collapse these into a blanket acknowledgment.
+// ─── Acknowledgment (one spoken block, one recorded Yes/No) ───────────────────
+//
+// Read as a single block and captured ONCE: contractor status, pay, the
+// background check and agreement that gate any work, and the on-job process.
+// The individually-signed versions of these — the contractor agreement, the
+// background check authorization, and the W-9 — are collected at onboarding,
+// which is where the legal record actually lives. This capture is the verbal
+// agreement on the call, timestamped and attributed to the screener.
+//
+// A No here blocks Advance outright.
 
-export interface ConsentItem {
+export interface AcknowledgmentItem {
   key: string;
   label: string;
   script: string;
 }
 
-export const CONSENT_ITEMS: ConsentItem[] = [
-  {
-    key: "contractor_1099",
-    label: "Independent contractor (1099) status",
-    script:
-      "This is an independent contractor position — a 1099 role, not employment. You run your own schedule, we send you job offers, and you handle your own taxes; nothing is withheld from your pay. Are you okay working as a 1099 independent contractor?",
-  },
-  {
-    key: "pay_structure",
-    label: "Pay structure (tier % of job value, per completed job, weekly payout, travel unpaid)",
-    script:
-      "Pay works like this: you earn a percentage of each job's value — starting at 35% and rising to 40% and 45% as you advance tiers. You're paid per completed job, with payouts weekly. Travel time between jobs is not paid. Does that pay structure work for you?",
-  },
-  {
-    key: "pay_final_value",
-    label: "Pay follows the final approved job value, including add-ons",
-    script:
-      "Your percentage is applied to the final approved value of the job — so if the client adds services and the job value grows, your pay grows with it. Are you good with pay being based on that final approved value?",
-  },
-  {
-    key: "background_check",
-    label: "Background check",
-    script:
-      "Before you can take any jobs we run a background check. Do we have your consent to run one?",
-  },
-  {
-    key: "signed_agreement",
-    label: "Signed agreement before any work or system access",
-    script:
-      "You'll sign an independent contractor agreement before any work or system access — nothing starts until it's signed. Are you okay with that?",
-  },
-  {
-    key: "liability_insurance",
-    label: "Willing to carry own general liability insurance",
-    script:
-      "Contractors carry their own general liability insurance. Are you willing to carry your own coverage? And if you already have a policy, who's your carrier?",
-  },
-];
+export const ACKNOWLEDGMENT_KEY = "terms_ack";
+
+export const ACKNOWLEDGMENT: AcknowledgmentItem = {
+  key: ACKNOWLEDGMENT_KEY,
+  label: "1099 status, pay, background check & agreement, and on-job process",
+  script:
+    "A few things to confirm before we move forward. This is a 1099 independent contractor role — you're not an employee, no taxes are withheld, and you're responsible for your own taxes. Pay is a percentage of each job's value based on your tier, paid weekly, and travel time isn't paid. Before any work, you'll need to pass a background check and sign our contractor agreement — no jobs are assigned until both are done. And you'll follow our process on every job: our checklist, before-and-after photos, and reporting anything that comes up. Are you good with all of that?",
+};
 
 // ─── Scorecard & recommendation ────────────────────────────────────────────────
 
@@ -382,7 +324,7 @@ export const DECLINE_REASONS: Array<{ code: string; label: string }> = [
   { code: "availability_mismatch", label: "Availability doesn't fit our jobs" },
   { code: "out_of_service_area", label: "Outside our service area" },
   { code: "insufficient_experience", label: "Insufficient experience for the role" },
-  { code: "declined_consent", label: "Declined a required consent (1099 / pay / background check…)" },
+  { code: "declined_consent", label: "Declined the acknowledgment (1099 / pay / background check / process)" },
   { code: "communication_concerns", label: "Communication / professionalism concerns" },
   { code: "compensation_mismatch", label: "Pay expectations mismatch" },
   { code: "withdrew", label: "Applicant withdrew / not interested" },
@@ -407,6 +349,8 @@ export interface HardQualifierState {
   pending: Array<{ key: string; label: string }>;
   answered: number;
   total: number;
+  /** Age failed — the non-negotiable stop. Decline is the only outcome. */
+  ageStop: boolean;
 }
 
 export function hardQualifierState(answers: ScreeningAnswers): HardQualifierState {
@@ -416,35 +360,42 @@ export function hardQualifierState(answers: ScreeningAnswers): HardQualifierStat
   const failed: Array<{ key: string; label: string }> = [];
   const pending: Array<{ key: string; label: string }> = [];
   let answered = 0;
+  let ageStop = false;
   for (const g of gates) {
     const v = values[g.key];
     if (v === "pass" || v === "fail" || v === "pending") answered += 1;
-    if (v === "fail") failed.push({ key: g.key, label: g.label });
-    if (v === "pending") pending.push({ key: g.key, label: g.label });
+    // A non-fixable gate has no "pending" path. Anything stored as pending on
+    // one is a hard fail here, so no amount of hand-edited draft data can turn
+    // the age stop into a Hold.
+    const isFail = v === "fail" || (v === "pending" && !g.fixable);
+    if (isFail) {
+      failed.push({ key: g.key, label: g.label });
+      if (g.key === AGE_GATE_KEY) ageStop = true;
+    } else if (v === "pending") {
+      pending.push({ key: g.key, label: g.label });
+    }
   }
-  return { failed, pending, answered, total: gates.length };
+  return { failed, pending, answered, total: gates.length, ageStop };
 }
 
-export interface ConsentsState {
-  answered: number;
-  total: number;
-  noItems: Array<{ key: string; label: string }>;
-  allYes: boolean;
+export interface AcknowledgmentState {
+  /** The recorded answer, or null when it hasn't been captured yet. */
+  value: YesNo | null;
+  captured: boolean;
+  isYes: boolean;
+  isNo: boolean;
+  capture: ConsentCapture | undefined;
 }
 
-export function consentsState(consents: ScreeningConsents): ConsentsState {
-  const noItems: Array<{ key: string; label: string }> = [];
-  let answered = 0;
-  for (const item of CONSENT_ITEMS) {
-    const c = consents[item.key];
-    if (c?.value === "yes" || c?.value === "no") answered += 1;
-    if (c?.value === "no") noItems.push({ key: item.key, label: item.label });
-  }
+export function acknowledgmentState(consents: ScreeningConsents): AcknowledgmentState {
+  const capture = consents?.[ACKNOWLEDGMENT_KEY];
+  const value = capture?.value === "yes" || capture?.value === "no" ? capture.value : null;
   return {
-    answered,
-    total: CONSENT_ITEMS.length,
-    noItems,
-    allYes: answered === CONSENT_ITEMS.length && noItems.length === 0,
+    value,
+    captured: value !== null,
+    isYes: value === "yes",
+    isNo: value === "no",
+    capture: value === null ? undefined : capture,
   };
 }
 
@@ -454,9 +405,8 @@ export function sectionProgress(
   answers: ScreeningAnswers,
   consents: ScreeningConsents,
 ): { answered: number; total: number } {
-  if (section.isConsents) {
-    const s = consentsState(consents);
-    return { answered: s.answered, total: s.total };
+  if (section.isAcknowledgment) {
+    return { answered: acknowledgmentState(consents).captured ? 1 : 0, total: 1 };
   }
   const values = (answers[section.id] || {}) as Record<string, unknown>;
   const required = section.questions.filter((q) => !q.optional);
@@ -496,7 +446,13 @@ export function validateScreeningOutcome(input: ScreeningOutcomeInput): string[]
   }
 
   const hq = hardQualifierState(input.answers);
-  const cs = consentsState(input.consents);
+  const ack = acknowledgmentState(input.consents);
+
+  // Under 18 is the one answer with no path other than Decline — a minor
+  // cannot sign a contractor agreement, so there is nothing to hold for.
+  if (hq.ageStop && rec !== "decline") {
+    errors.push("Under 18 is a hard stop with no exceptions — the only valid outcome is Decline.");
+  }
 
   if (rec === "advance") {
     if (hq.failed.length > 0) {
@@ -512,12 +468,12 @@ export function validateScreeningOutcome(input: ScreeningOutcomeInput): string[]
     if (hq.answered < hq.total) {
       errors.push("All hard qualifiers must be answered before an Advance recommendation.");
     }
-    if (cs.answered < cs.total) {
-      errors.push("Every consent must be captured (Yes/No) before an Advance recommendation.");
+    if (!ack.captured) {
+      errors.push("The acknowledgment must be recorded (Yes/No) before an Advance recommendation.");
     }
-    if (cs.noItems.length > 0) {
+    if (ack.isNo) {
       errors.push(
-        `Cannot Advance with a consent recorded as No: ${cs.noItems.map((n) => n.label).join(", ")} — route to Hold or Decline.`,
+        "The acknowledgment was recorded as No — Advance is blocked; route to Hold or Decline.",
       );
     }
   }
@@ -550,8 +506,6 @@ export interface DownstreamFields {
   noWorkAfter: string | null;
   noWorkBefore: string | null;
   travelRadiusMiles: number | null;
-  homeBase: string | null;
-  supplyStatus: string | null;
   /** Availability one-liner for the applicant record. */
   availabilityText: string | null;
   /** Constraint notes for cleaners.constraints.notes (risk layer + dispatch). */
@@ -570,8 +524,14 @@ export function deriveDownstreamFields(answers: ScreeningAnswers): DownstreamFie
     return s || null;
   };
 
-  const radiusRaw = str(q.travel_radius);
-  const radiusNum = radiusRaw ? parseInt(radiusRaw.replace(/[^0-9]/g, ""), 10) : NaN;
+  // Passing the travel gate credits the full radius. Screenings taken on the
+  // older form recorded a typed mileage instead, so fall back to that.
+  let travelRadiusMiles: number | null = q[TRAVEL_GATE_KEY] === "pass" ? TRAVEL_GATE_MILES : null;
+  if (travelRadiusMiles === null) {
+    const legacy = str(q.travel_radius);
+    const legacyNum = legacy ? parseInt(legacy.replace(/[^0-9]/g, ""), 10) : NaN;
+    if (Number.isFinite(legacyNum) && legacyNum > 0) travelRadiusMiles = legacyNum;
+  }
 
   const availabilityParts = [
     preferredDays.length > 0 ? preferredDays.join("/") : null,
@@ -583,17 +543,13 @@ export function deriveDownstreamFields(answers: ScreeningAnswers): DownstreamFie
     str(av.cutoff_after) ? `No work after ${str(av.cutoff_after)}` : null,
     str(av.cutoff_before) ? `No work before ${str(av.cutoff_before)}` : null,
     str(av.notice_needed) ? `Needs ${str(av.notice_needed)} notice` : null,
-    str(q.no_serve_note) ? `Won't serve: ${str(q.no_serve_note)}` : null,
-    str(q.supplies_note) ? `Supplies: ${str(q.supplies_note)}` : null,
   ].filter(Boolean);
 
   return {
     preferredDays,
     noWorkAfter: str(av.cutoff_after),
     noWorkBefore: str(av.cutoff_before),
-    travelRadiusMiles: Number.isFinite(radiusNum) && radiusNum > 0 ? radiusNum : null,
-    homeBase: str(q.home_base),
-    supplyStatus: str(q.supplies_note),
+    travelRadiusMiles,
     availabilityText: availabilityParts.length > 0 ? availabilityParts.join(" · ") : null,
     constraintNotes: noteParts.length > 0 ? noteParts.join(" · ") : null,
   };

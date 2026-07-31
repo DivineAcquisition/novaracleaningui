@@ -9,12 +9,13 @@
 // it left off), and tracks per-section progress so nothing gets skipped.
 //
 // Behavior highlights:
-//   · Hard qualifiers gate the call: a FAIL immediately offers the polite
-//     decline path (short-form submit, no forcing the remaining sections);
-//     a fixable qualifier marked PENDING routes to Hold with a required
-//     follow-up date.
-//   · Consents are captured individually (Yes/No + optional note), stamped
-//     with who/when automatically, and any No blocks an Advance.
+//   · Four hard qualifiers gate the call: a FAIL immediately offers the polite
+//     decline path (short-form submit, no forcing the remaining sections).
+//     Age is the non-negotiable one — under 18 can only end in Decline. A
+//     fixable ID gap marked PENDING routes to Hold with a required follow-up
+//     date instead.
+//   · The acknowledgment is read as one block and captured ONCE (Yes/No +
+//     optional note), stamped with who/when automatically. A No blocks Advance.
 //   · Inconsistent recommendations are BLOCKED — the same validation runs
 //     here and authoritatively on the server.
 //   · On submit a branded screening-record PDF is generated and attached to
@@ -45,13 +46,15 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import {
-  CONSENT_ITEMS,
+  ACKNOWLEDGMENT,
+  AGE_GATE_KEY,
   DECLINE_REASONS,
   DECLINE_SCRIPT,
   HOLD_SCRIPT,
   SCORECARD_ITEMS,
   SCREENING_SECTIONS,
-  consentsState,
+  TRAVEL_GATE_KEY,
+  acknowledgmentState,
   hardQualifierState,
   sectionProgress,
   validateScreeningOutcome,
@@ -112,10 +115,9 @@ async function callTalentAction(body: Record<string, unknown>): Promise<{ ok: bo
 
 // Map a failed qualifier to its standardized decline reason where one exists.
 const QUALIFIER_DECLINE_REASON: Record<string, string> = {
-  age_work_auth: "no_work_authorization",
-  vehicle: "no_vehicle",
-  phone_app: "failed_hard_qualifier",
-  own_products: "failed_hard_qualifier",
+  [AGE_GATE_KEY]: "under_18",
+  own_car: "no_vehicle",
+  [TRAVEL_GATE_KEY]: "out_of_service_area",
   photo_id: "failed_hard_qualifier",
 };
 
@@ -250,7 +252,7 @@ export default function PhoneScreeningForm({
 
   // ── Derived state ──
   const hq = useMemo(() => hardQualifierState(answers), [answers]);
-  const cs = useMemo(() => consentsState(consents), [consents]);
+  const ack = useMemo(() => acknowledgmentState(consents), [consents]);
   const outcomeErrors = useMemo(
     () =>
       validateScreeningOutcome({
@@ -263,20 +265,20 @@ export default function PhoneScreeningForm({
       }),
     [answers, consents, recommendation, declineReason, holdPending, holdDate],
   );
-  const advanceBlocked = hq.failed.length > 0 || hq.pending.length > 0 || !cs.allYes;
+  const advanceBlocked = hq.failed.length > 0 || hq.pending.length > 0 || !ack.isYes;
 
   const setAnswer = (sectionId: string, key: string, value: unknown) => {
     setAnswers((prev) => ({ ...prev, [sectionId]: { ...(prev[sectionId] || {}), [key]: value } }));
   };
 
-  const setConsent = (key: string, patch: Partial<ScreeningConsents[string]>) => {
+  const setAcknowledgment = (patch: Partial<ScreeningConsents[string]>) => {
     setConsents((prev) => {
-      const existing = prev[key];
+      const existing = prev[ACKNOWLEDGMENT.key];
       const next = { ...(existing || {}), ...patch } as ScreeningConsents[string];
       if (!existing?.at && (patch.value === "yes" || patch.value === "no")) {
         next.at = new Date().toISOString(); // stamped at answer time — never typed
       }
-      return { ...prev, [key]: next };
+      return { ...prev, [ACKNOWLEDGMENT.key]: next };
     });
   };
 
@@ -285,12 +287,20 @@ export default function PhoneScreeningForm({
   };
 
   const useDeclinePath = () => {
-    const first = hq.failed[0];
+    // The age stop outranks anything else that failed on the same call.
+    const first = hq.failed.find((f) => f.key === AGE_GATE_KEY) || hq.failed[0];
     setRecommendation("decline");
     setDeclineReason((first && QUALIFIER_DECLINE_REASON[first.key]) || "failed_hard_qualifier");
     if (hq.failed.length > 0) {
       setDeclineNotes((prev) => prev || `Failed hard qualifier: ${hq.failed.map((f) => f.label).join(", ")}`);
     }
+    scrollToSection("outcome");
+  };
+
+  const useAcknowledgmentDeclinePath = () => {
+    setRecommendation("decline");
+    setDeclineReason("declined_consent");
+    setDeclineNotes((prev) => prev || "Declined the acknowledgment on the call.");
     scrollToSection("outcome");
   };
 
@@ -473,6 +483,12 @@ export default function PhoneScreeningForm({
                     <span className="font-semibold">Hard qualifier failed:</span>{" "}
                     {hq.failed.map((f) => f.label).join(", ")}. You can end the call now — the remaining
                     sections are not required for a decline.
+                    {hq.ageStop && (
+                      <div className="mt-1 font-semibold">
+                        Under 18 is a hard stop with no exceptions — Decline is the only outcome
+                        available.
+                      </div>
+                    )}
                   </div>
                 </div>
                 <ScriptBlock text={fillScript(DECLINE_SCRIPT)} />
@@ -506,43 +522,55 @@ export default function PhoneScreeningForm({
                   <h3 className="text-sm font-bold text-slate-900">{section.title}</h3>
                   {section.intro && <ScriptBlock text={fillScript(section.intro)} />}
 
-                  {section.isConsents ? (
-                    <div className="space-y-4">
-                      {CONSENT_ITEMS.map((item) => {
-                        const c = consents[item.key];
-                        return (
-                          <div key={item.key} className="space-y-1.5 border-l-2 border-slate-100 pl-3">
-                            <p className="text-sm font-medium text-slate-800">{item.label}</p>
-                            <ScriptBlock text={fillScript(item.script)} />
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <YesNoToggle
-                                value={c?.value}
-                                onChange={(v) => setConsent(item.key, { value: v })}
-                                yesLabel="Yes — consents"
-                                noLabel="No"
-                              />
-                              {c?.at && (
-                                <span className="text-[11px] text-slate-400">
-                                  Recorded{" "}
-                                  {new Date(c.at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
-                                </span>
-                              )}
-                            </div>
-                            <Input
-                              value={c?.note || ""}
-                              onChange={(e) => setConsent(item.key, { note: e.target.value })}
-                              placeholder="Optional note (pushback, carrier they already have…)"
-                              className="h-8 text-xs"
-                            />
-                          </div>
-                        );
-                      })}
-                      {cs.noItems.length > 0 && (
-                        <p className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-md p-2">
-                          Consent recorded as <b>No</b>: {cs.noItems.map((n) => n.label).join(", ")} — an Advance
-                          recommendation is blocked; route to Hold or Decline.
-                        </p>
+                  {section.isAcknowledgment ? (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-slate-800">{ACKNOWLEDGMENT.label}</p>
+                      <ScriptBlock text={fillScript(ACKNOWLEDGMENT.script)} />
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <YesNoToggle
+                          value={ack.value ?? undefined}
+                          onChange={(v) => setAcknowledgment({ value: v })}
+                          yesLabel="Yes — agrees to all of it"
+                          noLabel="No"
+                        />
+                        {ack.capture?.at && (
+                          <span className="text-[11px] text-slate-400">
+                            Recorded{" "}
+                            {new Date(ack.capture.at).toLocaleTimeString("en-US", {
+                              hour: "numeric",
+                              minute: "2-digit",
+                            })}{" "}
+                            by {screening.screener_name || "you"}
+                          </span>
+                        )}
+                      </div>
+                      <Input
+                        value={ack.capture?.note || ""}
+                        onChange={(e) => setAcknowledgment({ note: e.target.value })}
+                        placeholder="Optional note (questions they raised, anything they pushed back on…)"
+                        className="h-8 text-xs"
+                      />
+                      {ack.isNo && (
+                        <div className="space-y-2 rounded-md bg-rose-50 border border-rose-200 p-2">
+                          <p className="text-xs text-rose-700">
+                            Acknowledgment recorded as <b>No</b> — the process ends here. Advance is blocked;
+                            route to Decline (or Hold if they only want time to think it over).
+                          </p>
+                          <ScriptBlock text={fillScript(DECLINE_SCRIPT)} />
+                          <Button
+                            size="sm"
+                            className="bg-rose-600 hover:bg-rose-700 text-white"
+                            onClick={useAcknowledgmentDeclinePath}
+                          >
+                            <RiCloseCircleLine className="w-4 h-4 mr-1.5" />
+                            Use the decline path
+                          </Button>
+                        </div>
                       )}
+                      <p className="text-[11px] text-slate-400">
+                        The signed agreement, background check authorization, and W-9 are collected at
+                        onboarding — this captures the verbal yes on the call.
+                      </p>
                     </div>
                   ) : section.id === "scenarios" ? (
                     <ScenarioFields
@@ -617,14 +645,14 @@ export default function PhoneScreeningForm({
                     <Badge
                       variant="outline"
                       className={cn(
-                        cs.allYes
+                        ack.isYes
                           ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                          : cs.noItems.length > 0
+                          : ack.isNo
                             ? "bg-rose-50 text-rose-700 border-rose-200"
                             : "bg-slate-50 text-slate-500 border-slate-200",
                       )}
                     >
-                      Consents: {cs.allYes ? "all Yes" : cs.noItems.length > 0 ? "has a No" : `${cs.answered}/${cs.total}`}
+                      Acknowledgment: {ack.isYes ? "Yes" : ack.isNo ? "No" : "not captured"}
                     </Badge>
                   </div>
                 </div>
@@ -641,7 +669,7 @@ export default function PhoneScreeningForm({
                       disabled={advanceBlocked}
                       title={
                         advanceBlocked
-                          ? "Blocked: requires all hard qualifiers passed and every consent Yes"
+                          ? "Blocked: requires all four hard qualifiers passed and the acknowledgment recorded as Yes"
                           : undefined
                       }
                       onClick={() => setRecommendation("advance")}
@@ -652,6 +680,8 @@ export default function PhoneScreeningForm({
                       size="sm"
                       variant={recommendation === "hold" ? "default" : "outline"}
                       className={cn(recommendation === "hold" && "bg-amber-600 hover:bg-amber-700 text-white")}
+                      disabled={hq.ageStop}
+                      title={hq.ageStop ? "Under 18 is a hard stop — Decline is the only outcome" : undefined}
                       onClick={() => setRecommendation("hold")}
                     >
                       Hold
@@ -665,11 +695,18 @@ export default function PhoneScreeningForm({
                       Decline
                     </Button>
                   </div>
-                  {advanceBlocked && (
-                    <p className="text-[11px] text-slate-500">
-                      Advance is blocked until every hard qualifier passes and every consent is Yes
-                      {hq.pending.length > 0 ? " (pending qualifiers route to Hold)" : ""}.
+                  {hq.ageStop ? (
+                    <p className="text-[11px] text-rose-600 font-medium">
+                      Under 18 is a hard stop with no exceptions — Decline is the only outcome available.
                     </p>
+                  ) : (
+                    advanceBlocked && (
+                      <p className="text-[11px] text-slate-500">
+                        Advance is blocked until all four hard qualifiers pass and the acknowledgment is
+                        recorded as Yes
+                        {hq.pending.length > 0 ? " (a fixable ID gap routes to Hold)" : ""}.
+                      </p>
+                    )
                   )}
 
                   {recommendation === "decline" && (
@@ -813,10 +850,12 @@ function YesNoToggle({
 function GateToggle({
   value,
   fixable,
+  pendingLabel,
   onChange,
 }: {
   value: string | undefined;
   fixable?: boolean;
+  pendingLabel?: string;
   onChange: (v: "pass" | "fail" | "pending") => void;
 }) {
   return (
@@ -857,7 +896,7 @@ function GateToggle({
               : "bg-white text-slate-600 border-slate-200 hover:border-amber-300",
           )}
         >
-          Pending (fixable)
+          {pendingLabel || "Pending (fixable)"}
         </button>
       )}
     </div>
@@ -946,7 +985,12 @@ function QuestionField({
       {question.script && <ScriptBlock text={fillScript(question.script)} />}
       {question.guidance && <GuidanceBlock text={question.guidance} />}
       {question.kind === "gate" && (
-        <GateToggle value={value as string | undefined} fixable={question.fixable} onChange={onChange} />
+        <GateToggle
+          value={value as string | undefined}
+          fixable={question.fixable}
+          pendingLabel={question.pendingLabel}
+          onChange={onChange}
+        />
       )}
       {question.kind === "yesno" && (
         <YesNoToggle

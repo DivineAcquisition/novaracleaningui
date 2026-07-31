@@ -16,9 +16,10 @@
 // Guarantees enforced here (and by the DB trigger):
 //   · screener identity + timestamps are stamped server-side, never typed
 //   · submitted screenings are immutable — a correction is a NEW screening
-//   · inconsistent outcomes are BLOCKED (Advance with a failed qualifier,
-//     a pending qualifier, or any consent = No; Decline without a standard
-//     reason; Hold without pending item + follow-up date)
+//   · inconsistent outcomes are BLOCKED (Advance with a failed qualifier, a
+//     pending qualifier, or the acknowledgment = No; anything other than
+//     Decline after the age stop; Decline without a standard reason; Hold
+//     without pending item + follow-up date)
 //   · the screening row is saved BEFORE the PDF: a failed generation flags
 //     pdf_status='failed' for retry and never discards the record
 //   · outcome routing reuses the existing pipeline: Advance moves the
@@ -31,6 +32,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin, AdminAuthError, type AdminPrincipal } from "@/lib/admin-auth";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import {
+  acknowledgmentState,
   declineReasonLabel,
   deriveDownstreamFields,
   validateScreeningOutcome,
@@ -97,7 +99,7 @@ async function logEvent(
     );
 }
 
-/** Stamp who/when onto any consent capture missing them — never hand-typed. */
+/** Stamp who/when onto the acknowledgment capture — never hand-typed. */
 function stampConsents(
   consents: ScreeningConsents | undefined,
   principal: AdminPrincipal,
@@ -164,8 +166,8 @@ async function generatePdf(
 /**
  * Write screening-captured data onto the applicant (and linked cleaner, if
  * one exists) using EXISTING fields — availability days, hard cutoffs,
- * travel radius, supply readiness, and the consent booleans — so dispatch
- * and the risk layer have them from day one without re-entry.
+ * travel radius, and the consent booleans — so dispatch and the risk layer
+ * have them from day one without re-entry.
  */
 async function writeDownstreamFields(
   supabase: ReturnType<typeof getAdminSupabase>,
@@ -173,19 +175,19 @@ async function writeDownstreamFields(
   applicant: ApplicantRow,
 ) {
   const derived = deriveDownstreamFields(screening.answers || {});
-  const c = screening.consents || {};
-  const consentBool = (key: string): boolean | undefined =>
-    c[key]?.value === "yes" ? true : c[key]?.value === "no" ? false : undefined;
 
   const applicantPatch: Record<string, unknown> = {};
   if (derived.preferredDays.length > 0) applicantPatch.preferred_days = derived.preferredDays;
   if (derived.availabilityText) applicantPatch.availability = derived.availabilityText;
-  const c1099 = consentBool("contractor_1099");
-  if (c1099 !== undefined) applicantPatch.consent_1099 = c1099;
-  const cBg = consentBool("background_check");
-  if (cBg !== undefined) applicantPatch.background_check_consent = cBg;
-  const cPay = consentBool("pay_structure");
-  if (cPay !== undefined) applicantPatch.pay_consent = cPay;
+
+  // The single acknowledgment covers 1099 status, pay, and the background
+  // check, so it answers all three existing applicant consent booleans.
+  const ack = acknowledgmentState(screening.consents || {});
+  if (ack.captured) {
+    applicantPatch.consent_1099 = ack.isYes;
+    applicantPatch.background_check_consent = ack.isYes;
+    applicantPatch.pay_consent = ack.isYes;
+  }
   if (Object.keys(applicantPatch).length > 0) {
     await supabase.from("cleaner_applicants").update(applicantPatch).eq("id", applicant.id);
   }
@@ -283,12 +285,9 @@ export async function POST(req: Request): Promise<NextResponse> {
         }
 
         // Pre-fill from what the intake already captured — the VA never
-        // re-types what the system knows. Consents are NEVER pre-filled:
-        // they are captured live, on this call, as a legal record.
+        // re-types what the system knows. The acknowledgment is NEVER
+        // pre-filled: it is captured live, on this call.
         const answers: ScreeningAnswers = {
-          qualifiers: {
-            ...(applicant.zip_code ? { home_base: [applicant.zip_code, applicant.state].filter(Boolean).join(", ") } : {}),
-          },
           availability: {
             ...(normalizeDays(applicant.preferred_days).length > 0
               ? { days: normalizeDays(applicant.preferred_days) }

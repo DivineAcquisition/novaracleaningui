@@ -6,19 +6,24 @@
 // (violet header, Helvetica, US Letter, generated-at footer). Content renders
 // from the SAME definitions the live form uses (src/lib/phone-screening.ts),
 // so the record always matches what the VA captured: every section's
-// answers, each consent with its Yes/No + timestamp + who captured it, the
-// scenario answers with ratings, the scorecard, and the recommendation.
+// answers, the acknowledgment with its Yes/No + timestamp + who captured it,
+// the scenario answers with ratings, the scorecard, and the recommendation.
+//
+// Screenings taken on the older, longer form are still rendered in full: any
+// captured answer the current form no longer asks for is printed under
+// "Additional Recorded Answers", so regenerating an old record never quietly
+// drops what was actually said on that call.
 //
 // SERVER ONLY (imported by the /api/talent/screening route).
 
 import {
-  CONSENT_ITEMS,
+  ACKNOWLEDGMENT,
   RECOMMENDATION_LABEL,
   SCENARIO_PAIRS,
   SCORECARD_ITEMS,
   SCREENING_SECTIONS,
+  acknowledgmentState,
   callDurationMinutes,
-  consentsState,
   declineReasonLabel,
   hardQualifierState,
   type PhoneScreeningRow,
@@ -68,6 +73,62 @@ function answerText(q: ScreeningQuestion, value: unknown): string {
     default:
       return String(value);
   }
+}
+
+/**
+ * Everything stored on the row that the current form definitions no longer
+ * cover — questions and consents from the pre-condensed form. Submitted
+ * screenings are immutable, so a regenerated PDF must still show them.
+ */
+function collectLegacyEntries(screening: PhoneScreeningRow): Array<{ label: string; value: string }> {
+  const known = new Map(SCREENING_SECTIONS.map((s) => [s.id, new Set(s.questions.map((q) => q.key))]));
+  const out: Array<{ label: string; value: string }> = [];
+
+  const humanize = (key: string) =>
+    key.replace(/_/g, " ").replace(/\b\w/g, (ch) => ch.toUpperCase());
+
+  const render = (value: unknown): string | null => {
+    if (value == null || value === "") return null;
+    if (Array.isArray(value)) return value.length > 0 ? value.join(", ") : null;
+    if (value === "pass") return "Pass";
+    if (value === "fail") return "FAIL";
+    if (value === "pending") return "Pending (fixable)";
+    if (value === "yes") return "Yes";
+    if (value === "no") return "No";
+    if (typeof value === "object") return null;
+    return String(value);
+  };
+
+  for (const [sectionId, values] of Object.entries(screening.answers || {})) {
+    const keys = known.get(sectionId);
+    for (const [key, value] of Object.entries((values || {}) as Record<string, unknown>)) {
+      if (keys?.has(key)) continue;
+      // Notes on a section the form still has are printed with that section.
+      if (key === "_notes" && keys) continue;
+      const text = render(value);
+      if (!text) continue;
+      const label = key === "_notes" ? `${humanize(sectionId)} — Section Notes` : `${humanize(sectionId)} — ${humanize(key)}`;
+      out.push({ label, value: text });
+    }
+  }
+
+  for (const [key, capture] of Object.entries(screening.consents || {})) {
+    if (key === ACKNOWLEDGMENT.key) continue;
+    if (capture?.value !== "yes" && capture?.value !== "no") continue;
+    const meta = [
+      capture.at ? `recorded ${fmtDateTime(capture.at)}` : null,
+      capture.by_name ? `by ${capture.by_name}` : null,
+      capture.note ? `note: ${capture.note}` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    out.push({
+      label: `Consent — ${humanize(key)}`,
+      value: [capture.value === "yes" ? "Yes" : "No", meta].filter(Boolean).join(" — "),
+    });
+  }
+
+  return out;
 }
 
 export async function buildScreeningPdf(
@@ -221,35 +282,33 @@ export async function buildScreeningPdf(
   }
   y -= 34;
 
+  const ack = acknowledgmentState(screening.consents || {});
+
   // ── Sections (from the same definitions as the live form) ──
   for (const section of SCREENING_SECTIONS) {
     sectionHeader(section.title);
 
-    if (section.isConsents) {
-      for (const item of CONSENT_ITEMS) {
-        const c = screening.consents?.[item.key];
-        const val = c?.value === "yes" ? "YES" : c?.value === "no" ? "NO" : "NOT CAPTURED";
-        const color = c?.value === "yes" ? green : c?.value === "no" ? red : gray;
-        ensure(30);
-        page.drawText(val, { x: MARGIN_X, y, size: 10, font: bold, color });
-        drawWrapped(item.label, { x: MARGIN_X + 46, size: 10, f: bold, gap: 0 });
-        const meta = [
-          c?.at ? `Recorded ${fmtDateTime(c.at)}` : null,
-          c?.by_name ? `by ${c.by_name}` : null,
-        ]
-          .filter(Boolean)
-          .join(" ");
-        if (meta) drawWrapped(meta, { x: MARGIN_X + 46, size: 8, color: gray, gap: 0 });
-        if (c?.note) drawWrapped(`Note: ${c.note}`, { x: MARGIN_X + 46, size: 9, color: dark, gap: 0 });
-        y -= 8;
-      }
-      const cState = consentsState(screening.consents || {});
+    if (section.isAcknowledgment) {
+      // The block is printed verbatim: the record has to show exactly what was
+      // read aloud, not just that something was agreed to.
+      drawWrapped(`Read aloud: "${ACKNOWLEDGMENT.script}"`, { size: 8, color: gray, gap: 6 });
+      const c = ack.capture;
+      const val = ack.isYes ? "YES" : ack.isNo ? "NO" : "NOT CAPTURED";
+      ensure(30);
+      page.drawText(val, { x: MARGIN_X, y, size: 12, font: bold, color: ack.isYes ? green : ack.isNo ? red : gray });
+      drawWrapped(ACKNOWLEDGMENT.label, { x: MARGIN_X + 60, size: 10, f: bold, gap: 0 });
+      const meta = [c?.at ? `Recorded ${fmtDateTime(c.at)}` : null, c?.by_name ? `by ${c.by_name}` : null]
+        .filter(Boolean)
+        .join(" ");
+      if (meta) drawWrapped(meta, { x: MARGIN_X + 60, size: 8, color: gray, gap: 0 });
+      if (c?.note) drawWrapped(`Note: ${c.note}`, { x: MARGIN_X + 60, size: 9, color: dark, gap: 0 });
+      y -= 8;
       drawWrapped(
-        cState.allYes
-          ? "All consents recorded as YES."
-          : `${cState.answered}/${cState.total} consents captured${cState.noItems.length > 0 ? ` — recorded NO: ${cState.noItems.map((n) => n.label).join("; ")}` : ""}.`,
-        { size: 9, f: bold, color: cState.allYes ? green : amber, gap: 4 },
+        "Verbal agreement captured on the call. The signed contractor agreement, background check authorization, and W-9 are collected at onboarding.",
+        { size: 8, color: gray, gap: 4 },
       );
+      const ackNotes = (screening.answers?.[section.id] || {})._notes;
+      if (ackNotes) qa("SECTION NOTES", String(ackNotes));
       continue;
     }
 
@@ -285,6 +344,18 @@ export async function buildScreeningPdf(
     if (notes) qa("SECTION NOTES", String(notes));
   }
 
+  // ── Anything the current form no longer asks (older screenings) ──
+  const legacy = collectLegacyEntries(screening);
+  if (legacy.length > 0) {
+    sectionHeader("Additional Recorded Answers");
+    drawWrapped("Captured on an earlier version of this form and retained verbatim.", {
+      size: 8,
+      color: gray,
+      gap: 4,
+    });
+    for (const entry of legacy) qa(entry.label.toUpperCase(), entry.value);
+  }
+
   // ── Scorecard ──
   sectionHeader("Scorecard");
   for (const item of SCORECARD_ITEMS) {
@@ -301,7 +372,6 @@ export async function buildScreeningPdf(
     y -= 15;
   }
   const hq = hardQualifierState(screening.answers || {});
-  const cs = consentsState(screening.consents || {});
   ensure(34);
   page.drawText("Hard qualifiers", { x: MARGIN_X, y, size: 10, font, color: dark });
   page.drawText(
@@ -309,13 +379,13 @@ export async function buildScreeningPdf(
     { x: MARGIN_X + 230, y, size: 10, font: bold, color: hq.failed.length > 0 ? red : hq.pending.length > 0 ? amber : green },
   );
   y -= 15;
-  page.drawText("Consents complete", { x: MARGIN_X, y, size: 10, font, color: dark });
-  page.drawText(cs.allYes ? "YES" : "NO", {
+  page.drawText("Acknowledgment", { x: MARGIN_X, y, size: 10, font, color: dark });
+  page.drawText(ack.isYes ? "YES" : ack.isNo ? "NO" : "NOT CAPTURED", {
     x: MARGIN_X + 230,
     y,
     size: 10,
     font: bold,
-    color: cs.allYes ? green : red,
+    color: ack.isYes ? green : ack.isNo ? red : gray,
   });
   y -= 20;
 
