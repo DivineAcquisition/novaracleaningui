@@ -135,7 +135,11 @@ console.log("\n── Worked examples (Current Pricing Reference)");
 {
   const r = computeQuote(
     seededConfig, zoneA,
-    q({ serviceType: "focused", homeSizeId: null, focused: { areas: 1, bedrooms: 2 } }),
+    q({
+      serviceType: "focused",
+      homeSizeId: null,
+      focused: { selections: [{ areaId: "bathroom", quantity: 1 }, { areaId: "bedroom", quantity: 2 }] },
+    }),
     live(1.2), // even a live demand spike must not touch a focused clean
     payRates,
   );
@@ -147,11 +151,42 @@ console.log("\n── Worked examples (Current Pricing Reference)");
 {
   const r = computeQuote(
     seededConfig, zoneB,
-    q({ serviceType: "focused", homeSizeId: null, focused: { areas: 1, bedrooms: 0 }, condition: "light", addOns: ["windows"], sameDay: true }),
+    q({
+      serviceType: "focused",
+      homeSizeId: null,
+      focused: { selections: [{ areaId: "bathroom", quantity: 1 }] },
+      condition: "light",
+      addOns: ["windows"],
+      sameDay: true,
+    }),
     off, payRates,
   );
   check("E · total $155.00 ($65 + $40 windows + $50 same-day)", r.totalCents, 15500);
   check("E · flat charges added last, never multiplied", r.serviceTotalCents, 6500);
+}
+
+// Focused: bedroom quantity stacks, and the $65 minimum floors the area total.
+{
+  const stacked = computeQuote(
+    seededConfig, zoneB,
+    q({ serviceType: "focused", homeSizeId: null, condition: "light",
+        focused: { selections: [{ areaId: "bedroom", quantity: 3 }] } }),
+    off, payRates,
+  );
+  check("Focused · 3 bedrooms stack to $150", stacked.totalCents, 15000);
+  const oneBedroom = computeQuote(
+    seededConfig, zoneB,
+    q({ serviceType: "focused", homeSizeId: null, condition: "light",
+        focused: { selections: [{ areaId: "bedroom", quantity: 1 }] } }),
+    off, payRates,
+  );
+  check("Focused · single $50 bedroom lifts to the $65 minimum", oneBedroom.totalCents, 6500);
+  const unknown = computeQuote(
+    seededConfig, zoneB,
+    q({ serviceType: "focused", homeSizeId: null, focused: { selections: [{ areaId: "nope", quantity: 1 }] } }),
+    off, payRates,
+  );
+  check("Focused · unknown area id → clean error, never a $0 quote", unknown.ok, false);
 }
 
 // F — Membership, bi-weekly, 1,600 sqft, Frederick (Zone C), first month

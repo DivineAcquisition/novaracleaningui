@@ -326,9 +326,16 @@ $json$
   },
   "condition_multipliers": { "light": 1.0, "standard": 1.25, "heavy": 1.6 },
   "focused_clean": {
-    "area_cents": 6500,
-    "bedroom_cents": 5000,
+    "_source": "FALLBACK ONLY — focused rates, the minimum, the bundle discount and the same-day fee are overlaid at load time from app_settings.focused_same_day_settings so those numbers live in one place.",
+    "areas": [
+      { "id": "bathroom", "label": "Bathroom",             "price_cents": 6500, "quantity": false },
+      { "id": "kitchen",  "label": "Kitchen",              "price_cents": 6500, "quantity": false },
+      { "id": "living",   "label": "Living / common area", "price_cents": 6500, "quantity": false },
+      { "id": "other",    "label": "Other single area",    "price_cents": 6500, "quantity": false },
+      { "id": "bedroom",  "label": "Bedroom",              "price_cents": 5000, "quantity": true  }
+    ],
     "minimum_cents": 6500,
+    "bundle_discount_percent": 0,
     "demand_enabled": false
   },
   "add_ons_cents": {
@@ -355,7 +362,7 @@ $json$
     "first_month_deep_clean_fee_cents": 7500,
     "demand_exempt": true
   },
-  "surcharges": { "same_day_cents": 5000 },
+  "surcharges": { "same_day_cents": 5000, "_source": "FALLBACK ONLY — overlaid from app_settings.focused_same_day_settings.same_day_upcharge_dollars" },
   "demand": {
     "enabled": false,
     "shadow_mode": true,

@@ -87,10 +87,20 @@ export function PriceBreakdownCard({
 
   const b: QuoteBreakdown | null = quote.breakdown;
   if (!b) {
+    // No layered quote — the rail is showing the legacy fallback price, which
+    // carries no zone, condition, or demand. Say so plainly: a VA must never
+    // read out a number believing it is the zone-priced quote when it isn't.
     if (quote.error) {
       return (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-800">
-          {quote.error}
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-3">
+          <p className="text-xs font-semibold text-amber-900 flex items-center gap-1.5">
+            <RiErrorWarningLine className="w-4 h-4" /> Zone pricing unavailable
+          </p>
+          <p className="text-[11px] text-amber-800 mt-1 leading-relaxed">{quote.error}</p>
+          <p className="text-[10.5px] text-amber-700 mt-1.5">
+            The total below is the fallback catalog price — it has no zone, condition, or demand
+            applied. Check with admin before quoting it.
+          </p>
         </div>
       );
     }

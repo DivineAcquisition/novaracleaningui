@@ -851,11 +851,13 @@ function GuardrailsTab({
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm">Floor · ceiling · override band · quote lock</CardTitle>
-          <CardDescription className="text-xs">
-            The floor guarantees per-cleaner hourly earnings after the Foundation pool percentage (solo{" "}
-            {payRates.soloFoundationPercent}% / crew {payRates.crewFoundationPercent}%, read live from cleaner pay
-            rates). Discounts are always funded by company margin — cleaner pay stays a percentage of final job value.
-          </CardDescription>
+        <CardDescription className="text-xs">
+          The floor guarantees per-cleaner hourly earnings after the Foundation pool percentage (solo{" "}
+          {payRates.soloFoundationPercent}% / crew {payRates.crewFoundationPercent}%, read live from cleaner pay
+          rates). Discounts are always funded by company margin — cleaner pay stays a percentage of final job value.
+          Focused-clean rates and the same-day fee are <strong>not</strong> edited here — they come from the shared
+          focused/same-day settings (Operations), which the customer funnel and job checklists read too.
+        </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

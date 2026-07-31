@@ -46,7 +46,7 @@ interface QuoteBody {
   zip?: string;
   serviceType?: DynamicServiceType;
   homeSizeId?: string | null;
-  focused?: { areas: number; bedrooms: number } | null;
+  focused?: { selections: Array<{ areaId: string; quantity: number }> } | null;
   condition?: ConditionLevel;
   addOns?: string[];
   serviceDate?: string | null;
@@ -93,21 +93,7 @@ serve(async (req) => {
       return json({ ok: false, error: "Dynamic pricing is not configured (no active config version)." }, 500);
     }
     const cfg = ctx.config;
-    const meta = {
-      configVersion: ctx.configVersion,
-      demandEnabled: cfg.demand.enabled,
-      shadowMode: cfg.demand.shadow_mode,
-      conditionMultipliers: cfg.condition_multipliers,
-      overrideReasons: cfg.override_reasons,
-      overrideBandPercent: cfg.guardrails.override_band_percent,
-      quoteLockHours: cfg.guardrails.quote_lock_hours,
-      baseTables: {
-        authoritative: cfg.base_tables.authoritative,
-        reconciled: cfg.base_tables.reconciled,
-      },
-      focusedClean: cfg.focused_clean,
-      sameDayCents: cfg.surcharges.same_day_cents,
-    };
+    const meta = metaFor(ctx);
 
     const action = body.action || "quote";
 
@@ -322,9 +308,11 @@ async function runQuote(supabase: any, ctx: NonNullable<Awaited<ReturnType<typeo
   };
 }
 
+/** Everything the internal booking screen needs to render + explain a quote. */
 function metaFor(ctx: NonNullable<Awaited<ReturnType<typeof loadDynamicPricingContext>>>) {
   const cfg = ctx.config;
   return {
+    focusedSettingsLinked: ctx.focusedSettingsLinked,
     configVersion: ctx.configVersion,
     demandEnabled: cfg.demand.enabled,
     shadowMode: cfg.demand.shadow_mode,

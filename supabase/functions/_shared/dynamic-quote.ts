@@ -43,6 +43,58 @@ export interface DynamicPricingContext {
   configVersion: number;
   zones: ZoneInfo[];
   payRates: FloorPayRates;
+  /** True when focused rates + the same-day fee came from
+   *  app_settings.focused_same_day_settings rather than the config fallback. */
+  focusedSettingsLinked: boolean;
+}
+
+/**
+ * Focused-clean rates, the focused minimum, the multi-area bundle discount and
+ * the same-day fee live in `app_settings.focused_same_day_settings` — the row
+ * ops already edits and the customer funnel + job checklists already read.
+ * Overlaying them here keeps ONE source of truth for those numbers instead of
+ * a second copy inside the dynamic-pricing config.
+ */
+async function overlayFocusedSameDaySettings(
+  supabase: Supa,
+  config: DynamicPricingConfig,
+): Promise<boolean> {
+  const { data } = await supabase
+    .from("app_settings")
+    .select("value")
+    .eq("key", "focused_same_day_settings")
+    .maybeSingle();
+  const s = data?.value as Record<string, unknown> | undefined;
+  if (!s || typeof s !== "object") return false;
+
+  const toCents = (v: unknown): number | null => {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.round(n * 100) : null;
+  };
+
+  const areas = Array.isArray(s.areas) ? s.areas : [];
+  if (areas.length > 0) {
+    config.focused_clean.areas = areas
+      .map((a) => {
+        const row = a as Record<string, unknown>;
+        const cents = toCents(row.price);
+        if (!row.id || cents == null) return null;
+        return {
+          id: String(row.id),
+          label: String(row.label || row.id),
+          price_cents: cents,
+          quantity: Boolean(row.quantity),
+        };
+      })
+      .filter((a): a is { id: string; label: string; price_cents: number; quantity: boolean } => a !== null);
+  }
+  const minimum = toCents(s.minimum_dollars);
+  if (minimum != null) config.focused_clean.minimum_cents = minimum;
+  const bundle = Number(s.multi_area_bundle_discount_percent);
+  if (Number.isFinite(bundle)) config.focused_clean.bundle_discount_percent = bundle;
+  const sameDay = toCents(s.same_day_upcharge_dollars);
+  if (sameDay != null) config.surcharges.same_day_cents = sameDay;
+  return true;
 }
 
 /** Load the active config version + zones + floor pay rates. Returns null
@@ -56,6 +108,8 @@ export async function loadDynamicPricingContext(
     .eq("is_active", true)
     .maybeSingle();
   if (!cfgRow?.config) return null;
+  const config = cfgRow.config as DynamicPricingConfig;
+  const focusedSettingsLinked = await overlayFocusedSameDaySettings(supabase, config);
 
   const { data: zoneRows } = await supabase
     .from("pricing_zones")
@@ -88,7 +142,13 @@ export async function loadDynamicPricingContext(
     if (min <= 2 && 2 <= max) payRates.crewFoundationPercent = Number(r.rate_percent);
   }
 
-  return { config: cfgRow.config as DynamicPricingConfig, configVersion: Number(cfgRow.version), zones, payRates };
+  return {
+    config,
+    configVersion: Number(cfgRow.version),
+    zones,
+    payRates,
+    focusedSettingsLinked,
+  };
 }
 
 // ─── Zone resolution ────────────────────────────────────────────────────────
@@ -288,7 +348,7 @@ export interface ServerQuoteParams {
   zip: string | null | undefined;
   serviceType: DynamicServiceType;
   homeSizeId: string | null;
-  focused?: { areas: number; bedrooms: number } | null;
+  focused?: { selections: Array<{ areaId: string; quantity: number }> } | null;
   condition: ConditionLevel;
   addOns: string[];
   serviceDate: string | null;

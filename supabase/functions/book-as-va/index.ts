@@ -32,7 +32,7 @@
 //   timeSlot *required (e.g. '10:00 AM - 11:00 AM')
 //   bedrooms?, bathrooms?, dwellingType?, pets?, sqft?
 //   condition? 'light' | 'standard' | 'heavy'  — pricing condition layer
-//   focused?: { areas, bedrooms }              — serviceType 'focused' only
+//   focused?: { selections: [{ areaId, quantity }] } — 'focused' only
 //   quoteId?  — locked va_quotes.id; inside its window the quoted price is
 //               charged verbatim (the quote-lock integrity rule)
 //   vaOverride?: { totalCents, reasonCode, note? } — bounded VA adjustment,
@@ -267,8 +267,8 @@ async function ghlPushBooking(
     tags: enforceTagPolicy([
       "customer",
       sourceTag("admin"),
-      serviceTag(bookingRow.service_type),
-      zipTag(bookingRow.zip_code),
+      serviceTag(bookingRow.service_type as string | null),
+      zipTag(bookingRow.zip_code as string | null),
     ]).tags,
   };
   let contactId: string | null = null;
@@ -398,7 +398,7 @@ interface VaBookingBody {
   /** Home condition for the pricing layer (light | standard | heavy). */
   condition?: string;
   /** Focused-clean composition — serviceType === 'focused' only. */
-  focused?: { areas: number; bedrooms: number };
+  focused?: { selections: Array<{ areaId: string; quantity: number }> };
   /** Locked va_quotes.id — inside its window the recorded price is charged. */
   quoteId?: string;
   /**

@@ -60,10 +60,18 @@ export interface DynamicPricingConfig {
   };
   bands: Record<string, { label: string; hours: number; crew_size: number }>;
   condition_multipliers: Record<ConditionLevel, number>;
+  /**
+   * Focused / single-area rates. These values are OVERLAID at load time from
+   * `app_settings.focused_same_day_settings` — the admin-editable row the
+   * customer funnel and the job checklists already read — so focused rates
+   * live in exactly one place. What is stored in this config row is only the
+   * fallback for when that settings row is missing.
+   */
   focused_clean: {
-    area_cents: number;
-    bedroom_cents: number;
+    areas: Array<{ id: string; label: string; price_cents: number; quantity: boolean }>;
     minimum_cents: number;
+    /** Optional multi-area bundle discount percent (0–100). */
+    bundle_discount_percent: number;
     /** Focused cleans sit near the floor already — demand off by default. */
     demand_enabled: boolean;
   };
@@ -77,6 +85,7 @@ export interface DynamicPricingConfig {
     first_month_deep_clean_fee_cents: number;
     demand_exempt: boolean;
   };
+  /** `same_day_cents` is likewise overlaid from focused_same_day_settings. */
   surcharges: { same_day_cents: number };
   demand: {
     /** Master switch. Off leaves base × condition × zone fully functional. */
@@ -331,12 +340,17 @@ export function computeFloorCents(
 
 // ─── Quote computation ──────────────────────────────────────────────────────
 
+export interface FocusedSelection {
+  areaId: string;
+  quantity: number;
+}
+
 export interface QuoteInput {
   serviceType: DynamicServiceType;
   /** Band id for sized services; null for focused cleans. */
   homeSizeId: string | null;
-  /** Focused-clean composition (areas = non-bedroom areas). */
-  focused?: { areas: number; bedrooms: number } | null;
+  /** Focused-clean composition — areas picked from the shared area catalog. */
+  focused?: { selections: FocusedSelection[] } | null;
   condition: ConditionLevel;
   addOns: string[];
   /** Same-day flag — flat surcharge, applied after all multipliers. */
@@ -564,16 +578,37 @@ export function computeQuote(
   let baseLabel = "";
   let baseReason = "";
   if (input.serviceType === "focused") {
-    const areas = Math.max(0, input.focused?.areas || 0);
-    const bedrooms = Math.max(0, input.focused?.bedrooms || 0);
-    if (areas + bedrooms === 0) return failed(input, zone.code, "Pick at least one area for a focused clean.");
-    const raw = areas * config.focused_clean.area_cents + bedrooms * config.focused_clean.bedroom_cents;
-    baseCents = Math.max(raw, config.focused_clean.minimum_cents);
+    // Areas stack. Rates come from the shared focused/same-day settings, so a
+    // rate change in one place moves the customer funnel and internal booking
+    // together.
+    const selections = input.focused?.selections || [];
     const parts: string[] = [];
-    if (areas > 0) parts.push(`${areas} × area ${money(config.focused_clean.area_cents)}`);
-    if (bedrooms > 0) parts.push(`${bedrooms} × bedroom ${money(config.focused_clean.bedroom_cents)}`);
+    let raw = 0;
+    let units = 0;
+    for (const sel of selections) {
+      const def = config.focused_clean.areas.find((a) => a.id === sel.areaId);
+      if (!def) continue;
+      const qty = def.quantity ? Math.max(1, Math.floor(Number(sel.quantity) || 1)) : 1;
+      raw += def.price_cents * qty;
+      units += qty;
+      parts.push(
+        qty > 1
+          ? `${qty} × ${def.label} ${money(def.price_cents)}`
+          : `${def.label} ${money(def.price_cents)}`,
+      );
+    }
+    if (units === 0) return failed(input, zone.code, "Pick at least one area for a focused clean.");
+    const bundlePct = Math.max(0, Math.min(100, config.focused_clean.bundle_discount_percent || 0));
+    if (bundlePct > 0 && selections.length > 1) {
+      raw = roundCents(raw * (1 - bundlePct / 100));
+      parts.push(`bundle −${bundlePct}%`);
+    }
+    // The focused minimum floors the AREA TOTAL, keeping the layer order
+    // intact: base (area total) × condition × zone × demand.
+    baseCents = Math.max(raw, config.focused_clean.minimum_cents);
     baseLabel = "Focused clean";
-    baseReason = parts.join(" + ") + (baseCents > raw ? ` (minimum ${money(config.focused_clean.minimum_cents)})` : "");
+    baseReason = parts.join(" + ") +
+      (baseCents > raw ? ` (minimum ${money(config.focused_clean.minimum_cents)})` : "");
   } else {
     if (!input.homeSizeId) return failed(input, zone.code, "Home size is required.");
     baseCents = baseCentsFor(config, input.serviceType, input.homeSizeId);

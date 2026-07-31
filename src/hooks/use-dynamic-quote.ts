@@ -27,8 +27,16 @@ export interface DynamicQuoteMeta {
   overrideBandPercent: number;
   quoteLockHours: number;
   baseTables: { authoritative: string; reconciled: boolean };
-  focusedClean: { area_cents: number; bedroom_cents: number; minimum_cents: number; demand_enabled: boolean };
+  /** Area catalog + minimum, sourced from focused_same_day_settings. */
+  focusedClean: {
+    areas: Array<{ id: string; label: string; price_cents: number; quantity: boolean }>;
+    minimum_cents: number;
+    bundle_discount_percent: number;
+    demand_enabled: boolean;
+  };
   sameDayCents: number;
+  /** True when focused rates + same-day fee came from the shared settings row. */
+  focusedSettingsLinked: boolean;
 }
 
 export interface DynamicQuoteState {
@@ -57,7 +65,7 @@ export interface DynamicQuoteInputs {
   zip: string;
   serviceType: string;
   homeSizeId: string | null;
-  focused: { areas: number; bedrooms: number } | null;
+  focused: { selections: Array<{ areaId: string; quantity: number }> } | null;
   condition: "light" | "standard" | "heavy";
   addOns: string[];
   serviceDate: string | null; // yyyy-MM-dd
@@ -130,15 +138,11 @@ export function useDynamicQuote(inputs: DynamicQuoteInputs): DynamicQuoteState &
       setState({ ...EMPTY, breakdown: null });
       return;
     }
-    if (inputs.serviceType === "focused") {
-      const f = inputs.focused;
-      if (!f || f.areas + f.bedrooms <= 0) {
-        setState((s) => ({ ...EMPTY, meta: s.meta }));
-        return;
-      }
-    } else if (!inputs.homeSizeId) {
-      return;
-    }
+    // A focused quote with nothing picked yet is still sent: the server
+    // answers with the "pick at least one area" message AND the area catalog
+    // the picker needs to render, so the UI never has to hold its own copy of
+    // the rates.
+    if (inputs.serviceType !== "focused" && !inputs.homeSizeId) return;
 
     const seq = ++requestSeq.current;
     setState((s) => ({ ...s, loading: true, error: null }));

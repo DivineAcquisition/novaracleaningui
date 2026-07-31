@@ -37,6 +37,23 @@ const tables: Record<string, Record<string, unknown>[]> = {
     { min_crew_size: 1, max_crew_size: 1, rate_percent: 35, pay_tier: "foundation" },
     { min_crew_size: 2, max_crew_size: null, rate_percent: 40, pay_tier: "foundation" },
   ],
+  // The shared focused/same-day settings row — the single source for focused
+  // rates + the same-day fee. Deliberately DIFFERENT from the config fallback
+  // so the overlay is provable.
+  app_settings: [
+    {
+      key: "focused_same_day_settings",
+      value: {
+        areas: [
+          { id: "bathroom", label: "Bathroom", price: 70, quantity: false },
+          { id: "bedroom", label: "Bedroom", price: 55, quantity: true },
+        ],
+        minimum_dollars: 75,
+        multi_area_bundle_discount_percent: 0,
+        same_day_upcharge_dollars: 60,
+      },
+    },
+  ],
   service_coverage_zones: [
     { zip_code: "20874", is_active: true },   // served but unmapped → default B
     { zip_code: "20899", is_active: false },  // inactive → waitlist
@@ -124,6 +141,15 @@ check("context loads (config v1, 4 zones, pay rates 35/40)",
   ctx.configVersion === 1 && ctx.zones.length === 4 &&
   ctx.payRates.soloFoundationPercent === 35 && ctx.payRates.crewFoundationPercent === 40);
 
+// Focused rates + same-day fee must come from app_settings, not the config copy
+check("focused/same-day settings linked", ctx.focusedSettingsLinked);
+check("focused area catalog overlaid from app_settings ($70 bath / $55 bedroom)",
+  ctx.config.focused_clean.areas.length === 2 &&
+  ctx.config.focused_clean.areas[0].price_cents === 7000 &&
+  ctx.config.focused_clean.areas[1].price_cents === 5500);
+check("focused minimum overlaid ($75)", ctx.config.focused_clean.minimum_cents === 7500);
+check("same-day fee overlaid ($60)", ctx.config.surcharges.same_day_cents === 6000);
+
 // Zone resolution paths
 const rA = await resolveZoneForZip(supa, "20814", ctx.zones);
 check("mapped Bethesda zip → Zone A ×1.15", rA.served && rA.zone?.code === "A" && rA.zone?.multiplier === 1.15);
@@ -181,6 +207,16 @@ const memberQuote = await computeServerQuote(supa, { ...ctx, config: liveCfg }, 
 check("member visit: zone applies, demand exempt",
   memberQuote.ok && memberQuote.breakdown?.demandMode === "exempt_member" &&
   memberQuote.breakdown?.membership?.monthlyCents === 28710);
+
+// A focused quote must price off the overlaid (app_settings) rates.
+const focusedQuote = await computeServerQuote(supa, ctx, {
+  zip: "21045", serviceType: "focused", homeSizeId: null,
+  focused: { selections: [{ areaId: "bathroom", quantity: 1 }, { areaId: "bedroom", quantity: 2 }] },
+  condition: "light", addOns: [], serviceDate: "2026-08-08", quotedBy: "test-va",
+});
+check("focused priced from app_settings rates ($70 + 2×$55 = $180)",
+  focusedQuote.ok && focusedQuote.breakdown?.totalCents === 18000,
+  `got ${focusedQuote.breakdown?.totalCents}`);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) Deno.exit(1);

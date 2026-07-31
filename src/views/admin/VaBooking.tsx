@@ -503,10 +503,24 @@ export default function VaBooking() {
     if (serviceType === "focused") setInvoiceMode("full_now");
   }, [serviceType]);
   const [addOns, setAddOns] = useState<string[]>([]);
-  // Pricing layers: home condition + focused-clean composition.
+  // Pricing layers: home condition + focused-clean area selections. The area
+  // catalog itself comes from the server (shared focused/same-day settings).
   const [condition, setCondition] = useState<ConditionLevel>("standard");
-  const [focusedAreas, setFocusedAreas] = useState("1");
-  const [focusedBedrooms, setFocusedBedrooms] = useState("0");
+  const [focusedSelections, setFocusedSelections] = useState<
+    Array<{ areaId: string; quantity: number }>
+  >([]);
+  const toggleFocusedArea = (areaId: string, on: boolean) =>
+    setFocusedSelections((prev) =>
+      on
+        ? prev.some((s) => s.areaId === areaId) ? prev : [...prev, { areaId, quantity: 1 }]
+        : prev.filter((s) => s.areaId !== areaId),
+    );
+  const setFocusedQuantity = (areaId: string, quantity: number) =>
+    setFocusedSelections((prev) =>
+      quantity <= 0
+        ? prev.filter((s) => s.areaId !== areaId)
+        : prev.map((s) => (s.areaId === areaId ? { ...s, quantity } : s)),
+    );
   const [deepClean, setDeepClean] = useState<DeepCleanChoice>({ deepCleanedBefore: "", includeDeepClean: true });
   const [bedrooms, setBedrooms] = useState("");
   const [bathrooms, setBathrooms] = useState("");
@@ -613,9 +627,13 @@ export default function VaBooking() {
         if (data.pets) setPets(data.pets);
         if (data.csr_name) setCsrName(data.csr_name);
         if (data.condition) setCondition(data.condition as ConditionLevel);
-        if (data.focused_areas) {
-          setFocusedAreas(String(data.focused_areas.areas ?? 1));
-          setFocusedBedrooms(String(data.focused_areas.bedrooms ?? 0));
+        if (Array.isArray(data.focused_areas?.selections)) {
+          setFocusedSelections(
+            data.focused_areas.selections.map((s: { areaId: string; quantity?: number }) => ({
+              areaId: String(s.areaId),
+              quantity: Math.max(1, Number(s.quantity) || 1),
+            })),
+          );
         }
         if (data.price_breakdown) {
           // Dynamic quote: the locked price is honored via quoteId — never
@@ -911,14 +929,8 @@ export default function VaBooking() {
   // until the VA changes the deal or submits.
   const serviceDateStr = selectedDate ? format(selectedDate, "yyyy-MM-dd") : null;
   const focusedComposition = useMemo(
-    () =>
-      serviceType === "focused"
-        ? {
-            areas: Math.max(0, parseInt(focusedAreas) || 0),
-            bedrooms: Math.max(0, parseInt(focusedBedrooms) || 0),
-          }
-        : null,
-    [serviceType, focusedAreas, focusedBedrooms],
+    () => (serviceType === "focused" ? { selections: focusedSelections } : null),
+    [serviceType, focusedSelections],
   );
   const dynQuote = useDynamicQuote({
     zip: zipCode,
@@ -1006,13 +1018,13 @@ export default function VaBooking() {
     if (!isRecurring && !vaAgreedOnPhone) list.push("Confirm client agreed (phone)");
     // Unserved address → no quote, no booking; offer the waitlist instead.
     if (zipDigits.length === 5 && !dynQuote.served) list.push("Serviceable ZIP (area not served — offer waitlist)");
-    if (serviceType === "focused" && (!focusedComposition || focusedComposition.areas + focusedComposition.bedrooms === 0)) {
+    if (serviceType === "focused" && focusedSelections.length === 0) {
       list.push("At least one focused-clean area");
     }
     // Any price adjustment needs a reason from the standard list.
     if (!isRecurring && overrideTotal.trim() && !overrideReason) list.push("Adjustment reason");
     return list;
-  }, [firstName, email, phoneDigits, zipDigits, selectedDate, selectedTime, vaAgreedOnPhone, isRecurring, dynQuote.served, serviceType, focusedComposition, overrideTotal, overrideReason]);
+  }, [firstName, email, phoneDigits, zipDigits, selectedDate, selectedTime, vaAgreedOnPhone, isRecurring, dynQuote.served, serviceType, focusedSelections, overrideTotal, overrideReason]);
 
   const canSubmit = requirements.length === 0;
 
@@ -2152,38 +2164,72 @@ export default function VaBooking() {
                   })}
                 </div>
 
-                {/* Focused / single-area composition — priced per area from
-                    the server config; condition + zone still apply. */}
+                {/* Focused / single-area areas. The catalog and its rates come
+                    from the shared focused/same-day settings (the same row the
+                    customer funnel and job checklists read), so there is one
+                    place to change a rate. Condition + zone still apply. */}
                 {serviceType === "focused" && (
-                  <div className="grid grid-cols-2 gap-4 rounded-xl border border-violet-200 bg-violet-50/40 p-3">
-                    <Field
-                      label="Areas (bath, kitchen, living…)"
-                      hint={
-                        dynQuote.meta
-                          ? `${fmtMoney(dynQuote.meta.focusedClean.area_cents)} per area · ${fmtMoney(dynQuote.meta.focusedClean.minimum_cents)} minimum`
-                          : undefined
-                      }
-                    >
-                      <Input
-                        value={focusedAreas}
-                        onChange={(e) => setFocusedAreas(e.target.value)}
-                        inputMode="numeric"
-                        placeholder="1"
-                        className="bg-white"
-                      />
-                    </Field>
-                    <Field
-                      label="Bedrooms"
-                      hint={dynQuote.meta ? `${fmtMoney(dynQuote.meta.focusedClean.bedroom_cents)} per bedroom` : undefined}
-                    >
-                      <Input
-                        value={focusedBedrooms}
-                        onChange={(e) => setFocusedBedrooms(e.target.value)}
-                        inputMode="numeric"
-                        placeholder="0"
-                        className="bg-white"
-                      />
-                    </Field>
+                  <div className="space-y-2 rounded-xl border border-violet-200 bg-violet-50/40 p-3">
+                    <div className="flex items-baseline justify-between">
+                      <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                        Areas to clean
+                      </Label>
+                      {dynQuote.meta && (
+                        <span className="text-[10.5px] text-slate-500">
+                          {fmtMoney(dynQuote.meta.focusedClean.minimum_cents)} minimum · areas stack
+                        </span>
+                      )}
+                    </div>
+                    {dynQuote.meta ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {dynQuote.meta.focusedClean.areas.map((a) => {
+                          const sel = focusedSelections.find((s) => s.areaId === a.id);
+                          const qty = sel?.quantity ?? 0;
+                          return (
+                            <div
+                              key={a.id}
+                              className={cn(
+                                "flex items-center justify-between gap-2 rounded-lg border px-3 py-2 bg-white",
+                                qty > 0 ? "border-violet-400" : "border-slate-200",
+                              )}
+                            >
+                              <label className="flex items-center gap-2 cursor-pointer min-w-0">
+                                <Checkbox
+                                  checked={qty > 0}
+                                  onCheckedChange={(v) => toggleFocusedArea(a.id, v === true)}
+                                />
+                                <span className="text-sm text-slate-800 truncate">{a.label}</span>
+                                <span className="text-xs text-slate-500 tabular-nums shrink-0">
+                                  {fmtMoney(a.price_cents)}
+                                  {a.quantity ? " ea" : ""}
+                                </span>
+                              </label>
+                              {a.quantity && qty > 0 && (
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <Button
+                                    type="button" variant="outline" size="icon" className="h-6 w-6"
+                                    onClick={() => setFocusedQuantity(a.id, qty - 1)}
+                                  >
+                                    −
+                                  </Button>
+                                  <span className="text-sm font-semibold tabular-nums w-5 text-center">{qty}</span>
+                                  <Button
+                                    type="button" variant="outline" size="icon" className="h-6 w-6"
+                                    onClick={() => setFocusedQuantity(a.id, qty + 1)}
+                                  >
+                                    +
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-slate-500 flex items-center gap-1.5">
+                        <RiLoader4Line className="w-3 h-3 animate-spin" /> Loading area rates…
+                      </p>
+                    )}
                   </div>
                 )}
 
