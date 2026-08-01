@@ -261,8 +261,11 @@ export default function Account() {
     return "Today";
   };
 
+  // "assigned" is still an upcoming appointment — cancel must stay available
+  // after a cleaner is dispatched (matches SMS cancel + cancel-booking).
   const upcomingBookings = bookings.filter(b =>
-    isFuture(parseServiceDate(b.service_date)) && b.status === 'confirmed'
+    isFuture(parseServiceDate(b.service_date)) &&
+    (b.status === "confirmed" || b.status === "assigned")
   );
   const nextBooking = upcomingBookings.length > 0 ? upcomingBookings[upcomingBookings.length - 1] : null;
   const otherUpcoming = upcomingBookings.filter(b => b.id !== nextBooking?.id);

@@ -1152,12 +1152,18 @@ function BookingSheet({
     }
     setWorking("cancel");
     try {
-      const fn = refundType === "none" ? "cancel-booking" : "admin-refund-booking";
-      const body =
-        refundType === "none"
-          ? { bookingId: booking.id, cancelReason, source: "admin", refundType: "none" }
-          : { bookingId: booking.id, reason: cancelReason, refundType, markCancelled: true };
-      const { data, error } = await supabase.functions.invoke(fn, { body });
+      // Always go through cancel-booking. It applies the 24-hr fee rule for
+      // "auto", forces a full deposit refund for "full", and skips Stripe for
+      // "none". Refund failures are best-effort — the booking still cancels
+      // (unlike admin-refund-booking, which 500s and leaves the row open).
+      const { data, error } = await supabase.functions.invoke("cancel-booking", {
+        body: {
+          bookingId: booking.id,
+          cancelReason,
+          source: "admin",
+          refundType,
+        },
+      });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       toast.success(`Booking cancelled (${refundType === "none" ? "no refund" : refundType + " refund"})`);

@@ -203,8 +203,12 @@ export default function ManageBooking() {
     setLookupValue("");
   };
 
+  // Keep Cancel available after dispatch — status flips to "assigned" but the
+  // appointment is still cancellable (same as SMS cancel + cancel-booking).
   const upcomingBookings = bookings.filter(
-    (b) => isFuture(parseServiceDate(b.service_date)) && b.status === "confirmed"
+    (b) =>
+      isFuture(parseServiceDate(b.service_date)) &&
+      (b.status === "confirmed" || b.status === "assigned")
   );
   const pastBookings = bookings.filter(
     (b) => b.status === "completed" || b.status === "cancelled"

@@ -357,10 +357,21 @@ function CustomerSheet({
     if (!confirm(`Refund + cancel booking #${b.booking_number || b.id.slice(0, 8)}?`)) return;
     setActioning(b.id);
     try {
-      const { error } = await supabase.functions.invoke("admin-refund-booking", {
-        body: { bookingId: b.id, reason: "admin_refund" },
+      // cancel-booking refunds the deposit (best-effort) AND flips the row to
+      // cancelled. admin-refund-booking used to refund without cancelling when
+      // markCancelled was omitted, and hard-failed the whole action on Stripe errors.
+      const { data, error } = await supabase.functions.invoke("cancel-booking", {
+        body: {
+          bookingId: b.id,
+          cancelReason: "admin_refund",
+          refundType: "full",
+          source: "admin",
+        },
       });
       if (error) throw error;
+      if ((data as { error?: string } | null)?.error) {
+        throw new Error((data as { error: string }).error);
+      }
       toast.success("Refunded & cancelled");
       await loadDetail(customer);
     } catch (err: any) {

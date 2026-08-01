@@ -92,6 +92,37 @@ serve(async (req) => {
       if (!paymentIntentId) paymentIntentId = data.payment_intent_id as string;
     }
     if (!paymentIntentId) {
+      // Credit / unpaid bookings have nothing to refund. If the caller asked
+      // to cancel, do that through cancel-booking instead of hard-failing.
+      if (markCancelled && bookingId) {
+        const { data: cancelData, error: cancelErr } = await supabase.functions.invoke("cancel-booking", {
+          body: {
+            bookingId,
+            cancelReason: reason || "admin-refund",
+            refundType: "none",
+            source: "admin",
+          },
+        });
+        if (cancelErr || cancelData?.error) {
+          return new Response(
+            JSON.stringify({
+              error: cancelData?.error || cancelErr?.message || "cancel failed",
+              note: "booking had no payment_intent_id",
+            }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 },
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            success: true,
+            refundId: null,
+            amountRefunded: 0,
+            bookingId,
+            note: "no payment_intent_id — cancelled without Stripe refund",
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
+        );
+      }
       return new Response(
         JSON.stringify({ error: "booking has no payment_intent_id" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 },
@@ -137,17 +168,52 @@ serve(async (req) => {
 
     // Issue the refund. metadata captures who/what asked for it so
     // ops can audit later.
-    const refund = await stripe.refunds.create({
-      payment_intent: paymentIntentId,
-      amount: refundAmount,
-      reason: "requested_by_customer",
-      metadata: {
-        booking_id: bookingId || "",
-        triggered_by: "admin-refund-booking",
-        admin_reason: reason || "",
-      },
-    });
-    logStep("Refund created", { id: refund.id, status: refund.status, amount: refund.amount });
+    let refund: Stripe.Refund | null = null;
+    try {
+      refund = await stripe.refunds.create({
+        payment_intent: paymentIntentId,
+        amount: refundAmount,
+        reason: "requested_by_customer",
+        metadata: {
+          booking_id: bookingId || "",
+          triggered_by: "admin-refund-booking",
+          admin_reason: reason || "",
+        },
+      });
+      logStep("Refund created", { id: refund.id, status: refund.status, amount: refund.amount });
+    } catch (refundErr) {
+      const message = refundErr instanceof Error ? refundErr.message : String(refundErr);
+      logStep("Refund failed", { message });
+      // If the operator also asked to cancel, still flip the booking so a
+      // Stripe hiccup (already refunded, charge missing, etc.) doesn't leave
+      // the appointment on the books.
+      if (markCancelled && booking) {
+        await supabase
+          .from("bookings")
+          .update({
+            status: "cancelled",
+            cancelled_at: new Date().toISOString(),
+            cancel_reason: reason || "admin-refund",
+          })
+          .eq("id", booking.id as string);
+        logStep("Booking cancelled despite refund failure", { bookingId: booking.id, message });
+        return new Response(
+          JSON.stringify({
+            success: true,
+            refundId: null,
+            amountRefunded: 0,
+            bookingId: bookingId || null,
+            paymentIntentId,
+            warning: `Cancelled, but Stripe refund failed: ${message}`,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
+        );
+      }
+      return new Response(
+        JSON.stringify({ error: message }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 },
+      );
+    }
 
     // Optionally flip the booking row to cancelled so the customer
     // portal stops surfacing it as upcoming.
