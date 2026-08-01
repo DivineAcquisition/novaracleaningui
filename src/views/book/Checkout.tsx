@@ -72,6 +72,7 @@ import {
   loadCheckoutSnapshot,
   saveCheckoutSnapshot,
 } from "@/lib/checkout-funnel-guard";
+import { capturePageForEvidence } from "@/lib/page-capture";
 const BOOKING_STEPS = [{
   number: 1,
   label: "Location",
@@ -116,6 +117,8 @@ export default function BookingCheckout() {
   const [isCreatingIntent, setIsCreatingIntent] = useState(false);
   const stripePromise = useMemo(() => getStripePromise(), []);
   const paymentInitStarted = useRef(false);
+  // Wraps the whole checkout body so it can be screenshotted for the packet.
+  const checkoutCaptureRef = useRef<HTMLDivElement>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState(0);
   const [bookingId, setBookingId] = useState<string | null>(null);
@@ -693,7 +696,7 @@ export default function BookingCheckout() {
     paymentInitStarted.current = false;
     handleInitializePayment(0);
   };
-  const handlePaymentSuccess = () => {
+  const handlePaymentSuccess = async () => {
     toast.success("Payment successful!");
     const id = bookingId || bookingData.bookingId;
     if (id) {
@@ -704,6 +707,9 @@ export default function BookingCheckout() {
       toast.error("Payment received but booking id is missing — contact support@novaracleaning.com");
       return;
     }
+    // Screenshot this page before we navigate away — it becomes the checkout
+    // evidence page in the job's dispute packet.
+    await capturePageForEvidence(checkoutCaptureRef.current, { bookingId: id, kind: "checkout" });
     router.replace(`/book/details?booking_id=${id}`);
   };
 
@@ -779,7 +785,7 @@ export default function BookingCheckout() {
         />
         <BookingHeader currentStep={currentStep} totalSteps={6} stepLabel="Checkout" />
         
-        <div className="container max-w-2xl mx-auto px-4 py-6 space-y-6">
+        <div ref={checkoutCaptureRef} className="container max-w-2xl mx-auto px-4 py-6 space-y-6">
           
 
           {/* Review & Reserve header — promo-led layout matching the

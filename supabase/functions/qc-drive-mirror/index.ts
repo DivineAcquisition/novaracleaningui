@@ -11,9 +11,9 @@
 //   2. Builds the Drive folder tree:
 //        <QC root>/<YYYY>/<MM - Month>/<NVC-xxxxx — Client — date>/{before,after}
 //   3. Uploads every ORIGINAL photo (deterministic filenames → retries dedupe).
-//   4. Generates the completion-summary PDF (job details, checkout + agreement
-//      page images, checklist, before/after photos, signed agreement) — the
-//      one-file dispute/chargeback packet.
+//   4. Generates the completion-summary PDF (job details, real checkout +
+//      agreement page screenshots, checklist, before/after photos, signed
+//      agreement) — the one-file dispute/chargeback packet.
 //   5. Marks the row mirrored, then pushes the Drive link + documented flag
 //      to the job's Airtable record via the existing sync webhook.
 //
@@ -312,6 +312,59 @@ function moneyLabel(cents: number | null | undefined): string {
   return `$${(Number(cents) / 100).toFixed(2)}`;
 }
 
+/** A real browser screenshot of a funnel page, captured as the customer used it. */
+interface RealPageCapture {
+  kind: "checkout" | "agreement";
+  bytes: Uint8Array;
+  capturedAt: string;
+  pageUrl: string | null;
+  userAgent: string | null;
+  viewport: string | null;
+}
+
+/**
+ * The newest genuine screenshot per page kind. These are actual captures of
+ * what the customer saw (page-captures bucket), so they outrank the
+ * reconstructed pages the packet falls back to for older bookings.
+ */
+async function loadRealPageCaptures(supabase: SB, bookingId: string | null): Promise<RealPageCapture[]> {
+  if (!bookingId) return [];
+  const out: RealPageCapture[] = [];
+  try {
+    const { data: rows } = await supabase
+      .from("page_captures")
+      .select("kind, storage_path, page_url, user_agent, viewport_width, viewport_height, captured_at")
+      .eq("booking_id", bookingId)
+      .order("captured_at", { ascending: false });
+    const seen = new Set<string>();
+    for (const row of rows || []) {
+      const kind = String(row.kind);
+      if (kind !== "checkout" && kind !== "agreement") continue;
+      if (seen.has(kind)) continue;
+      const { data: file, error } = await supabase.storage
+        .from("page-captures")
+        .download(String(row.storage_path));
+      if (error || !file) continue;
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      if (bytes.length === 0) continue;
+      seen.add(kind);
+      out.push({
+        kind,
+        bytes,
+        capturedAt: String(row.captured_at || ""),
+        pageUrl: row.page_url ? String(row.page_url) : null,
+        userAgent: row.user_agent ? String(row.user_agent) : null,
+        viewport: row.viewport_width && row.viewport_height
+          ? `${row.viewport_width}×${row.viewport_height}`
+          : null,
+      });
+    }
+  } catch (e) {
+    log("page capture load failed (non-blocking)", { error: e instanceof Error ? e.message : String(e) });
+  }
+  return out;
+}
+
 /** Live payment record for the dispute packet — booking financials + charges. */
 async function loadPaymentRecord(supabase: SB, bookingId: string): Promise<PaymentRecord> {
   const rows: Array<[string, string]> = [];
@@ -511,6 +564,7 @@ async function buildSummaryPdf(doc: DocRow, extras: {
   issues?: IssueForPacket[];
   photos: Array<{ label: string; bytes: Uint8Array }>;
   pageCapture?: PageCaptureData | null;
+  realCaptures?: RealPageCapture[];
 }): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
   const font = await pdf.embedFont(StandardFonts.Helvetica);
@@ -532,6 +586,51 @@ async function buildSummaryPdf(doc: DocRow, extras: {
     if (y < MARGIN + size) { page = pdf.addPage([PAGE_W, PAGE_H]); y = PAGE_H - MARGIN; }
     page.drawText(text.slice(0, 110), { x: MARGIN, y, size, font: opts.font ?? font, color: opts.color ?? dark });
     y -= size + (opts.gap ?? 6);
+  };
+
+  /**
+   * Embed a REAL screenshot of a funnel page, scaled to fit one packet page,
+   * with the capture provenance printed underneath.
+   */
+  const drawRealCapture = async (cap: RealPageCapture, title: string): Promise<boolean> => {
+    try {
+      const isPng = cap.bytes[0] === 0x89 && cap.bytes[1] === 0x50;
+      const img = isPng ? await pdf.embedPng(cap.bytes) : await pdf.embedJpg(cap.bytes);
+      const p = pdf.addPage([PAGE_W, PAGE_H]);
+      p.drawText(title, { x: MARGIN, y: PAGE_H - 36, size: 12, font: bold, color: violet });
+      p.drawText("Actual screenshot captured in the customer's browser at the moment they completed this step.", {
+        x: MARGIN, y: PAGE_H - 51, size: 8, font, color: gray,
+      });
+
+      const topY = PAGE_H - 62;
+      const bottomY = 66;
+      const maxW = PAGE_W - MARGIN * 2;
+      const maxH = topY - bottomY;
+      const scale = Math.min(maxW / img.width, maxH / img.height);
+      const w = img.width * scale;
+      const h = img.height * scale;
+      const x = (PAGE_W - w) / 2;
+      p.drawRectangle({
+        x: x - 2, y: topY - h - 2, width: w + 4, height: h + 4,
+        borderColor: rgb(0.75, 0.78, 0.82), borderWidth: 1,
+      });
+      p.drawImage(img, { x, y: topY - h, width: w, height: h });
+
+      let cy = 52;
+      const meta = (text: string) => {
+        p.drawText(text.slice(0, 118), { x: MARGIN, y: cy, size: 7.5, font, color: gray });
+        cy -= 10;
+      };
+      if (cap.capturedAt) meta(`Captured: ${new Date(cap.capturedAt).toUTCString()}`);
+      if (cap.pageUrl) meta(`URL: ${cap.pageUrl}`);
+      if (cap.viewport) meta(`Viewport: ${cap.viewport} px`);
+      if (cap.userAgent) meta(`Device: ${cap.userAgent}`);
+      meta("Card entry fields render inside Stripe's isolated frame and are never captured (PCI).");
+      return true;
+    } catch (e) {
+      log("real capture embed failed", { kind: cap.kind, error: e instanceof Error ? e.message : String(e) });
+      return false;
+    }
   };
 
   /** Browser-chrome framed page used as a visual capture of checkout / agreement. */
@@ -663,8 +762,24 @@ async function buildSummaryPdf(doc: DocRow, extras: {
   }
 
   // ── Checkout page + Agreement page images (dispute evidence) ──────────
+  //
+  // Real browser screenshots win. The drawn reconstruction below is only a
+  // fallback for bookings that predate page capture.
   const capture = extras.pageCapture;
-  if (capture) {
+  const realCaptures = extras.realCaptures || [];
+  let checkoutShown = false;
+  let agreementShown = false;
+
+  const realCheckout = realCaptures.find((c) => c.kind === "checkout");
+  if (realCheckout) {
+    checkoutShown = await drawRealCapture(realCheckout, "Checkout page — actual screenshot");
+  }
+  const realAgreement = realCaptures.find((c) => c.kind === "agreement");
+  if (realAgreement) {
+    agreementShown = await drawRealCapture(realAgreement, "Agreement / signature page — actual screenshot");
+  }
+
+  if (capture && (!checkoutShown || !agreementShown)) {
     const loc = [capture.address, capture.city, capture.state, capture.zip].filter(Boolean).join(", ");
     const paidAt = capture.paymentReceivedAt
       ? new Date(capture.paymentReceivedAt).toUTCString()
@@ -673,8 +788,8 @@ async function buildSummaryPdf(doc: DocRow, extras: {
       ? new Date(capture.acceptedAt).toUTCString()
       : paidAt;
 
-    drawBrowserCapture({
-      title: "Checkout page (as presented to the customer)",
+    if (!checkoutShown) drawBrowserCapture({
+      title: "Checkout page (reconstructed from the booking record)",
       url: "https://try.novaracleaning.com/book/checkout",
       subtitle: "Deposit payment step — policies listed; payment constitutes acceptance.",
       drawBody: (p, contentTop, _contentBottom, contentLeft, contentRight) => {
@@ -738,8 +853,8 @@ async function buildSummaryPdf(doc: DocRow, extras: {
       },
     });
 
-    drawBrowserCapture({
-      title: "Agreement / signature page (as presented to the customer)",
+    if (!agreementShown) drawBrowserCapture({
+      title: "Agreement / signature page (reconstructed from the booking record)",
       url: "https://try.novaracleaning.com/book/details",
       subtitle: "Property details step — customer e-signed the One-Time Service Agreement.",
       drawBody: (p, contentTop, _contentBottom, contentLeft, contentRight) => {
@@ -982,6 +1097,21 @@ async function mirrorOne(supabase: SB, token: string, rootFolderId: string, doc:
     serviceDate: doc.service_date,
     address: doc.address,
   });
+
+  // Real screenshots of the checkout + agreement pages, mirrored standalone
+  // into the job folder as well as embedded in the packet.
+  const realCaptures = await loadRealPageCaptures(supabase, doc.booking_id);
+  for (const cap of realCaptures) {
+    const capName = `${safeName(docRef)} — ${cap.kind === "checkout" ? "Checkout Page" : "Agreement Page"} Screenshot.jpg`;
+    if (!jobFiles.has(capName)) {
+      try {
+        await uploadFile(token, jobFolder, capName, cap.bytes, "image/jpeg");
+      } catch (e) {
+        log("page capture upload failed (non-blocking)", { kind: cap.kind, error: e instanceof Error ? e.message : String(e) });
+      }
+    }
+  }
+
   const pdfBytes = await buildSummaryPdf(doc, {
     ...extras,
     payment,
@@ -989,6 +1119,7 @@ async function mirrorOne(supabase: SB, token: string, rootFolderId: string, doc:
     issues: packetIssues,
     photos: photoBytes,
     pageCapture,
+    realCaptures,
   });
   const pdfName = `${safeName(docRef)} — Completion Summary.pdf`;
   let pdfId = doc.drive_pdf_id;

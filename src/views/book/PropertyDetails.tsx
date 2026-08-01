@@ -25,6 +25,7 @@ import { SEO } from "@/components/SEO";
 import { US_STATES, parseAddressString } from "@/lib/address-formatter";
 import { lookupZip, stateFromZip } from "@/lib/zip-lookup";
 import { buildSignedAgreementBase64 } from "@/lib/service-agreement";
+import { capturePageForEvidence } from "@/lib/page-capture";
 import {
   VALUE_STACK_HEADLINES,
   checklistPathForServiceType,
@@ -156,6 +157,8 @@ export default function PropertyDetails() {
   // this, a transient render where the URL param hasn't propagated yet could
   // bounce the page in a redirect loop.
   const didInitRedirect = useRef(false);
+  // Wraps the details + agreement card so it can be screenshotted for the packet.
+  const agreementCaptureRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const id = bookingId || bookingData.bookingId;
     if (id) {
@@ -514,6 +517,13 @@ export default function PropertyDetails() {
       // copy). Fire-and-forget so confirmation navigation isn't blocked.
       void persistServiceAgreement();
 
+      // Screenshot the signed agreement page while it's still on screen — it
+      // becomes the agreement evidence page in the job's dispute packet.
+      await capturePageForEvidence(agreementCaptureRef.current, {
+        bookingId: id,
+        kind: "agreement",
+      });
+
       toast.success("Details saved! Finalizing your booking…");
       router.push(`/book/confirmation?booking_id=${id}`);
     } catch (error: unknown) {
@@ -531,7 +541,7 @@ export default function PropertyDetails() {
   return (
     <div className="min-h-screen bg-gradient-hero px-3 md:px-4 py-8 md:py-12 flex items-center justify-center">
       <SEO title="Property Details" description="Provide details about your home for a customized cleaning experience." noindex />
-      <Card variant="outlined" className="max-w-lg w-full shadow-card animate-fade-in overflow-visible">
+      <Card ref={agreementCaptureRef} variant="outlined" className="max-w-lg w-full shadow-card animate-fade-in overflow-visible">
         {/* Brand gradient strip — visually ties the details step to the
             rest of the funnel (zip → offer → checkout → THIS → confirm). */}
         <div className="h-1.5 w-full" style={{ background: 'var(--gradient-primary)' }} />

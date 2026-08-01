@@ -679,6 +679,9 @@ verify_jwt = false
 [functions.send-testimonial-offer]
 verify_jwt = false
 
+[functions.store-page-capture]
+verify_jwt = false
+
 [functions.store-service-agreement]
 verify_jwt = false
 
