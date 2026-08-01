@@ -299,6 +299,34 @@ export async function upsertRecords(
   return result;
 }
 
+/** Create new records (batched ≤10). Used for manual applicant intake from admin. */
+export async function createRecords(
+  tableId: string,
+  records: Fields[],
+  options: { typecast?: boolean; baseId?: string; knownOptions?: Record<string, readonly string[]> } = {},
+): Promise<AirtableRecord[]> {
+  const baseId = options.baseId || getBaseId();
+  const typecast = options.typecast ?? true;
+  const prepared = records
+    .map((fields) => ({ fields: clean(fields) }))
+    .filter((r) => Object.keys(r.fields).length > 0);
+  reviewUnknownOptions(tableId, prepared as { fields: Fields }[], options.knownOptions);
+
+  const out: AirtableRecord[] = [];
+  if (prepared.length === 0) return out;
+
+  for (let i = 0; i < prepared.length; i += MAX_RECORDS_PER_REQUEST) {
+    const batch = prepared.slice(i, i + MAX_RECORDS_PER_REQUEST);
+    const res = await airtableRequest<{ records: AirtableRecord[] }>(`/${baseId}/${tableId}`, {
+      method: "POST",
+      body: { typecast, returnFieldsByFieldId: true, records: batch },
+    });
+    out.push(...(res.records || []));
+  }
+  log("create ok", { tableId, created: out.length });
+  return out;
+}
+
 /** Update existing records by id (batched ≤10). Used to set link fields after upsert. */
 export async function updateRecords(
   tableId: string,

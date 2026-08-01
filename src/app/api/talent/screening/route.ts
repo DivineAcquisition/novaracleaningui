@@ -43,6 +43,7 @@ import {
   type ScreeningScorecard,
 } from "@/lib/phone-screening";
 import { buildScreeningPdf, type ScreeningPdfApplicant } from "@/lib/screening-pdf";
+import { sendApplicantRejectEmail } from "@/lib/talent/reject-email";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -423,6 +424,19 @@ export async function POST(req: Request): Promise<NextResponse> {
             .eq("id", applicant.id);
         }
 
+        let rejectionEmailSent: boolean | null = null;
+        let rejectionEmailError: string | null = null;
+        if (newStage === "rejected") {
+          const rejectMail = await sendApplicantRejectEmail({
+            email: applicant.email,
+            firstName: applicant.first_name,
+            fullName: applicant.full_name,
+            reason: String(stagePatch.rejection_reason || ""),
+          });
+          rejectionEmailSent = rejectMail.sent;
+          rejectionEmailError = rejectMail.error;
+        }
+
         const who = applicant.full_name || applicant.email || applicant.id;
         await logEvent(supabase, {
           type: "applicant.screened",
@@ -432,6 +446,12 @@ export async function POST(req: Request): Promise<NextResponse> {
               : rec === "hold"
                 ? ` (follow up ${finalRow.hold_follow_up_date})`
                 : ""
+          }${
+            rec === "decline"
+              ? rejectionEmailSent
+                ? " — rejection email sent"
+                : ` — rejection email not sent: ${rejectionEmailError}`
+              : ""
           }`,
           cleanerId: applicant.cleaner_id,
           data: {
@@ -440,6 +460,8 @@ export async function POST(req: Request): Promise<NextResponse> {
             recommendation: rec,
             decline_reason: finalRow.decline_reason,
             hold_follow_up_date: finalRow.hold_follow_up_date,
+            rejection_email_sent: rejectionEmailSent,
+            rejection_email_error: rejectionEmailError,
           },
         });
 
@@ -454,6 +476,8 @@ export async function POST(req: Request): Promise<NextResponse> {
           offerLaunchOnboarding: rec === "advance",
           pdf: pdf.ok ? "generated" : "failed",
           pdfError: pdf.error,
+          emailed: rejectionEmailSent,
+          emailError: rejectionEmailError,
         });
       }
 

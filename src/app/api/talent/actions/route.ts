@@ -4,7 +4,7 @@
 // whole lifecycle lives here — Airtable is intake-only.
 //
 //   { action: "advance_screening", applicantId }
-//   { action: "reject",            applicantId, reason }
+//   { action: "reject",            applicantId, reason }  ← emails applicant from team@ (CC contact@)
 //   { action: "reinstate",         applicantId, targetStage? }  ← rejected → onboarding (default) / screening / applicant
 //   { action: "launch_onboarding", applicantId }   ← email + SMS via existing channels
 //   { action: "resend_onboarding", applicantId }   ← one-click nudge for stalled onboarding
@@ -27,6 +27,7 @@ import { requireAdmin, AdminAuthError } from "@/lib/admin-auth";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import { edgeResult } from "@/lib/edge-invoke";
 import { deriveDownstreamFields, type ScreeningAnswers } from "@/lib/phone-screening";
+import { sendApplicantRejectEmail } from "@/lib/talent/reject-email";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -243,13 +244,34 @@ export async function POST(req: Request): Promise<NextResponse> {
         const reason = String(body.reason || "").trim();
         if (!reason) return NextResponse.json({ error: "A rejection reason is required" }, { status: 400 });
         await setStage("rejected", { rejection_reason: reason });
+
+        const rejectMail = await sendApplicantRejectEmail({
+          email: applicant.email,
+          firstName: applicant.first_name,
+          fullName: applicant.full_name,
+          reason,
+        });
+
         await logEvent(supabase, {
           type: "applicant.stage_changed",
-          summary: `${who} rejected by ${principal.email} — ${reason}`,
+          summary: `${who} rejected by ${principal.email} — ${reason}` +
+            (rejectMail.sent ? " (rejection email sent)" : ` (rejection email not sent: ${rejectMail.error})`),
           cleanerId: applicant.cleaner_id,
-          data: { applicant_id: applicantId, from: applicant.stage, to: "rejected", reason },
+          data: {
+            applicant_id: applicantId,
+            from: applicant.stage,
+            to: "rejected",
+            reason,
+            rejection_email_sent: rejectMail.sent,
+            rejection_email_error: rejectMail.error,
+          },
         });
-        return NextResponse.json({ ok: true, stage: "rejected" });
+        return NextResponse.json({
+          ok: true,
+          stage: "rejected",
+          emailed: rejectMail.sent,
+          emailError: rejectMail.error,
+        });
       }
 
       case "reinstate": {

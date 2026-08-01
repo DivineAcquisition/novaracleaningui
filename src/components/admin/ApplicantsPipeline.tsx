@@ -43,6 +43,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { edgeResult } from "@/lib/edge-invoke";
 import PhoneScreeningForm from "@/components/admin/PhoneScreeningForm";
@@ -233,6 +234,19 @@ export default function ApplicantsPipeline() {
   const [syncing, setSyncing] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [addForm, setAddForm] = useState({
+    fullName: "",
+    email: "",
+    phone: "",
+    zipCode: "",
+    state: "",
+    role: "Independent Cleaner",
+    availability: "",
+    experience: "",
+    notes: "",
+  });
   const [screeningOpen, setScreeningOpen] = useState(false);
   const [screenings, setScreenings] = useState<ScreeningSummary[]>([]);
   const [screeningsLoading, setScreeningsLoading] = useState(false);
@@ -377,6 +391,17 @@ export default function ApplicantsPipeline() {
       });
     }
 
+    if (action === "reject") {
+      if (res.emailed) {
+        toast.success("Applicant rejected — rejection email sent.");
+      } else {
+        toast.warning("Applicant rejected — rejection email not sent", {
+          description: res.emailError || "No email on file.",
+          duration: 12_000,
+        });
+      }
+    }
+
     await load({ silent: true });
     return true;
   };
@@ -400,6 +425,59 @@ export default function ApplicantsPipeline() {
     }
   };
 
+  const resetAddForm = () =>
+    setAddForm({
+      fullName: "",
+      email: "",
+      phone: "",
+      zipCode: "",
+      state: "",
+      role: "Independent Cleaner",
+      availability: "",
+      experience: "",
+      notes: "",
+    });
+
+  const submitAddApplicant = async () => {
+    if (!addForm.fullName.trim() || !addForm.email.trim()) {
+      toast.error("Name and email are required.");
+      return;
+    }
+    setAdding(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const res = await fetch("/api/talent/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${sessionData.session?.access_token || ""}`,
+        },
+        body: JSON.stringify({
+          fullName: addForm.fullName.trim(),
+          email: addForm.email.trim(),
+          phone: addForm.phone.trim() || undefined,
+          zipCode: addForm.zipCode.trim() || undefined,
+          state: addForm.state.trim() || undefined,
+          role: addForm.role.trim() || undefined,
+          availability: addForm.availability.trim() || undefined,
+          experience: addForm.experience.trim() || undefined,
+          notes: addForm.notes.trim() || undefined,
+        }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j?.error || `Failed (${res.status})`);
+      toast.success("Applicant added — saved locally and in Airtable.");
+      resetAddForm();
+      setAddOpen(false);
+      if (j?.applicant?.id) setSelectedId(j.applicant.id);
+      await load({ silent: true });
+    } catch (err) {
+      toast.error("Couldn't add applicant", { description: (err as Error).message, duration: 12_000 });
+    } finally {
+      setAdding(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -416,10 +494,16 @@ export default function ApplicantsPipeline() {
             </span>
           )}
         </div>
-        <Button variant="outline" className="border-slate-200 text-slate-700" onClick={() => void syncNow()} disabled={syncing}>
-          <RiRefreshLine className={cn("w-4 h-4 mr-1.5", syncing && "animate-spin")} />
-          Sync from Airtable
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button className="bg-slate-900 hover:bg-slate-800 text-white" onClick={() => setAddOpen(true)}>
+            <RiUserAddLine className="w-4 h-4 mr-1.5" />
+            Add applicant
+          </Button>
+          <Button variant="outline" className="border-slate-200 text-slate-700" onClick={() => void syncNow()} disabled={syncing}>
+            <RiRefreshLine className={cn("w-4 h-4 mr-1.5", syncing && "animate-spin")} />
+            Sync from Airtable
+          </Button>
+        </div>
       </div>
 
       <Card className="border-slate-200">
@@ -987,13 +1071,134 @@ export default function ApplicantsPipeline() {
         </SheetContent>
       </Sheet>
 
+      {/* ── Add applicant dialog ── */}
+      <Dialog
+        open={addOpen}
+        onOpenChange={(open) => {
+          setAddOpen(open);
+          if (!open) resetAddForm();
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Add applicant</DialogTitle>
+            <DialogDescription>
+              Creates the person in this pipeline and in Airtable (Applicants table).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <div>
+              <Label className="text-[11px] uppercase tracking-wide text-slate-500">Full name *</Label>
+              <Input
+                value={addForm.fullName}
+                onChange={(e) => setAddForm((f) => ({ ...f, fullName: e.target.value }))}
+                placeholder="Jane Doe"
+                className="mt-1"
+                autoFocus
+              />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <Label className="text-[11px] uppercase tracking-wide text-slate-500">Email *</Label>
+                <Input
+                  type="email"
+                  value={addForm.email}
+                  onChange={(e) => setAddForm((f) => ({ ...f, email: e.target.value }))}
+                  placeholder="jane@email.com"
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-[11px] uppercase tracking-wide text-slate-500">Phone</Label>
+                <Input
+                  value={addForm.phone}
+                  onChange={(e) => setAddForm((f) => ({ ...f, phone: e.target.value }))}
+                  placeholder="(410) 555-0100"
+                  className="mt-1"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <Label className="text-[11px] uppercase tracking-wide text-slate-500">ZIP</Label>
+                <Input
+                  value={addForm.zipCode}
+                  onChange={(e) => setAddForm((f) => ({ ...f, zipCode: e.target.value }))}
+                  placeholder="21204"
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-[11px] uppercase tracking-wide text-slate-500">State</Label>
+                <Input
+                  value={addForm.state}
+                  onChange={(e) => setAddForm((f) => ({ ...f, state: e.target.value }))}
+                  placeholder="MD"
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-[11px] uppercase tracking-wide text-slate-500">Role</Label>
+                <Input
+                  value={addForm.role}
+                  onChange={(e) => setAddForm((f) => ({ ...f, role: e.target.value }))}
+                  className="mt-1"
+                />
+              </div>
+            </div>
+            <div>
+              <Label className="text-[11px] uppercase tracking-wide text-slate-500">Availability</Label>
+              <Input
+                value={addForm.availability}
+                onChange={(e) => setAddForm((f) => ({ ...f, availability: e.target.value }))}
+                placeholder="Weekdays mornings, weekends…"
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label className="text-[11px] uppercase tracking-wide text-slate-500">Experience</Label>
+              <Input
+                value={addForm.experience}
+                onChange={(e) => setAddForm((f) => ({ ...f, experience: e.target.value }))}
+                placeholder="2 years residential"
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label className="text-[11px] uppercase tracking-wide text-slate-500">Notes</Label>
+              <Textarea
+                value={addForm.notes}
+                onChange={(e) => setAddForm((f) => ({ ...f, notes: e.target.value }))}
+                placeholder="How they came in, referral, etc."
+                rows={2}
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="outline" onClick={() => setAddOpen(false)} disabled={adding}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-slate-900 hover:bg-slate-800 text-white"
+              disabled={adding || !addForm.fullName.trim() || !addForm.email.trim()}
+              onClick={() => void submitAddApplicant()}
+            >
+              {adding ? <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" /> : <RiUserAddLine className="w-4 h-4 mr-1.5" />}
+              Add to pipeline
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* ── Reject dialog ── */}
       <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Reject applicant</DialogTitle>
             <DialogDescription>
-              {selected ? `Reject ${applicantName(selected)}? A reason is required (audited).` : ""}
+              {selected
+                ? `Reject ${applicantName(selected)}? A reason is required (audited). They will be emailed from team@novaracleaning.com.`
+                : ""}
             </DialogDescription>
           </DialogHeader>
           <Textarea
@@ -1012,8 +1217,11 @@ export default function ApplicantsPipeline() {
               onClick={async () => {
                 const ok = await runAction("reject", { reason: rejectReason.trim() });
                 if (ok) {
-                  toast.success("Applicant rejected.");
+                  // runAction already reloads; surface email outcome from a fresh call result
+                  // by reading the last toast path below via a second lightweight fetch isn't
+                  // needed — callAction returns emailed/emailError.
                   setRejectOpen(false);
+                  setRejectReason("");
                 }
               }}
             >

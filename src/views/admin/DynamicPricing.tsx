@@ -9,8 +9,9 @@
 //                    multipliers are tuned against evidence, not guessed.
 //   2. Demand      — master switch, shadow mode, bounds, rate limit, input
 //                    weights, peak periods.
-//   3. Guardrails  — floor inputs (min hourly), ceiling, VA override band,
-//                    quote-lock window; derived floor table per service/band.
+//   3. Guardrails  — condition multipliers, floor inputs (min hourly), ceiling,
+//                    VA override band, quote-lock window; derived floor table
+//                    per service/band.
 //   4. Base tables — the UNRESOLVED two-price-tables discrepancy, surfaced
 //                    until admin confirms which is authoritative.
 //   5. Reports     — shadow comparison (charged vs would-be), clamp alerts,
@@ -842,12 +843,76 @@ function GuardrailsTab({
   onSave: (next: DynamicPricingConfig, note: string) => Promise<void>;
 }) {
   const [draft, setDraft] = useState(() => structuredClone(config.guardrails));
-  useEffect(() => setDraft(structuredClone(config.guardrails)), [config]);
+  const [conditions, setConditions] = useState(() => structuredClone(config.condition_multipliers));
+  useEffect(() => {
+    setDraft(structuredClone(config.guardrails));
+    setConditions(structuredClone(config.condition_multipliers));
+  }, [config]);
 
   const bands = Object.entries(config.bands).filter(([id]) => id !== "5000_plus");
 
+  const conditionMeta: Array<{ id: keyof typeof conditions; label: string; hint: string }> = [
+    { id: "light", label: "Light", hint: "Lived-in tidy; light dust & surfaces" },
+    { id: "standard", label: "Standard", hint: "Typical home condition" },
+    { id: "heavy", label: "Heavy", hint: "Build-up, neglect, or post-event" },
+  ];
+
   return (
     <div className="space-y-4">
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Condition multipliers</CardTitle>
+          <CardDescription className="text-xs">
+            Applied after the base price and before zone × demand:{" "}
+            <code className="text-[11px]">base × condition × zone × demand</code>. Light is usually 1.0;
+            standard and heavy scale effort for dirtier homes.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {conditionMeta.map((c) => (
+              <div key={c.id} className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+                <Label className="text-[10px] uppercase text-slate-500">{c.label}</Label>
+                <Input
+                  type="number"
+                  step={0.05}
+                  min={0.5}
+                  max={3}
+                  value={conditions[c.id]}
+                  onChange={(e) => {
+                    const n = parseFloat(e.target.value);
+                    setConditions((prev) => ({
+                      ...prev,
+                      [c.id]: Number.isFinite(n) ? Math.round(n * 100) / 100 : prev[c.id],
+                    }));
+                  }}
+                  className="h-9 mt-1 font-mono"
+                />
+                <p className="text-[10.5px] text-slate-400 mt-1.5 leading-snug">{c.hint}</p>
+              </div>
+            ))}
+          </div>
+          <Button
+            disabled={saving}
+            onClick={() => {
+              const light = Math.max(0.5, Math.min(3, Number(conditions.light) || 1));
+              const standard = Math.max(0.5, Math.min(3, Number(conditions.standard) || 1.25));
+              const heavy = Math.max(0.5, Math.min(3, Number(conditions.heavy) || 1.6));
+              void onSave(
+                {
+                  ...config,
+                  condition_multipliers: { light, standard, heavy },
+                },
+                `Condition multipliers → L ${light} / S ${standard} / H ${heavy}`,
+              );
+            }}
+          >
+            {saving ? <RiLoader4Line className="w-4 h-4 animate-spin mr-2" /> : null}
+            Save condition multipliers
+          </Button>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm">Floor · ceiling · override band · quote lock</CardTitle>

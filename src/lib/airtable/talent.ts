@@ -12,7 +12,7 @@
 // Fields are referenced by FIELD ID so column renames in the Airtable UI can't
 // break the sync.
 
-import { listRecords, updateRecords, type AirtableRecord } from "./client";
+import { createRecords, listRecords, updateRecords, type AirtableRecord, type Fields } from "./client";
 
 /** Applicants table in the Client & Revenue Ops base (the client's default base). */
 export const TALENT_APPLICANTS_TABLE = "tblJQx7JbalZPmlAB";
@@ -173,6 +173,54 @@ export function initialStageFromAirtable(a: TalentApplicant): string {
 export async function fetchTalentApplicants(): Promise<TalentApplicant[]> {
   const records = await listRecords(TALENT_APPLICANTS_TABLE);
   return records.map(mapTalentRecord);
+}
+
+export interface CreateTalentApplicantInput {
+  fullName: string;
+  email: string;
+  phone?: string | null;
+  zipCode?: string | null;
+  state?: string | null;
+  address?: string | null;
+  role?: string | null;
+  availability?: string | null;
+  experience?: string | null;
+  notes?: string | null;
+}
+
+/**
+ * Create an Applicants-table row in Airtable (admin manual intake), then return
+ * the same mapped shape the sync path uses so the local row can be inserted
+ * with a real airtable_record_id.
+ */
+export async function createTalentApplicantInAirtable(
+  input: CreateTalentApplicantInput,
+): Promise<TalentApplicant> {
+  const fullName = input.fullName.trim();
+  const email = input.email.trim().toLowerCase();
+  if (!fullName) throw new Error("Name is required");
+  if (!email || !email.includes("@")) throw new Error("A valid email is required");
+
+  const fields: Fields = {
+    [TALENT_FIELDS.contractorName]: fullName,
+    [TALENT_FIELDS.email]: email,
+    [TALENT_FIELDS.phone]: input.phone?.trim() || undefined,
+    [TALENT_FIELDS.zipCode]: input.zipCode?.trim() || undefined,
+    [TALENT_FIELDS.state]: input.state?.trim() || undefined,
+    [TALENT_FIELDS.address]: input.address?.trim() || undefined,
+    [TALENT_FIELDS.role]: input.role?.trim() || "Independent Cleaner",
+    [TALENT_FIELDS.availability]: input.availability?.trim() || undefined,
+    [TALENT_FIELDS.experience]: input.experience?.trim() || undefined,
+    [TALENT_FIELDS.reasonNote]: input.notes?.trim() || undefined,
+    [TALENT_FIELDS.status]: "Applied",
+    [TALENT_FIELDS.applicationStatus]: "New",
+    [TALENT_FIELDS.dateApplied]: new Date().toISOString().slice(0, 10),
+  };
+
+  const created = await createRecords(TALENT_APPLICANTS_TABLE, [fields], { typecast: true });
+  const rec = created[0];
+  if (!rec?.id) throw new Error("Airtable did not return a created record");
+  return mapTalentRecord(rec);
 }
 
 /**
