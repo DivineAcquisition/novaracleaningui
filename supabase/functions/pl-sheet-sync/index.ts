@@ -14,8 +14,10 @@
 //                          E:amount F:status G:paid_date   (H formula)
 //   pl_ad_spend → "Ad Spend"          A:date B:platform C:spend D:leads
 //                          E:booked F:notes                (G formula)
-//   pl_eod_reports → "EOD"            A:date B:va C..H:counts I:revenue J:notes
+//   va_eod_submissions + va_verified_metrics → "EOD"
+//                          A:date B:va C..H:counts I:revenue J:notes
 //                          (K formula)
+//     (legacy pl_eod_reports is retired — the live VA EOD system is the source)
 //
 // Idempotency: full clean rewrite of each tab's DATA RANGE (A2:<lastCol>),
 // sorted by date then id — re-running never duplicates; edits update in
@@ -246,25 +248,71 @@ async function buildAdSpendRows(supabase: SB, sinceYmd: string): Promise<(string
 }
 
 async function buildEodRows(supabase: SB, sinceYmd: string): Promise<(string | number)[][]> {
-  const { data } = await supabase
-    .from("pl_eod_reports")
-    .select("id, date, va_name, inbound_leads, bookings_closed, outbound_calls, apps_reviewed, phone_screens, complaints_issues, revenue_booked_cents, blockers_notes")
-    .gte("date", sinceYmd)
-    .order("date", { ascending: true })
-    .order("va_name", { ascending: true })
+  // Live VA EOD system (pl_eod_reports is retired). Counts come from
+  // va_verified_metrics; blockers/notes from the submission. Drafts stay out
+  // so the sheet only shows days a VA actually closed.
+  const { data: submissions, error: sErr } = await supabase
+    .from("va_eod_submissions")
+    .select(
+      "id, va_id, work_date, status, blockers, escalations, cleaner_issues, cleaner_issue_notes, wins, priorities, va:va_onboarding!va_eod_submissions_va_id_fkey(first_name, last_name, email)",
+    )
+    .gte("work_date", sinceYmd)
+    .in("status", ["submitted", "reviewed", "flagged"])
+    .order("work_date", { ascending: true })
     .limit(5000);
-  return (data || []).map((r: Record<string, unknown>) => [
-    ymd(r.date as string),
-    String(r.va_name || ""),
-    Number(r.inbound_leads) || 0,
-    Number(r.bookings_closed) || 0,
-    Number(r.outbound_calls) || 0,
-    Number(r.apps_reviewed) || 0,
-    Number(r.phone_screens) || 0,
-    Number(r.complaints_issues) || 0,
-    dollars(r.revenue_booked_cents as number),
-    String(r.blockers_notes || ""),
-  ]);
+  if (sErr) throw new Error(`va_eod_submissions: ${sErr.message}`);
+
+  const { data: verifiedRows, error: vErr } = await supabase
+    .from("va_verified_metrics")
+    .select(
+      "va_id, work_date, inbound_leads, bookings_created, calls_placed, applications_reviewed, phone_screens_completed, revenue_booked_cents",
+    )
+    .gte("work_date", sinceYmd)
+    .limit(5000);
+  if (vErr) throw new Error(`va_verified_metrics: ${vErr.message}`);
+
+  const verifiedByKey = new Map<string, Record<string, unknown>>();
+  for (const v of verifiedRows || []) {
+    verifiedByKey.set(`${v.va_id}|${ymd(v.work_date)}`, v as Record<string, unknown>);
+  }
+
+  const rows: Array<{ key: string; row: (string | number)[] }> = [];
+  for (const r of submissions || []) {
+    const vaRaw = r.va;
+    const va = (Array.isArray(vaRaw) ? vaRaw[0] : vaRaw || {}) as Record<string, unknown>;
+    const verified = verifiedByKey.get(`${r.va_id}|${ymd(r.work_date)}`) || {};
+    const name = `${va.first_name || ""} ${va.last_name || ""}`.trim() || String(va.email || "VA");
+    const cleanerIssues = String(r.cleaner_issues || "");
+    const complaints = cleanerIssues === "Serious" ? 2 : cleanerIssues === "Minor" ? 1 : 0;
+    const notes = [
+      r.blockers ? `Blockers: ${r.blockers}` : "",
+      r.escalations ? `Escalations: ${r.escalations}` : "",
+      r.cleaner_issue_notes ? `Cleaner issues: ${r.cleaner_issue_notes}` : "",
+      r.priorities ? `Priorities: ${r.priorities}` : "",
+      r.wins ? `Wins: ${r.wins}` : "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
+
+    rows.push({
+      key: `${ymd(r.work_date)}|${name.toLowerCase()}|${r.id}`,
+      row: [
+        ymd(r.work_date),
+        name,
+        Number(verified.inbound_leads) || 0,
+        Number(verified.bookings_created) || 0,
+        Number(verified.calls_placed) || 0,
+        Number(verified.applications_reviewed) || 0,
+        Number(verified.phone_screens_completed) || 0,
+        complaints,
+        dollars(verified.revenue_booked_cents as number),
+        notes,
+      ],
+    });
+  }
+
+  rows.sort((a, b) => a.key.localeCompare(b.key));
+  return rows.map((r) => r.row);
 }
 
 serve(async (req) => {
