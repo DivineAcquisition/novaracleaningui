@@ -11,8 +11,9 @@
 //   2. Builds the Drive folder tree:
 //        <QC root>/<YYYY>/<MM - Month>/<NVC-xxxxx — Client — date>/{before,after}
 //   3. Uploads every ORIGINAL photo (deterministic filenames → retries dedupe).
-//   4. Generates the completion-summary PDF (job details, checklist,
-//      before/after photos) — the one-file dispute/chargeback packet.
+//   4. Generates the completion-summary PDF (job details, checkout + agreement
+//      page images, checklist, before/after photos, signed agreement) — the
+//      one-file dispute/chargeback packet.
 //   5. Marks the row mirrored, then pushes the Drive link + documented flag
 //      to the job's Airtable record via the existing sync webhook.
 //
@@ -206,6 +207,109 @@ interface DocRow {
 
 interface PaymentRecord {
   rows: Array<[string, string]>;
+}
+
+/** Booking + acceptance fields used to render checkout / agreement page images. */
+interface PageCaptureData {
+  customerName: string;
+  customerEmail: string;
+  serviceType: string;
+  serviceDate: string;
+  timeSlot: string;
+  address: string;
+  city: string;
+  state: string;
+  zip: string;
+  totalCents: number | null;
+  depositCents: number | null;
+  paymentOption: string | null;
+  paymentIntentId: string | null;
+  paymentReceivedAt: string | null;
+  checkoutSessionId: string | null;
+  agreedTerms: boolean;
+  agreedDisclaimer: boolean;
+  agreedRefund: boolean;
+  agreedServiceAgreement: boolean;
+  signedBy: string | null;
+  acceptedAt: string | null;
+  agreementSource: string | null;
+  agreementIp: string | null;
+  userAgent: string | null;
+}
+
+async function loadPageCaptureData(supabase: SB, bookingId: string | null, fallback: {
+  clientName: string | null;
+  clientEmail: string | null;
+  serviceType: string | null;
+  serviceDate: string | null;
+  address: string | null;
+}): Promise<PageCaptureData | null> {
+  if (!bookingId) return null;
+  try {
+    const { data: b } = await supabase
+      .from("bookings")
+      .select(
+        "first_name, last_name, email, service_type, service_date, time_slot, address, city, state, zip_code, total_estimate_cents, final_charge_cents, deposit_cents, payment_option, payment_intent_id, payment_received_at, checkout_session_id",
+      )
+      .eq("id", bookingId)
+      .maybeSingle();
+    const { data: agr } = await supabase
+      .from("service_agreements")
+      .select(
+        "agreed_terms, agreed_disclaimer, agreed_refund, agreed_service_agreement, signed_by, accepted_at, source, ip, user_agent, created_at",
+      )
+      .eq("booking_id", bookingId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const nameFromBooking = b
+      ? `${b.first_name || ""} ${b.last_name || ""}`.trim()
+      : "";
+    return {
+      customerName: nameFromBooking || fallback.clientName || "Customer",
+      customerEmail: String(b?.email || fallback.clientEmail || ""),
+      serviceType: String(b?.service_type || fallback.serviceType || "Cleaning"),
+      serviceDate: String(b?.service_date || fallback.serviceDate || ""),
+      timeSlot: String(b?.time_slot || ""),
+      address: String(b?.address || fallback.address || ""),
+      city: String(b?.city || ""),
+      state: String(b?.state || ""),
+      zip: String(b?.zip_code || ""),
+      totalCents: b?.final_charge_cents != null
+        ? Number(b.final_charge_cents)
+        : b?.total_estimate_cents != null
+        ? Number(b.total_estimate_cents)
+        : null,
+      depositCents: b?.deposit_cents != null ? Number(b.deposit_cents) : null,
+      paymentOption: b?.payment_option ? String(b.payment_option) : null,
+      paymentIntentId: b?.payment_intent_id ? String(b.payment_intent_id) : null,
+      paymentReceivedAt: b?.payment_received_at ? String(b.payment_received_at) : null,
+      checkoutSessionId: b?.checkout_session_id ? String(b.checkout_session_id) : null,
+      agreedTerms: Boolean(agr?.agreed_terms ?? true),
+      agreedDisclaimer: Boolean(agr?.agreed_disclaimer ?? true),
+      agreedRefund: Boolean(agr?.agreed_refund ?? true),
+      agreedServiceAgreement: Boolean(agr?.agreed_service_agreement ?? true),
+      signedBy: agr?.signed_by ? String(agr.signed_by) : (nameFromBooking || fallback.clientName || null),
+      acceptedAt: agr?.accepted_at
+        ? String(agr.accepted_at)
+        : agr?.created_at
+        ? String(agr.created_at)
+        : b?.payment_received_at
+        ? String(b.payment_received_at)
+        : null,
+      agreementSource: agr?.source ? String(agr.source) : "checkout",
+      agreementIp: agr?.ip ? String(agr.ip) : null,
+      userAgent: agr?.user_agent ? String(agr.user_agent) : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function moneyLabel(cents: number | null | undefined): string {
+  if (cents == null || !Number.isFinite(Number(cents))) return "—";
+  return `$${(Number(cents) / 100).toFixed(2)}`;
 }
 
 /** Live payment record for the dispute packet — booking financials + charges. */
@@ -406,6 +510,7 @@ async function buildSummaryPdf(doc: DocRow, extras: {
   agreementBytes?: Uint8Array | null;
   issues?: IssueForPacket[];
   photos: Array<{ label: string; bytes: Uint8Array }>;
+  pageCapture?: PageCaptureData | null;
 }): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
   const font = await pdf.embedFont(StandardFonts.Helvetica);
@@ -413,6 +518,10 @@ async function buildSummaryPdf(doc: DocRow, extras: {
   const violet = rgb(0.33, 0, 1);
   const gray = rgb(0.32, 0.36, 0.42);
   const dark = rgb(0.07, 0.09, 0.15);
+  const lightViolet = rgb(0.95, 0.93, 1);
+  const softGray = rgb(0.94, 0.95, 0.97);
+  const chrome = rgb(0.91, 0.92, 0.94);
+  const green = rgb(0.09, 0.55, 0.33);
 
   const PAGE_W = 612, PAGE_H = 792, MARGIN = 54;
   let page = pdf.addPage([PAGE_W, PAGE_H]);
@@ -423,6 +532,47 @@ async function buildSummaryPdf(doc: DocRow, extras: {
     if (y < MARGIN + size) { page = pdf.addPage([PAGE_W, PAGE_H]); y = PAGE_H - MARGIN; }
     page.drawText(text.slice(0, 110), { x: MARGIN, y, size, font: opts.font ?? font, color: opts.color ?? dark });
     y -= size + (opts.gap ?? 6);
+  };
+
+  /** Browser-chrome framed page used as a visual capture of checkout / agreement. */
+  const drawBrowserCapture = (opts: {
+    title: string;
+    url: string;
+    subtitle: string;
+    drawBody: (p: ReturnType<typeof pdf.addPage>, contentTop: number, contentBottom: number, contentLeft: number, contentRight: number) => void;
+  }) => {
+    const p = pdf.addPage([PAGE_W, PAGE_H]);
+    // Packet section label above the "screenshot"
+    p.drawText(opts.title, { x: MARGIN, y: PAGE_H - 36, size: 12, font: bold, color: violet });
+    p.drawText(opts.subtitle, { x: MARGIN, y: PAGE_H - 52, size: 8.5, font, color: gray });
+
+    const frameX = MARGIN - 6;
+    const frameY = 48;
+    const frameW = PAGE_W - (MARGIN - 6) * 2;
+    const frameH = PAGE_H - 72 - 48;
+    // Outer browser window
+    p.drawRectangle({ x: frameX, y: frameY, width: frameW, height: frameH, color: rgb(1, 1, 1), borderColor: rgb(0.75, 0.78, 0.82), borderWidth: 1.2 });
+    // Chrome bar
+    p.drawRectangle({ x: frameX, y: frameY + frameH - 36, width: frameW, height: 36, color: chrome });
+    // Traffic lights
+    p.drawCircle({ x: frameX + 14, y: frameY + frameH - 18, size: 4, color: rgb(0.95, 0.35, 0.35) });
+    p.drawCircle({ x: frameX + 28, y: frameY + frameH - 18, size: 4, color: rgb(0.95, 0.72, 0.2) });
+    p.drawCircle({ x: frameX + 42, y: frameY + frameH - 18, size: 4, color: rgb(0.3, 0.75, 0.35) });
+    // URL bar
+    const urlX = frameX + 58;
+    const urlW = frameW - 70;
+    p.drawRectangle({ x: urlX, y: frameY + frameH - 28, width: urlW, height: 18, color: rgb(1, 1, 1), borderColor: rgb(0.8, 0.82, 0.86), borderWidth: 0.8 });
+    p.drawText(opts.url.slice(0, 78), { x: urlX + 6, y: frameY + frameH - 23, size: 8, font, color: gray });
+
+    const contentLeft = frameX + 16;
+    const contentRight = frameX + frameW - 16;
+    const contentTop = frameY + frameH - 52;
+    const contentBottom = frameY + 14;
+    opts.drawBody(p, contentTop, contentBottom, contentLeft, contentRight);
+
+    p.drawText("Visual capture reconstructed from the live booking record for chargeback / dispute evidence.", {
+      x: MARGIN, y: 28, size: 7.5, font, color: gray,
+    });
   };
 
   line("NOVARA CLEANING", { size: 20, font: bold, color: violet, gap: 2 });
@@ -512,6 +662,163 @@ async function buildSummaryPdf(doc: DocRow, extras: {
     }
   }
 
+  // ── Checkout page + Agreement page images (dispute evidence) ──────────
+  const capture = extras.pageCapture;
+  if (capture) {
+    const loc = [capture.address, capture.city, capture.state, capture.zip].filter(Boolean).join(", ");
+    const paidAt = capture.paymentReceivedAt
+      ? new Date(capture.paymentReceivedAt).toUTCString()
+      : "at checkout";
+    const acceptedAt = capture.acceptedAt
+      ? new Date(capture.acceptedAt).toUTCString()
+      : paidAt;
+
+    drawBrowserCapture({
+      title: "Checkout page (as presented to the customer)",
+      url: "https://try.novaracleaning.com/book/checkout",
+      subtitle: "Deposit payment step — policies listed; payment constitutes acceptance.",
+      drawBody: (p, contentTop, _contentBottom, contentLeft, contentRight) => {
+        let cy = contentTop;
+        const write = (text: string, o: { size?: number; f?: typeof font; color?: ReturnType<typeof rgb>; gap?: number } = {}) => {
+          const size = o.size ?? 10;
+          p.drawText(text.slice(0, 86), { x: contentLeft, y: cy, size, font: o.f ?? font, color: o.color ?? dark });
+          cy -= size + (o.gap ?? 6);
+        };
+        write("Novara Cleaning", { size: 14, f: bold, color: violet, gap: 4 });
+        write("Checkout", { size: 16, f: bold, color: dark, gap: 14 });
+
+        // Order summary card
+        const cardH = 118;
+        p.drawRectangle({
+          x: contentLeft, y: cy - cardH + 14, width: contentRight - contentLeft, height: cardH,
+          color: softGray, borderColor: rgb(0.85, 0.87, 0.9), borderWidth: 0.8,
+        });
+        let iy = cy - 4;
+        const info = (label: string, value: string) => {
+          p.drawText(label, { x: contentLeft + 12, y: iy, size: 8, font: bold, color: gray });
+          p.drawText(value.slice(0, 62), { x: contentLeft + 110, y: iy, size: 9, font, color: dark });
+          iy -= 14;
+        };
+        info("Customer", `${capture.customerName}${capture.customerEmail ? `  ·  ${capture.customerEmail}` : ""}`);
+        info("Service", capture.serviceType.replace(/_/g, " "));
+        info("Date / time", `${capture.serviceDate || "—"}${capture.timeSlot ? ` · ${capture.timeSlot}` : ""}`);
+        info("Address", loc || "—");
+        info("Total", moneyLabel(capture.totalCents));
+        info("Deposit due", moneyLabel(capture.depositCents));
+        if (capture.paymentOption) info("Payment option", capture.paymentOption);
+        cy = iy - 10;
+
+        write("Service Agreement & Policies", { size: 11, f: bold, color: dark, gap: 8 });
+        for (const pLabel of ["Terms of Service", "Disclaimer", "Refund Policy", "One-Time Service Agreement"]) {
+          p.drawRectangle({ x: contentLeft, y: cy - 2, width: 8, height: 8, color: lightViolet, borderColor: violet, borderWidth: 0.8 });
+          p.drawText(pLabel, { x: contentLeft + 14, y: cy, size: 9, font, color: violet });
+          cy -= 14;
+        }
+        cy -= 4;
+        write("By paying your deposit you agree to the Terms of Service, Disclaimer,", { size: 8, color: gray, gap: 3 });
+        write("Refund Policy, and the One-Time Service Agreement. Signature follows.", { size: 8, color: gray, gap: 12 });
+
+        // Pay button
+        p.drawRectangle({
+          x: contentLeft, y: cy - 18, width: 200, height: 28,
+          color: violet,
+        });
+        p.drawText(`Pay deposit ${moneyLabel(capture.depositCents)}`, {
+          x: contentLeft + 18, y: cy - 10, size: 11, font: bold, color: rgb(1, 1, 1),
+        });
+        cy -= 40;
+
+        write(`Payment completed: ${paidAt}`, { size: 8, f: bold, color: green, gap: 3 });
+        if (capture.paymentIntentId) {
+          write(`Stripe PaymentIntent: ${capture.paymentIntentId}`, { size: 7.5, color: gray, gap: 3 });
+        }
+        if (capture.checkoutSessionId) {
+          write(`Checkout session: ${capture.checkoutSessionId}`, { size: 7.5, color: gray, gap: 3 });
+        }
+      },
+    });
+
+    drawBrowserCapture({
+      title: "Agreement / signature page (as presented to the customer)",
+      url: "https://try.novaracleaning.com/book/details",
+      subtitle: "Property details step — customer e-signed the One-Time Service Agreement.",
+      drawBody: (p, contentTop, _contentBottom, contentLeft, contentRight) => {
+        let cy = contentTop;
+        const write = (text: string, o: { size?: number; f?: typeof font; color?: ReturnType<typeof rgb>; gap?: number } = {}) => {
+          const size = o.size ?? 10;
+          p.drawText(text.slice(0, 86), { x: contentLeft, y: cy, size, font: o.f ?? font, color: o.color ?? dark });
+          cy -= size + (o.gap ?? 6);
+        };
+        write("Novara Cleaning", { size: 14, f: bold, color: violet, gap: 4 });
+        write("Property details & agreement", { size: 15, f: bold, color: dark, gap: 12 });
+        write(`Client: ${capture.customerName}`, { size: 10, gap: 4 });
+        write(`Email: ${capture.customerEmail || "—"}`, { size: 10, gap: 4 });
+        write(`Service: ${capture.serviceType.replace(/_/g, " ")} on ${capture.serviceDate || "—"}`, { size: 10, gap: 12 });
+
+        write("Policies accepted at signing", { size: 11, f: bold, color: dark, gap: 8 });
+        const checks: Array<[string, boolean]> = [
+          ["Terms of Service", capture.agreedTerms],
+          ["Disclaimer", capture.agreedDisclaimer],
+          ["Refund Policy", capture.agreedRefund],
+          ["One-Time Service Agreement", capture.agreedServiceAgreement],
+        ];
+        for (const [label, ok] of checks) {
+          p.drawRectangle({
+            x: contentLeft, y: cy - 2, width: 10, height: 10,
+            color: ok ? green : softGray, borderColor: ok ? green : gray, borderWidth: 0.8,
+          });
+          if (ok) {
+            // Simple checkmark using lines (Helvetica has no check glyph).
+            p.drawLine({
+              start: { x: contentLeft + 2, y: cy + 2 },
+              end: { x: contentLeft + 4, y: cy },
+              thickness: 1.4, color: rgb(1, 1, 1),
+            });
+            p.drawLine({
+              start: { x: contentLeft + 4, y: cy },
+              end: { x: contentLeft + 8, y: cy + 5 },
+              thickness: 1.4, color: rgb(1, 1, 1),
+            });
+          }
+          p.drawText(`${label}${ok ? " — accepted" : " — not recorded"}`, {
+            x: contentLeft + 16, y: cy, size: 9, font, color: dark,
+          });
+          cy -= 16;
+        }
+        cy -= 8;
+
+        // Signature pad card
+        const sigH = 90;
+        p.drawRectangle({
+          x: contentLeft, y: cy - sigH + 12, width: contentRight - contentLeft, height: sigH,
+          color: rgb(1, 1, 1), borderColor: violet, borderWidth: 1.2,
+        });
+        p.drawText("Your signature *", { x: contentLeft + 12, y: cy - 2, size: 9, font: bold, color: gray });
+        p.drawText(capture.signedBy || capture.customerName, {
+          x: contentLeft + 12, y: cy - 36, size: 18, font: bold, color: dark,
+        });
+        p.drawLine({
+          start: { x: contentLeft + 12, y: cy - 48 },
+          end: { x: contentLeft + 260, y: cy - 48 },
+          thickness: 1, color: gray,
+        });
+        p.drawText("Electronically signed — executed acceptance on file", {
+          x: contentLeft + 12, y: cy - 64, size: 8, font, color: gray,
+        });
+        cy -= sigH + 8;
+
+        write(`Signed at: ${acceptedAt}`, { size: 8.5, f: bold, color: green, gap: 3 });
+        write(`Source: ${capture.agreementSource || "details"}`, { size: 8, color: gray, gap: 3 });
+        if (capture.agreementIp) write(`IP address: ${capture.agreementIp}`, { size: 8, color: gray, gap: 3 });
+        if (capture.userAgent) {
+          write(`Device: ${capture.userAgent.slice(0, 84)}`, { size: 7.5, color: gray, gap: 3 });
+        }
+        cy -= 6;
+        write("Full executed agreement PDF is attached at the end of this packet.", { size: 8, color: gray, gap: 3 });
+      },
+    });
+  }
+
   // Photo pages — 2 per page, labelled, preserving aspect ratio. ALL photos.
   const photos = extras.photos;
   for (let i = 0; i < photos.length; i += 2) {
@@ -538,7 +845,7 @@ async function buildSummaryPdf(doc: DocRow, extras: {
   }
 
   // Append the executed service agreement so the packet is one self-contained
-  // file: summary + policies + ALL photos + the signed agreement.
+  // file: summary + policies + page captures + ALL photos + the signed agreement.
   if (extras.agreementBytes) {
     try {
       const agrDoc = await PDFDocument.load(extras.agreementBytes as unknown as ArrayBuffer, { ignoreEncryption: true });
@@ -664,16 +971,24 @@ async function mirrorOne(supabase: SB, token: string, rootFolderId: string, doc:
     log("agreement copy failed (non-blocking)", { docId: doc.id, error: e instanceof Error ? e.message : String(e) });
   }
 
-  // Dispute packet: summary + policy highlights + ALL photos + the signed
-  // agreement, regenerated on every mirror so it always reflects the record.
+  // Dispute packet: summary + policy highlights + checkout/agreement page
+  // images + ALL photos + the signed agreement, regenerated on every mirror.
   const payment = doc.booking_id ? await loadPaymentRecord(supabase, doc.booking_id) : { rows: [] };
   const packetIssues = await loadIssuesForPacket(supabase, doc.booking_id);
+  const pageCapture = await loadPageCaptureData(supabase, doc.booking_id, {
+    clientName: doc.client_name,
+    clientEmail: doc.client_email,
+    serviceType: doc.service_type,
+    serviceDate: doc.service_date,
+    address: doc.address,
+  });
   const pdfBytes = await buildSummaryPdf(doc, {
     ...extras,
     payment,
     agreementBytes: agreement?.bytes || null,
     issues: packetIssues,
     photos: photoBytes,
+    pageCapture,
   });
   const pdfName = `${safeName(docRef)} — Completion Summary.pdf`;
   let pdfId = doc.drive_pdf_id;
