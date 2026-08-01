@@ -211,7 +211,21 @@ serve(async (req) => {
       bookingRef,
     };
 
-    // Nothing to collect (only removals / zero delta).
+    /** Notify the customer whenever add-ons were added (charged or just saved). */
+    const notifyCustomerOfAddons = async (opts: {
+      emailType: "addon_charged" | "addon_saved";
+      smsMessage: string;
+    }) => {
+      if (added.length === 0) return;
+      if (booking.email) {
+        await admin.functions.invoke("send-addon-email", {
+          body: { type: opts.emailType, email: booking.email, data: emailData },
+        }).then(() => undefined, () => undefined);
+      }
+      await smsCustomer(opts.smsMessage);
+    };
+
+    // Nothing to collect (only removals / zero delta / save without charging).
     if (!charge || deltaCents <= 0) {
       if (charge && added.length > 0 && deltaCents <= 0) {
         return json({
@@ -221,7 +235,32 @@ serve(async (req) => {
         }, 400);
       }
       if (auditId) await admin.from("booking_addon_charges").update({ status: "no_charge" }).eq("id", auditId);
-      return json({ ok: true, charged: false, status: "no_charge", deltaCents, newTotalCents, addedAddOns: added, removedAddOns: removed });
+      await notifyCustomerOfAddons({
+        emailType: "addon_saved",
+        smsMessage:
+          `Novara Cleaning: We added ${addOnListForSms || "extra services"} to your cleaning${booking.service_date ? ` on ${booking.service_date}` : ""}. ` +
+          (deltaCents > 0
+            ? `Your updated total is $${(newTotalCents / 100).toFixed(2)} — no action needed right now. `
+            : "") +
+          `Questions? Call (844) 735-2070.`,
+      });
+      await admin.from("events").insert({
+        event_type: "booking.addon_saved",
+        booking_id: bookingId,
+        source: "admin",
+        summary: `Add-ons saved ($${(Math.max(0, deltaCents) / 100).toFixed(2)}) — customer notified`,
+        data: { added, removed, by: callerId, charge: false },
+      }).then(() => undefined, () => undefined);
+      return json({
+        ok: true,
+        charged: false,
+        status: "no_charge",
+        notified: added.length > 0,
+        deltaCents,
+        newTotalCents,
+        addedAddOns: added,
+        removedAddOns: removed,
+      });
     }
 
     const stripeKey = await resolveSecret(admin, "STRIPE_SECRET_KEY");
@@ -261,12 +300,11 @@ serve(async (req) => {
         if (pi.status === "succeeded") {
           if (auditId) await admin.from("booking_addon_charges").update({ status: "paid", stripe_payment_intent_id: pi.id }).eq("id", auditId);
           await admin.from("bookings").update({ customer_id: customerId }).eq("id", bookingId);
-          if (booking.email) {
-            await admin.functions.invoke("send-addon-email", { body: { type: "addon_charged", email: booking.email, data: emailData } }).catch(() => {});
-          }
-          await smsCustomer(
-            `Novara Cleaning: We added ${addOnListForSms} to your cleaning${booking.service_date ? ` on ${booking.service_date}` : ""} and charged your card on file $${(deltaCents / 100).toFixed(2)}. A receipt was emailed to you. Questions? Call (844) 735-2070.`,
-          );
+          await notifyCustomerOfAddons({
+            emailType: "addon_charged",
+            smsMessage:
+              `Novara Cleaning: We added ${addOnListForSms} to your cleaning${booking.service_date ? ` on ${booking.service_date}` : ""} and charged your card on file $${(deltaCents / 100).toFixed(2)}. A receipt was emailed to you. Questions? Call (844) 735-2070.`,
+          });
           // NOTE: PostgrestBuilder is a thenable without .catch() — calling
           // .catch() on it throws a TypeError AFTER the charge succeeds.
           // Use .then(onOk, onErr) for fire-and-forget error swallowing.
@@ -284,9 +322,11 @@ serve(async (req) => {
     // informational note only; the ADMIN is told the auto-charge failed.
     if (auditId) await admin.from("booking_addon_charges").update({ status: "charge_failed" }).eq("id", auditId);
     await admin.from("bookings").update({ customer_id: customerId }).eq("id", bookingId);
-    await smsCustomer(
-      `Novara Cleaning: We added ${addOnListForSms} to your cleaning${booking.service_date ? ` on ${booking.service_date}` : ""}. Your updated total is $${(newTotalCents / 100).toFixed(2)} — no action needed. Questions? Call (844) 735-2070.`,
-    );
+    await notifyCustomerOfAddons({
+      emailType: "addon_saved",
+      smsMessage:
+        `Novara Cleaning: We added ${addOnListForSms} to your cleaning${booking.service_date ? ` on ${booking.service_date}` : ""}. Your updated total is $${(newTotalCents / 100).toFixed(2)} — no action needed. Questions? Call (844) 735-2070.`,
+    });
     await admin.from("events").insert({ event_type: "booking.addon_charge_failed", booking_id: bookingId, source: "admin", summary: `Add-ons added ($${(deltaCents / 100).toFixed(2)}) but auto-charge failed — will collect with booking balance.`, data: { added, removed, by: callerId } }).then(() => undefined, () => undefined);
 
     return json({ ok: true, charged: false, status: "charge_failed", deltaCents, newTotalCents, addedAddOns: added, removedAddOns: removed });

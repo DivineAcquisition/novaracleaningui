@@ -3009,7 +3009,7 @@ function AddonDialog({
       else if (d?.status === "charge_failed") toast.warning("Add-ons saved — no usable card on file, so the amount will be collected with the booking balance. Customer notified.");
       else if (charge && d?.status === "no_charge") {
         throw new Error("Charge was $0.00 — the server may not recognize these add-ons yet. Use Retry charge after deploy.");
-      } else toast.success("Add-ons updated.");
+      } else toast.success("Add-ons updated. Customer notified.");
       onSuccess();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not update add-ons");

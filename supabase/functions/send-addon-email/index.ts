@@ -1,8 +1,9 @@
 // send-addon-email
 //
 // Customer email when an admin adds add-on services to a booking (including
-// after completion). Two types:
+// after completion). Types:
 //   addon_charged  - card on file was charged for the add-ons (receipt)
+//   addon_saved    - add-ons saved on the booking (no immediate card charge)
 //   addon_invoiced - no card on file: includes a hosted invoice pay link
 //
 // Branded, inline HTML (no React templates). Best-effort; never throws fatally.
@@ -122,6 +123,16 @@ function build(type: string, d: AddonEmailData): { subject: string; html: string
       html: renderHtml({
         heading: "Add-on services confirmed",
         bodyHtml: `<p>${hi}</p><p>We've added the following service(s) to your cleaning and charged the card on file: <strong>${list}</strong>.</p>`,
+        rows,
+      }),
+    };
+  }
+  if (type === "addon_saved") {
+    return {
+      subject: `Add-on services added to your cleaning${d.amount ? ` - ${d.amount}` : ""}`,
+      html: renderHtml({
+        heading: "Add-on services added",
+        bodyHtml: `<p>${hi}</p><p>We've added the following service(s) to your cleaning: <strong>${list}</strong>.</p><p>Your booking total has been updated${d.amount ? ` by <strong>${d.amount}</strong>` : ""}. No action is needed right now — we'll collect any balance with your cleaning payment.</p>`,
         rows,
       }),
     };
