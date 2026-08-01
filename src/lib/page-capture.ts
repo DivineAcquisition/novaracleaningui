@@ -15,7 +15,7 @@ export type PageCaptureKind = "checkout" | "agreement";
 /** Max encoded bytes we'll ship; keeps mobile uploads and the packet sane. */
 const MAX_UPLOAD_BYTES = 5_500_000;
 /** Never block the customer's navigation for longer than this. */
-const CAPTURE_TIMEOUT_MS = 4000;
+const CAPTURE_TIMEOUT_MS = 3000;
 
 interface CaptureResult {
   base64: string;

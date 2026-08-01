@@ -517,14 +517,16 @@ export default function PropertyDetails() {
       // copy). Fire-and-forget so confirmation navigation isn't blocked.
       void persistServiceAgreement();
 
+      toast.success("Details saved! Finalizing your booking…");
+
       // Screenshot the signed agreement page while it's still on screen — it
-      // becomes the agreement evidence page in the job's dispute packet.
+      // becomes the agreement evidence page in the job's dispute packet. The
+      // helper is time-bounded so a slow raster can't strand the customer.
       await capturePageForEvidence(agreementCaptureRef.current, {
         bookingId: id,
         kind: "agreement",
       });
 
-      toast.success("Details saved! Finalizing your booking…");
       router.push(`/book/confirmation?booking_id=${id}`);
     } catch (error: unknown) {
       console.error("Error saving details:", error);
