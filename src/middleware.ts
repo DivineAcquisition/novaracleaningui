@@ -83,6 +83,8 @@ const ROUTE_OWNER: Array<[string, SubdomainKey]> = [
   ["/membership/success", "app"],
   // Tip checkout return (Stripe redirects here; confirms + records the tip).
   ["/tip", "app"],
+  // Tokenized tip-only invite (link texted/emailed to the customer — no login).
+  ["/leave-tip", "try"],
 
   // Partner (Airbnb/STR host + commercial/office) portal — its own subdomain.
   // Owns the whole /partner/* tree, including its auth callback

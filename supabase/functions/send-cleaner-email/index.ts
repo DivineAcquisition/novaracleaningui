@@ -171,6 +171,35 @@ serve(async (req) => {
         break;
       }
 
+      case "tip_received": {
+        const first = data.cleanerFirstName || data.firstName || "there";
+        const amountStr = `$${((Number(data.amount) || 0) / 100).toFixed(2)}`;
+        const totalStr = `$${((Number(data.totalTipCents) || Number(data.amount) || 0) / 100).toFixed(2)}`;
+        const crewSize = Number(data.crewSize) || 1;
+        const bookingLabel = data.bookingLabel || "your recent job";
+        const customerName = data.customerName || "your customer";
+        subject = `You received a ${amountStr} tip 💜`;
+        html = `
+          <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#0f172a">
+            <h2 style="margin:0 0 8px;font-size:20px">You received a tip 💜</h2>
+            <p style="margin:0 0 16px;color:#475569">Hi ${first},</p>
+            <p style="margin:0 0 16px;color:#475569">
+              ${customerName} left a tip on ${bookingLabel}.
+              ${crewSize > 1 ? `Your share of the ${totalStr} crew tip is below.` : "100% of it goes to you."}
+            </p>
+            <div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:12px;padding:18px;text-align:center;margin:0 0 16px">
+              <div style="font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#6d28d9">Your tip</div>
+              <div style="font-size:32px;font-weight:800;color:#5b21b6;margin-top:4px">${amountStr}</div>
+              <div style="font-size:12px;color:#7c3aed;margin-top:4px">100% pass-through — Novara takes nothing</div>
+            </div>
+            <p style="margin:0 0 8px;color:#475569;font-size:14px">
+              It will be included with your next payout.
+            </p>
+            <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">Novara Cleaning</p>
+          </div>`;
+        break;
+      }
+
       default:
         throw new Error(`Unknown email type: ${type}`);
     }
