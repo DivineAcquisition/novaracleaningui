@@ -3,11 +3,17 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.80.0";
 
 // admin-modify-booking
 //
-// Admin/VA adjusts a booking's SERVICE (service type, home size, add-ons,
-// bed/bath) from the Bookings tab. Unlike cancel/delete, the customer IS
-// notified — via SMS AND email — about the change. Pricing is authoritative
-// from the admin UI (it uses the same src/lib/pricing the customer sees), so
-// this function trusts the supplied totalEstimateCents and records it.
+// Admin/VA edits from the Bookings tab. Body.action selects the path:
+//
+//   update_service (default) — service type, home size, add-ons, bed/bath.
+//     Customer is notified via SMS AND email. Pricing is authoritative from
+//     the admin UI (same src/lib/pricing the customer sees), so this function
+//     trusts the supplied totalEstimateCents and records it.
+//
+//   update_customer_info — name, email, phone, address on THIS booking.
+//     Also mirrors the patch onto the linked customers + jobs rows when
+//     present so the directory / dispatch board don't go stale. No customer
+//     "service changed" blast — this is a records correction.
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -92,6 +98,20 @@ async function ensureAdminOrVa(admin: any, req: Request): Promise<string> {
   return u.user.id;
 }
 
+function normalizeEmail(raw: unknown): string {
+  return String(raw ?? "").toLowerCase().trim();
+}
+
+function normalizePhone(raw: unknown): string | null {
+  const digits = String(raw ?? "").replace(/\D/g, "");
+  return digits || null;
+}
+
+function trimOrNull(raw: unknown): string | null {
+  const s = String(raw ?? "").trim();
+  return s || null;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
 
@@ -103,6 +123,7 @@ serve(async (req) => {
   try {
     const actorId = await ensureAdminOrVa(admin, req);
     const body = await req.json();
+    const action = String(body.action || "update_service");
     const { bookingId, serviceType, homeSizeId, addOns, bedrooms, bathrooms, dwellingType, totalEstimateCents, addOnPrices } = body;
     if (!bookingId) throw new Error("bookingId is required");
 
@@ -112,6 +133,131 @@ serve(async (req) => {
       .eq("id", bookingId)
       .single();
     if (bErr || !booking) throw new Error("Booking not found");
+
+    // ── Customer personal info (name / email / phone / address) ────────
+    // Allowed on any status — correcting a typo on a completed booking is
+    // a records fix, not a service change. No customer "service updated"
+    // SMS/email; GHL still gets a sync so the contact stays current.
+    if (action === "update_customer_info") {
+      const firstName = trimOrNull(body.firstName);
+      const lastName = trimOrNull(body.lastName);
+      const email = normalizeEmail(body.email);
+      const phone = normalizePhone(body.phone);
+      const address = trimOrNull(body.address);
+      const city = trimOrNull(body.city);
+      const state = trimOrNull(body.state);
+      const zipCode = trimOrNull(body.zipCode ?? body.zip);
+
+      if (!firstName) throw new Error("First name is required");
+      if (!email || !email.includes("@")) throw new Error("A valid email is required");
+
+      const bookingPatch: Record<string, unknown> = {
+        first_name: firstName,
+        last_name: lastName,
+        email,
+        phone,
+        address,
+        city,
+        state,
+        zip_code: zipCode,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error: upErr } = await admin.from("bookings").update(bookingPatch).eq("id", bookingId);
+      if (upErr) throw upErr;
+
+      // Mirror onto the linked customer directory row when we have one —
+      // the Customers tab and wallet lookups key off that table.
+      if (booking.customer_id) {
+        const customerPatch: Record<string, unknown> = {
+          first_name: firstName,
+          last_name: lastName,
+          email,
+          phone,
+          address,
+          city,
+          state,
+          zip: zipCode,
+          updated_at: new Date().toISOString(),
+        };
+        const { error: custErr } = await admin
+          .from("customers")
+          .update(customerPatch)
+          .eq("id", booking.customer_id);
+        if (custErr) {
+          console.warn("[admin-modify-booking] customer mirror failed (non-blocking)", custErr.message);
+        }
+      }
+
+      // Keep the dispatch/job board address in sync with the booking.
+      if (booking.job_id) {
+        const jobPatch: Record<string, unknown> = {
+          address,
+          city,
+          state,
+          zip: zipCode,
+        };
+        const { error: jobErr } = await admin.from("jobs").update(jobPatch).eq("id", booking.job_id);
+        if (jobErr) {
+          console.warn("[admin-modify-booking] job address mirror failed (non-blocking)", jobErr.message);
+        }
+      }
+
+      try {
+        await admin.from("events").insert({
+          event_type: "booking.customer_info_updated",
+          source: "admin-modify-booking",
+          summary: `Customer info updated on booking ${booking.booking_number || bookingId}`,
+          data: {
+            booking_id: bookingId,
+            by: actorId,
+            before: {
+              first_name: booking.first_name,
+              last_name: booking.last_name,
+              email: booking.email,
+              phone: booking.phone,
+              address: booking.address,
+              city: booking.city,
+              state: booking.state,
+              zip_code: booking.zip_code,
+            },
+            after: bookingPatch,
+          },
+        });
+      } catch (evErr) {
+        console.warn("[admin-modify-booking] event log failed (non-blocking)", evErr);
+      }
+
+      try {
+        await admin.functions.invoke("send-zapier-webhook", { body: { bookingId } });
+      } catch (e) {
+        console.error("[admin-modify-booking] GHL sync failed (non-critical):", e);
+      }
+
+      console.log("[admin-modify-booking] customer info updated", { bookingId, actorId, email });
+      return new Response(
+        JSON.stringify({
+          success: true,
+          bookingId,
+          customer: {
+            first_name: firstName,
+            last_name: lastName,
+            email,
+            phone,
+            address,
+            city,
+            state,
+            zip_code: zipCode,
+          },
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
+      );
+    }
+
+    if (action !== "update_service") {
+      throw new Error(`Unknown action: ${action}`);
+    }
+
     if (booking.status === "cancelled") throw new Error("Cannot modify a cancelled booking");
     if (booking.status === "completed") throw new Error("Cannot modify a completed booking");
 

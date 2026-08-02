@@ -298,6 +298,14 @@ export default function AdminBookings() {
     if (match) setSelected(match);
   }, [highlightId, bookings]);
 
+  // Keep the open sheet's booking row fresh after mutations (customer info
+  // edits, service adjusts, etc.) so the summary reflects the saved values.
+  useEffect(() => {
+    if (!selected) return;
+    const match = bookings.find((b) => b.id === selected.id);
+    if (match && match !== selected) setSelected(match);
+  }, [bookings, selected]);
+
   const filtersActive =
     statusFilter !== "all" || dateRange !== "all" || search.trim().length > 0;
 
@@ -944,6 +952,17 @@ function BookingSheet({
   const [addOnPrices, setAddOnPrices] = useState<Record<string, string>>({});
   // Optional manual override of the whole new total (dollars). Blank = auto.
   const [totalOverride, setTotalOverride] = useState<string>("");
+  // Customer personal info (name / email / phone / address) — records
+  // correction on THIS booking. Mirrors to the linked customer + job rows.
+  const [customerOpen, setCustomerOpen] = useState(false);
+  const [custFirstName, setCustFirstName] = useState("");
+  const [custLastName, setCustLastName] = useState("");
+  const [custEmail, setCustEmail] = useState("");
+  const [custPhone, setCustPhone] = useState("");
+  const [custAddress, setCustAddress] = useState("");
+  const [custCity, setCustCity] = useState("");
+  const [custState, setCustState] = useState("");
+  const [custZip, setCustZip] = useState("");
   // Credit state (grants and removals both target the booking email's wallet).
   const [creditMode, setCreditMode] = useState<"grant" | "remove">("grant");
   const [creditAmount, setCreditAmount] = useState("");
@@ -968,6 +987,15 @@ function BookingSheet({
   useEffect(() => {
     if (!booking) return;
     setAdjustOpen(false);
+    setCustomerOpen(false);
+    setCustFirstName(booking.first_name || "");
+    setCustLastName(booking.last_name || "");
+    setCustEmail(booking.email || "");
+    setCustPhone(booking.phone || "");
+    setCustAddress(booking.address || "");
+    setCustCity(booking.city || "");
+    setCustState(booking.state || "");
+    setCustZip(booking.zip_code || "");
     setSuppressReview(Boolean(booking.suppress_review_request));
     setCreditMode("grant");
     setCreditAmount("");
@@ -1232,6 +1260,7 @@ function BookingSheet({
       }
       const { data, error } = await supabase.functions.invoke("admin-modify-booking", {
         body: {
+          action: "update_service",
           bookingId: booking.id,
           serviceType: svcType,
           homeSizeId: svcHomeSize,
@@ -1245,6 +1274,46 @@ function BookingSheet({
       toast.success("Service updated — customer notified via SMS & email.");
       onMutated();
       onClose();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setWorking(null);
+    }
+  };
+
+  const saveCustomerInfo = async () => {
+    if (!booking) return;
+    const first = custFirstName.trim();
+    const email = custEmail.trim().toLowerCase();
+    if (!first) {
+      toast.error("First name is required.");
+      return;
+    }
+    if (!email || !email.includes("@")) {
+      toast.error("A valid email is required.");
+      return;
+    }
+    setWorking("customer");
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-modify-booking", {
+        body: {
+          action: "update_customer_info",
+          bookingId: booking.id,
+          firstName: first,
+          lastName: custLastName.trim(),
+          email,
+          phone: custPhone.trim(),
+          address: custAddress.trim(),
+          city: custCity.trim(),
+          state: custState.trim(),
+          zipCode: custZip.trim(),
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success("Customer info updated on this booking.");
+      setCustomerOpen(false);
+      onMutated();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
     } finally {
@@ -1407,6 +1476,7 @@ function BookingSheet({
             </SheetTitle>
             <SheetDescription>
               {booking.first_name || ""} {booking.last_name || ""} · {booking.email || ""}
+              {booking.phone ? ` · ${booking.phone}` : ""}
             </SheetDescription>
           </SheetHeader>
 
@@ -1422,10 +1492,14 @@ function BookingSheet({
                 <span className="text-right tabular-nums">
                   {booking.service_date || "—"} {booking.time_slot || ""}
                 </span>
+                <span className="text-slate-500">Phone</span>
+                <span className="text-right tabular-nums">{booking.phone || "—"}</span>
                 <span className="text-slate-500">Address</span>
                 <span className="text-right truncate">
                   {booking.address || "—"}
                   {booking.city && `, ${booking.city}`}
+                  {booking.state ? ` ${booking.state}` : ""}
+                  {booking.zip_code ? ` ${booking.zip_code}` : ""}
                 </span>
 
                 {/* What the crew is walking into. Sits with service and address
@@ -1491,6 +1565,130 @@ function BookingSheet({
                     ? currentAddOns.map((a) => ADD_ONS[a as AddOnId]?.label || a).join(", ")
                     : "—"}
                 </span>
+              </CardContent>
+            </Card>
+
+            {/* Edit customer personal info on this booking */}
+            <Card className="border-slate-200">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-1.5">
+                  <RiUserSmileLine className="w-4 h-4 text-violet-700" />
+                  Customer info
+                </CardTitle>
+                <CardDescription>
+                  Update name, email, phone, or address on this booking. Also updates the linked customer directory and job address when present.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {!customerOpen ? (
+                  <Button variant="outline" className="w-full" onClick={() => setCustomerOpen(true)}>
+                    Edit customer info <RiArrowRightLine className="w-4 h-4 ml-2" />
+                  </Button>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div>
+                        <Label className="text-xs">First name</Label>
+                        <Input
+                          value={custFirstName}
+                          onChange={(e) => setCustFirstName(e.target.value)}
+                          autoComplete="off"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Last name</Label>
+                        <Input
+                          value={custLastName}
+                          onChange={(e) => setCustLastName(e.target.value)}
+                          autoComplete="off"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-xs">Email</Label>
+                      <Input
+                        type="email"
+                        value={custEmail}
+                        onChange={(e) => setCustEmail(e.target.value)}
+                        autoComplete="off"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Phone</Label>
+                      <Input
+                        value={custPhone}
+                        onChange={(e) => setCustPhone(e.target.value)}
+                        placeholder="4105551234"
+                        autoComplete="off"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Address</Label>
+                      <Input
+                        value={custAddress}
+                        onChange={(e) => setCustAddress(e.target.value)}
+                        autoComplete="off"
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <div className="sm:col-span-1">
+                        <Label className="text-xs">City</Label>
+                        <Input
+                          value={custCity}
+                          onChange={(e) => setCustCity(e.target.value)}
+                          autoComplete="off"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">State</Label>
+                        <Input
+                          value={custState}
+                          onChange={(e) => setCustState(e.target.value)}
+                          autoComplete="off"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">ZIP</Label>
+                        <Input
+                          value={custZip}
+                          onChange={(e) => setCustZip(e.target.value)}
+                          autoComplete="off"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => {
+                          setCustomerOpen(false);
+                          setCustFirstName(booking.first_name || "");
+                          setCustLastName(booking.last_name || "");
+                          setCustEmail(booking.email || "");
+                          setCustPhone(booking.phone || "");
+                          setCustAddress(booking.address || "");
+                          setCustCity(booking.city || "");
+                          setCustState(booking.state || "");
+                          setCustZip(booking.zip_code || "");
+                        }}
+                        disabled={working === "customer"}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        className="flex-1 bg-violet-600 hover:bg-violet-700 text-white"
+                        onClick={saveCustomerInfo}
+                        disabled={working === "customer"}
+                      >
+                        {working === "customer" ? (
+                          <><RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> Saving…</>
+                        ) : (
+                          <><RiCheckLine className="w-4 h-4 mr-2" /> Save customer info</>
+                        )}
+                      </Button>
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
 
