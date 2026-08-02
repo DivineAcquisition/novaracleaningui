@@ -129,6 +129,10 @@ serve(async (req) => {
             status: "confirmed",
             confirmed_at: new Date().toISOString(),
             payment_intent_id: (session.payment_intent as string) || booking.payment_intent_id,
+            // Stripe reports the session paid, so record it rather than
+            // waiting on the webhook — the confirmation email is gated on
+            // this column and the fan-out below runs immediately.
+            payment_received_at: booking.payment_received_at || new Date().toISOString(),
           })
           .eq("id", booking.id);
         logStep("Booking confirmed via verify", { bookingId: booking.id });
@@ -267,6 +271,10 @@ serve(async (req) => {
               status: "confirmed",
               confirmed_at: new Date().toISOString(),
               payment_intent_id: pi.id,
+              // The charge cleared right here, so record it rather than
+              // waiting on the webhook — the confirmation email is gated on
+              // this column and the fan-out below runs immediately.
+              payment_received_at: booking.payment_received_at || new Date().toISOString(),
             })
             .eq("id", booking.id);
           logStep("Charged saved card off-session", { bookingId: booking.id, amountCents });
