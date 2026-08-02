@@ -2,7 +2,8 @@
 
 React Native (Expo SDK 57) rebuild of the contractor portal. It runs against
 the **existing** Novara Supabase project (`sxdraeptzuamsgjcvfeg`) — same tables,
-same RLS, same edge functions. No backend changes were needed to ship it.
+same RLS, same edge functions. The only backend change was teaching `send-push`
+to speak Expo (see below); no schema or RLS change was needed.
 
 This lives alongside the older Capacitor app in `/mobile`, which wraps the web
 portal in a WebView. Both target bundle id `com.novaracleaning.contractor`, so
@@ -58,7 +59,12 @@ provisioning, and `cleaner-mark-complete` moves the booking to `pending_review`
 for QC rather than finalizing it.
 
 Push tokens upsert into `cleaner_device_tokens` on the existing `token`
-conflict key, so the current `send-push` function reaches this app unchanged.
+conflict key. `send-push` picks its transport from the token's shape, so the
+`ExponentPushToken[...]` this app registers goes out through Expo while any
+legacy raw APNs/FCM tokens keep using the direct transports. Expo holds the
+Apple/Google push credentials, so no `APNS_*` / `FCM_*` secret is needed for
+this app — set `EXPO_ACCESS_TOKEN` only if you turn on Expo's "Enhanced
+Security for Push Notifications".
 
 ## Not ported yet
 
