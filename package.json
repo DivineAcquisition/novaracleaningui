@@ -16,6 +16,7 @@
     "airtable:verify": "tsx scripts/verify-airtable-mapping.ts",
     "va:verify": "tsx scripts/verify-va-performance.ts",
     "screening:verify": "tsx scripts/verify-phone-screening.ts",
+    "edge:bundle": "node scripts/build-edge-bundle.mjs",
     "pricing:verify": "tsx scripts/verify-dynamic-pricing.ts",
     "pricing:verify:server": "deno run --allow-read scripts/verify-dynamic-quote.deno.ts"
   },
@@ -104,6 +105,7 @@
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^4.7.0",
     "autoprefixer": "^10.4.21",
+    "esbuild": "^0.25.10",
     "eslint": "^8.57.0",
     "eslint-config-next": "^14.2.20",
     "postcss": "^8.5.6",
