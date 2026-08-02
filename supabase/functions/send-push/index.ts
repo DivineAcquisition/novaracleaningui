@@ -1,14 +1,18 @@
 // ─── send-push ──────────────────────────────────────────────────────────────
 //
 // Sends a push notification to a cleaner's registered devices
-// (cleaner_device_tokens). Android → FCM HTTP v1, iOS → APNs token-based
-// (ES256 JWT). Credentials are read from app_secrets / env and the function
-// no-ops gracefully when a transport isn't configured, so it's safe to wire
-// into dispatch before the Apple/Google keys are in place.
+// (cleaner_device_tokens). Transport is chosen per token:
+//   ExponentPushToken[...] → Expo push service (the Novara Pro Expo app)
+//   raw device token       → Android FCM HTTP v1 / iOS APNs (ES256 JWT)
+// Credentials are read from app_secrets / env and the function no-ops
+// gracefully when a transport isn't configured, so it's safe to wire into
+// dispatch before the Apple/Google keys are in place. Expo needs no keys at
+// all — Expo holds the APNs/FCM credentials on our behalf.
 //
 // Body: { cleanerId?, userId?, tokens?: string[], title, body, data? }
 //
 // Secrets used (any subset):
+//   EXPO_ACCESS_TOKEN         — only if "Enhanced Security for Push" is on
 //   FCM_SERVICE_ACCOUNT_JSON  — full Google service-account JSON (Android)
 //   APNS_KEY_P8               — contents of the AuthKey_XXXX.p8 (iOS)
 //   APNS_KEY_ID, APNS_TEAM_ID — from the Apple developer portal
@@ -51,6 +55,90 @@ function pemToDer(pem: string): Uint8Array {
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
+}
+
+// ─── Expo push (Novara Pro) ──────────────────────────────────────────────
+const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
+const EXPO_BATCH = 100; // Expo's documented per-request ticket limit.
+
+function isExpoToken(token: string): boolean {
+  return /^Expo(nent)?PushToken\[[^\]]+\]$/.test(token.trim());
+}
+
+interface ExpoTicket {
+  status?: string;
+  message?: string;
+  details?: { error?: string };
+}
+
+/**
+ * Push through Expo and return the tokens Expo told us are dead so the caller
+ * can prune them. A token that has been uninstalled comes back as
+ * `DeviceNotRegistered`; leaving it in the table means every later dispatch
+ * pays for a send that can never land.
+ */
+async function sendExpo(
+  accessToken: string,
+  tokens: string[],
+  title: string,
+  body: string,
+  data: Record<string, string>,
+): Promise<{ sent: number; failed: number; dead: string[] }> {
+  let sent = 0;
+  let failed = 0;
+  const dead: string[] = [];
+
+  for (let i = 0; i < tokens.length; i += EXPO_BATCH) {
+    const batch = tokens.slice(i, i + EXPO_BATCH);
+    const messages = batch.map((to) => ({
+      to,
+      title,
+      body,
+      data,
+      sound: "default",
+      priority: "high",
+      channelId: "default",
+    }));
+
+    let tickets: ExpoTicket[] = [];
+    try {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      };
+      if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+
+      const res = await fetch(EXPO_PUSH_URL, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(messages),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        log("expo send failed", { status: res.status, body: JSON.stringify(json).slice(0, 300) });
+        failed += batch.length;
+        continue;
+      }
+      tickets = Array.isArray(json?.data) ? json.data : [];
+    } catch (e) {
+      log("expo send threw", { err: e instanceof Error ? e.message : String(e) });
+      failed += batch.length;
+      continue;
+    }
+
+    batch.forEach((token, idx) => {
+      const ticket = tickets[idx];
+      if (ticket?.status === "ok") {
+        sent++;
+        return;
+      }
+      failed++;
+      log("expo ticket error", { error: ticket?.details?.error, message: ticket?.message });
+      if (ticket?.details?.error === "DeviceNotRegistered") dead.push(token);
+    });
+  }
+
+  return { sent, failed, dead };
 }
 
 // ─── FCM HTTP v1 (Android) ───────────────────────────────────────────────
@@ -198,9 +286,14 @@ serve(async (req) => {
       for (const [k, v] of Object.entries(data)) dataStr[k] = String(v);
     }
 
+    // Expo tokens are self-describing, so split them out by shape rather than
+    // by the `platform` column — the Expo app stores ios/android there too.
+    const expoTokens = devices.filter((d) => isExpoToken(d.token)).map((d) => d.token.trim());
+    const nativeDevices = devices.filter((d) => !isExpoToken(d.token));
+
     // Lazily prepare each transport based on which devices we have + creds.
-    const hasAndroid = devices.some((d) => d.platform === "android" || d.platform === "unknown");
-    const hasIos = devices.some((d) => d.platform === "ios" || d.platform === "unknown");
+    const hasAndroid = nativeDevices.some((d) => d.platform === "android" || d.platform === "unknown");
+    const hasIos = nativeDevices.some((d) => d.platform === "ios" || d.platform === "unknown");
 
     let fcmAccessToken = "";
     let fcmProjectId = "";
@@ -238,7 +331,22 @@ serve(async (req) => {
 
     let sent = 0;
     let failed = 0;
-    for (const d of devices) {
+
+    if (expoTokens.length > 0) {
+      const expoAccessToken = (await resolveSecret(supabase, "EXPO_ACCESS_TOKEN")) || "";
+      const expo = await sendExpo(expoAccessToken, expoTokens, title, body, dataStr);
+      sent += expo.sent;
+      failed += expo.failed;
+      if (expo.dead.length > 0) {
+        const { error: pruneErr } = await supabase
+          .from("cleaner_device_tokens")
+          .delete()
+          .in("token", expo.dead);
+        log("pruned unregistered devices", { count: expo.dead.length, error: pruneErr?.message });
+      }
+    }
+
+    for (const d of nativeDevices) {
       const isIos = d.platform === "ios";
       const isAndroid = d.platform === "android";
       let ok = false;

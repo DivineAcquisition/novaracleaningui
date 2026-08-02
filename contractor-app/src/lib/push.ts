@@ -1,6 +1,7 @@
 // Device-token registration. Writes to the same `cleaner_device_tokens` table
-// the Capacitor app uses, so the existing `send-push` edge function reaches
-// this app with no server change.
+// the Capacitor app uses; `send-push` routes on token shape, so the
+// ExponentPushToken[...] stored here goes out via Expo while any legacy raw
+// APNs/FCM tokens keep using the direct transports.
 
 import Constants from "expo-constants";
 import * as Device from "expo-device";
