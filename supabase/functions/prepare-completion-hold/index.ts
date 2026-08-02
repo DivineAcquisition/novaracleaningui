@@ -12,8 +12,8 @@
 //
 // Retry policy:
 //   • 3 attempts max, spaced ~24h apart via completion_hold_next_attempt_at
-//   • Each failure → SMS + email asking customer to update card via
-//     the Customer Portal
+//   • Each failure → SMS with the booking's existing pay link so they can
+//     try again (email still points at the Customer Portal)
 //   • Final failure → cancel the booking, refund the deposit, send
 //     final notification
 //
@@ -51,6 +51,28 @@ const MAX_ATTEMPTS = 3;
 const RETRY_GAP_MS = 24 * 60 * 60 * 1000;             // 24h between retries
 const HOLD_WINDOW_DAYS = 5;                            // Place auth at S-5
 const PORTAL_URL = "https://app.novaracleaning.com/account";
+const PAY_PAGE_BASE = "https://try.novaracleaning.com/pay";
+
+/**
+ * Prefer the booking-specific pay / invoice link that was generated when
+ * the booking was created (pay page token or hosted_invoice_url). The
+ * generic account portal is only a last resort so the SMS never ends
+ * with a dead/empty URL.
+ */
+// deno-lint-ignore no-explicit-any
+function bookingRetryUrl(booking: any): string {
+  const token = typeof booking?.pay_page_token === "string"
+    ? booking.pay_page_token.trim()
+    : "";
+  if (token.length >= 16) return `${PAY_PAGE_BASE}/${token}`;
+
+  const hosted = typeof booking?.hosted_invoice_url === "string"
+    ? booking.hosted_invoice_url.trim()
+    : "";
+  if (/^https?:\/\//i.test(hosted)) return hosted;
+
+  return PORTAL_URL;
+}
 
 interface ProcessResult {
   bookingId: string;
@@ -118,10 +140,11 @@ async function notifyCustomer(
   const attemptsLeft = Math.max(0, 3 - attemptCount);
 
   if (kind === "auth_failed") {
+    const retryUrl = bookingRetryUrl(booking);
     smsMsg =
       `NovaraCleaning: We couldn't place the pre-authorization hold for your ` +
       `${dateLabel} cleaning balance. Please update your card to keep your booking — ` +
-      `${attemptsLeft} attempt${attemptsLeft === 1 ? "" : "s"} left before we cancel. ${PORTAL_URL}`;
+      `${attemptsLeft} attempt${attemptsLeft === 1 ? "" : "s"} left before we cancel. ${retryUrl}`;
     emailHtml = renderEmail({
       firstName,
       title: "Action needed: payment method update",
