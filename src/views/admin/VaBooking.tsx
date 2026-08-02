@@ -569,7 +569,6 @@ export default function VaBooking() {
   // logged to price_overrides.
   const [overrideReason, setOverrideReason] = useState("");
   const [overrideNote, setOverrideNote] = useState("");
-  const [requestingApproval, setRequestingApproval] = useState(false);
   const [promoCode, setPromoCode] = useState("");
   const [sendConfirmationSms, setSendConfirmationSms] = useState(true);
   const [sendChecklistEmail, setSendChecklistEmail] = useState(true);
@@ -1378,11 +1377,7 @@ export default function VaBooking() {
           try {
             const detail = await ctx.json();
             if (detail?.error) {
-              throw new Error(
-                detail.requiresApproval
-                  ? `${detail.error} Use "Hold for admin approval" in the Payment section.`
-                  : detail.error,
-              );
+              throw new Error(detail.error);
             }
           } catch (parseErr) {
             if (parseErr instanceof Error && parseErr.message && !/JSON/i.test(parseErr.message)) throw parseErr;
@@ -1517,54 +1512,6 @@ export default function VaBooking() {
       toast.error(`Failed to save quote: ${m}`);
     } finally {
       setSavingQuote(false);
-    }
-  };
-
-  // Beyond-band adjustment: lock the quote (if not already) and file a
-  // pending override for admin decision. The quote — and its price — holds
-  // while the admin decides; the VA never discounts freely on a call.
-  const handleRequestApproval = async () => {
-    if (!overrideTotal.trim() || !overrideReason) {
-      toast.error("Enter the adjusted total and pick a reason first.");
-      return;
-    }
-    setRequestingApproval(true);
-    try {
-      let quoteId = savedQuoteId;
-      if (!quoteId) {
-        const lock = await dynQuote.lockQuote({
-          firstName: firstName.trim() || "—",
-          lastName: lastName.trim() || undefined,
-          email: email.trim().toLowerCase() || undefined,
-          phone: phone || undefined,
-          address: address || undefined,
-          city: city || undefined,
-          state: state || undefined,
-        });
-        if (!lock) throw new Error("Could not lock the quote.");
-        quoteId = lock.quoteId;
-        setSavedQuoteId(lock.quoteId);
-        lockSignatureRef.current = dealSignature;
-      }
-      const { data, error } = await supabase.functions.invoke("quote-dynamic-price", {
-        body: {
-          action: "request_override",
-          quoteId,
-          csrName: csrName.trim() || "va_admin",
-          override: {
-            totalCents: Math.round(parseFloat(overrideTotal) * 100),
-            reasonCode: overrideReason,
-            note: overrideNote.trim() || undefined,
-          },
-        },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      toast.success(data?.message || "Override submitted for admin approval.");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not submit the override.");
-    } finally {
-      setRequestingApproval(false);
     }
   };
 
@@ -2715,29 +2662,12 @@ export default function VaBooking() {
                     }
                     if (Math.abs(deltaPct) > band) {
                       return (
-                        <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 space-y-2">
-                          <p className="text-[11px] text-amber-900">
-                            <strong>{deltaPct > 0 ? "+" : ""}{deltaPct.toFixed(1)}%</strong> is outside your ±{band}%
-                            adjustment band. Hold it for admin approval — the quote stays locked while they decide.
-                          </p>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={requestingApproval || !overrideReason}
-                            onClick={handleRequestApproval}
-                            className="bg-white"
-                          >
-                            {requestingApproval ? (
-                              <>
-                                <RiLoader4Line className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Submitting…
-                              </>
-                            ) : (
-                              "Save quote & hold for admin approval"
-                            )}
-                          </Button>
+                        <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+                          <strong>{deltaPct > 0 ? "+" : ""}{deltaPct.toFixed(1)}%</strong> is outside your ±{band}%
+                          adjustment band. You can still book at this price — admin
+                          (contact@novaracleaning.com) will be notified automatically.
                           {!overrideReason && (
-                            <p className="text-[10.5px] text-amber-800">Pick a reason first.</p>
+                            <span className="block mt-1 text-amber-800">Pick a reason first.</span>
                           )}
                         </div>
                       );

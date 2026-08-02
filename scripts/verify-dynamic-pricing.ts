@@ -280,11 +280,11 @@ console.log("\n── Guardrails (floor, ceiling, bounds, rate limit, override b
   const limited = applyRateLimit(seededConfig, 1.25, { multiplier: 1.0, updatedAtMs: Date.now() - 30 * 60_000 }, Date.now());
   check("Rate limit: 1.00 → target 1.25 after 30min moves only to 1.025", Math.round(limited * 1000) / 1000, 1.025);
 
-  // Override band: ±10% self-serve, beyond → approval, below floor → never.
+  // Override band: ±10% self-serve, beyond → allowed + notify admin, below floor → never.
   const within = checkOverride(seededConfig, 30000, 27500, 20000);
-  check("Override −8.3% within ±10% band → allowed", [within.allowed, within.requiresApproval], [true, false]);
+  check("Override −8.3% within ±10% band → allowed, no notify", [within.allowed, within.notifyAdmin], [true, false]);
   const beyond = checkOverride(seededConfig, 30000, 25000, 20000);
-  check("Override −16.7% beyond band → requires admin approval", [beyond.allowed, beyond.requiresApproval], [false, true]);
+  check("Override −16.7% beyond band → allowed + notify admin", [beyond.allowed, beyond.notifyAdmin], [true, true]);
   const below = checkOverride(seededConfig, 30000, 19000, 20000);
   check("Override below floor → refused at any level", [below.allowed, below.belowFloor], [false, true]);
 }

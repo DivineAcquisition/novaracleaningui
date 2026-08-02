@@ -15,7 +15,7 @@
 //   4. Base tables — the UNRESOLVED two-price-tables discrepancy, surfaced
 //                    until admin confirms which is authoritative.
 //   5. Reports     — shadow comparison (charged vs would-be), clamp alerts,
-//                    override activity per VA + pending approvals, audit log.
+//                    override activity per VA, audit log.
 //
 // Every config save INSERTS A NEW VERSION (immutable history) — historical
 // quotes keep pointing at the version that priced them, so any past price is
@@ -26,7 +26,6 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import {
   RiAlarmWarningLine,
-  RiCheckLine,
   RiCloseLine,
   RiEyeLine,
   RiHistoryLine,
@@ -283,8 +282,6 @@ export default function DynamicPricing() {
     );
   }
 
-  const pendingApprovals = overrides.filter((o) => o.status === "pending_approval");
-
   return (
     <div className="space-y-5">
       <SEO title="Dynamic Pricing — Admin" description="Zones, demand-reactive pricing, guardrails." noindex />
@@ -331,10 +328,6 @@ export default function DynamicPricing() {
         </div>
       )}
 
-      {pendingApprovals.length > 0 && (
-        <PendingApprovals rows={pendingApprovals} onDecided={loadAll} />
-      )}
-
       <Tabs defaultValue="zones">
         <TabsList>
           <TabsTrigger value="zones"><RiMapPin2Line className="w-3.5 h-3.5 mr-1.5" />Zones</TabsTrigger>
@@ -361,78 +354,6 @@ export default function DynamicPricing() {
         </TabsContent>
       </Tabs>
     </div>
-  );
-}
-
-// ─── Pending approvals (beyond-band VA overrides) ──────────────────────────
-
-function PendingApprovals({ rows, onDecided }: { rows: OverrideRow[]; onDecided: () => void }) {
-  const [busy, setBusy] = useState<string | null>(null);
-
-  const decide = async (row: OverrideRow, approve: boolean) => {
-    setBusy(row.id);
-    try {
-      const { data: userData } = await supabase.auth.getUser();
-      const decidedBy = userData?.user?.email || "admin";
-      const { error } = await db
-        .from("price_overrides")
-        .update({ status: approve ? "approved" : "rejected", decided_by: decidedBy, decided_at: new Date().toISOString() })
-        .eq("id", row.id);
-      if (error) throw error;
-      if (approve && row.quote_id) {
-        // Apply the approved price to the held quote and refresh its lock so
-        // the VA can book it at the approved number.
-        await db
-          .from("va_quotes")
-          .update({
-            quoted_price_cents: row.override_cents,
-            total_estimate_cents: row.override_cents,
-            locked_until: new Date(Date.now() + 48 * 3_600_000).toISOString(),
-          })
-          .eq("id", row.quote_id);
-      }
-      toast.success(approve ? "Override approved — the quote now carries the approved price." : "Override rejected.");
-      onDecided();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Decision failed.");
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  return (
-    <Card className="border-amber-300 bg-amber-50/50">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm text-amber-900">
-          Price overrides waiting for approval ({rows.length})
-        </CardTitle>
-        <CardDescription className="text-xs">
-          Beyond-band VA adjustments hold here — the quote stays locked while you decide.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        {rows.map((o) => (
-          <div key={o.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white border border-amber-200 px-3 py-2">
-            <div className="text-xs">
-              <span className="font-semibold text-slate-900">{o.va_name}</span>{" "}
-              <span className="text-slate-500">
-                {fmtMoney(o.original_cents)} → <strong>{fmtMoney(o.override_cents)}</strong> ({o.delta_percent > 0 ? "+" : ""}
-                {o.delta_percent}%) · {o.reason_code}
-                {o.note ? ` · “${o.note}”` : ""} · {format(new Date(o.created_at), "MMM d, h:mm a")}
-              </span>
-            </div>
-            <div className="flex gap-1.5">
-              <Button size="sm" variant="outline" disabled={busy === o.id} onClick={() => decide(o, true)} className="h-7 text-emerald-700 border-emerald-300">
-                <RiCheckLine className="w-3.5 h-3.5 mr-1" /> Approve
-              </Button>
-              <Button size="sm" variant="outline" disabled={busy === o.id} onClick={() => decide(o, false)} className="h-7 text-rose-700 border-rose-300">
-                <RiCloseLine className="w-3.5 h-3.5 mr-1" /> Reject
-              </Button>
-            </div>
-          </div>
-        ))}
-      </CardContent>
-    </Card>
   );
 }
 

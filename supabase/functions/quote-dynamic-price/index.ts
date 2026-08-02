@@ -14,10 +14,10 @@
 //     the VA can re-state the price, never silently charge something else.
 //   • "lock" — record the quote against the customer + property, locking the
 //     price for the configured window (guardrails.quote_lock_hours).
-//   • "request_override" — a VA adjustment beyond the configured band: the
-//     quote holds as pending_approval for an admin decision instead of the
-//     VA discounting freely on a call. (Within-band overrides don't need
-//     this endpoint — they're applied and logged at booking time.)
+//   • "request_override" — apply a VA adjustment to a locked quote and log
+//     it. Beyond-band adjustments notify admin (contact@novaracleaning.com);
+//     no approval gate. Within-band overrides are also fine here, though
+//     booking-time logging usually covers those.
 //
 // Pricing inputs are property, service, timing, and location only. Nothing
 // about the customer's identity or behavior enters the computation.
@@ -34,6 +34,70 @@ import {
   type DynamicServiceType,
   type MembershipPlanId,
 } from "../_shared/dynamic-quote.ts";
+
+const ADMIN_OVERRIDE_NOTIFY_EMAIL = "contact@novaracleaning.com";
+
+async function resolveSecret(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  name: string,
+): Promise<string> {
+  try {
+    const { data } = await supabase.from("app_secrets").select("value").eq("key", name).maybeSingle();
+    if (data?.value && typeof data.value === "string" && data.value.trim()) return data.value.trim();
+  } catch { /* ignore */ }
+  return (Deno.env.get(name) || "").trim();
+}
+
+async function notifyAdminQuoteOverride(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  opts: {
+    quoteId: string;
+    vaName: string;
+    originalCents: number;
+    overrideCents: number;
+    deltaPct: number;
+    reason: string;
+    note?: string;
+    customerLabel?: string;
+  },
+): Promise<void> {
+  const resendKey = await resolveSecret(supabase, "RESEND_API_KEY");
+  if (!resendKey) {
+    console.log("[quote-dynamic-price] override notify skipped — RESEND_API_KEY missing");
+    return;
+  }
+  const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+  const sign = opts.deltaPct > 0 ? "+" : "";
+  const subject = `Price override on quote ${opts.quoteId.slice(0, 8)}: ${money(opts.originalCents)} → ${money(opts.overrideCents)} (${sign}${opts.deltaPct}%)`;
+  const html = `
+    <div style="font-family:Arial,sans-serif;font-size:14px;color:#0f172a;line-height:1.5">
+      <p style="margin:0 0 12px"><strong>A VA applied a price override outside the usual adjustment band.</strong> No approval was required — this is a notification only.</p>
+      <table style="border-collapse:collapse;width:100%;max-width:520px">
+        <tr><td style="padding:4px 8px;color:#64748b">Quote</td><td style="padding:4px 8px"><strong>${opts.quoteId}</strong></td></tr>
+        <tr><td style="padding:4px 8px;color:#64748b">Customer</td><td style="padding:4px 8px">${opts.customerLabel || "—"}</td></tr>
+        <tr><td style="padding:4px 8px;color:#64748b">VA</td><td style="padding:4px 8px">${opts.vaName}</td></tr>
+        <tr><td style="padding:4px 8px;color:#64748b">Quoted</td><td style="padding:4px 8px">${money(opts.originalCents)}</td></tr>
+        <tr><td style="padding:4px 8px;color:#64748b">Override</td><td style="padding:4px 8px"><strong>${money(opts.overrideCents)}</strong> (${sign}${opts.deltaPct}%)</td></tr>
+        <tr><td style="padding:4px 8px;color:#64748b">Reason</td><td style="padding:4px 8px">${opts.reason}</td></tr>
+        <tr><td style="padding:4px 8px;color:#64748b">Note</td><td style="padding:4px 8px">${opts.note || "—"}</td></tr>
+      </table>
+    </div>`;
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      from: "Novara Cleaning <hello@novaracleaning.com>",
+      to: [ADMIN_OVERRIDE_NOTIFY_EMAIL],
+      subject,
+      html,
+    }),
+  });
+  if (!res.ok) {
+    console.error("[quote-dynamic-price] override notify failed", res.status, (await res.text()).slice(0, 200));
+  }
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -97,7 +161,7 @@ serve(async (req) => {
 
     const action = body.action || "quote";
 
-    // ── request_override: beyond-band adjustment → holds for admin ────────
+    // ── request_override: apply now; beyond-band → notify admin ───────────
     if (action === "request_override") {
       if (!body.quoteId || !body.override) {
         return json({ ok: false, error: "quoteId and override are required." }, 400);
@@ -108,8 +172,9 @@ serve(async (req) => {
       const computed = Number(quote.quoted_price_cents || quote.total_estimate_cents || 0);
       const floor = Number(quote.price_breakdown?.floorCents || 0);
       const check = checkOverride(cfg, computed, body.override.totalCents, floor);
-      if (check.belowFloor) return json({ ok: false, error: check.reason }, 422);
+      if (!check.allowed) return json({ ok: false, error: check.reason }, 422);
       if (!body.override.reasonCode) return json({ ok: false, error: "A reason is required for any override." }, 400);
+      const deltaPct = Math.round(check.deltaPercent * 100) / 100;
       const { data: ov, error: ovErr } = await supabase
         .from("price_overrides")
         .insert({
@@ -117,29 +182,40 @@ serve(async (req) => {
           va_name: body.csrName || "unknown",
           original_cents: computed,
           override_cents: body.override.totalCents,
-          delta_percent: Math.round(check.deltaPercent * 100) / 100,
+          delta_percent: deltaPct,
           direction: body.override.totalCents >= computed ? "up" : "down",
           reason_code: body.override.reasonCode,
           note: body.override.note || null,
-          status: check.requiresApproval ? "pending_approval" : "applied",
+          status: "applied",
         })
         .select("id, status")
         .single();
       if (ovErr) throw ovErr;
-      if (!check.requiresApproval) {
-        // Within band — apply to the locked quote immediately.
-        await supabase
-          .from("va_quotes")
-          .update({ quoted_price_cents: body.override.totalCents, total_estimate_cents: body.override.totalCents })
-          .eq("id", body.quoteId);
+      await supabase
+        .from("va_quotes")
+        .update({ quoted_price_cents: body.override.totalCents, total_estimate_cents: body.override.totalCents })
+        .eq("id", body.quoteId);
+      if (check.notifyAdmin) {
+        const cust = [quote.first_name, quote.last_name].filter(Boolean).join(" ").trim();
+        await notifyAdminQuoteOverride(supabase, {
+          quoteId: body.quoteId,
+          vaName: body.csrName || "unknown",
+          originalCents: computed,
+          overrideCents: body.override.totalCents,
+          deltaPct,
+          reason: body.override.reasonCode,
+          note: body.override.note,
+          customerLabel: cust || quote.email || undefined,
+        }).catch((e) => console.error("[quote-dynamic-price] notify failed", e));
       }
       return json({
         ok: true,
         overrideId: ov.id,
         status: ov.status,
-        requiresApproval: check.requiresApproval,
-        message: check.requiresApproval
-          ? "Adjustment is outside the VA band — it's now waiting for admin approval. The quote holds meanwhile."
+        requiresApproval: false,
+        notifyAdmin: check.notifyAdmin,
+        message: check.notifyAdmin
+          ? "Adjustment applied. Admin has been notified (outside the usual VA band)."
           : "Adjustment applied to the locked quote.",
         meta,
       });

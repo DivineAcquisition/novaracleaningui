@@ -158,6 +158,68 @@ async function resolveSecret(
   return value;
 }
 
+const ADMIN_OVERRIDE_NOTIFY_EMAIL = "contact@novaracleaning.com";
+
+/** Email admin when a VA applies a beyond-band price override (no approval gate). */
+async function notifyAdminPriceOverride(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  opts: {
+    bookingId: string;
+    bookingRef: string;
+    customerName: string;
+    customerEmail: string;
+    vaName: string;
+    originalCents: number;
+    overrideCents: number;
+    deltaPct: number;
+    reason: string;
+    note: string | null;
+    serviceDate: string | null;
+  },
+): Promise<void> {
+  const resendKey = await resolveSecret(supabase, "RESEND_API_KEY");
+  if (!resendKey) {
+    logStep("override notify skipped — RESEND_API_KEY missing");
+    return;
+  }
+  const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+  const sign = opts.deltaPct > 0 ? "+" : "";
+  const subject = `Price override on ${opts.bookingRef}: ${money(opts.originalCents)} → ${money(opts.overrideCents)} (${sign}${opts.deltaPct}%)`;
+  const html = `
+    <div style="font-family:Arial,sans-serif;font-size:14px;color:#0f172a;line-height:1.5">
+      <p style="margin:0 0 12px"><strong>A VA applied a price override outside the usual adjustment band.</strong> No approval was required — this is a notification only.</p>
+      <table style="border-collapse:collapse;width:100%;max-width:520px">
+        <tr><td style="padding:4px 8px;color:#64748b">Booking</td><td style="padding:4px 8px"><strong>${opts.bookingRef}</strong></td></tr>
+        <tr><td style="padding:4px 8px;color:#64748b">Customer</td><td style="padding:4px 8px">${opts.customerName} &lt;${opts.customerEmail}&gt;</td></tr>
+        <tr><td style="padding:4px 8px;color:#64748b">Service date</td><td style="padding:4px 8px">${opts.serviceDate || "—"}</td></tr>
+        <tr><td style="padding:4px 8px;color:#64748b">VA</td><td style="padding:4px 8px">${opts.vaName}</td></tr>
+        <tr><td style="padding:4px 8px;color:#64748b">Quoted</td><td style="padding:4px 8px">${money(opts.originalCents)}</td></tr>
+        <tr><td style="padding:4px 8px;color:#64748b">Override</td><td style="padding:4px 8px"><strong>${money(opts.overrideCents)}</strong> (${sign}${opts.deltaPct}%)</td></tr>
+        <tr><td style="padding:4px 8px;color:#64748b">Reason</td><td style="padding:4px 8px">${opts.reason}</td></tr>
+        <tr><td style="padding:4px 8px;color:#64748b">Note</td><td style="padding:4px 8px">${opts.note || "—"}</td></tr>
+      </table>
+      <p style="margin:16px 0 0;font-size:12px;color:#94a3b8">Booking id: ${opts.bookingId}</p>
+    </div>`;
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${resendKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: "Novara Cleaning <hello@novaracleaning.com>",
+      to: [ADMIN_OVERRIDE_NOTIFY_EMAIL],
+      subject,
+      html,
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`resend ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  }
+  logStep("override admin notified", { to: ADMIN_OVERRIDE_NOTIFY_EMAIL, bookingRef: opts.bookingRef });
+}
+
 // ─── Stripe + invoice helpers ───────────────────────────────────────
 async function ensureStripeCustomer(
   stripe: Stripe,
@@ -588,7 +650,15 @@ serve(async (req) => {
       ? breakdown.floorCents + breakdown.addOnsCents + breakdown.surchargesCents
       : 0;
     let pendingOverride:
-      | { original: number; override: number; deltaPct: number; reason: string; note: string | null; vaName: string }
+      | {
+        original: number;
+        override: number;
+        deltaPct: number;
+        reason: string;
+        note: string | null;
+        vaName: string;
+        notifyAdmin: boolean;
+      }
       | null = null;
 
     if (dynCtx && body.vaOverride) {
@@ -600,11 +670,10 @@ serve(async (req) => {
       }
       const check = checkOverride(dynCtx.config, computedCents, body.vaOverride.totalCents, jobFloorCents);
       if (!check.allowed) {
-        // Below-floor: never, at any level. Beyond-band: the quote holds for
-        // admin approval (quote-dynamic-price action=request_override) —
-        // the VA does not discount freely on a call.
+        // Below-floor: never, at any level. Beyond-band overrides are
+        // allowed and admin is notified after the booking lands.
         return new Response(
-          JSON.stringify({ error: check.reason, requiresApproval: check.requiresApproval }),
+          JSON.stringify({ error: check.reason }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 422 },
         );
       }
@@ -615,6 +684,7 @@ serve(async (req) => {
         reason: body.vaOverride.reasonCode,
         note: body.vaOverride.note || null,
         vaName: body.csrName || "va_admin",
+        notifyAdmin: check.notifyAdmin,
       };
       computedCents = body.vaOverride.totalCents;
     } else if (body.priceOverride?.total != null) {
@@ -637,6 +707,7 @@ serve(async (req) => {
           reason: "manual_admin",
           note: null,
           vaName: body.csrName || "admin",
+          notifyAdmin: false,
         };
       }
       computedCents = body.priceOverride.total;
@@ -855,6 +926,25 @@ serve(async (req) => {
         });
       } catch (ovErr) {
         noteFailure("Override log", ovErr);
+      }
+      if (pendingOverride.notifyAdmin) {
+        try {
+          await notifyAdminPriceOverride(supabase, {
+            bookingId,
+            bookingRef,
+            customerName: `${body.firstName || ""} ${body.lastName || ""}`.trim() || body.email,
+            customerEmail: body.email,
+            vaName: pendingOverride.vaName,
+            originalCents: pendingOverride.original,
+            overrideCents: pendingOverride.override,
+            deltaPct: pendingOverride.deltaPct,
+            reason: pendingOverride.reason,
+            note: pendingOverride.note,
+            serviceDate: body.serviceDate || null,
+          });
+        } catch (notifyErr) {
+          noteFailure("Override admin notify", notifyErr);
+        }
       }
     }
     try {

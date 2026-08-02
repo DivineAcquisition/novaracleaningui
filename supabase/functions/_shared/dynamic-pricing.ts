@@ -807,7 +807,10 @@ export function computeQuote(
 
 export interface OverrideCheck {
   allowed: boolean;
+  /** @deprecated Always false when allowed — beyond-band overrides notify admin instead of waiting for approval. */
   requiresApproval: boolean;
+  /** True when the adjustment is outside the VA band; admin is emailed, booking still proceeds. */
+  notifyAdmin: boolean;
   belowFloor: boolean;
   deltaPercent: number;
   reason: string;
@@ -815,8 +818,8 @@ export interface OverrideCheck {
 
 /**
  * A VA may adjust within ±override_band_percent with a required reason.
- * Beyond the band → admin approval. Below the floor → never, at any level:
- * the floor exists to protect cleaner pay and is not overridable.
+ * Beyond the band → still allowed; admin is notified. Below the floor →
+ * never, at any level: the floor protects cleaner pay and is not overridable.
  */
 export function checkOverride(
   config: DynamicPricingConfig,
@@ -831,6 +834,7 @@ export function checkOverride(
     return {
       allowed: false,
       requiresApproval: false,
+      notifyAdmin: false,
       belowFloor: true,
       deltaPercent,
       reason: `Override is below the ${money(floorCents)} floor for this service — the floor protects cleaner pay and cannot be overridden.`,
@@ -839,16 +843,18 @@ export function checkOverride(
   const band = config.guardrails.override_band_percent;
   if (Math.abs(deltaPercent) > band) {
     return {
-      allowed: false,
-      requiresApproval: true,
+      allowed: true,
+      requiresApproval: false,
+      notifyAdmin: true,
       belowFloor: false,
       deltaPercent,
-      reason: `Adjustment of ${deltaPercent.toFixed(1)}% is outside the ±${band}% VA band — needs admin approval.`,
+      reason: `Adjustment of ${deltaPercent.toFixed(1)}% is outside the ±${band}% VA band — applied and admin notified.`,
     };
   }
   return {
     allowed: true,
     requiresApproval: false,
+    notifyAdmin: false,
     belowFloor: false,
     deltaPercent,
     reason: "Within the VA adjustment band.",
