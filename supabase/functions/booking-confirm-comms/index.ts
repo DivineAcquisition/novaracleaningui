@@ -32,6 +32,19 @@ function checklistLink(serviceType: string | null | undefined): string {
   }
 }
 
+/**
+ * Mirror of upfrontPaymentSettled() in _shared/post-confirm-booking.ts —
+ * duplicated because this function is deliberately self-contained. A VA
+ * booking is confirmed with its deposit invoice still outstanding, so the
+ * customer-facing comms wait here until the money lands. stripe-webhook
+ * calls this function again once it does.
+ */
+function paymentSettled(b: Record<string, unknown>): boolean {
+  if (b.uses_credit === true) return true;
+  if (b.payment_received_at) return true;
+  return Number(b.total_estimate_cents || 0) <= 0;
+}
+
 function fmtDate(d: string | null | undefined): string {
   if (!d) return "";
   try { return new Date(`${d}T12:00:00`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }); }
@@ -72,21 +85,31 @@ serve(async (req) => {
         body: JSON.stringify({ type, email: b.email, data }),
       }).catch((e) => log(`${type} email failed`, e instanceof Error ? e.message : String(e)));
 
-    // 1. Confirmation email.
-    await callEmail("confirmation", {
-      firstName: b.first_name, lastName: b.last_name, bookingId: b.id,
-      bookingNumber: b.booking_number ? `NVC-${String(b.booking_number).padStart(4, "0")}` : undefined,
-      serviceDate: b.service_date, timeSlot: b.time_slot, arrivalWindow: b.arrival_window || b.time_slot,
-      serviceType: b.service_type, homeSize: b.home_size_id, bedrooms: b.bedrooms, bathrooms: b.bathrooms,
-      sqft: b.sqft, address: b.address, city: b.city, state: b.state, zipCode: b.zip_code,
-      totalAmount: totalCents, depositAmount: depositCents, balanceAmount: balanceAfterDeposit,
-      paymentOption: b.payment_option, paymentMethod: b.payment_method, useCredit: b.uses_credit,
-      addOns: b.add_ons, frequency: b.frequency, checklistLink: cl, hostedInvoiceUrl: b.hosted_invoice_url,
-    });
+    const settled = paymentSettled(b);
+    if (!settled) {
+      log("upfront payment outstanding — holding customer comms", { bookingId: b.id });
+    }
 
-    // 2. Payment receipt (only if money changed hands).
-    const wasPaid = depositCents > 0 || finalCents > 0 || Boolean(b.payment_received_at);
-    if (wasPaid) {
+    // 1. Confirmation email.
+    if (settled) {
+      await callEmail("confirmation", {
+        firstName: b.first_name, lastName: b.last_name, bookingId: b.id,
+        bookingNumber: b.booking_number ? `NVC-${String(b.booking_number).padStart(4, "0")}` : undefined,
+        serviceDate: b.service_date, timeSlot: b.time_slot, arrivalWindow: b.arrival_window || b.time_slot,
+        serviceType: b.service_type, homeSize: b.home_size_id, bedrooms: b.bedrooms, bathrooms: b.bathrooms,
+        sqft: b.sqft, address: b.address, city: b.city, state: b.state, zipCode: b.zip_code,
+        totalAmount: totalCents, depositAmount: depositCents, balanceAmount: balanceAfterDeposit,
+        paymentOption: b.payment_option, paymentMethod: b.payment_method, useCredit: b.uses_credit,
+        addOns: b.add_ons, frequency: b.frequency, checklistLink: cl,
+        // Pay CTA only while something is still owed — see post-confirm-booking.ts.
+        hostedInvoiceUrl: b.payment_received_at ? undefined : b.hosted_invoice_url,
+      });
+    }
+
+    // 2. Payment receipt (only if money changed hands — deposit_cents is
+    // what we intend to collect, not what was collected).
+    const wasPaid = Boolean(b.payment_received_at) || finalCents > 0;
+    if (settled && wasPaid) {
       await callEmail("payment_receipt", {
         firstName: b.first_name, lastName: b.last_name, bookingId: b.id,
         serviceDate: b.service_date, timeSlot: b.time_slot, serviceType: b.service_type,
@@ -97,7 +120,7 @@ serve(async (req) => {
     }
 
     // 3. Customer confirmation SMS (GHL primary, Telnyx fallback).
-    if (b.phone) {
+    if (settled && b.phone) {
       const amountDue = b.payment_option === "deposit" ? Math.max(0, totalCents - depositCents) : 0;
       const tail = amountDue > 0 ? ` Remaining $${(amountDue / 100).toFixed(2)} due after service.` : " Paid in full - see you soon!";
       const msg = `Novara Cleaning: Booking confirmed for ${fmtDate(b.service_date)}${b.time_slot ? ` (${b.time_slot})` : ""}.${tail}`;
@@ -125,13 +148,16 @@ serve(async (req) => {
     await invoke("send-post-booking-sms", { bookingId: b.id });
     await invoke("auto-dispatch-booking", { bookingId: b.id });
 
-    // Mark sent (idempotency latch).
-    await supabase.from("bookings").update({
-      confirmation_email_sent: true,
-      confirmation_email_sent_at: new Date().toISOString(),
-    }).eq("id", b.id);
+    // Mark sent (idempotency latch). Only latch when the comms actually
+    // went out, so a still-unpaid booking gets them when the deposit lands.
+    if (settled) {
+      await supabase.from("bookings").update({
+        confirmation_email_sent: true,
+        confirmation_email_sent_at: new Date().toISOString(),
+      }).eq("id", b.id);
+    }
 
-    return json({ ok: true, sent: true });
+    return json({ ok: true, sent: settled, heldForPayment: !settled });
   } catch (e) {
     return json({ error: e instanceof Error ? e.message : String(e) }, 500);
   }

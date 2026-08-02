@@ -129,6 +129,24 @@ serve(async (req) => {
             .eq('id', booking.id);
         }
 
+        // VA pay-page (deposit_plus_preauth) bookings are already 'confirmed'
+        // with the deposit outstanding, so post-confirm held their
+        // "Booking Confirmed" + "Payment Received" emails. Release them now.
+        // Bookings still being promoted below get theirs from the confirm
+        // trigger instead, by which point payment_received_at is stamped.
+        if (alreadyConfirmed) {
+          try {
+            await supabase.functions.invoke("booking-confirm-comms", {
+              body: { bookingId: booking.id },
+            });
+            logStep("Confirmation comms released after deposit (PI)", { bookingId: booking.id });
+          } catch (commsErr) {
+            logStep("Confirmation comms after deposit failed (non-blocking)", {
+              error: commsErr instanceof Error ? commsErr.message : String(commsErr),
+            });
+          }
+        }
+
         // Thank-you + account/referral SMS fires once the deposit clears —
         // not at VA "confirmed" with an unpaid invoice. Idempotent; also
         // re-invoked later on full confirm for belt-and-suspenders.
@@ -1472,6 +1490,21 @@ serve(async (req) => {
             payment_received_at: new Date().toISOString(),
           }).eq("id", bookingId);
           logStep("Booking updated from deposit/full invoice payment", { bookingId, purpose });
+
+          // A VA booking is already 'confirmed' with this invoice unpaid, so
+          // post-confirm held back the "Booking Confirmed" + "Payment
+          // Received" emails. The money is in now — release them. Idempotent
+          // via bookings.confirmation_email_sent.
+          try {
+            await supabase.functions.invoke("booking-confirm-comms", {
+              body: { bookingId },
+            });
+            logStep("Confirmation comms released after invoice payment", { bookingId, purpose });
+          } catch (commsErr) {
+            logStep("Confirmation comms after invoice payment failed (non-blocking)", {
+              error: commsErr instanceof Error ? commsErr.message : String(commsErr),
+            });
+          }
 
           // VA deposit invoices confirm the booking before payment — the
           // thank-you + referral SMS waits here until the deposit lands.

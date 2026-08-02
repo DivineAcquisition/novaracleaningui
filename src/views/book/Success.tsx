@@ -259,7 +259,14 @@ export default function BookingSuccess() {
         // tied to the customer actually reaching this page. The
         // edge function is idempotent and we mark the row sent
         // immediately so a second tab open doesn't double-email.
-        if (booking.status === "confirmed" && !booking.confirmation_email_sent) {
+        // A VA-created booking is 'confirmed' while its deposit invoice is
+        // still unpaid, so 'confirmed' alone is not proof the customer paid.
+        // Only the settled ones get the confirmation + receipt here.
+        if (
+          booking.status === "confirmed" &&
+          !booking.confirmation_email_sent &&
+          (bookingRow.payment_received_at || booking.uses_credit)
+        ) {
           (async () => {
             try {
               const balanceCents =

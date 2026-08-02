@@ -1138,8 +1138,11 @@ serve(async (req) => {
     //
     // We delegate to the SAME shared helper finalize-booking uses, so
     // VA bookings fire identical side effects to customer bookings:
-    //   • Confirmation email (with checklist link)
-    //   • Payment receipt email (only when an invoice was created)
+    //   • Confirmation email (with checklist link) — HELD until the
+    //     deposit/full invoice is actually paid, since a VA booking is
+    //     'confirmed' the moment the call ends. stripe-webhook releases
+    //     it (and the receipt) on invoice.payment_succeeded.
+    //   • Payment receipt email (only once money has moved)
     //   • auto-dispatch-booking
     //   • create-google-calendar-event
     //   • send-zapier-webhook (full GHL custom-field map)
@@ -1194,20 +1197,11 @@ serve(async (req) => {
     } catch (err) {
       logStep("pre-mint referral code failed (non-blocking)", err);
     }
-    // For confirmed VA bookings, mark payment_received_at when the
-    // VA collected payment in-line (full_now). deposit_plus_remaining
-    // leaves it null until the customer actually pays the invoice —
-    // the stripe-webhook will stamp it when invoice.payment_succeeded.
-    if (bookingStatus === "confirmed" && invoiceMode === "full_now") {
-      try {
-        await supabase
-          .from("bookings")
-          .update({ payment_received_at: new Date().toISOString() })
-          .eq("id", bookingId);
-      } catch (payStampErr) {
-        noteFailure("payment_received_at stamp", payStampErr);
-      }
-    }
+    // payment_received_at is deliberately left NULL here for every invoice
+    // mode. 'full_now' does not charge a card — like the deposit mode it
+    // finalizes and SENDS a Stripe invoice — so stamping it paid at booking
+    // time told the customer "Payment Received" for money we hadn't taken.
+    // stripe-webhook stamps it on invoice.payment_succeeded for both modes.
 
     const emails: Record<string, unknown> = {};
     if (bookingStatus === "confirmed") {

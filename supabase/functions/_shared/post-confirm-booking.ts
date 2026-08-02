@@ -11,7 +11,8 @@
 //   • estimated_duration_hours stamped if missing
 //   • Time slot reserved (idempotent — RPC already handles dup inserts)
 //   • Confirmation email + payment receipt (Resend) — gated on
-//     bookings.confirmation_email_sent so re-invokes stay quiet
+//     bookings.confirmation_email_sent so re-invokes stay quiet, and
+//     held back entirely until the upfront payment has settled
 //   • Customer confirmation SMS (Telnyx via sendSms)
 //   • auto-dispatch-booking (assigns cleaners)
 //   • create-google-calendar-event
@@ -138,6 +139,25 @@ export async function ensurePayoutFieldsStamped(
 }
 
 /**
+ * True once the money the customer owes UP FRONT has actually landed.
+ *
+ * A VA booking is marked `confirmed` the moment the call ends so
+ * dispatch, the calendar and the CRM can start working it — but its
+ * deposit invoice is still unpaid at that point. "Booking Confirmed"
+ * and "Payment Received" must not reach the customer until it clears,
+ * or we are thanking them for money they haven't sent. stripe-webhook
+ * re-runs the comms the moment the deposit (or full payment) settles.
+ *
+ * A booking covered by a membership credit, or one with nothing owed at
+ * all, has nothing to wait on.
+ */
+export function upfrontPaymentSettled(booking: Record<string, unknown>): boolean {
+  if (booking.uses_credit === true) return true;
+  if (booking.payment_received_at) return true;
+  return Number(booking.total_estimate_cents || 0) <= 0;
+}
+
+/**
  * Reserve the booking's availability slot. Tolerant of the slot row
  * not existing yet (admin-channel bookings often skip the reserve
  * step) — falls through to upsert.
@@ -225,6 +245,14 @@ async function sendConfirmationEmails(
     log("skipEmails=true — bypassing");
     return;
   }
+  // Held, not dropped: confirmation_email_sent stays false so the
+  // stripe-webhook can run booking-confirm-comms once the deposit lands.
+  if (!upfrontPaymentSettled(booking)) {
+    log("upfront payment outstanding — holding confirmation + receipt", {
+      bookingId: booking.id,
+    });
+    return;
+  }
 
   const checklistLink =
     opts.checklistLink || checklistLinkForServiceType(booking.service_type as string);
@@ -281,11 +309,13 @@ async function sendConfirmationEmails(
           // New: link customers to the public service checklist so
           // they know exactly what's included before the visit.
           checklistLink,
-          // Hosted invoice URL is set by both create-payment-intent
-          // (remaining-balance flow) and book-as-va (deposit / full
-          // invoice). Pass through so the email's "View Invoice" CTA
-          // works on the VA path.
-          hostedInvoiceUrl: booking.hosted_invoice_url,
+          // "Pay Your Invoice" CTA — only while something is still owed.
+          // This email now waits for the upfront payment, so on the VA
+          // path the deposit invoice it points at is normally settled by
+          // the time we get here and the button would misinform.
+          hostedInvoiceUrl: booking.payment_received_at
+            ? undefined
+            : booking.hosted_invoice_url,
           // Account / management deep links — populated by the email
           // function from BRAND.urls if absent.
           rescheduleLink: undefined,
@@ -296,13 +326,12 @@ async function sendConfirmationEmails(
     });
     log("confirmation email queued");
 
-    // Payment receipt — only for booking flows that actually charged
-    // money (deposit > 0). VA invoice mode 'none' doesn't get a
-    // receipt because nothing was paid yet.
-    const wasPaid =
-      Number(depositCents) > 0 ||
-      Number(finalCents) > 0 ||
-      Boolean(booking.payment_received_at);
+    // Payment receipt — only once money has actually moved. deposit_cents
+    // is the amount we intend to collect, not the amount collected, so it
+    // can't stand in for a receipt: a VA deposit invoice sets it while the
+    // invoice is still unpaid.
+    const wasPaid = Boolean(booking.payment_received_at) ||
+      Number(finalCents) > 0;
     if (wasPaid) {
       await fetch(`${supabaseUrl}/functions/v1/send-booking-email`, {
         method: "POST",
