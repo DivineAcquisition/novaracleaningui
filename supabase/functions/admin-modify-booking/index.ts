@@ -102,14 +102,38 @@ function normalizeEmail(raw: unknown): string {
   return String(raw ?? "").toLowerCase().trim();
 }
 
-function normalizePhone(raw: unknown): string | null {
-  const digits = String(raw ?? "").replace(/\D/g, "");
-  return digits || null;
+/** Digits only. Returns "" (not null) — bookings.phone is NOT NULL. */
+function normalizePhone(raw: unknown): string {
+  return String(raw ?? "").replace(/\D/g, "");
 }
 
-function trimOrNull(raw: unknown): string | null {
-  const s = String(raw ?? "").trim();
-  return s || null;
+/**
+ * Every customer-facing column on `bookings` and `jobs` is NOT NULL, so a
+ * cleared field has to be written as "" rather than null or the whole save
+ * fails with a 23502.
+ */
+function trimStr(raw: unknown): string {
+  return String(raw ?? "").trim();
+}
+
+/**
+ * Supabase client errors are plain objects, not Errors — `String(err)` on one
+ * yields "[object Object]" and tells an operator nothing. Pull out the parts
+ * Postgres actually filled in.
+ */
+function errMessage(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (e && typeof e === "object") {
+    const o = e as { message?: string; details?: string; hint?: string; code?: string };
+    const parts = [o.message, o.details, o.hint].filter(Boolean);
+    if (parts.length > 0) return `${parts.join(" — ")}${o.code ? ` (${o.code})` : ""}`;
+    try {
+      return JSON.stringify(e);
+    } catch {
+      return "Unknown error";
+    }
+  }
+  return String(e);
 }
 
 serve(async (req) => {
@@ -139,14 +163,14 @@ serve(async (req) => {
     // a records fix, not a service change. No customer "service updated"
     // SMS/email; GHL still gets a sync so the contact stays current.
     if (action === "update_customer_info") {
-      const firstName = trimOrNull(body.firstName);
-      const lastName = trimOrNull(body.lastName);
+      const firstName = trimStr(body.firstName);
+      const lastName = trimStr(body.lastName);
       const email = normalizeEmail(body.email);
       const phone = normalizePhone(body.phone);
-      const address = trimOrNull(body.address);
-      const city = trimOrNull(body.city);
-      const state = trimOrNull(body.state);
-      const zipCode = trimOrNull(body.zipCode ?? body.zip);
+      const address = trimStr(body.address);
+      const city = trimStr(body.city);
+      const state = trimStr(body.state);
+      const zipCode = trimStr(body.zipCode ?? body.zip);
 
       if (!firstName) throw new Error("First name is required");
       if (!email || !email.includes("@")) throw new Error("A valid email is required");
@@ -164,21 +188,23 @@ serve(async (req) => {
       };
 
       const { error: upErr } = await admin.from("bookings").update(bookingPatch).eq("id", bookingId);
-      if (upErr) throw upErr;
+      if (upErr) throw new Error(`Booking update failed: ${errMessage(upErr)}`);
 
       // Mirror onto the linked customer directory row when we can find it.
       // bookings.customer_id is text and sometimes holds a Stripe `cus_…`
       // id rather than the customers.id UUID, so only eq-by-id when it
       // looks like a UUID; otherwise match on the booking's previous email.
+      // customers.address/city/state/zip/phone are nullable, so blank out to
+      // NULL there rather than storing empty strings in the directory.
       const customerPatch: Record<string, unknown> = {
         first_name: firstName,
         last_name: lastName,
         email,
-        phone,
-        address,
-        city,
-        state,
-        zip: zipCode,
+        phone: phone || null,
+        address: address || null,
+        city: city || null,
+        state: state || null,
+        zip: zipCode || null,
         updated_at: new Date().toISOString(),
       };
       const customerUuid =
@@ -194,11 +220,14 @@ serve(async (req) => {
         custQ = customerUuid ? custQ.eq("id", customerUuid) : custQ.eq("email", prevEmail);
         const { error: custErr } = await custQ;
         if (custErr) {
-          console.warn("[admin-modify-booking] customer mirror failed (non-blocking)", custErr.message);
+          // A duplicate email here means another directory row already owns
+          // it — the booking is still corrected, so don't fail the save.
+          console.warn("[admin-modify-booking] customer mirror failed (non-blocking)", errMessage(custErr));
         }
       }
 
-      // Keep the dispatch/job board address in sync with the booking.
+      // Keep the dispatch/job board address in sync with the booking. These
+      // columns are NOT NULL too, hence the empty-string writes.
       if (booking.job_id) {
         const jobPatch: Record<string, unknown> = {
           address,
@@ -208,7 +237,7 @@ serve(async (req) => {
         };
         const { error: jobErr } = await admin.from("jobs").update(jobPatch).eq("id", booking.job_id);
         if (jobErr) {
-          console.warn("[admin-modify-booking] job address mirror failed (non-blocking)", jobErr.message);
+          console.warn("[admin-modify-booking] job address mirror failed (non-blocking)", errMessage(jobErr));
         }
       }
 
@@ -311,7 +340,7 @@ serve(async (req) => {
     }
 
     const { error: upErr } = await admin.from("bookings").update(update).eq("id", bookingId);
-    if (upErr) throw upErr;
+    if (upErr) throw new Error(`Booking update failed: ${errMessage(upErr)}`);
 
     console.log("[admin-modify-booking] updated", { bookingId, actorId, newServiceType, newHomeSize, newTotalCents });
 
@@ -380,7 +409,7 @@ serve(async (req) => {
       { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
     );
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
+    const msg = errMessage(error);
     console.error("[admin-modify-booking] ERROR", msg);
     return new Response(
       JSON.stringify({ success: false, error: msg }),

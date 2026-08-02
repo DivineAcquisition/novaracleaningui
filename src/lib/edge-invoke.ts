@@ -20,6 +20,26 @@ interface InvokeErrorLike {
 
 const GENERIC = "Edge Function returned a non-2xx status code";
 
+/**
+ * Render whatever a function put in `error` as something an operator can act
+ * on. Postgres errors arrive as plain objects, and `String(obj)` on one gives
+ * "[object Object]" — which is worse than the generic message it replaced.
+ */
+function stringifyReason(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object") {
+    const o = value as { message?: string; details?: string; hint?: string; code?: string };
+    const parts = [o.message, o.details, o.hint].filter(Boolean);
+    if (parts.length > 0) return `${parts.join(" — ")}${o.code ? ` (${o.code})` : ""}`;
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return "";
+    }
+  }
+  return value == null ? "" : String(value);
+}
+
 /** Pull the useful text out of an invoke() failure. Never throws. */
 export async function describeEdgeError(error: unknown, data?: unknown): Promise<string> {
   const err = error as InvokeErrorLike | null;
@@ -31,9 +51,9 @@ export async function describeEdgeError(error: unknown, data?: unknown): Promise
       const text = (await ctx.text()).trim();
       if (text) {
         try {
-          const parsed = JSON.parse(text) as { error?: string; message?: string; body?: string };
-          const inner = parsed.error || parsed.message || parsed.body;
-          if (inner) return String(inner).slice(0, 400);
+          const parsed = JSON.parse(text) as { error?: unknown; message?: unknown; body?: unknown };
+          const inner = stringifyReason(parsed.error ?? parsed.message ?? parsed.body);
+          if (inner) return inner.slice(0, 400);
         } catch {
           /* not JSON — the raw text is still better than the generic message */
         }
@@ -45,8 +65,8 @@ export async function describeEdgeError(error: unknown, data?: unknown): Promise
   }
 
   // Some functions answer 200 with { error } in the body.
-  const inBody = (data as { error?: string } | null)?.error;
-  if (inBody) return String(inBody).slice(0, 400);
+  const inBody = stringifyReason((data as { error?: unknown } | null)?.error);
+  if (inBody) return inBody.slice(0, 400);
 
   if (typeof error === "string" && error) return error.slice(0, 400);
   if (err?.message && err.message !== GENERIC) return err.message.slice(0, 400);
