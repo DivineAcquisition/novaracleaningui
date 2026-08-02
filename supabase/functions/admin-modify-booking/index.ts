@@ -166,24 +166,33 @@ serve(async (req) => {
       const { error: upErr } = await admin.from("bookings").update(bookingPatch).eq("id", bookingId);
       if (upErr) throw upErr;
 
-      // Mirror onto the linked customer directory row when we have one —
-      // the Customers tab and wallet lookups key off that table.
-      if (booking.customer_id) {
-        const customerPatch: Record<string, unknown> = {
-          first_name: firstName,
-          last_name: lastName,
-          email,
-          phone,
-          address,
-          city,
-          state,
-          zip: zipCode,
-          updated_at: new Date().toISOString(),
-        };
-        const { error: custErr } = await admin
-          .from("customers")
-          .update(customerPatch)
-          .eq("id", booking.customer_id);
+      // Mirror onto the linked customer directory row when we can find it.
+      // bookings.customer_id is text and sometimes holds a Stripe `cus_…`
+      // id rather than the customers.id UUID, so only eq-by-id when it
+      // looks like a UUID; otherwise match on the booking's previous email.
+      const customerPatch: Record<string, unknown> = {
+        first_name: firstName,
+        last_name: lastName,
+        email,
+        phone,
+        address,
+        city,
+        state,
+        zip: zipCode,
+        updated_at: new Date().toISOString(),
+      };
+      const customerUuid =
+        typeof booking.customer_id === "string" &&
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+            booking.customer_id,
+          )
+          ? booking.customer_id
+          : null;
+      const prevEmail = normalizeEmail(booking.email);
+      if (customerUuid || prevEmail) {
+        let custQ = admin.from("customers").update(customerPatch);
+        custQ = customerUuid ? custQ.eq("id", customerUuid) : custQ.eq("email", prevEmail);
+        const { error: custErr } = await custQ;
         if (custErr) {
           console.warn("[admin-modify-booking] customer mirror failed (non-blocking)", custErr.message);
         }

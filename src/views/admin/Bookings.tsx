@@ -1269,8 +1269,8 @@ function BookingSheet({
           totalEstimateCents: newQuoteCents,
         },
       });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      const outcome = await edgeResult(error, data);
+      if (!outcome.ok) throw new Error(outcome.error || "Update failed");
       toast.success("Service updated — customer notified via SMS & email.");
       onMutated();
       onClose();
@@ -1309,8 +1309,10 @@ function BookingSheet({
           zipCode: custZip.trim(),
         },
       });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      // invoke() collapses every non-2xx into the generic "Edge Function
+      // returned a non-2xx status code" — pull the real reason out.
+      const outcome = await edgeResult(error, data);
+      if (!outcome.ok) throw new Error(outcome.error || "Update failed");
       toast.success("Customer info updated on this booking.");
       setCustomerOpen(false);
       onMutated();
