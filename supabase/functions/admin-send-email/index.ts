@@ -10,6 +10,8 @@
 //     subject: string;
 //     html: string;                // already-formatted HTML body
 //     from?: string;               // defaults to "Novara Cleaning <hello@novaracleaning.com>"
+//     cc?: string | string[];      // optional CC recipients
+//     reply_to?: string | string[];
 //   }
 //
 // Returns 200 with { success: true, id } when Resend accepts.
@@ -23,6 +25,15 @@ const corsHeaders = {
 
 const log = (s: string, d?: unknown) =>
   console.log(`[ADMIN-SEND-EMAIL] ${s}${d ? " " + JSON.stringify(d) : ""}`);
+
+function asEmailList(value: unknown): string[] | undefined {
+  if (Array.isArray(value)) {
+    const list = value.map((v) => String(v || "").trim()).filter(Boolean);
+    return list.length ? list : undefined;
+  }
+  if (typeof value === "string" && value.trim()) return [value.trim()];
+  return undefined;
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -39,6 +50,8 @@ serve(async (req) => {
     const subject = String(body.subject || "").trim();
     const html = String(body.html || "");
     const from = String(body.from || "Novara Cleaning <hello@novaracleaning.com>");
+    const cc = asEmailList(body.cc);
+    const replyTo = asEmailList(body.reply_to ?? body.replyTo);
     // Optional file attachments: [{ filename, content }] where content is
     // base64 (Resend's format). Passed straight through when provided.
     const attachments = Array.isArray(body.attachments) && body.attachments.length > 0
@@ -61,7 +74,15 @@ serve(async (req) => {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ from, to: [to], subject, html, ...(attachments ? { attachments } : {}) }),
+      body: JSON.stringify({
+        from,
+        to: [to],
+        subject,
+        html,
+        ...(cc ? { cc } : {}),
+        ...(replyTo ? { reply_to: replyTo } : {}),
+        ...(attachments ? { attachments } : {}),
+      }),
     });
     const text = await res.text();
     if (!res.ok) {
@@ -77,7 +98,7 @@ serve(async (req) => {
     } catch {
       /* ignore */
     }
-    log("ok", { id, to, subject });
+    log("ok", { id, to, cc, subject });
     return new Response(JSON.stringify({ success: true, id }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
