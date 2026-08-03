@@ -202,7 +202,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       <aside className="hidden lg:flex w-64 flex-col border-r border-slate-200 bg-white shrink-0">
         <SidebarBrand />
         <SidebarNav pathname={pathname} items={navItems} />
-        <SidebarFooter user={user} onSignOut={handleSignOut} />
+        <SidebarFooter user={user} isAdmin={isAdmin} onSignOut={handleSignOut} />
       </aside>
 
       {/* ─── Mobile slide-over ───────────────────────────────────────── */}
@@ -230,7 +230,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           </Button>
         </div>
         <SidebarNav pathname={pathname} items={navItems} />
-        <SidebarFooter user={user} onSignOut={handleSignOut} />
+        <SidebarFooter user={user} isAdmin={isAdmin} onSignOut={handleSignOut} />
       </aside>
 
       {/* ─── Main column ─────────────────────────────────────────────── */}
@@ -353,22 +353,52 @@ function SidebarNav({ pathname, items }: { pathname: string | null; items: NavIt
   );
 }
 
+function displayNameFromUser(user: {
+  email?: string | null;
+  user_metadata?: Record<string, unknown> | null;
+} | null): string {
+  const meta = user?.user_metadata || {};
+  const full =
+    (typeof meta.full_name === "string" && meta.full_name.trim()) ||
+    (typeof meta.name === "string" && meta.name.trim()) ||
+    "";
+  if (full) {
+    // Prefer first name for the sidebar (e.g. "Malik" from "Malik Sannie").
+    const first = full.split(/\s+/)[0];
+    return first || full;
+  }
+  const first =
+    typeof meta.first_name === "string" ? meta.first_name.trim() : "";
+  if (first) return first;
+  return user?.email || "—";
+}
+
 function SidebarFooter({
   user,
+  isAdmin,
   onSignOut,
 }: {
-  user: { email?: string | null } | null;
+  user: {
+    email?: string | null;
+    user_metadata?: Record<string, unknown> | null;
+  } | null;
+  isAdmin: boolean;
   onSignOut: () => void;
 }) {
+  const name = displayNameFromUser(user);
+  const roleLabel = isAdmin ? "Owner" : "VA";
   return (
     <div className="border-t border-slate-200 p-3 space-y-2">
       <div className="px-3 py-2 rounded-lg bg-slate-50">
         <p className="text-[10px] uppercase tracking-wide text-slate-500 font-bold">
-          Signed in
+          {roleLabel}
         </p>
-        <p className="text-sm text-slate-900 font-medium truncate">
-          {user?.email || "—"}
-        </p>
+        <p className="text-sm text-slate-900 font-medium truncate">{name}</p>
+        {user?.email && name !== user.email ? (
+          <p className="text-[11px] text-slate-500 truncate mt-0.5">
+            {user.email}
+          </p>
+        ) : null}
       </div>
       <Button
         variant="outline"
