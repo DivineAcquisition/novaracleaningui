@@ -1,9 +1,18 @@
 // ─── sync-cleaner-to-ghl ─────────────────────────────────────────────────
 //
-// Upsert a Novara contractor (cleaner) into GoHighLevel as a contact,
+// Upsert a Novara contractor (cleaner) into GoHighLevel as a CONTACT,
 // stamp it with the canonical contractor custom fields + tags, and
 // move/refresh their opportunity in the contractor pipeline (if one
 // is configured via GHL_CONTRACTOR_PIPELINE_ID).
+//
+// Contacts only — never sub-account USERS. This function used to also
+// provision a GHL location user (a paid seat with a login) for every
+// contractor, cloned from a staff template user and given a guessable
+// password. That handed contractors a CRM login with staff-equivalent
+// permissions, kept working after they were terminated, and consumed a
+// seat per contractor. Contractors reach Novara through the contractor
+// portal and SMS; they have no reason to hold a GHL login. VA/staff seats
+// are provisioned deliberately and separately in admin-va-provision.
 //
 // Fires from:
 //   * Onboarding.tsx submit (initial create + 'onboarding-complete')
@@ -20,7 +29,6 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-import { provisionGhlUserFromTemplate } from "../_shared/ghl-users.ts";
 import { enforceTagPolicy } from "../_shared/ghl-tags.ts";
 
 const GHL_BASE = "https://services.leadconnectorhq.com";
@@ -263,9 +271,9 @@ serve(async (req) => {
     const departed = status === "terminated" || status === "inactive" || status === "suspended";
     const alreadyInGhl = !!(cleaner.ghl_user_id || cleaner.ghl_synced_at);
 
-    // Termination / deactivation must NEVER create a new GHL contact or
-    // sub-account user. That was adding contractors to the sub-account
-    // the moment they were terminated. Only refresh an existing contact.
+    // Termination / deactivation must NEVER create a new GHL contact. That
+    // was adding contractors to the sub-account the moment they were
+    // terminated. Only refresh an existing contact.
     if (departed && !alreadyInGhl) {
       console.log(`[sync-cleaner-to-ghl] skip — ${status} and never synced to GHL`, cleanerId);
       return json({ ok: true, skipped: "departed_never_synced" });
@@ -312,35 +320,11 @@ serve(async (req) => {
       opportunityId = await upsertContractorOpportunity(token, locationId, contactId, cleaner, pipelineId, stageMap);
     }
 
-
-    // Provision GHL sub-account user (same permissions as template user).
-    // NEVER on terminate/deactivate — that was creating users for people
-    // we were removing.
-    let ghlUserId: string | null = (cleaner as { ghl_user_id?: string | null }).ghl_user_id || null;
-    if (!departed && !ghlUserId && cleaner.email && cleaner.first_name && cleaner.last_name) {
-      const password = `${String(cleaner.first_name)[0].toLowerCase()}${String(cleaner.last_name).replace(/\s+/g, "")}nv2025!`;
-      // ghl-users.ts types its supabase param with a deeply-nested
-      // structural shape; cast the fn to loose params so TS doesn't try
-      // to instantiate that type against the full SupabaseClient.
-      // deno-lint-ignore no-explicit-any
-      const provision = provisionGhlUserFromTemplate as (s: any, i: {
-        email: string; firstName: string; lastName: string;
-        phone?: string | null; password: string; templateEmail?: string;
-      }) => Promise<{ ghlUserId: string | null; created: boolean; error?: string; skipped?: string }>;
-      const userResult = await provision(supabase, {
-        email: cleaner.email,
-        firstName: cleaner.first_name,
-        lastName: cleaner.last_name,
-        phone: cleaner.phone,
-        password,
-      });
-      ghlUserId = userResult.ghlUserId;
-      if (ghlUserId) {
-        await supabase.from("cleaners").update({ ghl_user_id: ghlUserId }).eq("id", cleanerId);
-      } else if (userResult.error) {
-        console.warn("[sync-cleaner-to-ghl] GHL user provision:", userResult.error);
-      }
-    }
+    // No GHL user/seat provisioning here — see the header. ghl_user_id is
+    // still read back so records created before this change keep reporting
+    // the seat that needs revoking, but nothing new is ever created.
+    const ghlUserId: string | null =
+      (cleaner as { ghl_user_id?: string | null }).ghl_user_id || null;
 
     await supabase
       .from("cleaners")
