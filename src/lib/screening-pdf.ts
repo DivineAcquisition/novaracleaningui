@@ -18,6 +18,9 @@
 
 import {
   ACKNOWLEDGMENT,
+  CONFIDENTIALITY_SCRIPT,
+  NON_SOLICITATION,
+  NON_SOLICITATION_VERBATIM_KEY,
   RECOMMENDATION_LABEL,
   SCENARIO_PAIRS,
   SCORECARD_ITEMS,
@@ -26,6 +29,8 @@ import {
   callDurationMinutes,
   declineReasonLabel,
   hardQualifierState,
+  nonSolicitationState,
+  nonSolicitationVerbatim,
   type PhoneScreeningRow,
   type ScreeningQuestion,
 } from "@/lib/phone-screening";
@@ -81,7 +86,16 @@ function answerText(q: ScreeningQuestion, value: unknown): string {
  * screenings are immutable, so a regenerated PDF must still show them.
  */
 function collectLegacyEntries(screening: PhoneScreeningRow): Array<{ label: string; value: string }> {
-  const known = new Map(SCREENING_SECTIONS.map((s) => [s.id, new Set(s.questions.map((q) => q.key))]));
+  const known = new Map(
+    SCREENING_SECTIONS.map((s) => [
+      s.id,
+      new Set([
+        ...s.questions.map((q) => q.key),
+        // Rendered by the section itself rather than as a plain question.
+        ...(s.isNonSolicitation ? [NON_SOLICITATION_VERBATIM_KEY] : []),
+      ]),
+    ]),
+  );
   const out: Array<{ label: string; value: string }> = [];
 
   const humanize = (key: string) =>
@@ -113,7 +127,7 @@ function collectLegacyEntries(screening: PhoneScreeningRow): Array<{ label: stri
   }
 
   for (const [key, capture] of Object.entries(screening.consents || {})) {
-    if (key === ACKNOWLEDGMENT.key) continue;
+    if (key === ACKNOWLEDGMENT.key || key === NON_SOLICITATION.key) continue;
     if (capture?.value !== "yes" && capture?.value !== "no") continue;
     const meta = [
       capture.at ? `recorded ${fmtDateTime(capture.at)}` : null,
@@ -283,10 +297,50 @@ export async function buildScreeningPdf(
   y -= 34;
 
   const ack = acknowledgmentState(screening.consents || {});
+  const nonSolicit = nonSolicitationState(screening.consents || {});
 
   // ── Sections (from the same definitions as the live form) ──
   for (const section of SCREENING_SECTIONS) {
+    // Screenings taken before the covenant was added to the call have nothing
+    // to show here; printing an empty "NOT CAPTURED" block on an old record
+    // would read as a failure rather than a form change.
+    if (section.isNonSolicitation && !nonSolicit.captured && !nonSolicitationVerbatim(screening.answers || {})) {
+      continue;
+    }
+
     sectionHeader(section.title);
+
+    if (section.isNonSolicitation) {
+      // The covenant is printed in full: the record must show exactly what was
+      // read aloud, and exactly what the applicant said back.
+      drawWrapped(`Read verbatim: "${NON_SOLICITATION.script.replace(/\n\n/g, " ")}"`, {
+        size: 8,
+        color: gray,
+        gap: 6,
+      });
+      const c = nonSolicit.capture;
+      const val = nonSolicit.isYes ? "ACCEPTED" : nonSolicit.isNo ? "NOT ACCEPTED" : "NOT CAPTURED";
+      ensure(30);
+      page.drawText(val, {
+        x: MARGIN_X,
+        y,
+        size: 12,
+        font: bold,
+        color: nonSolicit.isYes ? green : nonSolicit.isNo ? red : gray,
+      });
+      drawWrapped(NON_SOLICITATION.label, { x: MARGIN_X + 100, size: 10, f: bold, gap: 0 });
+      const meta = [c?.at ? `Recorded ${fmtDateTime(c.at)}` : null, c?.by_name ? `by ${c.by_name}` : null]
+        .filter(Boolean)
+        .join(" ");
+      if (meta) drawWrapped(meta, { x: MARGIN_X + 100, size: 8, color: gray, gap: 0 });
+      if (c?.note) drawWrapped(`Note: ${c.note}`, { x: MARGIN_X + 100, size: 9, gap: 0 });
+      y -= 8;
+      qa("APPLICANT'S ANSWER, VERBATIM", nonSolicitationVerbatim(screening.answers || {}) || "—");
+      drawWrapped(`Also stated: "${CONFIDENTIALITY_SCRIPT}"`, { size: 8, color: gray, gap: 4 });
+      const nsNotes = (screening.answers?.[section.id] || {})._notes;
+      if (nsNotes) qa("SECTION NOTES", String(nsNotes));
+      continue;
+    }
 
     if (section.isAcknowledgment) {
       // The block is printed verbatim: the record has to show exactly what was
@@ -386,6 +440,16 @@ export async function buildScreeningPdf(
     size: 10,
     font: bold,
     color: ack.isYes ? green : ack.isNo ? red : gray,
+  });
+  y -= 15;
+  ensure(20);
+  page.drawText("Client non-solicitation covenant", { x: MARGIN_X, y, size: 10, font, color: dark });
+  page.drawText(nonSolicit.isYes ? "ACCEPTED" : nonSolicit.isNo ? "NOT ACCEPTED" : "NOT CAPTURED", {
+    x: MARGIN_X + 230,
+    y,
+    size: 10,
+    font: bold,
+    color: nonSolicit.isYes ? green : nonSolicit.isNo ? red : gray,
   });
   y -= 20;
 

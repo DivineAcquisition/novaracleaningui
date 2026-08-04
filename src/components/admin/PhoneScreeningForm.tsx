@@ -16,6 +16,9 @@
 //     date instead.
 //   · The acknowledgment is read as one block and captured ONCE (Yes/No +
 //     optional note), stamped with who/when automatically. A No blocks Advance.
+//   · The client non-solicitation covenant is rendered as a formal, visually
+//     distinct VERBATIM block — the playbook's one non-casual moment — and its
+//     answer is recorded verbatim. A No blocks Advance.
 //   · Inconsistent recommendations are BLOCKED — the same validation runs
 //     here and authoritatively on the server.
 //   · On submit a branded screening-record PDF is generated and attached to
@@ -47,15 +50,26 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import {
   ACKNOWLEDGMENT,
+  ADVANCE_SCRIPT,
   AGE_GATE_KEY,
+  BEFORE_YOU_DIAL,
+  CONFIDENTIALITY_SCRIPT,
+  DECLINE_GUIDANCE,
   DECLINE_REASONS,
   DECLINE_SCRIPT,
+  END_CALL_TRIGGERS,
+  HOLD_GUIDANCE,
   HOLD_SCRIPT,
+  NON_SOLICITATION,
+  NON_SOLICITATION_VERBATIM_KEY,
+  POST_CALL_CHECKLIST,
   SCORECARD_ITEMS,
   SCREENING_SECTIONS,
   TRAVEL_GATE_KEY,
   acknowledgmentState,
   hardQualifierState,
+  nonSolicitationState,
+  nonSolicitationVerbatim,
   sectionProgress,
   validateScreeningOutcome,
   type PhoneScreeningRow,
@@ -253,6 +267,8 @@ export default function PhoneScreeningForm({
   // ── Derived state ──
   const hq = useMemo(() => hardQualifierState(answers), [answers]);
   const ack = useMemo(() => acknowledgmentState(consents), [consents]);
+  const nonSolicit = useMemo(() => nonSolicitationState(consents), [consents]);
+  const nonSolicitVerbatim = useMemo(() => nonSolicitationVerbatim(answers), [answers]);
   const outcomeErrors = useMemo(
     () =>
       validateScreeningOutcome({
@@ -265,22 +281,31 @@ export default function PhoneScreeningForm({
       }),
     [answers, consents, recommendation, declineReason, holdPending, holdDate],
   );
-  const advanceBlocked = hq.failed.length > 0 || hq.pending.length > 0 || !ack.isYes;
+  const advanceBlocked =
+    hq.failed.length > 0 ||
+    hq.pending.length > 0 ||
+    !ack.isYes ||
+    !nonSolicit.isYes ||
+    !nonSolicitVerbatim;
 
   const setAnswer = (sectionId: string, key: string, value: unknown) => {
     setAnswers((prev) => ({ ...prev, [sectionId]: { ...(prev[sectionId] || {}), [key]: value } }));
   };
 
-  const setAcknowledgment = (patch: Partial<ScreeningConsents[string]>) => {
+  /** Records a spoken consent, stamping the time at answer time — never typed. */
+  const setConsent = (key: string, patch: Partial<ScreeningConsents[string]>) => {
     setConsents((prev) => {
-      const existing = prev[ACKNOWLEDGMENT.key];
+      const existing = prev[key];
       const next = { ...(existing || {}), ...patch } as ScreeningConsents[string];
       if (!existing?.at && (patch.value === "yes" || patch.value === "no")) {
-        next.at = new Date().toISOString(); // stamped at answer time — never typed
+        next.at = new Date().toISOString();
       }
-      return { ...prev, [ACKNOWLEDGMENT.key]: next };
+      return { ...prev, [key]: next };
     });
   };
+
+  const setAcknowledgment = (patch: Partial<ScreeningConsents[string]>) =>
+    setConsent(ACKNOWLEDGMENT.key, patch);
 
   const scrollToSection = (id: string) => {
     document.getElementById(`screening-section-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -301,6 +326,19 @@ export default function PhoneScreeningForm({
     setRecommendation("decline");
     setDeclineReason("declined_consent");
     setDeclineNotes((prev) => prev || "Declined the acknowledgment on the call.");
+    scrollToSection("outcome");
+  };
+
+  const useNonSolicitationDeclinePath = () => {
+    setRecommendation("decline");
+    setDeclineReason("refused_non_solicitation");
+    setDeclineNotes(
+      (prev) =>
+        prev ||
+        `Would not accept the client non-solicitation covenant.${
+          nonSolicitVerbatim ? ` Said: "${nonSolicitVerbatim}"` : ""
+        }`,
+    );
     scrollToSection("outcome");
   };
 
@@ -367,7 +405,22 @@ export default function PhoneScreeningForm({
   };
 
   const fillScript = (script: string) =>
-    script.replace(/\{name\}/g, firstName).replace(/\{screener\}/g, screening?.screener_name || "the Novara team");
+    script
+      .replace(/\{name\}/g, firstName)
+      .replace(/\{screener\}/g, screening?.screener_name || "the Novara team")
+      // The Hold script names the pending item and the date out loud, so the VA
+      // never has to improvise the one part that decides whether they return.
+      .replace(/\{pending\}/g, holdPending.trim() || "[what's missing — their ID, a car sorted out]")
+      .replace(
+        /\{followUpDate\}/g,
+        holdDate
+          ? new Date(`${holdDate}T12:00:00`).toLocaleDateString("en-US", {
+              weekday: "long",
+              month: "long",
+              day: "numeric",
+            })
+          : "[a specific date]",
+      );
 
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
@@ -474,6 +527,8 @@ export default function PhoneScreeningForm({
               </button>
             </div>
 
+            <BeforeYouDialPanel />
+
             {/* ── Hard-qualifier gate ── */}
             {hq.failed.length > 0 && (
               <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 space-y-2">
@@ -509,6 +564,7 @@ export default function PhoneScreeningForm({
                   </div>
                 </div>
                 <ScriptBlock text={fillScript(HOLD_SCRIPT)} />
+                <GuidanceBlock text={HOLD_GUIDANCE} />
                 <Button size="sm" variant="outline" className="border-amber-300 text-amber-800" onClick={useHoldPath}>
                   Route to Hold
                 </Button>
@@ -520,7 +576,16 @@ export default function PhoneScreeningForm({
               <Card key={section.id} id={`screening-section-${section.id}`} className="border-slate-200 scroll-mt-4">
                 <CardContent className="p-4 space-y-4">
                   <h3 className="text-sm font-bold text-slate-900">{section.title}</h3>
+                  {section.guidance && <GuidanceBlock text={section.guidance} />}
                   {section.intro && <ScriptBlock text={fillScript(section.intro)} />}
+                  {section.id === "qualifiers" && (
+                    <p className="text-[11px] text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-2.5 py-1.5">
+                      <span className="font-semibold uppercase tracking-wider text-[10px] mr-1.5">
+                        End the call politely if
+                      </span>
+                      {END_CALL_TRIGGERS.join(" · ")}
+                    </p>
+                  )}
 
                   {section.isAcknowledgment ? (
                     <div className="space-y-2">
@@ -571,6 +636,67 @@ export default function PhoneScreeningForm({
                         The signed agreement, background check authorization, and W-9 are collected at
                         onboarding — this captures the verbal yes on the call.
                       </p>
+                    </div>
+                  ) : section.isNonSolicitation ? (
+                    <div className="space-y-2">
+                      <VerbatimBlock text={NON_SOLICITATION.script} />
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <YesNoToggle
+                          value={nonSolicit.value ?? undefined}
+                          onChange={(v) => setConsent(NON_SOLICITATION.key, { value: v })}
+                          yesLabel="Yes — understands & accepts"
+                          noLabel="No / anything less than a clear yes"
+                        />
+                        {nonSolicit.capture?.at && (
+                          <span className="text-[11px] text-slate-400">
+                            Recorded{" "}
+                            {new Date(nonSolicit.capture.at).toLocaleTimeString("en-US", {
+                              hour: "numeric",
+                              minute: "2-digit",
+                            })}{" "}
+                            by {screening.screener_name || "you"}
+                          </span>
+                        )}
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-slate-800">
+                          Their answer, word for word
+                        </p>
+                        <Textarea
+                          value={String(
+                            (answers.non_solicitation || {})[NON_SOLICITATION_VERBATIM_KEY] || "",
+                          )}
+                          onChange={(e) =>
+                            setAnswer("non_solicitation", NON_SOLICITATION_VERBATIM_KEY, e.target.value)
+                          }
+                          placeholder="Exactly what they said — required before Advance…"
+                          rows={2}
+                          className="text-sm"
+                        />
+                      </div>
+                      {nonSolicit.isNo && (
+                        <div className="space-y-2 rounded-md bg-rose-50 border border-rose-200 p-2">
+                          <p className="text-xs text-rose-700">
+                            The covenant was not accepted — Advance is blocked. Do not negotiate the
+                            terms on this call; route to Decline.
+                          </p>
+                          <ScriptBlock text={fillScript(DECLINE_SCRIPT)} />
+                          <Button
+                            size="sm"
+                            className="bg-rose-600 hover:bg-rose-700 text-white"
+                            onClick={useNonSolicitationDeclinePath}
+                          >
+                            <RiCloseCircleLine className="w-4 h-4 mr-1.5" />
+                            Use the decline path
+                          </Button>
+                        </div>
+                      )}
+                      <div className="pt-1">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1">
+                          Then, back to a normal tone
+                        </p>
+                        <ScriptBlock text={CONFIDENTIALITY_SCRIPT} />
+                      </div>
                     </div>
                   ) : section.id === "scenarios" ? (
                     <ScenarioFields
@@ -654,6 +780,25 @@ export default function PhoneScreeningForm({
                     >
                       Acknowledgment: {ack.isYes ? "Yes" : ack.isNo ? "No" : "not captured"}
                     </Badge>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        nonSolicit.isYes && nonSolicitVerbatim
+                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                          : nonSolicit.isNo
+                            ? "bg-rose-50 text-rose-700 border-rose-200"
+                            : "bg-slate-50 text-slate-500 border-slate-200",
+                      )}
+                    >
+                      Non-solicitation:{" "}
+                      {nonSolicit.isYes
+                        ? nonSolicitVerbatim
+                          ? "Yes"
+                          : "Yes — answer not recorded"
+                        : nonSolicit.isNo
+                          ? "No"
+                          : "not captured"}
+                    </Badge>
                   </div>
                 </div>
 
@@ -702,15 +847,24 @@ export default function PhoneScreeningForm({
                   ) : (
                     advanceBlocked && (
                       <p className="text-[11px] text-slate-500">
-                        Advance is blocked until all four hard qualifiers pass and the acknowledgment is
-                        recorded as Yes
+                        Advance is blocked until all four hard qualifiers pass, the acknowledgment is
+                        recorded as Yes, and the non-solicitation covenant is accepted with their answer
+                        recorded verbatim
                         {hq.pending.length > 0 ? " (a fixable ID gap routes to Hold)" : ""}.
                       </p>
                     )
                   )}
 
+                  {recommendation === "advance" && (
+                    <div className="space-y-1 pt-1">
+                      <ScriptBlock text={fillScript(ADVANCE_SCRIPT)} />
+                    </div>
+                  )}
+
                   {recommendation === "decline" && (
                     <div className="space-y-2 pt-1">
+                      <ScriptBlock text={fillScript(DECLINE_SCRIPT)} />
+                      <GuidanceBlock text={DECLINE_GUIDANCE} />
                       <select
                         value={declineReason}
                         onChange={(e) => setDeclineReason(e.target.value)}
@@ -735,6 +889,8 @@ export default function PhoneScreeningForm({
 
                   {recommendation === "hold" && (
                     <div className="space-y-2 pt-1">
+                      <ScriptBlock text={fillScript(HOLD_SCRIPT)} />
+                      <GuidanceBlock text={HOLD_GUIDANCE} />
                       <Input
                         value={holdPending}
                         onChange={(e) => setHoldPending(e.target.value)}
@@ -802,6 +958,53 @@ function ScriptBlock({ text }: { text: string }) {
         </span>
         {text}
       </p>
+    </div>
+  );
+}
+
+/**
+ * The one block that is read word for word. Deliberately heavier than
+ * ScriptBlock — larger, upright (not italic), paragraph-separated — because the
+ * formality is the point and paraphrasing it is the failure mode.
+ */
+function VerbatimBlock({ text }: { text: string }) {
+  return (
+    <div className="rounded-md bg-slate-900 px-4 py-3 space-y-2">
+      <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-amber-300">
+        <RiAlertLine className="w-3.5 h-3.5" />
+        Read verbatim · do not paraphrase
+      </p>
+      {text.split("\n\n").map((para) => (
+        <p key={para.slice(0, 40)} className="text-[13px] text-slate-100 leading-relaxed">
+          {para}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+/** Pre-call reminders — collapsed by default so it never nags on every call. */
+function BeforeYouDialPanel() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50/70">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900"
+      >
+        Before you dial — {BEFORE_YOU_DIAL.length} reminders
+        <span className="text-slate-400">{open ? "Hide" : "Show"}</span>
+      </button>
+      {open && (
+        <ul className="px-3 pb-3 space-y-1.5">
+          {BEFORE_YOU_DIAL.map((item) => (
+            <li key={item.title} className="text-[11px] text-slate-600 leading-relaxed">
+              <span className="font-semibold text-slate-800">{item.title}.</span> {item.detail}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -1137,6 +1340,17 @@ function SubmitResultPanel({
             </Button>
           </span>
         )}
+      </div>
+
+      <div className="text-left rounded-lg border border-slate-200 bg-slate-50/70 p-3 space-y-1.5">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+          Right after the call — do it the same day
+        </p>
+        {POST_CALL_CHECKLIST.map((item) => (
+          <p key={item.doThis} className="text-[11px] text-slate-600 leading-relaxed">
+            <span className="font-semibold text-slate-800">{item.doThis}</span> — {item.why}
+          </p>
+        ))}
       </div>
 
       {result.offerLaunchOnboarding && (
