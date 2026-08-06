@@ -653,7 +653,6 @@ serve(async (req) => {
         teamSize,
         perCleanerPayCents: assignment.estimated_pay_cents || 0,
         sharePct,
-        revenueCents,
         teamPoolCents: offerPoolCents,
         offerUrl,
         expiresAt: expiresAtDate,

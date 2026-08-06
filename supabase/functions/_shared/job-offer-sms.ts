@@ -21,9 +21,7 @@ export interface JobOfferSmsContext {
   perCleanerPayCents: number;
   /** Team revenue-share % used for the pool (highest tier on team). */
   sharePct: number;
-  /** Customer job revenue in cents (for transparency). */
-  revenueCents: number;
-  /** Total team pool before split (cents). */
+  /** Total team pool before split (cents). Never include customer job cost in SMS. */
   teamPoolCents: number;
   offerUrl: string;
   expiresAt: Date;
@@ -40,7 +38,6 @@ export function formatOfferExpiresAt(d: Date): string {
 
 export function buildJobOfferSmsMessage(ctx: JobOfferSmsContext): string {
   const yourPay = (ctx.perCleanerPayCents / 100).toFixed(2);
-  const jobTotal = ctx.revenueCents > 0 ? (ctx.revenueCents / 100).toFixed(2) : null;
   const teamPool = ctx.teamPoolCents > 0 ? (ctx.teamPoolCents / 100).toFixed(2) : null;
   const expiresLabel = formatOfferExpiresAt(ctx.expiresAt);
 
@@ -49,12 +46,11 @@ export function buildJobOfferSmsMessage(ctx: JobOfferSmsContext): string {
       ? `Team: ${ctx.teamSize} cleaners (you're ${ctx.role})`
       : `Solo job (${ctx.role})`;
 
+  // Never show customer job cost / revenue — only the cleaner's own pay.
   let payBlock = `Your pay: $${yourPay}`;
-  if (ctx.teamSize > 1 && teamPool && jobTotal) {
+  if (ctx.teamSize > 1 && teamPool) {
     payBlock +=
-      `\nSplit among ${ctx.teamSize} · ${ctx.sharePct}% pool ≈ $${teamPool} on $${jobTotal} job`;
-  } else if (jobTotal) {
-    payBlock += ` · ${ctx.sharePct}% revenue share on $${jobTotal} job`;
+      `\nSplit among ${ctx.teamSize} · ${ctx.sharePct}% pool ≈ $${teamPool}`;
   } else {
     payBlock += ` · ${ctx.sharePct}% revenue share`;
   }
