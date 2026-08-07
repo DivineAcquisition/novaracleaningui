@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "eas-build-pre-install": "node scripts/eas-prepare-contractor-app.mjs",
     "mobile:dev": "vite -c mobile/vite.config.ts",
     "mobile:build": "vite build -c mobile/vite.config.ts",
     "mobile:sync": "npm run mobile:build && cap sync",

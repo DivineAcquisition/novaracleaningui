@@ -26,8 +26,7 @@ setup. Override per-environment with `EXPO_PUBLIC_SUPABASE_URL` /
 
 ## Link to EAS and build
 
-Always run EAS commands from **this directory** (`contractor-app/`), not the
-monorepo root. `eas.json` and `.eas/workflows/` live here.
+For local CLI, run EAS from **this directory** (`contractor-app/`):
 
 ```bash
 npm i -g eas-cli
@@ -39,22 +38,26 @@ eas build --profile production --platform ios    # TestFlight
 
 ### EAS Workflows (Expo dashboard / GitHub)
 
-Workflow YAML files are under `.eas/workflows/`:
+Expo’s GitHub “Base directory” defaults to the **repo root** (`/`), so
+`eas.json`, `app.json`, and `.eas/workflows/` are also mirrored at the
+monorepo root. On EAS workers, `eas-build-pre-install` promotes this
+`contractor-app/` tree into the build root (see
+`scripts/eas-prepare-contractor-app.mjs`).
 
-| File | What it builds |
+Preferred: set Base directory to `contractor-app` on the project’s
+[GitHub settings](https://expo.dev/accounts/[account]/projects/novara-pro/github)
+page so EAS uses this folder directly (no promote step needed).
+
+| Workflow (repo root or here) | What it builds |
 | --- | --- |
 | `preview-android.yml` | Internal Android APK (`preview`) |
 | `production-builds.yml` | Android + iOS store builds (`production`) |
 | `development-builds.yml` | Dev-client builds (`development`) |
 
 ```bash
+# from contractor-app/
 eas workflow:run .eas/workflows/preview-android.yml
 ```
-
-In the Expo project’s **GitHub** settings, set the app directory / base
-directory to `contractor-app` so the dashboard looks for
-`contractor-app/.eas/workflows/` (not the repo root). After that, workflows
-appear for the connected git ref (e.g. `main`).
 
 `eas init` is also what enables push: `registerForPush` needs
 `extra.eas.projectId` and no-ops without it.

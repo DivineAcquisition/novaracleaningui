@@ -1,0 +1,13 @@
+name: Preview Android (APK)
+
+# Installable internal APK via the `preview` profile in eas.json.
+# Expo GitHub base directory defaults to repo root; eas-build-pre-install
+# promotes contractor-app/ into the build root on EAS workers.
+
+jobs:
+  build_android:
+    name: Build Android preview
+    type: build
+    params:
+      platform: android
+      profile: preview
