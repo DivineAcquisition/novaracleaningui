@@ -1,0 +1,13 @@
+name: Preview iOS (Simulator)
+
+# Simulator build via the `preview` profile (ios.simulator: true).
+# Does not require Apple device provisioning. Install with:
+#   eas build:run -p ios --latest
+
+jobs:
+  build_ios:
+    name: Build iOS simulator preview
+    type: build
+    params:
+      platform: ios
+      profile: preview

@@ -56,6 +56,7 @@ page so EAS uses this folder directly (no promote step needed).
 | Workflow (repo root or here) | What it builds |
 | --- | --- |
 | `preview-android.yml` | Internal Android APK (`preview`) |
+| `preview-ios-simulator.yml` | iOS Simulator build (`preview`) |
 | `production-builds.yml` | Android + iOS store builds (`production`) |
 | `development-builds.yml` | Dev-client builds (`development`) |
 
@@ -63,6 +64,25 @@ page so EAS uses this folder directly (no promote step needed).
 # from contractor-app/
 eas workflow:run .eas/workflows/preview-android.yml
 ```
+
+### How to install / preview a build (not Expo Go)
+
+Do **not** open this app in Expo Go or the expo.dev “Preview” QR for
+published SDK 54 metadata. EAS `preview` / `production` builds are native
+binaries:
+
+1. **Android APK** — On the finished build page, tap **Install** / download
+   the `.apk` and install it on a device (may need “install unknown apps”).
+2. **iOS Simulator** — Run the `preview-ios-simulator` workflow, then:
+   `eas build:run -p ios --latest` on a Mac with Xcode.
+3. **iOS physical device / TestFlight** — Needs an Apple Developer account
+   and credentials configured once (`eas credentials` / first interactive
+   `eas build -p ios`). Store builds use the `production` profile (no
+   `simulator: true`).
+
+The HTTP 400 about `sdkVersions` + `runtimeVersion` both set to `54.0.0` is
+from Expo Go / an old project manifest, not from the Android APK install
+flow.
 
 `eas init` is also what enables push: `registerForPush` needs
 `extra.eas.projectId` and no-ops without it.
