@@ -56,24 +56,35 @@ function ensureProjectIdInAppJson() {
   const existing = appJson?.expo?.extra?.eas?.projectId;
   if (existing) {
     console.log(`[eas-prepare] app.json already has projectId=${existing}`);
-    return;
-  }
-  if (!projectId) {
+  } else if (!projectId) {
     console.warn(
       "[eas-prepare] No committed projectId and EAS_BUILD_PROJECT_ID is unset. " +
         "Run `eas init` locally and commit app.json, or set Base directory to contractor-app."
     );
-    return;
+  } else {
+    appJson.expo = appJson.expo ?? {};
+    appJson.expo.extra = appJson.expo.extra ?? {};
+    appJson.expo.extra.eas = {
+      ...(appJson.expo.extra.eas ?? {}),
+      projectId,
+    };
+    writeFileSync(appJsonPath, `${JSON.stringify(appJson, null, 2)}\n`);
+    console.log(`[eas-prepare] Wrote extra.eas.projectId=${projectId}`);
   }
 
-  appJson.expo = appJson.expo ?? {};
-  appJson.expo.extra = appJson.expo.extra ?? {};
-  appJson.expo.extra.eas = {
-    ...(appJson.expo.extra.eas ?? {}),
-    projectId,
-  };
-  writeFileSync(appJsonPath, `${JSON.stringify(appJson, null, 2)}\n`);
-  console.log(`[eas-prepare] Wrote extra.eas.projectId=${projectId}`);
+  const final = JSON.parse(readFileSync(appJsonPath, "utf8"));
+  console.log(
+    "[eas-prepare] Resolved Expo identity:",
+    JSON.stringify({
+      name: final?.expo?.name,
+      slug: final?.expo?.slug,
+      projectId: final?.expo?.extra?.eas?.projectId,
+      bundleIdentifier: final?.expo?.ios?.bundleIdentifier,
+      package: final?.expo?.android?.package,
+      cwd: root,
+      packageName: JSON.parse(readFileSync(join(root, "package.json"), "utf8")).name,
+    })
+  );
 }
 
 const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
