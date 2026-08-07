@@ -233,9 +233,13 @@ serve(async (req) => {
       .eq("email", bookingData.email)
       .in("status", ["confirmed", "completed"])
       .order("created_at", { ascending: false });
-    const bookingNumber = (previousBookings?.length || 0) + 1;
-    const isNewCustomer = bookingNumber === 1;
-    void isNewCustomer;
+    // Customer's visit ordinal (1 = first booking). Used for analytics /
+    // PaymentIntent metadata only — NOT written to bookings.booking_number.
+    // That column is a global sequence (booking_number_seq) with a UNIQUE
+    // constraint; writing per-customer counts collides on every new customer
+    // (duplicate key on bookings_booking_number_uniq) and breaks Stripe checkout.
+    const customerBookingOrdinal = (previousBookings?.length || 0) + 1;
+    const isNewCustomer = customerBookingOrdinal === 1;
 
     // Referral codes still attach to the booking row (so the referrer
     // gets a referral credit when the booking completes via
@@ -278,7 +282,7 @@ serve(async (req) => {
     }
 
     logStep("Customer booking history", { 
-      bookingNumber, 
+      customerBookingOrdinal, 
       isNewCustomer, 
       previousBookings: previousBookings?.length || 0, 
       newCustomerDiscount, 
@@ -418,8 +422,9 @@ serve(async (req) => {
         serviceDate: bookingData.serviceDate,
         timeSlot: bookingData.timeSlot,
         paymentOption: paymentOptionStored,
-        bookingNumber: String(bookingNumber),
+        bookingNumber: String(customerBookingOrdinal),
         isNewCustomer: String(isNewCustomer),
+        customerBookingOrdinal: String(customerBookingOrdinal),
         referralCode: referralCode || '',
         promoCode: promoCode || '',
         isSameDay: String(isSameDay),
@@ -429,7 +434,7 @@ serve(async (req) => {
 
     const paymentIntentId = paymentIntent.id;
     const clientSecret = paymentIntent.client_secret;
-    logStep("Created payment intent", { paymentIntentId, amount: amountToCharge, bookingNumber });
+    logStep("Created payment intent", { paymentIntentId, amount: amountToCharge, customerBookingOrdinal });
 
     // Ensure the availability slot row exists for display, but DO NOT
     // reserve/hold it here. Capacity is only consumed when the booking is
@@ -489,7 +494,7 @@ serve(async (req) => {
         platform_fee_cents: platformFeeCents,
         cleaner_payout_cents: cleanerPayoutCents,
         payout_status: 'pending',
-        booking_number: bookingNumber,
+        // booking_number omitted — DB default nextval('booking_number_seq')
         estimated_duration_hours: estimatedHours,
         focused_areas: isFocused ? focusedAreas : [],
         condition_level: isFocused || bookingData.conditionLevel ? conditionLevel : null,
@@ -548,7 +553,7 @@ serve(async (req) => {
         amount: amountToCharge,
         bookingId: booking.id,
         requiresPayment: true, // ALWAYS true - no bookings without payment verification
-        bookingNumber,
+        bookingNumber: booking.booking_number,
         isNewCustomer,
       }),
       {
@@ -557,7 +562,13 @@ serve(async (req) => {
       }
     );
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    // PostgrestError / Stripe errors are often plain objects, not Error —
+    // String(error) becomes "[object Object]" which is useless in Checkout.
+    const errorMessage = error instanceof Error
+      ? error.message
+      : (typeof error === "object" && error !== null
+          ? ((error as any).message || (error as any).error_description || JSON.stringify(error))
+          : String(error));
     logStep("Error in create-payment-intent", { error: errorMessage });
     return new Response(
       JSON.stringify({ error: errorMessage }),
