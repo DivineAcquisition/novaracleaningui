@@ -31,10 +31,15 @@ For local CLI, run EAS from **this directory** (`contractor-app/`):
 ```bash
 npm i -g eas-cli
 eas login
-eas init            # links to the Expo project, writes extra.eas.projectId
+eas init            # REQUIRED once — writes extra.eas.projectId into app.json
 eas build --profile preview --platform android   # installable APK
 eas build --profile production --platform ios    # TestFlight
 ```
+
+Commit the `extra.eas.projectId` that `eas init` adds. Without it, GitHub /
+dashboard builds fail with `EAS project not configured` / `eas build:internal`.
+On EAS workers we also inject `EAS_BUILD_PROJECT_ID` into `app.json` as a
+fallback, but committing the ID is still required for a stable setup.
 
 ### EAS Workflows (Expo dashboard / GitHub)
 
