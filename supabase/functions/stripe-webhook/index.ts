@@ -129,11 +129,10 @@ serve(async (req) => {
             .eq('id', booking.id);
         }
 
-        // VA pay-page (deposit_plus_preauth) bookings are already 'confirmed'
-        // with the deposit outstanding, so post-confirm held their
-        // "Booking Confirmed" + "Payment Received" emails. Release them now.
-        // Bookings still being promoted below get theirs from the confirm
-        // trigger instead, by which point payment_received_at is stamped.
+        // Legacy VA rows may already be 'confirmed' with the deposit
+        // outstanding; release held confirmation emails now. Newer internal
+        // bookings stay pending_payment until this PI clears and are promoted
+        // below — booking-confirm-comms runs after that promote.
         if (alreadyConfirmed) {
           try {
             await supabase.functions.invoke("booking-confirm-comms", {
@@ -148,8 +147,8 @@ serve(async (req) => {
         }
 
         // Thank-you + account/referral SMS fires once the deposit clears —
-        // not at VA "confirmed" with an unpaid invoice. Idempotent; also
-        // re-invoked later on full confirm for belt-and-suspenders.
+        // not while the internal booking is still pending payment. Idempotent;
+        // also re-invoked later on full confirm for belt-and-suspenders.
         try {
           await supabase.functions.invoke("send-post-booking-sms", {
             body: { bookingId: booking.id },
@@ -200,11 +199,16 @@ serve(async (req) => {
         // questionnaire on /book/details. If they haven't, we mark the
         // row as 'pending_details' and fire a Telnyx SMS + email asking
         // them to come back and finish.
+        //
+        // Internal/admin bookings skip this gate — VAs collect details on
+        // the call, and holding them at pending_details after deposit
+        // would leave paid jobs unconfirmed.
         const detailsComplete = hasHomeDetails(booking);
+        const isAdminChannel = booking.booking_channel === "admin";
 
         if (alreadyConfirmed) {
           logStep("Booking already confirmed - skipping status update but running downstream actions", { bookingId: booking.id });
-        } else if (!detailsComplete) {
+        } else if (!detailsComplete && !isAdminChannel) {
           logStep("Payment cleared but home details missing — holding at pending_details", {
             bookingId: booking.id,
           });
@@ -1491,10 +1495,34 @@ serve(async (req) => {
           }).eq("id", bookingId);
           logStep("Booking updated from deposit/full invoice payment", { bookingId, purpose });
 
-          // A VA booking is already 'confirmed' with this invoice unpaid, so
-          // post-confirm held back the "Booking Confirmed" + "Payment
-          // Received" emails. The money is in now — release them. Idempotent
-          // via bookings.confirmation_email_sent.
+          // Internal bookings are created as pending_payment. Promote to
+          // confirmed now that the deposit/full invoice has cleared so the
+          // bookings tab and booking-confirm-comms see a real confirmation.
+          const { data: promotedRows, error: promoteErr } = await supabase
+            .from("bookings")
+            .update({
+              status: "confirmed",
+              confirmed_at: new Date().toISOString(),
+            })
+            .eq("id", bookingId)
+            .in("status", ["pending_payment", "pending_details", "booked"])
+            .select("id");
+          if (promoteErr) {
+            logStep("Promote booking after invoice payment failed (non-blocking)", {
+              bookingId,
+              error: promoteErr.message,
+            });
+          } else {
+            logStep("Booking confirmed after deposit/full invoice payment", {
+              bookingId,
+              purpose,
+              promoted: (promotedRows || []).length > 0,
+            });
+          }
+
+          // Money is in — release "Booking Confirmed" + "Payment Received".
+          // Idempotent via bookings.confirmation_email_sent. Also covers
+          // auto-dispatch + post-booking SMS.
           try {
             await supabase.functions.invoke("booking-confirm-comms", {
               body: { bookingId },
@@ -1506,17 +1534,24 @@ serve(async (req) => {
             });
           }
 
-          // VA deposit invoices confirm the booking before payment — the
-          // thank-you + referral SMS waits here until the deposit lands.
-          try {
-            await supabase.functions.invoke("send-post-booking-sms", {
-              body: { bookingId },
-            });
-            logStep("Post-booking GHL SMS triggered after deposit invoice", { bookingId, purpose });
-          } catch (ghlSmsErr) {
-            logStep("Post-booking GHL SMS after deposit invoice failed (non-blocking)", {
-              error: ghlSmsErr instanceof Error ? ghlSmsErr.message : String(ghlSmsErr),
-            });
+          // Downstream fan-out that used to run at VA booking-create time
+          // (when rows were pre-confirmed). Now that confirmation waits on
+          // payment, run the remaining pieces here. Each is idempotent /
+          // non-blocking. booking-confirm-comms already handles dispatch +
+          // post-booking SMS.
+          for (const fn of [
+            "create-google-calendar-event",
+            "send-zapier-webhook",
+            "sync-to-anything",
+          ]) {
+            try {
+              await supabase.functions.invoke(fn, { body: { bookingId } });
+              logStep(`${fn} triggered after deposit invoice`, { bookingId, purpose });
+            } catch (fanoutErr) {
+              logStep(`${fn} after deposit invoice failed (non-blocking)`, {
+                error: fanoutErr instanceof Error ? fanoutErr.message : String(fanoutErr),
+              });
+            }
           }
         }
 

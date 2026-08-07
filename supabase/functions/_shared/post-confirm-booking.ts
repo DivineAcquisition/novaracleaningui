@@ -141,12 +141,11 @@ export async function ensurePayoutFieldsStamped(
 /**
  * True once the money the customer owes UP FRONT has actually landed.
  *
- * A VA booking is marked `confirmed` the moment the call ends so
- * dispatch, the calendar and the CRM can start working it — but its
- * deposit invoice is still unpaid at that point. "Booking Confirmed"
- * and "Payment Received" must not reach the customer until it clears,
- * or we are thanking them for money they haven't sent. stripe-webhook
- * re-runs the comms the moment the deposit (or full payment) settles.
+ * An internal (VA) booking stays `pending_payment` until its deposit
+ * or paid-in-full payment clears. "Booking Confirmed" and "Payment
+ * Received" must not reach the customer before that, or we are thanking
+ * them for money they haven't sent. stripe-webhook promotes the booking
+ * and releases the comms when the deposit (or full payment) settles.
  *
  * A booking covered by a membership credit, or one with nothing owed at
  * all, has nothing to wait on.

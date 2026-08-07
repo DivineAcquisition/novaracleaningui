@@ -1660,10 +1660,10 @@ export default function VaBooking() {
               Internal booking created
             </Badge>
             <CardTitle className="font-jakarta text-2xl mt-3 text-slate-900 tracking-tight">
-              Booking #{result.bookingNumber} confirmed
+              Booking #{result.bookingNumber} pending
             </CardTitle>
             <CardDescription className="mt-1">
-              Email, SMS, and Stripe invoices have been dispatched.
+              SMS and payment link sent. Booking stays pending until deposit or paid-in-full clears.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5 pb-8">

@@ -357,14 +357,14 @@ export default function PayPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 pb-16">
-      <SEO title="Confirm & pay your deposit — Novara Cleaning" noindex />
+      <SEO title="Pay your deposit to confirm — Novara Cleaning" noindex />
       <div className="max-w-md mx-auto p-4 space-y-4">
         {/* Booking summary */}
         <header className="rounded-2xl bg-gradient-to-br from-violet-600 to-purple-500 p-5 text-white shadow-md">
           <div className="flex items-center gap-2">
             <RiSparklingLine className="w-5 h-5" />
             <p className="text-sm font-semibold">
-              Hi {summary.firstName || "there"} — confirm your clean
+              Hi {summary.firstName || "there"} — your clean is pending
             </p>
           </div>
           <p className="mt-2 text-xs text-violet-50 leading-snug">

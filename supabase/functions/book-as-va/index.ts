@@ -54,10 +54,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import Stripe from "https://esm.sh/stripe@18.5.0";
-import {
-  runPostConfirmFanout,
-  checklistLinkForServiceType,
-} from "../_shared/post-confirm-booking.ts";
 import { getEstimatedHours } from "../_shared/payout-utils.ts";
 import { enforceTagPolicy, serviceTag, sourceTag, zipTag } from "../_shared/ghl-tags.ts";
 // Static, not the runtime `await import()` this used to do. A relative dynamic
@@ -775,9 +771,11 @@ serve(async (req) => {
     // platform_fee_cents, payout_status, estimated_duration_hours,
     // offer_type. Otherwise auto-dispatch + payroll see NULL and skip
     // the row.
-    const bookingStatus = invoiceMode === "none"
-      ? "pending_payment"
-      : "confirmed";
+    //
+    // Internal bookings stay pending_payment until a deposit or paid-in-full
+    // payment clears (stripe-webhook / pay-page). Nothing is "confirmed"
+    // for the customer or the bookings tab until money lands.
+    const bookingStatus = "pending_payment";
 
     // Cleaner pay = revenue × 35% (Foundation default at booking time
     // — dispatch-job recomputes when offering using the assigned
@@ -856,11 +854,8 @@ serve(async (req) => {
         payment_option: paymentOption,
         estimated_duration_hours: getEstimatedHours(body.homeSizeId),
         status: bookingStatus,
-        // For confirmed VA bookings, treat the moment of insert as the
-        // confirmation timestamp so reporting / GHL / dispatch all see
-        // a non-null confirmed_at like customer bookings do.
-        confirmed_at:
-          bookingStatus === "confirmed" ? new Date().toISOString() : null,
+        // confirmed_at is stamped only when deposit/full payment clears.
+        confirmed_at: null,
         booking_channel: "admin",
         booker_source: body.csrName ? `va_${body.csrName}` : "va_admin",
         sdr_rep_name: body.csrName || null,
@@ -1136,25 +1131,12 @@ serve(async (req) => {
 
     // 7. Confirmation + receipt emails + downstream fan-out.
     //
-    // We delegate to the SAME shared helper finalize-booking uses, so
-    // VA bookings fire identical side effects to customer bookings:
-    //   • Confirmation email (with checklist link) — HELD until the
-    //     deposit/full invoice is actually paid, since a VA booking is
-    //     'confirmed' the moment the call ends. stripe-webhook releases
-    //     it (and the receipt) on invoice.payment_succeeded.
-    //   • Payment receipt email (only once money has moved)
-    //   • auto-dispatch-booking
-    //   • create-google-calendar-event
-    //   • send-zapier-webhook (full GHL custom-field map)
-    //   • sync-to-anything
-    //   • book-ghl-appointment (no-op since we already invoked above)
-    //   • send-post-booking-sms (account + referral link)
+    // Internal bookings stay pending_payment until deposit/full payment
+    // clears, so the shared post-confirm fan-out is deferred to
+    // stripe-webhook (booking-confirm-comms / finalize path) once money
+    // lands. We still send the VA-specific pending/pay SMS below.
     //
-    // We DO skip the customer SMS in the helper because we still want
-    // to send the VA-specific invoice-aware copy below (different from
-    // the Telnyx confirmation SMS the customer flow uses).
-    //
-    // Pre-stamp hosted_invoice_url on the booking row so the helper's
+    // Pre-stamp hosted_invoice_url on the booking row so the eventual
     // confirmation email carries the right "Pay invoice" / "Pay deposit"
     // link. preauthSession.url already stamped above.
     if (depositInvoice?.hostedInvoiceUrl || fullInvoice?.hostedInvoiceUrl) {
@@ -1204,83 +1186,58 @@ serve(async (req) => {
     // stripe-webhook stamps it on invoice.payment_succeeded for both modes.
 
     const emails: Record<string, unknown> = {};
-    if (bookingStatus === "confirmed") {
-      try {
-        // Re-fetch the booking row so the shared helper sees the
-        // hosted_invoice_url + payment_received_at + customer_id we
-        // just stamped. Otherwise its email payload would miss them.
-        const { data: refreshed } = await supabase
-          .from("bookings")
-          .select("*")
-          .eq("id", bookingId)
-          .single();
+    // Post-confirm fan-out (confirmation email, dispatch, calendar, etc.)
+    // waits until deposit/full payment clears — booking stays pending_payment.
+    logStep("skipping post-confirm fanout until deposit/full payment clears", {
+      bookingId,
+      invoiceMode,
+    });
 
-        const fanout = await runPostConfirmFanout(
-          supabase,
-          refreshed || booking,
+    // Optional checklist email can still go out at booking time when the VA
+    // checked the box — it is informational, not a confirmation.
+    if (body.sendChecklistEmail !== false) {
+      try {
+        const checklistResp = await fetch(
+          `${Deno.env.get("SUPABASE_URL")}/functions/v1/send-cleaning-checklist`,
           {
-            source: "admin",
-            checklistLink: checklistLinkForServiceType(body.serviceType),
-            // Customer SMS is sent below with VA-specific invoice copy.
-            skipCustomerSms: true,
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
+            },
+            body: JSON.stringify({ bookingId }),
           },
         );
-        emails.fanout = fanout;
-
-        // Send service-type-specific checklist email when the VA checked
-        // the box. Standard bookings are also covered by the DB trigger
-        // (trigger_send_maintenance_checklist), but send-cleaning-checklist
-        // is idempotent so calling it here is safe — the idempotency ledger
-        // catches the duplicate before a second email goes out.
-        if (body.sendChecklistEmail !== false) {
-          try {
-            const checklistResp = await fetch(
-              `${Deno.env.get("SUPABASE_URL")}/functions/v1/send-cleaning-checklist`,
-              {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
-                },
-                body: JSON.stringify({ bookingId }),
-              },
-            );
-            emails.checklist = await checklistResp.json();
-          } catch (chkErr) {
-            emails.checklist_error = chkErr instanceof Error ? chkErr.message : String(chkErr);
-            logStep("send-cleaning-checklist failed (non-blocking)", emails.checklist_error);
-          }
-        }
-      } catch (err) {
-        emails.fanout_error = err instanceof Error ? err.message : String(err);
-        logStep("post-confirm fanout failed (non-blocking)", emails.fanout_error);
+        emails.checklist = await checklistResp.json();
+      } catch (chkErr) {
+        emails.checklist_error = chkErr instanceof Error ? chkErr.message : String(chkErr);
+        logStep("send-cleaning-checklist failed (non-blocking)", emails.checklist_error);
       }
-    } else {
-      logStep("invoiceMode=none → skipping post-confirm fanout (booking still pending_payment)");
     }
 
-    // 8. Confirmation SMS via GHL (uses verified outbound number)
+    // 8. Pending/pay SMS via GHL (uses verified outbound number).
+    // Wording must NOT say confirmed — deposit has not been received yet.
     let smsResult: unknown = null;
     if (body.sendConfirmationSms !== false && phoneE164) {
       try {
         const fname = body.firstName;
         const msgParts = [
-          `Novara Cleaning: Hi ${fname}! Your ${body.serviceType} clean is confirmed for ${body.serviceDate} ${body.timeSlot}`,
+          `Novara Cleaning: Hi ${fname}! Your ${body.serviceType} clean is pending for ${body.serviceDate} ${body.timeSlot}`,
         ];
         if (body.address) msgParts.push(`at ${body.address}`);
         msgParts.push(`. Total $${(totalCents / 100).toFixed(2)}.`);
         if (depositInvoice) {
           msgParts.push(
-            ` Deposit invoice ($${(depositCents / 100).toFixed(2)}) just sent to your email — please pay today. We'll send the remaining $${(remainingCents / 100).toFixed(2)} the morning of service.`,
+            ` Deposit invoice ($${(depositCents / 100).toFixed(2)}) just sent to your email — please pay today to confirm. We'll send the remaining $${(remainingCents / 100).toFixed(2)} the morning of service.`,
           );
         }
         if (preauthSession?.url) {
           msgParts.push(
-            ` Please review & sign your service agreement, then pay your $${(depositCents / 100).toFixed(2)} deposit here: ${preauthSession.url} — we won't charge the remaining $${(remainingCents / 100).toFixed(2)} until after we complete the clean.`,
+            ` Your booking stays pending until you review & sign your service agreement and pay your $${(depositCents / 100).toFixed(2)} deposit here: ${preauthSession.url} — we won't charge the remaining $${(remainingCents / 100).toFixed(2)} until after we complete the clean.`,
           );
         }
         if (fullInvoice) {
-          msgParts.push(` Invoice sent to your email.`);
+          msgParts.push(` Invoice sent to your email — please pay to confirm your booking.`);
         }
         msgParts.push(" Reply HELP for help or STOP to opt out.");
         const sms = await fetch(
