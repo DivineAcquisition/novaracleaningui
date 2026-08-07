@@ -3,10 +3,11 @@
  * The Expo app lives in contractor-app/. On EAS, copy that app to the build root
  * before npm install so type:build jobs use the right package.json / app.json.
  *
- * No-ops when already building from contractor-app/ (correct Base directory)
- * or when not running on EAS.
+ * No-ops the promote when already building from contractor-app/ (correct Base
+ * directory) or when not running on EAS. Always drops non-npm lockfiles so EAS
+ * does not pick bun from the monorepo-root bun.lockb.
  */
-import { cpSync, existsSync, readFileSync, rmSync } from "node:fs";
+import { cpSync, existsSync, readFileSync, rmSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 
 const root = process.cwd();
@@ -15,9 +16,27 @@ if (!process.env.EAS_BUILD) {
   process.exit(0);
 }
 
+function removeIfExists(filePath) {
+  if (!existsSync(filePath)) return;
+  unlinkSync(filePath);
+  console.log(`[eas-prepare] Removed ${filePath}`);
+}
+
+/**
+ * EAS picks the package manager from lockfiles (bun > yarn > npm > pnpm).
+ * The monorepo root has bun.lockb for the Next app; contractor-app uses npm.
+ * Drop non-npm lockfiles so install uses package-lock.json with --frozen-lockfile.
+ */
+function preferNpmLockfile() {
+  for (const name of ["bun.lockb", "bun.lock", "yarn.lock", "pnpm-lock.yaml"]) {
+    removeIfExists(join(root, name));
+  }
+}
+
 const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 if (pkg.name === "contractor-app") {
-  console.log("[eas-prepare] Already in contractor-app; skipping promote.");
+  console.log("[eas-prepare] Already in contractor-app; ensuring npm lockfile wins.");
+  preferNpmLockfile();
   process.exit(0);
 }
 
@@ -52,4 +71,11 @@ for (const dir of ["app", "src", "assets"]) {
   cpSync(from, to, { recursive: true });
 }
 
-console.log("[eas-prepare] Done.");
+preferNpmLockfile();
+
+if (!existsSync(join(root, "package-lock.json"))) {
+  console.error("[eas-prepare] package-lock.json missing after promote");
+  process.exit(1);
+}
+
+console.log("[eas-prepare] Done (npm + package-lock.json).");
