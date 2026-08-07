@@ -357,25 +357,34 @@ serve(async (req) => {
 
       // 2) Internal Admin Workspace access ('va' role + invite email) via the
       //    existing team-user function — forwarding the caller's admin JWT.
+      //    Workspace access is Novara-domain only; personal emails (gmail, etc.)
+      //    stay on the onboarding/GHL track without admin console access.
       let portalUserId: string | null = null;
       let workspaceInviteSent = false;
-      try {
-        const res = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/admin-create-team-user`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${jwt}` },
-          body: JSON.stringify({
-            action: "create",
-            email: row.email,
-            firstName: row.first_name || "",
-            lastName: row.last_name || "",
-            role: "va",
-          }),
-        });
-        const j = await res.json();
-        if (j?.userId) portalUserId = String(j.userId);
-        workspaceInviteSent = !!j?.inviteSent;
-      } catch (e) {
-        console.warn("[admin-va-provision] workspace grant failed", e instanceof Error ? e.message : String(e));
+      const workspaceEmail = String(row.email || "").trim().toLowerCase();
+      if (!/^[^@\s]+@novaracleaning\.com$/i.test(workspaceEmail)) {
+        console.warn(
+          `[admin-va-provision] skipping workspace grant for non-Novara email: ${workspaceEmail}`,
+        );
+      } else {
+        try {
+          const res = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/admin-create-team-user`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${jwt}` },
+            body: JSON.stringify({
+              action: "create",
+              email: workspaceEmail,
+              firstName: row.first_name || "",
+              lastName: row.last_name || "",
+              role: "va",
+            }),
+          });
+          const j = await res.json();
+          if (j?.userId) portalUserId = String(j.userId);
+          workspaceInviteSent = !!j?.inviteSent;
+        } catch (e) {
+          console.warn("[admin-va-provision] workspace grant failed", e instanceof Error ? e.message : String(e));
+        }
       }
 
       // 3) Stamp the record.

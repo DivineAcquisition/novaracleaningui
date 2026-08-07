@@ -29,6 +29,11 @@ const PORTAL_ROLES = new Set(["admin", "va"]);
 const ADMIN_PORTAL_URL = "https://admin.novaracleaning.com";
 const ADMIN_CALLBACK = `${ADMIN_PORTAL_URL}/admin/auth/callback`;
 const FROM_ADDRESS = "Novara Cleaning <hello@novaracleaning.com>";
+const NOVARA_EMAIL_RE = /^[^@\s]+@novaracleaning\.com$/i;
+
+function isNovaraEmail(email: string): boolean {
+  return NOVARA_EMAIL_RE.test(String(email || "").trim());
+}
 
 const BRAND = {
   name: "Novara Cleaning",
@@ -253,6 +258,11 @@ serve(async (req) => {
         const lastName = body?.lastName ? String(body.lastName) : "";
         if (!email) return json({ error: "email required" }, 400);
         if (!PORTAL_ROLES.has(role)) return json({ error: "role must be 'va' or 'admin'" }, 400);
+        if (!isNovaraEmail(email)) {
+          return json({
+            error: "Admin workspace access is limited to @novaracleaning.com emails.",
+          }, 400);
+        }
 
         const password = `Novara${Math.random().toString(36).slice(2, 8)}!${new Date().getFullYear()}`;
 
@@ -361,6 +371,13 @@ serve(async (req) => {
         const role = String(body?.role || "").trim().toLowerCase();
         if (!userId) return json({ error: "userId required" }, 400);
         if (!PORTAL_ROLES.has(role)) return json({ error: "role must be 'va' or 'admin'" }, 400);
+        const { data: targetUser } = await admin.auth.admin.getUserById(userId);
+        const targetEmail = String(targetUser?.user?.email || "").trim().toLowerCase();
+        if (!isNovaraEmail(targetEmail)) {
+          return json({
+            error: "Admin workspace access is limited to @novaracleaning.com emails.",
+          }, 400);
+        }
         const { error } = await admin
           .from("user_roles")
           .upsert({ user_id: userId, role }, { onConflict: "user_id,role" });

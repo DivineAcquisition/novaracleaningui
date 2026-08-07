@@ -35,6 +35,18 @@ export const ProtectedRoute = ({ children, requiredRole = "admin" }: ProtectedRo
           return;
         }
 
+        // Admin console is Novara-domain only. Personal emails (gmail, etc.)
+        // never get portal access even if a stale role row exists.
+        const email = String(session.user.email || "").trim().toLowerCase();
+        if (!email.endsWith("@novaracleaning.com")) {
+          setRedirectTo("/admin/auth");
+          setIsAuthorized(false);
+          toast.error("Access Denied", {
+            description: "Use your @novaracleaning.com email to access the admin workspace.",
+          });
+          return;
+        }
+
         // Admin-portal pages accept both `admin` and `va` (virtual
         // assistant) roles. VAs operate the same console; the matching RLS
         // policies were added in the va_admin_portal_access migration.
