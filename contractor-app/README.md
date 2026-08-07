@@ -26,6 +26,9 @@ setup. Override per-environment with `EXPO_PUBLIC_SUPABASE_URL` /
 
 ## Link to EAS and build
 
+Always run EAS commands from **this directory** (`contractor-app/`), not the
+monorepo root. `eas.json` and `.eas/workflows/` live here.
+
 ```bash
 npm i -g eas-cli
 eas login
@@ -33,6 +36,25 @@ eas init            # links to the Expo project, writes extra.eas.projectId
 eas build --profile preview --platform android   # installable APK
 eas build --profile production --platform ios    # TestFlight
 ```
+
+### EAS Workflows (Expo dashboard / GitHub)
+
+Workflow YAML files are under `.eas/workflows/`:
+
+| File | What it builds |
+| --- | --- |
+| `preview-android.yml` | Internal Android APK (`preview`) |
+| `production-builds.yml` | Android + iOS store builds (`production`) |
+| `development-builds.yml` | Dev-client builds (`development`) |
+
+```bash
+eas workflow:run .eas/workflows/preview-android.yml
+```
+
+In the Expo project’s **GitHub** settings, set the app directory / base
+directory to `contractor-app` so the dashboard looks for
+`contractor-app/.eas/workflows/` (not the repo root). After that, workflows
+appear for the connected git ref (e.g. `main`).
 
 `eas init` is also what enables push: `registerForPush` needs
 `extra.eas.projectId` and no-ops without it.

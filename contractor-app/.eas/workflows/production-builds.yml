@@ -1,0 +1,19 @@
+name: Production builds
+
+# Store-ready builds via the `production` profile in eas.json.
+# Run from Expo dashboard or: eas workflow:run .eas/workflows/production-builds.yml
+
+jobs:
+  build_android:
+    name: Build Android production
+    type: build
+    params:
+      platform: android
+      profile: production
+
+  build_ios:
+    name: Build iOS production
+    type: build
+    params:
+      platform: ios
+      profile: production

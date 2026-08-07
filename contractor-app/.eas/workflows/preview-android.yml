@@ -1,0 +1,12 @@
+name: Preview Android (APK)
+
+# Installable internal APK via the `preview` profile in eas.json.
+# Run from Expo dashboard or: eas workflow:run .eas/workflows/preview-android.yml
+
+jobs:
+  build_android:
+    name: Build Android preview
+    type: build
+    params:
+      platform: android
+      profile: preview

@@ -1,0 +1,19 @@
+name: Development builds
+
+# Dev-client builds via the `development` profile in eas.json.
+# Run from Expo dashboard or: eas workflow:run .eas/workflows/development-builds.yml
+
+jobs:
+  build_android:
+    name: Build Android development
+    type: build
+    params:
+      platform: android
+      profile: development
+
+  build_ios:
+    name: Build iOS development
+    type: build
+    params:
+      platform: ios
+      profile: development
