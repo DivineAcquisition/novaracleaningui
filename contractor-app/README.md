@@ -50,7 +50,7 @@ monorepo root. On EAS workers, `eas-build-pre-install` promotes this
 `scripts/eas-prepare-contractor-app.mjs`).
 
 Preferred: set Base directory to `contractor-app` on the project’s
-[GitHub settings](https://expo.dev/accounts/[account]/projects/novara-pro/github)
+[GitHub settings](https://expo.dev/accounts/[account]/projects/novarapro/github)
 page so EAS uses this folder directly (no promote step needed).
 
 | Workflow (repo root or here) | What it builds |
