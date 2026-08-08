@@ -52,18 +52,59 @@ export default function CleanerAuth() {
 
   useEffect(() => {
     void (async () => {
-      const token = searchParams.get("invite")?.trim() || null;
-      if (!token) {
+      const invite = searchParams.get("invite")?.trim() || null;
+      const setup = searchParams.get("setup")?.trim() || null;
+
+      // Account-setup nudge from admin (existing cleaner row, phone/Stripe incomplete).
+      if (setup) {
+        setInviteToken(setup);
+        try {
+          const res = await fetch(`/api/cleaner/setup/${encodeURIComponent(setup)}`, {
+            cache: "no-store",
+          });
+          const data = (await res.json().catch(() => ({}))) as {
+            error?: string;
+            complete?: boolean;
+            cleaner?: { firstName?: string; email?: string };
+          };
+          if (!res.ok) {
+            toast.error(data.error || "This setup link isn't valid.");
+          } else if (data.complete) {
+            toast.success("Your account setup is already complete — sign in to continue.");
+            setDefaultTab("signin");
+            if (data.cleaner?.email) setEmail(data.cleaner.email);
+            if (data.cleaner?.firstName) setInviteName(data.cleaner.firstName);
+          } else {
+            if (data.cleaner?.email) setEmail(data.cleaner.email);
+            if (data.cleaner?.firstName) setInviteName(data.cleaner.firstName);
+            setDefaultTab("signin");
+            toast.success(
+              data.cleaner?.firstName
+                ? `Welcome back, ${data.cleaner.firstName} — sign in to finish setup.`
+                : "Sign in to finish your account setup.",
+            );
+          }
+        } catch (err) {
+          console.error("Setup redeem failed:", err);
+          toast.error("Could not validate your setup link.");
+        } finally {
+          setInviteReady(true);
+          await checkExistingSession();
+        }
+        return;
+      }
+
+      if (!invite) {
         setInviteReady(true);
         await checkExistingSession();
         return;
       }
-      setInviteToken(token);
+      setInviteToken(invite);
       try {
         const res = await fetch("/api/talent/invite/redeem", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ inviteToken: token }),
+          body: JSON.stringify({ inviteToken: invite }),
         });
         const data = (await res.json().catch(() => ({}))) as {
           error?: string;

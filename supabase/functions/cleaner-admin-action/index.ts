@@ -902,6 +902,278 @@ serve(async (req) => {
         return json({ ok: true, emailed, smsSent, emailError, smsError, agreementUrl: AGREEMENT_URL });
       }
 
+      // ─── SEND ACCOUNT SETUP LINK ─────────────────────────────────────
+      // Phone verify + Stripe Connect. Tokenized link lands on a short
+      // setup page, then auth → onboarding portal — same pattern as the
+      // agreement send for contractors who never finished account setup.
+      case "send_setup": {
+        const phoneOk = cleaner.phone_verified === true;
+        const stripeOk =
+          cleaner.payouts_enabled === true ||
+          cleaner.ob_payouts_setup === true ||
+          Boolean(String(cleaner.stripe_account_id || "").trim());
+        if (phoneOk && stripeOk) {
+          return json({
+            error: "Account setup is already complete (phone + payouts).",
+            code: "ALREADY_COMPLETE",
+          }, 409);
+        }
+        const force = Boolean(body.force);
+        if (cleaner.status === "terminated" && !force) {
+          return json({ error: "Cannot send setup link to a terminated cleaner." }, 409);
+        }
+
+        const firstName = String(cleaner.first_name || "").trim() || "there";
+        const email = String(cleaner.email || "").trim();
+        const phone = String(cleaner.phone || "").trim();
+        if (!email && !phone) {
+          return json({ error: "Cleaner has no email or phone on file." }, 400);
+        }
+
+        const { data: mintedToken, error: mintErr } = await adminClient.rpc(
+          "mint_cleaner_setup_token",
+          { p_cleaner_id: cleanerId, p_ttl_days: 14 },
+        );
+        if (mintErr) {
+          return json({ error: `Could not create a setup link: ${mintErr.message}` }, 500);
+        }
+        if (!mintedToken) {
+          return json({
+            error: "Account setup is already complete (phone + payouts).",
+            code: "ALREADY_COMPLETE",
+          }, 409);
+        }
+
+        const SETUP_URL =
+          `https://contractor.novaracleaning.com/cleaner/setup/${mintedToken}`;
+
+        let emailed = false;
+        let smsSent = false;
+        let emailError: string | null = null;
+        let smsError: string | null = null;
+
+        if (email && !email.endsWith("@pending.novara")) {
+          try {
+            const { data: mailRes, error: mailErr } = await adminClient.functions.invoke(
+              "send-cleaner-email",
+              {
+                body: {
+                  type: "setup_request",
+                  email,
+                  data: {
+                    firstName,
+                    lastName: cleaner.last_name || "",
+                    email,
+                    setupUrl: SETUP_URL,
+                    loginUrl: SETUP_URL,
+                    needsPhone: !phoneOk,
+                    needsStripe: !stripeOk,
+                  },
+                },
+              },
+            );
+            const failed = mailErr || (mailRes as { error?: string } | null)?.error;
+            emailed = !failed;
+            if (failed) {
+              emailError = await describeInvokeFailure(mailErr, mailRes);
+              console.warn("[cleaner-admin-action] setup email failed", emailError);
+            }
+          } catch (mailCatch) {
+            emailError = mailCatch instanceof Error ? mailCatch.message : String(mailCatch);
+            console.warn("[cleaner-admin-action] setup email failed", emailError);
+          }
+        } else {
+          emailError = email ? "Placeholder email address on file." : "No email on file.";
+        }
+
+        if (phone) {
+          const missing = [
+            !phoneOk ? "verify your phone" : null,
+            !stripeOk ? "connect payouts" : null,
+          ].filter(Boolean).join(" and ");
+          const message =
+            `Hi ${firstName}! Novara Cleaning — finish account setup (${missing}) here: ${SETUP_URL} ` +
+            `It only takes a few minutes. Questions? Just reply.`;
+          try {
+            const { data: smsRes, error: smsErr } = await adminClient.functions.invoke("send-ghl-sms", {
+              body: {
+                phone,
+                email: email || undefined,
+                firstName,
+                message,
+                type: "confirmation",
+              },
+            });
+            const ghlFailed = smsErr || (smsRes as { error?: string } | null)?.error;
+            smsSent = !ghlFailed;
+            if (ghlFailed) {
+              smsError = await describeInvokeFailure(smsErr, smsRes);
+              console.warn("[cleaner-admin-action] setup SMS via GHL failed", smsError);
+            }
+          } catch (smsCatch) {
+            smsError = smsCatch instanceof Error ? smsCatch.message : String(smsCatch);
+            console.warn("[cleaner-admin-action] setup SMS via GHL failed", smsError);
+          }
+        } else {
+          smsError = "No phone on file.";
+        }
+
+        await adminClient.from("events").insert({
+          event_type: "cleaner.setup_link_sent",
+          cleaner_id: cleanerId,
+          source: "cleaner-admin-action",
+          summary:
+            `Account setup link sent to ${`${cleaner.first_name || ""} ${cleaner.last_name || ""}`.trim()} ` +
+            `(email: ${emailed ? "sent" : `failed — ${emailError}`}, SMS: ${smsSent ? "sent" : `failed — ${smsError}`})`,
+          data: {
+            by: callerId,
+            emailed,
+            sms_sent: smsSent,
+            email_error: emailError,
+            sms_error: smsError,
+            needs_phone: !phoneOk,
+            needs_stripe: !stripeOk,
+          },
+        }).then(() => undefined, () => undefined);
+
+        if (!emailed && !smsSent) {
+          return json({
+            error:
+              `Couldn't reach them. Email: ${emailError || "not attempted"}. SMS: ${smsError || "not attempted"}. ` +
+              `The setup link below is valid for 14 days if you want to send it yourself.`,
+            emailError,
+            smsError,
+            setupUrl: SETUP_URL,
+          }, 502);
+        }
+
+        return json({ ok: true, emailed, smsSent, emailError, smsError, setupUrl: SETUP_URL });
+      }
+
+      // ─── SEND SUPPLY CHECKLIST LINK ──────────────────────────────────
+      // Tokenized page listing essentials + optional kit items; contractor
+      // marks what they own. Readiness % is computed in the app.
+      case "send_supplies": {
+        const force = Boolean(body.force);
+        if (cleaner.status === "terminated" && !force) {
+          return json({ error: "Cannot send supply checklist to a terminated cleaner." }, 409);
+        }
+
+        const firstName = String(cleaner.first_name || "").trim() || "there";
+        const email = String(cleaner.email || "").trim();
+        const phone = String(cleaner.phone || "").trim();
+        if (!email && !phone) {
+          return json({ error: "Cleaner has no email or phone on file." }, 400);
+        }
+
+        const { data: mintedToken, error: mintErr } = await adminClient.rpc(
+          "mint_cleaner_supply_token",
+          { p_cleaner_id: cleanerId, p_ttl_days: 30 },
+        );
+        if (mintErr) {
+          return json({ error: `Could not create a supply link: ${mintErr.message}` }, 500);
+        }
+        if (!mintedToken) {
+          return json({ error: "Cleaner not found." }, 404);
+        }
+
+        const SUPPLY_URL =
+          `https://contractor.novaracleaning.com/cleaner/supplies/${mintedToken}`;
+
+        let emailed = false;
+        let smsSent = false;
+        let emailError: string | null = null;
+        let smsError: string | null = null;
+
+        if (email && !email.endsWith("@pending.novara")) {
+          try {
+            const { data: mailRes, error: mailErr } = await adminClient.functions.invoke(
+              "send-cleaner-email",
+              {
+                body: {
+                  type: "supply_checklist_request",
+                  email,
+                  data: {
+                    firstName,
+                    lastName: cleaner.last_name || "",
+                    email,
+                    supplyUrl: SUPPLY_URL,
+                  },
+                },
+              },
+            );
+            const failed = mailErr || (mailRes as { error?: string } | null)?.error;
+            emailed = !failed;
+            if (failed) {
+              emailError = await describeInvokeFailure(mailErr, mailRes);
+              console.warn("[cleaner-admin-action] supply email failed", emailError);
+            }
+          } catch (mailCatch) {
+            emailError = mailCatch instanceof Error ? mailCatch.message : String(mailCatch);
+            console.warn("[cleaner-admin-action] supply email failed", emailError);
+          }
+        } else {
+          emailError = email ? "Placeholder email address on file." : "No email on file.";
+        }
+
+        if (phone) {
+          const message =
+            `Hi ${firstName}! Novara Cleaning — mark which cleaning supplies you have here: ${SUPPLY_URL} ` +
+            `No login needed. Questions? Just reply.`;
+          try {
+            const { data: smsRes, error: smsErr } = await adminClient.functions.invoke("send-ghl-sms", {
+              body: {
+                phone,
+                email: email || undefined,
+                firstName,
+                message,
+                type: "confirmation",
+              },
+            });
+            const ghlFailed = smsErr || (smsRes as { error?: string } | null)?.error;
+            smsSent = !ghlFailed;
+            if (ghlFailed) {
+              smsError = await describeInvokeFailure(smsErr, smsRes);
+              console.warn("[cleaner-admin-action] supply SMS via GHL failed", smsError);
+            }
+          } catch (smsCatch) {
+            smsError = smsCatch instanceof Error ? smsCatch.message : String(smsCatch);
+            console.warn("[cleaner-admin-action] supply SMS via GHL failed", smsError);
+          }
+        } else {
+          smsError = "No phone on file.";
+        }
+
+        await adminClient.from("events").insert({
+          event_type: "cleaner.supply_link_sent",
+          cleaner_id: cleanerId,
+          source: "cleaner-admin-action",
+          summary:
+            `Supply checklist link sent to ${`${cleaner.first_name || ""} ${cleaner.last_name || ""}`.trim()} ` +
+            `(email: ${emailed ? "sent" : `failed — ${emailError}`}, SMS: ${smsSent ? "sent" : `failed — ${smsError}`})`,
+          data: {
+            by: callerId,
+            emailed,
+            sms_sent: smsSent,
+            email_error: emailError,
+            sms_error: smsError,
+          },
+        }).then(() => undefined, () => undefined);
+
+        if (!emailed && !smsSent) {
+          return json({
+            error:
+              `Couldn't reach them. Email: ${emailError || "not attempted"}. SMS: ${smsError || "not attempted"}. ` +
+              `The supply link below is valid for 30 days if you want to send it yourself.`,
+            emailError,
+            smsError,
+            supplyUrl: SUPPLY_URL,
+          }, 502);
+        }
+
+        return json({ ok: true, emailed, smsSent, emailError, smsError, supplyUrl: SUPPLY_URL });
+      }
+
       default:
         return json({ error: `unknown action: ${action}` }, 400);
     }
