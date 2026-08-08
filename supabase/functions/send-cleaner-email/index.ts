@@ -171,6 +171,56 @@ serve(async (req) => {
         break;
       }
 
+      case "setup_request": {
+        const first = data.firstName || "there";
+        const setupUrl = data.setupUrl || "https://contractor.novaracleaning.com/cleaner/auth";
+        const needs: string[] = [];
+        if (data.needsPhone !== false) needs.push("verify your phone");
+        if (data.needsStripe !== false) needs.push("connect payouts (Stripe)");
+        const needsLine = needs.length ? needs.join(" and ") : "finish a couple of quick steps";
+        subject = "Finish your Novara Cleaning account setup";
+        html = `
+          <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#0f172a">
+            <h2 style="margin:0 0 8px;font-size:20px">Finish your account setup</h2>
+            <p style="margin:0 0 16px;color:#475569">Hi ${first},</p>
+            <p style="margin:0 0 16px;color:#475569">
+              You're almost ready for jobs — please ${needsLine} so we can keep sending you work and pay you on time.
+            </p>
+            <p style="margin:24px 0;text-align:center">
+              <a href="${setupUrl}"
+                 style="display:inline-block;background:#7c3aed;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600">
+                Complete account setup
+              </a>
+            </p>
+            <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">Novara Cleaning</p>
+          </div>`;
+        break;
+      }
+
+      case "supply_checklist_request": {
+        const first = data.firstName || "there";
+        const supplyUrl = data.supplyUrl || "https://contractor.novaracleaning.com/cleaner/role";
+        subject = "Mark which cleaning supplies you have";
+        html = `
+          <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#0f172a">
+            <h2 style="margin:0 0 8px;font-size:20px">Your supply checklist</h2>
+            <p style="margin:0 0 16px;color:#475569">Hi ${first},</p>
+            <p style="margin:0 0 16px;color:#475569">
+              Please open the checklist and mark which essential supplies you already have.
+              You don't need every item on day one — we use this so we know you're job-ready.
+            </p>
+            <p style="margin:24px 0;text-align:center">
+              <a href="${supplyUrl}"
+                 style="display:inline-block;background:#7c3aed;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600">
+                Open supply checklist
+              </a>
+            </p>
+            <p style="margin:0 0 8px;color:#64748b;font-size:14px">No login required — the link opens straight onto the checklist.</p>
+            <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">Novara Cleaning</p>
+          </div>`;
+        break;
+      }
+
       case "tip_received": {
         const first = data.cleanerFirstName || data.firstName || "there";
         const amountStr = `$${((Number(data.amount) || 0) / 100).toFixed(2)}`;

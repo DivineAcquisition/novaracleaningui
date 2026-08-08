@@ -287,7 +287,9 @@ export default function AdminCleaners() {
       | "update_compliance"
       | "set_status"
       | "advance_pay_tier"
-      | "send_agreement",
+      | "send_agreement"
+      | "send_setup"
+      | "send_supplies",
     extra: Record<string, unknown> = {},
   ) => {
     if (!selected) return;
@@ -314,19 +316,28 @@ export default function AdminCleaners() {
           `Promoted to ${tier} · ${d.toPercentage ?? "—"}%` +
             (d.emailSent ? " — email sent" : " — email not sent (no address)"),
         );
-      } else if (action === "send_agreement") {
+      } else if (action === "send_agreement" || action === "send_setup" || action === "send_supplies") {
         const d = data as {
           emailed?: boolean;
           smsSent?: boolean;
           emailError?: string | null;
           smsError?: string | null;
           agreementUrl?: string;
+          setupUrl?: string;
+          supplyUrl?: string;
         };
         const parts = [d.emailed ? "email" : null, d.smsSent ? "SMS" : null].filter(Boolean);
+        const url = d.agreementUrl || d.setupUrl || d.supplyUrl;
+        const label =
+          action === "send_agreement"
+            ? "Signing link"
+            : action === "send_setup"
+              ? "Setup link"
+              : "Supply checklist link";
         toast.success(
           parts.length
-            ? `Signing link sent via ${parts.join(" + ")} — opens straight onto the agreement, no login`
-            : "Signing link created",
+            ? `${label} sent via ${parts.join(" + ")}`
+            : `${label} created`,
           {
             // A half-delivered link is worth saying out loud, and the URL is
             // worth handing over: the fastest fix for a dead transport is an
@@ -334,7 +345,7 @@ export default function AdminCleaners() {
             description: [
               !d.emailed && d.emailError ? `Email didn't go: ${d.emailError}` : null,
               !d.smsSent && d.smsError ? `SMS didn't go: ${d.smsError}` : null,
-              d.agreementUrl,
+              url,
             ]
               .filter(Boolean)
               .join("\n"),
@@ -659,7 +670,9 @@ function CleanerSheet({
       | "update_compliance"
       | "set_status"
       | "advance_pay_tier"
-      | "send_agreement",
+      | "send_agreement"
+      | "send_setup"
+      | "send_supplies",
     extra?: Record<string, unknown>,
   ) => void;
   onDelete: () => void;
@@ -716,6 +729,8 @@ function CleanerSheet({
                   <OnboardingChecklist
                     cleaner={cleaner}
                     onSendAgreement={() => onAction("send_agreement")}
+                    onSendSetup={() => onAction("send_setup")}
+                    onSendSupplies={() => onAction("send_supplies")}
                     actioning={actioning}
                   />
                 </TabsContent>
@@ -1131,15 +1146,20 @@ const OB_STEPS: Array<{ done: (c: CleanerRow) => boolean; label: string; detail?
 function OnboardingChecklist({
   cleaner,
   onSendAgreement,
+  onSendSetup,
+  onSendSupplies,
   actioning,
 }: {
   cleaner: CleanerRow;
   onSendAgreement: () => void;
+  onSendSetup: () => void;
+  onSendSupplies: () => void;
   actioning: boolean;
 }) {
   const introReady =
     Boolean(cleaner.phone_verified) && stripeOnboardingDone(cleaner);
   const agreementSigned = Boolean(cleaner.ob_agreement_signed);
+  const setupComplete = introReady;
 
   return (
     <div className="space-y-4">
@@ -1175,6 +1195,38 @@ function OnboardingChecklist({
         </li>
       </ul>
 
+      {!setupComplete && cleaner.status !== "terminated" ? (
+        <div className="rounded-lg border border-sky-200 bg-sky-50/80 p-3 space-y-2">
+          <p className="text-sm font-medium text-sky-950">Account setup incomplete</p>
+          <p className="text-xs text-sky-800">
+            Sends email + SMS with a link to finish phone verification and Stripe payouts.
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            disabled={actioning || (!cleaner.email && !cleaner.phone)}
+            onClick={() => {
+              if (
+                !confirm(
+                  `Send the account setup link to ${cleaner.first_name || "this cleaner"} via email/SMS?`,
+                )
+              ) {
+                return;
+              }
+              onSendSetup();
+            }}
+            className="bg-sky-700 hover:bg-sky-800 text-white"
+          >
+            {actioning ? (
+              <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" />
+            ) : (
+              <RiSendPlaneLine className="w-4 h-4 mr-1.5" />
+            )}
+            Send setup link
+          </Button>
+        </div>
+      ) : null}
+
       {!agreementSigned && cleaner.status !== "terminated" ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50/80 p-3 space-y-2">
           <p className="text-sm font-medium text-amber-950">Agreement not signed yet</p>
@@ -1203,6 +1255,38 @@ function OnboardingChecklist({
               <RiSendPlaneLine className="w-4 h-4 mr-1.5" />
             )}
             Send agreement link
+          </Button>
+        </div>
+      ) : null}
+
+      {cleaner.status !== "terminated" ? (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50/80 p-3 space-y-2">
+          <p className="text-sm font-medium text-emerald-950">Supply checklist</p>
+          <p className="text-xs text-emerald-800">
+            Sends a no-login link so they can mark which essential supplies they have for jobs.
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            disabled={actioning || (!cleaner.email && !cleaner.phone)}
+            onClick={() => {
+              if (
+                !confirm(
+                  `Send the supply checklist link to ${cleaner.first_name || "this cleaner"} via email/SMS?`,
+                )
+              ) {
+                return;
+              }
+              onSendSupplies();
+            }}
+            className="bg-emerald-700 hover:bg-emerald-800 text-white"
+          >
+            {actioning ? (
+              <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" />
+            ) : (
+              <RiSendPlaneLine className="w-4 h-4 mr-1.5" />
+            )}
+            Send supply checklist
           </Button>
         </div>
       ) : null}
@@ -1510,7 +1594,9 @@ function ActionsBlock({
       | "update_compliance"
       | "set_status"
       | "advance_pay_tier"
-      | "send_agreement",
+      | "send_agreement"
+      | "send_setup"
+      | "send_supplies",
     extra?: Record<string, unknown>,
   ) => void;
   onDelete: () => void;
