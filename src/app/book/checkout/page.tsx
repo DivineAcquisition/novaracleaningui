@@ -3,7 +3,11 @@ import { Suspense } from "react";
 import BookingCheckoutPage from "@/views/book/Checkout";
 
 export default function Page() {
-  return <BookingCheckoutPage />;
+  return (
+    <Suspense fallback={null}>
+      <BookingCheckoutPage />
+    </Suspense>
+  );
 }
 
 export const dynamic = "force-dynamic";

@@ -24,17 +24,18 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    const fortyEightHoursAgo = new Date();
-    fortyEightHoursAgo.setHours(fortyEightHoursAgo.getHours() - 48);
+    // 72 hours so the day-2 abandoned-checkout reminder can fire before cleanup.
+    const seventyTwoHoursAgo = new Date();
+    seventyTwoHoursAgo.setHours(seventyTwoHoursAgo.getHours() - 72);
 
-    logStep("Cutoff time calculated", { cutoff: fortyEightHoursAgo.toISOString() });
+    logStep("Cutoff time calculated", { cutoff: seventyTwoHoursAgo.toISOString() });
 
-    // Find pending_payment bookings older than 48 hours
+    // Find pending_payment bookings older than 72 hours
     const { data: oldBookings, error: fetchError } = await supabase
       .from("bookings")
       .select("id, email, created_at, service_date")
       .eq("status", "pending_payment")
-      .lt("created_at", fortyEightHoursAgo.toISOString());
+      .lt("created_at", seventyTwoHoursAgo.toISOString());
 
     if (fetchError) {
       logStep("Error fetching old bookings", fetchError);

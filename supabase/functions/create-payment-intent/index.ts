@@ -462,6 +462,14 @@ serve(async (req) => {
       });
     }
 
+    // Tokenized resume link for abandoned-checkout reminders
+    // (/book/checkout?resume_token=…). Same 20-byte hex mint as pay_page_token.
+    const resumeBytes = new Uint8Array(20);
+    crypto.getRandomValues(resumeBytes);
+    const checkoutResumeToken = Array.from(resumeBytes)
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+
     // Store provisional booking in database - ALWAYS as pending_payment
     const { data: booking, error: bookingError } = await supabaseClient
       .from("bookings")
@@ -489,6 +497,7 @@ serve(async (req) => {
         payment_intent_id: paymentIntentId,
         customer_id: customerId,
         status: 'pending_payment', // CRITICAL: Always pending until payment verified
+        checkout_resume_token: checkoutResumeToken,
         payment_option: paymentOptionStored,
         full_payment_discount: fullPaymentDiscount,
         platform_fee_cents: platformFeeCents,
@@ -552,6 +561,7 @@ serve(async (req) => {
         clientSecret,
         amount: amountToCharge,
         bookingId: booking.id,
+        checkoutResumeToken,
         requiresPayment: true, // ALWAYS true - no bookings without payment verification
         bookingNumber: booking.booking_number,
         isNewCustomer,

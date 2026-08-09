@@ -21,7 +21,7 @@ import {
   RiTimeLine
 } from "@remixicon/react";
 import { useState, useEffect, useMemo, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useBooking } from "@/contexts/BookingContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -105,6 +105,7 @@ const TIME_SLOT_LABELS: Record<string, string> = {
 };
 export default function BookingCheckout() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const {
     bookingData,
     currentStep,
@@ -117,6 +118,12 @@ export default function BookingCheckout() {
   const [isCreatingIntent, setIsCreatingIntent] = useState(false);
   const stripePromise = useMemo(() => getStripePromise(), []);
   const paymentInitStarted = useRef(false);
+  const resumeHydrated = useRef(false);
+  const [resumeReady, setResumeReady] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return !new URLSearchParams(window.location.search).get("resume_token");
+  });
+  const [resumeError, setResumeError] = useState<string | null>(null);
   // Wraps the whole checkout body so it can be screenshotted for the packet.
   const checkoutCaptureRef = useRef<HTMLDivElement>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
@@ -229,10 +236,102 @@ export default function BookingCheckout() {
   const isMemberUsingCredit = bookingData.useCredit === true;
   const [deepClean, setDeepClean] = useState<DeepCleanChoice>({ deepCleanedBefore: '', includeDeepClean: true });
 
+  // Resume from a tokenized reminder link (?resume_token=…) — restores the
+  // customer's pending_payment booking into BookingContext + session snapshot
+  // so checkout continues on any device.
+  useEffect(() => {
+    const token = searchParams.get("resume_token")?.trim();
+    if (!token) {
+      setResumeReady(true);
+      return;
+    }
+    if (resumeHydrated.current) return;
+    resumeHydrated.current = true;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke(
+          "get-checkout-resume",
+          { body: { token } },
+        );
+        if (cancelled) return;
+        if (error || !data?.ok || !data?.booking) {
+          const msg =
+            data?.error ||
+            error?.message ||
+            "This resume link is invalid or expired.";
+          setResumeError(msg);
+          toast.error(msg);
+          setResumeReady(true);
+          return;
+        }
+        const b = data.booking as Record<string, unknown>;
+        const hydrated = {
+          bookingId: String(b.bookingId || ""),
+          zipCode: String(b.zipCode || ""),
+          homeSizeId: String(b.homeSizeId || ""),
+          serviceType: String(b.serviceType || ""),
+          addOns: Array.isArray(b.addOns) ? (b.addOns as string[]) : [],
+          membershipPlan: String(b.membershipPlan || "none"),
+          serviceDate: String(b.serviceDate || ""),
+          timeSlot: String(b.timeSlot || ""),
+          firstName: String(b.firstName || ""),
+          lastName: String(b.lastName || ""),
+          email: String(b.email || ""),
+          phone: String(b.phone || ""),
+          address: String(b.address || ""),
+          city: String(b.city || ""),
+          state: String(b.state || ""),
+          paymentOption: (b.paymentOption === "full" ? "full" : "deposit") as
+            | "deposit"
+            | "full",
+          bedrooms: typeof b.bedrooms === "number" ? b.bedrooms : undefined,
+          bathrooms: typeof b.bathrooms === "number" ? b.bathrooms : undefined,
+          dwellingType: b.dwellingType ? String(b.dwellingType) : undefined,
+          referralCode: b.referralCode ? String(b.referralCode) : undefined,
+          focusedAreas: Array.isArray(b.focusedAreas)
+            ? (b.focusedAreas as { areaId: string; quantity: number }[])
+            : [],
+          conditionLevel:
+            (b.conditionLevel as "light" | "normal" | "heavy" | "severe") ||
+            "normal",
+          isSameDay: !!b.isSameDay,
+          sameDayAcknowledgedAt: b.sameDayAcknowledgedAt
+            ? String(b.sameDayAcknowledgedAt)
+            : null,
+          useCredit: false,
+          serviceDuration: 0,
+        };
+        updateBookingData(hydrated);
+        // Persist immediately so the prerequisites effect (which may run
+        // before React flushes bookingData) still sees the restored session.
+        saveCheckoutSnapshot({ ...bookingData, ...hydrated });
+        toast.success("Welcome back — we restored your booking.");
+      } catch (e) {
+        if (!cancelled) {
+          const msg =
+            e instanceof Error ? e.message : "Could not restore your booking.";
+          setResumeError(msg);
+          toast.error(msg);
+        }
+      } finally {
+        if (!cancelled) setResumeReady(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
   // Pin funnel step + persist a session snapshot so schedule/service
   // selections survive idle time on this page (browser back, tab discard,
   // or accidental BookingContext churn).
   useEffect(() => {
+    if (!resumeReady) return;
+
     setCurrentStep(4);
 
     const desired = bookingData.serviceType === "focused" ? "full" : "deposit";
@@ -251,10 +350,16 @@ export default function BookingCheckout() {
       return;
     }
 
+    if (resumeError) {
+      // Resume failed — send them back to restart rather than a blank checkout.
+      router.replace("/book/offer");
+      return;
+    }
+
     toast.error("Please choose your service and appointment time first.");
     router.replace("/book/offer");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [resumeReady]);
 
   useEffect(() => {
     if (hasCheckoutPrerequisites(bookingData)) {
@@ -774,6 +879,22 @@ export default function BookingCheckout() {
   const currentAmount = depositPricing.deposit;
   const totalSavings = (depositPricing.newCustomerDiscount || 0) + (depositPricing.membershipDiscount || 0) + promoDiscount + referralDiscount;
   const addOnLabels = bookingData.addOns?.map(id => ADD_ONS[id as keyof typeof ADD_ONS]?.label).filter(Boolean) || [];
+
+  if (!resumeReady) {
+    return (
+      <PageTransition direction="forward">
+        <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8">
+          <SEO title="Checkout" noindex />
+          <BookingHeader currentStep={4} totalSteps={6} stepLabel="Checkout" />
+          <div className="container max-w-2xl mx-auto px-4 py-16 flex flex-col items-center gap-3 text-muted-foreground">
+            <RiLoader4Line className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-sm">Restoring your saved booking…</p>
+          </div>
+        </div>
+      </PageTransition>
+    );
+  }
+
   return <PageTransition direction="forward">
       <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8">
         <SEO

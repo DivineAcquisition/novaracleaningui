@@ -6,6 +6,8 @@ import { DetailRow } from './components/DetailRow.tsx';
 import { Highlight } from './components/Highlight.tsx';
 import { BRAND } from './brand.ts';
 
+type ReminderType = '10_minute' | '2_hour' | 'next_day_noon' | 'day_2' | '24_hour';
+
 interface BookingReminderProps {
   firstName?: string;
   bookingId?: string;
@@ -16,7 +18,8 @@ interface BookingReminderProps {
   depositAmount?: number;
   paymentOption?: string;
   checkoutUrl?: string;
-  reminderType?: '10_minute' | '24_hour';
+  reminderType?: ReminderType;
+  emailHeadline?: string;
 }
 
 const formatTimeSlot = (slot: string) => {
@@ -39,9 +42,62 @@ const formatServiceType = (type: string) => {
     standard: 'Standard Cleaning',
     deep: 'Deep Cleaning',
     moveInOut: 'Move In/Out Cleaning',
+    focused: 'Focused Clean',
   };
   return types[type] || type;
 };
+
+function copyForType(type: ReminderType | undefined, firstName?: string) {
+  const name = firstName || 'there';
+  switch (type) {
+    case '2_hour':
+      return {
+        title: 'Your cleaning spot is still held',
+        subtitle: 'Continue where you left off — it only takes a minute.',
+        highlightVariant: 'info' as const,
+        highlightTitle: 'Still thinking it over?',
+        highlightBody:
+          `Hi ${name}, your Novara booking is saved. Tap below to pick up right where you stopped — no need to re-enter your details.`,
+        cta: 'Continue my booking',
+        urgent: false,
+      };
+    case 'next_day_noon':
+      return {
+        title: 'Good afternoon — your booking is still open',
+        subtitle: "Yesterday's cleaning request is waiting for you.",
+        highlightVariant: 'info' as const,
+        highlightTitle: 'Pick up where you left off',
+        highlightBody:
+          `Hi ${name}, we saved your session from yesterday. Continue with the same service and time — one secure link, no starting over.`,
+        cta: 'Resume my booking',
+        urgent: false,
+      };
+    case 'day_2':
+    case '24_hour':
+      return {
+        title: 'Final reminder — complete your booking',
+        subtitle: 'Your unfinished booking expires soon.',
+        highlightVariant: 'danger' as const,
+        highlightTitle: 'Last chance to keep your date',
+        highlightBody:
+          `Hi ${name}, this is your final reminder. Complete payment with the link below to lock in your cleaning before the hold is released.`,
+        cta: 'Complete payment now',
+        urgent: true,
+      };
+    case '10_minute':
+    default:
+      return {
+        title: "You're almost done — finish & save $30",
+        subtitle: 'One step left to lock in your Novara cleaning.',
+        highlightVariant: 'info' as const,
+        highlightTitle: 'Save $30 as a new customer',
+        highlightBody:
+          `Hi ${name}, you're just one step away. Continue your saved booking below to finish checkout and claim the new-customer discount.`,
+        cta: 'Finish & save $30',
+        urgent: false,
+      };
+  }
+}
 
 export const BookingReminder = (props: BookingReminderProps) => {
   const formattedDate = props.serviceDate
@@ -53,91 +109,67 @@ export const BookingReminder = (props: BookingReminderProps) => {
       })
     : '';
 
-  const is24Hour = props.reminderType === '24_hour';
-  const is10Minute = props.reminderType === '10_minute';
-  const title = is24Hour ? '⏰ Your Booking is Waiting!' : '🧹 Complete Your Booking & Save $30';
-  const subtitle = is10Minute ? "You're almost done - finish your booking now!" : "Don't miss out on your cleaning service!";
+  const copy = copyForType(props.reminderType, props.firstName);
+  const title = props.emailHeadline || copy.title;
 
   return (
     <EmailLayout
       title={title}
-      subtitle={subtitle}
-      previewText={`Complete your ${formattedDate} booking`}
-      footerNote="You're receiving this because you started a booking at Novara Cleaning."
+      subtitle={copy.subtitle}
+      previewText={`${title}${formattedDate ? ` · ${formattedDate}` : ''}`}
+      footerNote="You're receiving this because you started a booking at Novara Cleaning. This link restores your saved session."
     >
       <Text style={paragraph}>Hi {props.firstName || 'there'},</Text>
 
-      {is24Hour ? (
-        <Highlight variant="danger">
-          <Text style={urgentTitle}>⚠️ Your booking will expire soon!</Text>
-          <Text style={highlightText}>
-            Complete your payment in the next few hours to secure your cleaning appointment.
-          </Text>
-        </Highlight>
-      ) : is10Minute ? (
-        <Highlight variant="info">
-          <Text style={highlightTitle}>✨ Save $30 as a New Customer!</Text>
-          <Text style={highlightText}>
-            You're just one step away from securing your cleaning service. Complete your booking now to take advantage of our new customer discount!
-          </Text>
-        </Highlight>
-      ) : (
-        <Text style={paragraph}>
-          We noticed you started booking a cleaning service with Novara but didn't complete your payment. Your
-          spot is still available!
-        </Text>
-      )}
+      <Highlight variant={copy.highlightVariant}>
+        <Text style={copy.urgent ? urgentTitle : highlightTitle}>{copy.highlightTitle}</Text>
+        <Text style={highlightText}>{copy.highlightBody}</Text>
+      </Highlight>
 
       <Section style={detailBox}>
-        <Text style={sectionTitle}>📅 Your Service Details</Text>
-        <DetailRow label="Date:" value={<strong>{formattedDate}</strong>} />
-        <DetailRow label="Time:" value={<strong>{formatTimeSlot(props.timeSlot || '')}</strong>} />
+        <Text style={sectionTitle}>Your saved booking</Text>
+        {formattedDate ? <DetailRow label="Date:" value={<strong>{formattedDate}</strong>} /> : null}
+        {props.timeSlot ? (
+          <DetailRow label="Time:" value={<strong>{formatTimeSlot(props.timeSlot)}</strong>} />
+        ) : null}
         <DetailRow label="Service:" value={formatServiceType(props.serviceType || '')} />
         <DetailRow
           label="Amount:"
           value={
             <>
               <strong>
-                ${(((props.paymentOption === 'deposit' ? (props.depositAmount || 0) : (props.totalAmount || 0))) / 100).toFixed(2)}
+                $
+                {(
+                  ((props.paymentOption === 'deposit'
+                    ? props.depositAmount || 0
+                    : props.totalAmount || 0) /
+                    100)
+                ).toFixed(2)}
               </strong>
-              {props.paymentOption === 'deposit' ? ' deposit' : ' (full payment - save 10%!)'}
+              {props.paymentOption === 'deposit' ? ' deposit' : ' (paid in full)'}
             </>
           }
           isLast
         />
       </Section>
 
-      {is10Minute && (
-        <Highlight variant="info">
-          <Text style={highlightTitle}>💡 Why Choose Novara?</Text>
-          <ul style={listStyle}>
-            <li>Professional, vetted cleaning teams</li>
-            <li>Flexible scheduling and easy rescheduling</li>
-            <li>Satisfaction guarantee on every service</li>
-            <li>Secure payment processing</li>
-          </ul>
-        </Highlight>
-      )}
-
       <Section style={buttonContainer}>
-        <Button href={props.checkoutUrl || BRAND.urls.booking}>
-          {is24Hour ? '🚀 Complete Payment Now' : '✨ Complete Your Booking'}
-        </Button>
+        <Button href={props.checkoutUrl || BRAND.urls.booking}>{copy.cta}</Button>
       </Section>
 
       <Text style={referenceText}>
-        Booking Reference: <strong>{props.bookingId}</strong>
+        Secure resume link — your details stay filled in when you continue.
+        {props.bookingId ? (
+          <>
+            <br />
+            Booking reference: <strong>{props.bookingId}</strong>
+          </>
+        ) : null}
       </Text>
 
-      {is24Hour ? (
-        <Text style={helpText}>
-          Need help or have questions? Reply to this email or call us at {BRAND.contact.phone}
-        </Text>
-      ) : (
-        <Text style={paragraph}>
-          Have questions or need to adjust your booking? Just reply to this email and we'll help you out!
-        </Text>
-      )}
+      <Text style={helpText}>
+        Need help? Reply to this email or call us at {BRAND.contact.phone}
+      </Text>
 
       <Text style={signature}>
         Best regards,
@@ -189,12 +221,6 @@ const highlightText = {
   color: BRAND.colors.gray[700],
 };
 
-const listStyle = {
-  margin: '8px 0 0 0',
-  paddingLeft: '20px',
-  color: BRAND.colors.gray[700],
-};
-
 const buttonContainer = {
   textAlign: 'center' as const,
   margin: `${BRAND.spacing.xl} 0`,
@@ -208,15 +234,17 @@ const referenceText = {
 };
 
 const helpText = {
-  textAlign: 'center' as const,
-  color: BRAND.colors.gray[600],
+  margin: '16px 0',
   fontSize: '14px',
-  margin: '20px 0',
+  lineHeight: '1.6',
+  color: BRAND.colors.gray[600],
+  textAlign: 'center' as const,
 };
 
 const signature = {
   margin: '24px 0 0 0',
   fontSize: '16px',
+  lineHeight: '1.6',
   color: BRAND.colors.gray[700],
 };
 
