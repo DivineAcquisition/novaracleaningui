@@ -34,10 +34,10 @@ function checklistLink(serviceType: string | null | undefined): string {
 
 /**
  * Mirror of upfrontPaymentSettled() in _shared/post-confirm-booking.ts —
- * duplicated because this function is deliberately self-contained. A VA
- * booking is confirmed with its deposit invoice still outstanding, so the
- * customer-facing comms wait here until the money lands. stripe-webhook
- * calls this function again once it does.
+ * duplicated because this function is deliberately self-contained.
+ * Internal (VA) bookings stay pending_payment until deposit/full payment
+ * clears; stripe-webhook promotes them and calls this function so
+ * "Booking confirmed" email/SMS only go out after money lands.
  */
 function paymentSettled(b: Record<string, unknown>): boolean {
   if (b.uses_credit === true) return true;

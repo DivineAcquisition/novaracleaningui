@@ -2828,7 +2828,7 @@ export default function VaBooking() {
                       checked={sendConfirmationSms}
                       onCheckedChange={(v) => setSendConfirmationSms(v === true)}
                     />
-                    Send confirmation SMS via GHL
+                    Send pending/pay SMS via GHL (not "confirmed" until deposit)
                   </label>
                   <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
                     <Checkbox

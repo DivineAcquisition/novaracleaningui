@@ -13,10 +13,11 @@
 //   5. Optionally create Stripe invoices:
 //        a) $deposit invoice due today (configurable, default 50%)
 //        b) $remaining invoice due on the service date
-//   6. Send confirmation email + payment receipt + Standard Clean
-//      checklist via Resend
-//   7. Send confirmation SMS via send-ghl-sms (so it rides the verified
-//      GHL number, no Telnyx dependency)
+//   6. Send a PENDING booking email (not confirmation) + optional Standard
+//      Clean checklist via Resend. Confirmation + receipt wait until the
+//      deposit / paid-in-full payment clears (stripe-webhook).
+//   7. Send pending/pay SMS via send-ghl-sms (verified GHL number). Copy
+//      must say pending until deposit — never "confirmed".
 //   8. Return everything the UI needs to copy/paste invoice URLs to the
 //      customer while still on the phone.
 //
@@ -214,6 +215,80 @@ async function notifyAdminPriceOverride(
     throw new Error(`resend ${res.status}: ${(await res.text()).slice(0, 200)}`);
   }
   logStep("override admin notified", { to: ADMIN_OVERRIDE_NOTIFY_EMAIL, bookingRef: opts.bookingRef });
+}
+
+/**
+ * Customer-facing "booking is pending until deposit" email for internal
+ * (VA) bookings. Confirmation + receipt emails are held until payment
+ * clears — this is the only booking-status email that may go out at
+ * create time, and it must never say the booking is confirmed.
+ */
+async function sendPendingUntilDepositEmail(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  opts: {
+    to: string;
+    firstName: string;
+    serviceType: string;
+    serviceDate: string;
+    timeSlot: string;
+    address?: string | null;
+    bookingRef: string;
+    totalCents: number;
+    depositCents: number;
+    remainingCents: number;
+    payUrl: string | null;
+    invoiceMode: string;
+  },
+): Promise<{ ok: boolean; id?: string; error?: string }> {
+  const resendKey = await resolveSecret(supabase, "RESEND_API_KEY");
+  if (!resendKey) {
+    return { ok: false, error: "RESEND_API_KEY missing" };
+  }
+  const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+  const fname = opts.firstName || "there";
+  const where = opts.address ? ` at ${opts.address}` : "";
+  const payCta = opts.payUrl
+    ? `<p style="margin:20px 0"><a href="${opts.payUrl}" style="display:inline-block;background:#0f172a;color:#fff;text-decoration:none;padding:12px 18px;border-radius:6px;font-weight:600">Pay deposit ${money(opts.depositCents)}</a></p>
+       <p style="margin:0 0 12px;font-size:13px;color:#64748b">Or open this link: <a href="${opts.payUrl}">${opts.payUrl}</a></p>`
+    : `<p style="margin:16px 0 0">Check your inbox for the Stripe invoice and pay the deposit there.</p>`;
+  const remainingNote = opts.remainingCents > 0
+    ? `<p style="margin:12px 0 0;color:#475569">Remaining balance of ${money(opts.remainingCents)} is due after we complete the clean (or per your invoice schedule).</p>`
+    : "";
+  const subject = `Your Novara cleaning is pending — deposit needed (${opts.bookingRef})`;
+  const html = `
+    <div style="font-family:Arial,sans-serif;font-size:15px;color:#0f172a;line-height:1.55;max-width:560px">
+      <p style="margin:0 0 12px">Hi ${fname},</p>
+      <p style="margin:0 0 12px">Your <strong>${opts.serviceType}</strong> clean for <strong>${opts.serviceDate}</strong> (${opts.timeSlot})${where} is <strong>pending until your deposit is received</strong>.</p>
+      <p style="margin:0 0 12px">This is <em>not</em> a confirmed booking yet. Once we receive your ${money(opts.depositCents)} deposit (of ${money(opts.totalCents)} total), we'll confirm your appointment and send your confirmation details.</p>
+      ${payCta}
+      ${remainingNote}
+      <p style="margin:20px 0 0;font-size:12px;color:#94a3b8">Booking ${opts.bookingRef} · Novara Cleaning</p>
+    </div>`;
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${resendKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: "Novara Cleaning <hello@novaracleaning.com>",
+      to: [opts.to],
+      subject,
+      html,
+    }),
+  });
+  if (!res.ok) {
+    return { ok: false, error: `resend ${res.status}: ${(await res.text()).slice(0, 200)}` };
+  }
+  const json = await res.json().catch(() => ({}));
+  logStep("pending-until-deposit email sent", {
+    to: opts.to,
+    bookingRef: opts.bookingRef,
+    invoiceMode: opts.invoiceMode,
+    id: (json as { id?: string }).id,
+  });
+  return { ok: true, id: (json as { id?: string }).id };
 }
 
 // ─── Stripe + invoice helpers ───────────────────────────────────────
@@ -1193,6 +1268,36 @@ serve(async (req) => {
       invoiceMode,
     });
 
+    // Pending-until-deposit email — the customer-facing status email at
+    // create time. Confirmation / receipt emails stay held until payment.
+    const payUrl =
+      preauthSession?.url ||
+      depositInvoice?.hostedInvoiceUrl ||
+      fullInvoice?.hostedInvoiceUrl ||
+      null;
+    if (invoiceMode !== "none") {
+      try {
+        emails.pending = await sendPendingUntilDepositEmail(supabase, {
+          to: body.email,
+          firstName: body.firstName,
+          serviceType: body.serviceType,
+          serviceDate: body.serviceDate,
+          timeSlot: body.timeSlot,
+          address: body.address || null,
+          bookingRef,
+          totalCents,
+          depositCents: fullInvoice ? totalCents : depositCents,
+          remainingCents: fullInvoice ? 0 : remainingCents,
+          payUrl,
+          invoiceMode,
+        });
+      } catch (pendingErr) {
+        emails.pending_error =
+          pendingErr instanceof Error ? pendingErr.message : String(pendingErr);
+        logStep("pending-until-deposit email failed (non-blocking)", emails.pending_error);
+      }
+    }
+
     // Optional checklist email can still go out at booking time when the VA
     // checked the box — it is informational, not a confirmation.
     if (body.sendChecklistEmail !== false) {
@@ -1224,20 +1329,28 @@ serve(async (req) => {
         const msgParts = [
           `Novara Cleaning: Hi ${fname}! Your ${body.serviceType} clean is pending for ${body.serviceDate} ${body.timeSlot}`,
         ];
-        if (body.address) msgParts.push(`at ${body.address}`);
-        msgParts.push(`. Total $${(totalCents / 100).toFixed(2)}.`);
-        if (depositInvoice) {
-          msgParts.push(
-            ` Deposit invoice ($${(depositCents / 100).toFixed(2)}) just sent to your email — please pay today to confirm. We'll send the remaining $${(remainingCents / 100).toFixed(2)} the morning of service.`,
-          );
-        }
+        if (body.address) msgParts.push(` at ${body.address}`);
+        msgParts.push(
+          `. Total $${(totalCents / 100).toFixed(2)}. Your booking stays pending until your deposit is received.`,
+        );
         if (preauthSession?.url) {
           msgParts.push(
-            ` Your booking stays pending until you review & sign your service agreement and pay your $${(depositCents / 100).toFixed(2)} deposit here: ${preauthSession.url} — we won't charge the remaining $${(remainingCents / 100).toFixed(2)} until after we complete the clean.`,
+            ` Review & sign your service agreement and pay your $${(depositCents / 100).toFixed(2)} deposit here: ${preauthSession.url} — we won't charge the remaining $${(remainingCents / 100).toFixed(2)} until after we complete the clean.`,
           );
-        }
-        if (fullInvoice) {
-          msgParts.push(` Invoice sent to your email — please pay to confirm your booking.`);
+        } else if (depositInvoice?.hostedInvoiceUrl) {
+          msgParts.push(
+            ` Pay your $${(depositCents / 100).toFixed(2)} deposit invoice here: ${depositInvoice.hostedInvoiceUrl} — we'll send the remaining $${(remainingCents / 100).toFixed(2)} the morning of service.`,
+          );
+        } else if (depositInvoice) {
+          msgParts.push(
+            ` Deposit invoice ($${(depositCents / 100).toFixed(2)}) was just sent to your email — please pay today. We'll send the remaining $${(remainingCents / 100).toFixed(2)} the morning of service.`,
+          );
+        } else if (fullInvoice?.hostedInvoiceUrl) {
+          msgParts.push(
+            ` Pay your invoice here to move off pending: ${fullInvoice.hostedInvoiceUrl}`,
+          );
+        } else if (fullInvoice) {
+          msgParts.push(` Invoice sent to your email — please pay to move your booking off pending.`);
         }
         msgParts.push(" Reply HELP for help or STOP to opt out.");
         const sms = await fetch(
