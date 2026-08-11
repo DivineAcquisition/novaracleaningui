@@ -797,11 +797,11 @@ function BookingAssignBlock({
   };
 
   const unassignOne = async (cleanerId: string, label: string) => {
-    if (!confirm(`Unassign ${label} from this job? It will drop off their dashboard. No SMS is sent.`)) return;
+    if (!confirm(`Unassign ${label} from this job? It will drop off their dashboard.`)) return;
     setWorking(`unassign-${cleanerId}`);
     try {
       await callUnassign(cleanerId);
-      toast.success(`${label} unassigned — removed from their dashboard (no SMS)`);
+      toast.success(`${label} unassigned — removed from their dashboard, GHL + Airtable synced`);
       onMutated();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
@@ -811,11 +811,11 @@ function BookingAssignBlock({
   };
 
   const unassignAll = async () => {
-    if (!confirm("Unassign all cleaners from this job? It will drop off their dashboards and the job reopens for assignment. No SMS is sent.")) return;
+    if (!confirm("Unassign all cleaners from this job? It will drop off their dashboards and the job reopens for assignment.")) return;
     setWorking("unassign-all");
     try {
       await callUnassign();
-      toast.success("All cleaners unassigned — dashboards cleared (no SMS)");
+      toast.success("All cleaners unassigned — removed from their dashboards, GHL + Airtable synced");
       onMutated();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
@@ -950,7 +950,6 @@ function BookingAssignBlock({
           </CardTitle>
           <CardDescription>
             Manage who&apos;s on this job: lead, payout tier, check-in, photo links, or unassign.
-            Unassign / drop does not text the cleaner.
             {checkedIn ? " · Job checked in ✓" : ""}
           </CardDescription>
         </CardHeader>

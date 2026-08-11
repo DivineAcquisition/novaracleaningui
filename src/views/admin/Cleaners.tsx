@@ -934,7 +934,7 @@ function CleanerJobsBlock({ cleaner, onChanged }: { cleaner: CleanerRow; onChang
       });
       const json = (await res.json()) as { error?: string };
       if (!res.ok || json?.error) throw new Error(json?.error || "Could not drop from job");
-      toast.success("Dropped from job — removed from their dashboard (no SMS)");
+      toast.success("Dropped from job — removed from their dashboard, GHL + Airtable synced");
       await load();
       onChanged();
     } catch (e) {

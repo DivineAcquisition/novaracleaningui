@@ -28,7 +28,7 @@ import {
   checkScheduleBuffer,
   recordBufferOverride,
 } from "../_shared/schedule-buffer.ts";
-import { computeCrewPay, payExplanation, shareFor } from "../_shared/crew-pay.ts";
+import { computeCrewPay, shareFor } from "../_shared/crew-pay.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -521,33 +521,8 @@ serve(async (req) => {
     booking.num_cleaners_assigned = cleanerIds.length;
 
     // Pre-completion crew-size change: remaining cleaners' displayed pay
-    // updates (already written above) and they are told why.
-    const crewSizeChanged =
-      priorCrewSize > 0 && priorCrewSize !== cleanerIds.length && lockedRows.length === 0;
-    if (crewSizeChanged) {
-      for (const c of cleaners) {
-        const share = shareByCleaner.get(c.id);
-        if (!share || !c.phone) continue;
-        const prev = priorPayByCleaner.get(c.id);
-        if (prev != null && prev === share.shareCents) continue;
-        try {
-          const why =
-            cleanerIds.length === 1
-              ? "Crew size is now 1 — solo rate applies."
-              : `Crew size is now ${cleanerIds.length} — crew pool rate applies.`;
-          await admin.functions.invoke("send-ghl-sms", {
-            body: {
-              phone: c.phone,
-              firstName: c.first_name || undefined,
-              message:
-                `Novara: your pay for this job was recalculated because the crew changed. ` +
-                `${why} ${payExplanation(share)}`,
-              type: "crew_pay_change",
-            },
-          });
-        } catch (_) { /* non-blocking */ }
-      }
-    }
+    // already updated on assignment rows above. Do NOT SMS about the
+    // recalculation — ops/cleaners see the new estimate in the portal.
 
     await admin.from("jobs").update({ status: "Assigned" }).eq("id", jobId);
 

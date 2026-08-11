@@ -52,24 +52,6 @@ export async function POST(req: Request): Promise<NextResponse> {
     if (bErr) throw bErr;
     if (!booking) return NextResponse.json({ error: "Booking not found" }, { status: 404 });
 
-    // Suppress the "You've been taken off…" SMS from notify-crew-change.
-    // Admin/VA Unassign + Drop are intentional ops actions — no SMS. Must be
-    // written BEFORE the Withdrawn update so the trigger's async handler sees it
-    // (that handler waits ~2.5s before texting). Replace/reassign still texts.
-    await supabase
-      .from("events")
-      .insert({
-        event_type: "cleaner.withdrawn_sms_suppressed",
-        booking_id: bookingId,
-        cleaner_id: cleanerId,
-        source: "unassign-job",
-        summary: cleanerId
-          ? `Suppress withdrawn SMS for cleaner ${cleanerId}`
-          : "Suppress withdrawn SMS for entire crew unassign",
-        data: { cleanerId, by: principal.userId },
-      })
-      .then(() => undefined, () => undefined);
-
     // 1) Withdraw the dispatch assignment(s) so they leave cleaner dashboards.
     if (booking.job_id) {
       let q = supabase
