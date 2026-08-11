@@ -530,6 +530,8 @@ type MileageDraftRow = {
   name: string;
   miles: string;
   amount: string;
+  /** Flat cleaner pay bump ($) — recorded as surge via admin-extra-pay. */
+  payAdjust: string;
   recommendedMiles: number | null;
   recommendedAmountDollars: number | null;
   include: boolean;
@@ -734,13 +736,14 @@ function BookingAssignBlock({
         name,
         miles: miles != null ? String(miles) : "",
         amount: recommended != null ? recommended.toFixed(2) : "",
+        payAdjust: "",
         recommendedMiles: miles,
         recommendedAmountDollars: recommended,
         include: miles != null && miles > 0,
       };
     });
 
-  /** Open mileage popup before assign — recommended $0.70/mi from distance. */
+  /** Open mileage + pay-adjustment popup before assign — $0.70/mi from distance. */
   const openMileageThenAssign = async (
     allowUnpaid = false,
     bufferOverrideReason?: string,
@@ -778,7 +781,7 @@ function BookingAssignBlock({
 
   const updateMileageRow = (
     cleanerId: string,
-    patch: Partial<Pick<MileageDraftRow, "miles" | "amount" | "include">>,
+    patch: Partial<Pick<MileageDraftRow, "miles" | "amount" | "payAdjust" | "include">>,
   ) => {
     setMileageRows((prev) =>
       prev.map((r) => {
@@ -796,29 +799,46 @@ function BookingAssignBlock({
     );
   };
 
-  const recordAssignMileage = async (rows: MileageDraftRow[]) => {
+  /**
+   * Record assign-time mileage and/or flat pay adjustment via job_extra_pay.
+   * Portal pay (get-cleaner-portal) already folds these extras into display.
+   */
+  const recordAssignExtras = async (rows: MileageDraftRow[]) => {
     let paid = 0;
     let failed = 0;
     for (const row of rows) {
-      if (!row.include) continue;
-      const miles = Math.max(0, parseFloat(row.miles) || 0);
-      const amountCents = Math.max(0, Math.round((parseFloat(row.amount) || 0) * 100));
-      if (amountCents <= 0) continue;
+      const miles = row.include ? Math.max(0, parseFloat(row.miles) || 0) : 0;
+      const amountCents = row.include
+        ? Math.max(0, Math.round((parseFloat(row.amount) || 0) * 100))
+        : 0;
+      const payAdjustCents = Math.max(0, Math.round((parseFloat(row.payAdjust) || 0) * 100));
+      if (amountCents <= 0 && payAdjustCents <= 0) continue;
+
       // admin-extra-pay stores miles × rate; derive rate so customized $ sticks.
-      const milesForApi = miles > 0 ? miles : 1;
-      const rateCents =
-        miles > 0 ? Math.max(1, Math.round(amountCents / miles)) : amountCents;
+      const body: Record<string, unknown> = {
+        action: "pay",
+        cleanerId: row.cleanerId,
+        bookingId: booking.id,
+        note:
+          amountCents > 0 && payAdjustCents > 0
+            ? "Assign-time mileage + pay adjustment"
+            : payAdjustCents > 0
+              ? "Assign-time pay adjustment"
+              : "Assign-time mileage",
+      };
+      if (amountCents > 0) {
+        const milesForApi = miles > 0 ? miles : 1;
+        body.mileageMiles = milesForApi;
+        body.mileageRateCents =
+          miles > 0 ? Math.max(1, Math.round(amountCents / miles)) : amountCents;
+      }
+      if (payAdjustCents > 0) {
+        // Flat bump to cleaner pay — same ledger the portal shows as extras.
+        body.surgeCents = payAdjustCents;
+      }
+
       try {
-        const { data, error } = await supabase.functions.invoke("admin-extra-pay", {
-          body: {
-            action: "pay",
-            cleanerId: row.cleanerId,
-            bookingId: booking.id,
-            mileageMiles: milesForApi,
-            mileageRateCents: rateCents,
-            note: "Assign-time mileage",
-          },
-        });
+        const { data, error } = await supabase.functions.invoke("admin-extra-pay", { body });
         if (error || (data as { error?: string })?.error) {
           failed += 1;
         } else {
@@ -887,18 +907,25 @@ function BookingAssignBlock({
       setBufferReason("");
       setPendingAssign(null);
 
-      let mileageNote = "";
-      if (mileage && mileage.some((r) => r.include && (parseFloat(r.amount) || 0) > 0)) {
-        const { paid, failed } = await recordAssignMileage(mileage);
-        if (paid > 0) mileageNote = ` · mileage recorded for ${paid}`;
-        if (failed > 0) mileageNote += ` · ${failed} mileage failed`;
+      let extrasNote = "";
+      const hasExtras =
+        mileage &&
+        mileage.some(
+          (r) =>
+            (r.include && (parseFloat(r.amount) || 0) > 0) ||
+            (parseFloat(r.payAdjust) || 0) > 0,
+        );
+      if (hasExtras) {
+        const { paid, failed } = await recordAssignExtras(mileage);
+        if (paid > 0) extrasNote = ` · extras recorded for ${paid}`;
+        if (failed > 0) extrasNote += ` · ${failed} extras failed`;
       }
 
       const notes = (data as { notifications?: Array<{ email?: boolean; sms?: boolean }> })?.notifications;
       const emailed = notes?.filter((n) => n.email).length ?? 0;
       const texted = notes?.filter((n) => n.sms).length ?? 0;
       toast.success(
-        `Assigned · GHL synced · ${emailed} email · ${texted} SMS · GHL task(s) created when contact is linked${mileageNote}`,
+        `Assigned · GHL synced · ${emailed} email · ${texted} SMS · GHL task(s) created when contact is linked${extrasNote}`,
       );
       onMutated();
     } catch (err) {
@@ -908,10 +935,10 @@ function BookingAssignBlock({
     }
   };
 
-  const confirmMileageAndAssign = async (withMileage: boolean) => {
+  const confirmMileageAndAssign = async (withExtras: boolean) => {
     const opts = pendingAssign || { allowUnpaid: false };
     setMileageOpen(false);
-    await assign(opts.allowUnpaid, opts.bufferOverrideReason, withMileage ? mileageRows : []);
+    await assign(opts.allowUnpaid, opts.bufferOverrideReason, withExtras ? mileageRows : []);
   };
 
   // Admin-approved offer blast: scores nearby cleaners and texts them the
@@ -1458,10 +1485,11 @@ function BookingAssignBlock({
       >
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Mileage for this assignment</DialogTitle>
+            <DialogTitle>Mileage &amp; pay for this assignment</DialogTitle>
             <DialogDescription>
-              Recommended at ${(MILEAGE_RATE_CENTS / 100).toFixed(2)}/mi from each cleaner&apos;s
-              home to the job. Adjust miles or $ per person, or skip mileage entirely.
+              Mileage recommended at ${(MILEAGE_RATE_CENTS / 100).toFixed(2)}/mi from home to the
+              job. Optional pay adjustment is added on top of base cut and shows in the cleaner
+              portal as extras.
             </DialogDescription>
           </DialogHeader>
           {mileageLoading ? (
@@ -1493,7 +1521,7 @@ function BookingAssignBlock({
                         }
                         className="rounded border-slate-300"
                       />
-                      Include
+                      Mileage
                     </label>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
@@ -1513,7 +1541,7 @@ function BookingAssignBlock({
                       />
                     </div>
                     <div>
-                      <Label className="text-xs text-slate-600">Amount ($)</Label>
+                      <Label className="text-xs text-slate-600">Mileage ($)</Label>
                       <Input
                         type="number"
                         min={0}
@@ -1528,6 +1556,23 @@ function BookingAssignBlock({
                       />
                     </div>
                   </div>
+                  <div>
+                    <Label className="text-xs text-slate-600">Pay adjustment ($)</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={row.payAdjust}
+                      onChange={(e) =>
+                        updateMileageRow(row.cleanerId, { payAdjust: e.target.value })
+                      }
+                      placeholder="0.00"
+                      className="bg-white mt-1"
+                    />
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      Flat bump to this cleaner&apos;s pay for the job (optional). Leave blank to skip.
+                    </p>
+                  </div>
                 </div>
               ))}
             </div>
@@ -1539,7 +1584,7 @@ function BookingAssignBlock({
               disabled={working === "assign" || mileageLoading}
               onClick={() => confirmMileageAndAssign(false)}
             >
-              Assign without mileage
+              Assign without extras
             </Button>
             <Button
               type="button"
@@ -1553,7 +1598,7 @@ function BookingAssignBlock({
                   Assigning…
                 </>
               ) : (
-                "Confirm mileage & assign"
+                "Confirm extras & assign"
               )}
             </Button>
           </DialogFooter>
