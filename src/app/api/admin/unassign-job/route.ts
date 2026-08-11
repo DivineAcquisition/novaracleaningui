@@ -62,12 +62,13 @@ export async function POST(req: Request): Promise<NextResponse> {
       await q.then(() => undefined, () => undefined);
 
       // Mark the job open again only when nobody is left assigned.
+      // Do not .limit(1) here — we need the full remaining set for the count
+      // when a single cleaner is dropped from a multi-person crew.
       const { data: remaining } = await supabase
         .from("job_assignments")
-        .select("id")
+        .select("id, cleaner_id")
         .eq("job_id", booking.job_id)
-        .not("status", "in", "(withdrawn,cancelled,declined,expired)")
-        .limit(1);
+        .not("status", "in", "(withdrawn,cancelled,declined,expired)");
       if (!remaining || remaining.length === 0) {
         await supabase
           .from("jobs")
@@ -96,8 +97,7 @@ export async function POST(req: Request): Promise<NextResponse> {
         .from("job_assignments")
         .select("cleaner_id")
         .eq("job_id", booking.job_id)
-        .not("status", "in", "(withdrawn,cancelled,declined,expired)")
-        .limit(1);
+        .not("status", "in", "(withdrawn,cancelled,declined,expired)");
       if (keep && keep.length > 0) {
         patch.cleaner_id = keep[0].cleaner_id;
         delete patch.status; // still assigned to someone

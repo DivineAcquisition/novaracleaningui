@@ -901,6 +901,49 @@ function CleanerJobsBlock({ cleaner, onChanged }: { cleaner: CleanerRow; onChang
     }
   };
 
+  // VA/admin drop: withdraw this cleaner from the booking without touching the
+  // rest of the crew (same /api/admin/unassign-job path as Bookings → Current crew).
+  const dropFromJob = async (item: CleanerJobItem) => {
+    if (!item.bookingId) {
+      toast.error("No booking linked to this job.");
+      return;
+    }
+    const label = item.booking?.customer
+      ? `${(item.service_type || "clean").replace(/_/g, " ")} for ${item.booking.customer}`
+      : (item.service_type || "this job").replace(/_/g, " ");
+    if (
+      !confirm(
+        `Drop ${cleaner.first_name || "this cleaner"} from ${label}? It leaves their dashboard immediately; other crew on the booking stay assigned.`,
+      )
+    ) {
+      return;
+    }
+    setBusy(`${item.assignmentId}-drop`);
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Not signed in");
+      const res = await fetch("/api/admin/unassign-job", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ bookingId: item.bookingId, cleanerId: cleaner.id }),
+      });
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok || json?.error) throw new Error(json?.error || "Could not drop from job");
+      toast.success("Dropped from job — removed from their dashboard, GHL + Airtable synced");
+      await load();
+      onChanged();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not drop from job");
+    } finally {
+      setBusy(null);
+    }
+  };
+
   if (loading) {
     return <div className="py-6 flex justify-center"><RiLoader4Line className="w-5 h-5 animate-spin text-slate-400" /></div>;
   }
@@ -974,16 +1017,35 @@ function CleanerJobsBlock({ cleaner, onChanged }: { cleaner: CleanerRow; onChang
                   {j.check_in_time ? " · checked in ✓" : ""}
                 </p>
               </div>
-              {!j.check_in_time && (
-                <Button
-                  size="sm"
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                  disabled={busy !== null}
-                  onClick={() => checkIn(j)}
-                >
-                  {busy === `${j.assignmentId}-checkin` ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : <><RiLoginCircleLine className="w-4 h-4 mr-1.5" /> Start job / check in</>}
-                </Button>
-              )}
+              <div className="flex flex-wrap gap-2">
+                {!j.check_in_time && (
+                  <Button
+                    size="sm"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                    disabled={busy !== null}
+                    onClick={() => checkIn(j)}
+                  >
+                    {busy === `${j.assignmentId}-checkin` ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : <><RiLoginCircleLine className="w-4 h-4 mr-1.5" /> Start job / check in</>}
+                  </Button>
+                )}
+                {j.bookingId && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-rose-200 text-rose-700 hover:bg-rose-50"
+                    disabled={busy !== null}
+                    onClick={() => dropFromJob(j)}
+                  >
+                    {busy === `${j.assignmentId}-drop` ? (
+                      <RiLoader4Line className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <>
+                        <RiCloseCircleLine className="w-4 h-4 mr-1.5" /> Drop from job
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
               {j.bookingId && (
                 <div className="space-y-1.5">
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 flex items-center gap-1">

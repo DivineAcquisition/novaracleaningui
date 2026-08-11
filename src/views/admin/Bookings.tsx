@@ -517,6 +517,12 @@ interface RiskInfo {
   flags: string[];
 }
 
+type BookingAssignee = {
+  cleaner_id: string;
+  role: string | null;
+  status: string;
+};
+
 function BookingAssignBlock({
   booking,
   working,
@@ -531,8 +537,10 @@ function BookingAssignBlock({
   const [cleaners, setCleaners] = useState<CleanerOption[]>([]);
   const [suggestions, setSuggestions] = useState<SuggestedCleaner[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [assignees, setAssignees] = useState<BookingAssignee[]>([]);
   const [loadingCleaners, setLoadingCleaners] = useState(true);
   const [loadingSuggest, setLoadingSuggest] = useState(true);
+  const [loadingAssignees, setLoadingAssignees] = useState(true);
   const [depositBlocked, setDepositBlocked] = useState(false);
   const [risk, setRisk] = useState<Map<string, RiskInfo>>(new Map());
   // The schedule buffer blocked this assignment. Holds the explanation the
@@ -575,8 +583,14 @@ function BookingAssignBlock({
   }, [booking.id]);
 
   useEffect(() => {
+    setLoadingAssignees(true);
     if (!booking.job_id) {
-      setSelectedIds(booking.cleaner_id ? [booking.cleaner_id] : []);
+      const fallback = booking.cleaner_id
+        ? [{ cleaner_id: booking.cleaner_id, role: "Lead", status: "Assigned" }]
+        : [];
+      setAssignees(fallback);
+      setSelectedIds(fallback.map((a) => a.cleaner_id));
+      setLoadingAssignees(false);
       return;
     }
     void (async () => {
@@ -585,17 +599,20 @@ function BookingAssignBlock({
         .select("cleaner_id, role, status")
         .eq("job_id", booking.job_id)
         .in("status", ["Confirmed", "Accepted", "Assigned", "Offered"]);
-      const ids = (data || [])
+      const rows = ((data || []) as BookingAssignee[])
+        .filter((a) => a.cleaner_id)
         .slice()
-        .sort((a: any, b: any) =>
+        .sort((a, b) =>
           String(a.role || "").toLowerCase() === "lead" ? -1 : 1,
-        )
-        .map((a: any) => a.cleaner_id as string)
-        .filter(Boolean)
-        .slice(0, 3);
+        );
+      setAssignees(rows);
+      // Pre-seed the replace form with the current crew so adding one person
+      // doesn't accidentally wipe the rest on Save.
+      const ids = rows.map((a) => a.cleaner_id).slice(0, 3);
       setSelectedIds(ids.length ? ids : booking.cleaner_id ? [booking.cleaner_id] : []);
+      setLoadingAssignees(false);
     })();
-  }, [booking.id, booking.job_id, booking.cleaner_id]);
+  }, [booking.id, booking.job_id, booking.cleaner_id, booking.num_cleaners_assigned]);
 
   const toggle = (id: string) => {
     setSelectedIds((prev) => {
@@ -694,20 +711,38 @@ function BookingAssignBlock({
     }
   };
 
-  const unassign = async () => {
-    if (!confirm("Unassign all cleaners from this job? It will drop off their dashboards and the job reopens for assignment.")) return;
-    setWorking("unassign");
+  const callUnassign = async (cleanerId?: string) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error("Not signed in");
+    const res = await fetch("/api/admin/unassign-job", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify(cleanerId ? { bookingId: booking.id, cleanerId } : { bookingId: booking.id }),
+    });
+    const json = await res.json();
+    if (!res.ok || json?.error) throw new Error(json?.error || "Unassign failed");
+  };
+
+  const unassignOne = async (cleanerId: string, label: string) => {
+    if (!confirm(`Unassign ${label} from this job? It will drop off their dashboard.`)) return;
+    setWorking(`unassign-${cleanerId}`);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) throw new Error("Not signed in");
-      const res = await fetch("/api/admin/unassign-job", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({ bookingId: booking.id }),
-      });
-      const json = await res.json();
-      if (!res.ok || json?.error) throw new Error(json?.error || "Unassign failed");
-      toast.success("Cleaner(s) unassigned — removed from their dashboards, GHL + Airtable synced");
+      await callUnassign(cleanerId);
+      toast.success(`${label} unassigned — removed from their dashboard, GHL + Airtable synced`);
+      onMutated();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setWorking(null);
+    }
+  };
+
+  const unassignAll = async () => {
+    if (!confirm("Unassign all cleaners from this job? It will drop off their dashboards and the job reopens for assignment.")) return;
+    setWorking("unassign-all");
+    try {
+      await callUnassign();
+      toast.success("All cleaners unassigned — removed from their dashboards, GHL + Airtable synced");
       onMutated();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
@@ -718,210 +753,278 @@ function BookingAssignBlock({
 
   if (booking.status === "cancelled" || booking.status === "completed") return null;
 
-  const hasAssignment = Boolean(booking.cleaner_id) || (booking.num_cleaners_assigned ?? 0) > 0;
+  const hasAssignment =
+    assignees.length > 0 || Boolean(booking.cleaner_id) || (booking.num_cleaners_assigned ?? 0) > 0;
+
+  const cleanerName = (id: string) => {
+    const c = cleaners.find((x) => x.id === id);
+    return c ? `${c.first_name} ${c.last_name}` : "Cleaner";
+  };
 
   return (
-    <Card className="border-indigo-200 bg-indigo-50/20">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-1.5 text-indigo-900">
-          <RiUserSmileLine className="w-4 h-4" />
-          Assign / reassign cleaners
-        </CardTitle>
-        <CardDescription>
-          Nearby / available cleaners are ranked first. Assigning emails + texts cleaners and
-          creates a GHL task on the customer contact when linked.
-          {booking.num_cleaners_assigned
-            ? ` Currently ${booking.num_cleaners_assigned} assigned.`
-            : ""}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {!loadingSuggest && suggestions.length > 0 ? (
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold text-indigo-800 uppercase tracking-wide">
-              Suggested (nearby &amp; available)
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {suggestions.slice(0, 6).map((s) => {
-                const on = selectedIds.includes(s.id);
-                const r = risk.get(s.id);
-                const flagged = (r?.flags.length || 0) > 0;
-                // A buffer conflict is harder than a risk flag: this crew
-                // physically can't get here in time without an override.
-                const noRoom = Boolean(s.bufferConflict);
+    <div className="space-y-3">
+      {/* Current crew — unassign only. Kept separate from assign/replace so VA/admin
+          don't mix "who is on it" with "who should be on it next". */}
+      <Card className="border-rose-200 bg-rose-50/20">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm flex items-center gap-1.5 text-rose-900">
+            <RiCloseCircleLine className="w-4 h-4" />
+            Current crew
+          </CardTitle>
+          <CardDescription>
+            Unassign one cleaner or the whole crew. Dropped cleaners leave their dashboards
+            immediately; GHL + Airtable sync.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {loadingAssignees ? (
+            <Skeleton className="h-16 w-full" />
+          ) : !hasAssignment ? (
+            <p className="text-xs text-slate-500">No cleaners assigned yet.</p>
+          ) : (
+            <>
+              {assignees.length === 0 ? (
+                <p className="text-xs text-slate-500">
+                  Booking shows {booking.num_cleaners_assigned ?? 1} assigned, but no active
+                  assignment rows were found. You can still clear the crew below.
+                </p>
+              ) : (
+                <div className="space-y-1.5">
+                  {assignees.map((a) => {
+                    const name = cleanerName(a.cleaner_id);
+                    const busy = working === `unassign-${a.cleaner_id}`;
+                    return (
+                      <div
+                        key={`${a.cleaner_id}-${a.status}`}
+                        className="flex items-center gap-2 rounded-md border border-rose-100 bg-white px-3 py-2"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-slate-900 truncate">{name}</p>
+                          <p className="text-[11px] text-slate-500">
+                            {a.role || "Support"} · {a.status}
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="shrink-0 border-rose-200 text-rose-700 hover:bg-rose-50"
+                          disabled={working?.startsWith("unassign")}
+                          onClick={() => unassignOne(a.cleaner_id, name)}
+                        >
+                          {busy ? (
+                            <RiLoader4Line className="w-4 h-4 animate-spin" />
+                          ) : (
+                            "Unassign"
+                          )}
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <Button
+                onClick={unassignAll}
+                disabled={working?.startsWith("unassign")}
+                variant="outline"
+                size="sm"
+                className="w-full border-rose-300 text-rose-800 hover:bg-rose-50"
+              >
+                {working === "unassign-all" ? (
+                  <>
+                    <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />
+                    Unassigning…
+                  </>
+                ) : assignees.length > 1 ? (
+                  "Unassign entire crew"
+                ) : (
+                  "Unassign & reopen job"
+                )}
+              </Button>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="border-indigo-200 bg-indigo-50/20">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm flex items-center gap-1.5 text-indigo-900">
+            <RiUserSmileLine className="w-4 h-4" />
+            Assign / replace crew
+          </CardTitle>
+          <CardDescription>
+            Nearby / available cleaners are ranked first. Saving replaces the crew with your
+            selection, emails + texts them, and creates a GHL task when the customer is linked.
+            Use Current crew above to drop someone without replacing the rest.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {!loadingSuggest && suggestions.length > 0 ? (
+            <div className="space-y-1">
+              <p className="text-[11px] font-semibold text-indigo-800 uppercase tracking-wide">
+                Suggested (nearby &amp; available)
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {suggestions.slice(0, 6).map((s) => {
+                  const on = selectedIds.includes(s.id);
+                  const r = risk.get(s.id);
+                  const flagged = (r?.flags.length || 0) > 0;
+                  // A buffer conflict is harder than a risk flag: this crew
+                  // physically can't get here in time without an override.
+                  const noRoom = Boolean(s.bufferConflict);
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => toggle(s.id)}
+                      title={
+                        [s.bufferConflict, flagged ? r!.flags.join("\n") : null]
+                          .filter(Boolean)
+                          .join("\n") || undefined
+                      }
+                      className={cn(
+                        "text-xs px-2 py-1 rounded-full border transition-colors",
+                        on
+                          ? "bg-indigo-600 text-white border-indigo-600"
+                          : noRoom
+                            ? "bg-orange-50 text-orange-900 border-orange-300 hover:bg-orange-100"
+                            : flagged
+                              ? "bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100"
+                              : "bg-white text-indigo-900 border-indigo-200 hover:bg-indigo-50",
+                      )}
+                    >
+                      {noRoom ? "⏱ " : flagged ? "⚠ " : ""}
+                      {s.first_name} {s.last_name?.[0]}.
+                      {r?.overall != null ? ` · ${Math.round(r.overall)}` : ""}
+                      {s.distance_miles != null ? ` · ${s.distance_miles} mi` : ""}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+          {/* Risk layer: advisory only — flags + reasons, human decides. */}
+          {selectedIds.some((id) => (risk.get(id)?.flags.length || 0) > 0) && (
+            <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 space-y-1">
+              <p className="font-semibold">Risk flags on your selection (advisory — you decide):</p>
+              {selectedIds.map((id) => {
+                const r = risk.get(id);
+                if (!r || r.flags.length === 0) return null;
+                const c = cleaners.find((x) => x.id === id);
                 return (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => toggle(s.id)}
-                    title={
-                      [s.bufferConflict, flagged ? r!.flags.join("\n") : null]
-                        .filter(Boolean)
-                        .join("\n") || undefined
-                    }
-                    className={cn(
-                      "text-xs px-2 py-1 rounded-full border transition-colors",
-                      on
-                        ? "bg-indigo-600 text-white border-indigo-600"
-                        : noRoom
-                          ? "bg-orange-50 text-orange-900 border-orange-300 hover:bg-orange-100"
-                          : flagged
-                            ? "bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100"
-                            : "bg-white text-indigo-900 border-indigo-200 hover:bg-indigo-50",
-                    )}
-                  >
-                    {noRoom ? "⏱ " : flagged ? "⚠ " : ""}
-                    {s.first_name} {s.last_name?.[0]}.
-                    {r?.overall != null ? ` · ${Math.round(r.overall)}` : ""}
-                    {s.distance_miles != null ? ` · ${s.distance_miles} mi` : ""}
-                  </button>
+                  <div key={id}>
+                    <span className="font-medium">{c ? `${c.first_name} ${c.last_name}` : "Cleaner"}:</span>{" "}
+                    {r.flags.join(" · ")}
+                  </div>
                 );
               })}
             </div>
-          </div>
-        ) : null}
-        {/* Risk layer: advisory only — flags + reasons, human decides. */}
-        {selectedIds.some((id) => (risk.get(id)?.flags.length || 0) > 0) && (
-          <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 space-y-1">
-            <p className="font-semibold">Risk flags on your selection (advisory — you decide):</p>
-            {selectedIds.map((id) => {
-              const r = risk.get(id);
-              if (!r || r.flags.length === 0) return null;
-              const c = cleaners.find((x) => x.id === id);
-              return (
-                <div key={id}>
-                  <span className="font-medium">{c ? `${c.first_name} ${c.last_name}` : "Cleaner"}:</span>{" "}
-                  {r.flags.join(" · ")}
-                </div>
-              );
-            })}
-          </div>
-        )}
-        {loadingCleaners ? (
-          <Skeleton className="h-24 w-full" />
-        ) : (
-          <div className="max-h-40 overflow-y-auto space-y-1 border border-slate-200 rounded-md bg-white p-2">
-            {cleaners.map((c) => {
-              const checked = selectedIds.includes(c.id);
-              return (
-                <label
-                  key={c.id}
-                  className={cn(
-                    "flex items-center gap-2 text-sm px-2 py-1.5 rounded cursor-pointer",
-                    checked ? "bg-indigo-50" : "hover:bg-slate-50",
-                  )}
-                >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggle(c.id)}
-                    className="rounded border-slate-300"
-                  />
-                  <span className="font-medium text-slate-900">
-                    {c.first_name} {c.last_name}
-                  </span>
-                  <span className="text-xs text-slate-500 ml-auto">{c.phone || ""}</span>
-                </label>
-              );
-            })}
-          </div>
-        )}
-        {depositBlocked && (
-          <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 space-y-2">
-            <p className="font-medium">
-              Deposit not received yet — this customer hasn&apos;t paid. Assigning a cleaner is
-              blocked until the deposit clears.
-            </p>
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full border-amber-400 text-amber-900 hover:bg-amber-100"
-              onClick={() => assign(true)}
-              disabled={working === "assign"}
-            >
-              Assign anyway (override — cash / comp job)
-            </Button>
-          </div>
-        )}
-        {bufferBlock && (
-          <div className="rounded-md border border-orange-300 bg-orange-50 px-3 py-2 text-xs text-orange-900 space-y-2">
-            <p className="font-medium">{bufferBlock}</p>
-            <p className="text-orange-800/90">
-              Pick a different crew or time, or force it with a reason. Overrides stay on the
-              booking — if this turns into a cascade later, this is where it started.
-            </p>
-            <Input
-              value={bufferReason}
-              onChange={(e) => setBufferReason(e.target.value)}
-              placeholder="Why is this the right call? (required, logged)"
-              className="bg-white text-sm"
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full border-orange-400 text-orange-900 hover:bg-orange-100"
-              onClick={() => assign(false, bufferReason.trim())}
-              disabled={working === "assign" || bufferReason.trim().length < 8}
-            >
-              Assign inside the buffer anyway (logged override)
-            </Button>
-          </div>
-        )}
-        <Button
-          onClick={() => assign(false)}
-          disabled={working === "assign"}
-          className="w-full bg-indigo-600 hover:bg-indigo-700 text-white"
-        >
-          {working === "assign" ? (
-            <>
-              <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />
-              Saving &amp; syncing GHL…
-            </>
-          ) : (
-            "Save, notify cleaners & sync GHL"
           )}
-        </Button>
-        <Button
-          onClick={sendOffers}
-          disabled={working === "send_offers"}
-          variant="outline"
-          className="w-full border-indigo-300 text-indigo-800 hover:bg-indigo-50"
-        >
-          {working === "send_offers" ? (
-            <>
-              <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />
-              Sending offers…
-            </>
+          {loadingCleaners ? (
+            <Skeleton className="h-24 w-full" />
           ) : (
-            "Send SMS offers to best-matched cleaners"
+            <div className="max-h-40 overflow-y-auto space-y-1 border border-slate-200 rounded-md bg-white p-2">
+              {cleaners.map((c) => {
+                const checked = selectedIds.includes(c.id);
+                return (
+                  <label
+                    key={c.id}
+                    className={cn(
+                      "flex items-center gap-2 text-sm px-2 py-1.5 rounded cursor-pointer",
+                      checked ? "bg-indigo-50" : "hover:bg-slate-50",
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggle(c.id)}
+                      className="rounded border-slate-300"
+                    />
+                    <span className="font-medium text-slate-900">
+                      {c.first_name} {c.last_name}
+                    </span>
+                    <span className="text-xs text-slate-500 ml-auto">{c.phone || ""}</span>
+                  </label>
+                );
+              })}
+            </div>
           )}
-        </Button>
-        <p className="text-[11px] text-slate-500 -mt-1">
-          Offers only ever go out from this button or the Dispatch page — nothing is texted to
-          contractors automatically.
-        </p>
-        {hasAssignment && (
+          {depositBlocked && (
+            <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 space-y-2">
+              <p className="font-medium">
+                Deposit not received yet — this customer hasn&apos;t paid. Assigning a cleaner is
+                blocked until the deposit clears.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full border-amber-400 text-amber-900 hover:bg-amber-100"
+                onClick={() => assign(true)}
+                disabled={working === "assign"}
+              >
+                Assign anyway (override — cash / comp job)
+              </Button>
+            </div>
+          )}
+          {bufferBlock && (
+            <div className="rounded-md border border-orange-300 bg-orange-50 px-3 py-2 text-xs text-orange-900 space-y-2">
+              <p className="font-medium">{bufferBlock}</p>
+              <p className="text-orange-800/90">
+                Pick a different crew or time, or force it with a reason. Overrides stay on the
+                booking — if this turns into a cascade later, this is where it started.
+              </p>
+              <Input
+                value={bufferReason}
+                onChange={(e) => setBufferReason(e.target.value)}
+                placeholder="Why is this the right call? (required, logged)"
+                className="bg-white text-sm"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full border-orange-400 text-orange-900 hover:bg-orange-100"
+                onClick={() => assign(false, bufferReason.trim())}
+                disabled={working === "assign" || bufferReason.trim().length < 8}
+              >
+                Assign inside the buffer anyway (logged override)
+              </Button>
+            </div>
+          )}
           <Button
-            onClick={unassign}
-            disabled={working === "unassign"}
-            variant="outline"
-            className="w-full border-rose-200 text-rose-700 hover:bg-rose-50"
+            onClick={() => assign(false)}
+            disabled={working === "assign"}
+            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white"
           >
-            {working === "unassign" ? (
+            {working === "assign" ? (
               <>
                 <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />
-                Unassigning…
+                Saving &amp; syncing GHL…
               </>
             ) : (
-              <>
-                <RiCloseCircleLine className="w-4 h-4 mr-2" />
-                Unassign cleaner(s) — remove from their dashboard
-              </>
+              "Save, notify cleaners & sync GHL"
             )}
           </Button>
-        )}
-      </CardContent>
-    </Card>
+          <Button
+            onClick={sendOffers}
+            disabled={working === "send_offers"}
+            variant="outline"
+            className="w-full border-indigo-300 text-indigo-800 hover:bg-indigo-50"
+          >
+            {working === "send_offers" ? (
+              <>
+                <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />
+                Sending offers…
+              </>
+            ) : (
+              "Send SMS offers to best-matched cleaners"
+            )}
+          </Button>
+          <p className="text-[11px] text-slate-500 -mt-1">
+            Offers only ever go out from this button or the Dispatch page — nothing is texted to
+            contractors automatically.
+          </p>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
