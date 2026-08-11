@@ -10,6 +10,10 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import {
+  confirmationSmsBalanceTail,
+  remainingDueAfterUpfrontCents,
+} from "../_shared/booking-balance.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -73,9 +77,8 @@ serve(async (req) => {
     const finalCents = Number(b.final_charge_cents || 0);
     const depositCents = Number(b.deposit_cents || 0);
     const fullDiscount = Number(b.full_payment_discount || 0);
-    const balanceAfterDeposit = b.payment_option === "full"
-      ? Math.max(0, totalCents - fullDiscount)
-      : Math.max(0, totalCents - depositCents);
+    // Never treat preauth/deposit as "paid in full" — use real remaining.
+    const balanceAfterDeposit = remainingDueAfterUpfrontCents(b);
     const cl = checklistLink(b.service_type);
 
     const callEmail = (type: string, data: Record<string, unknown>) =>
@@ -114,15 +117,16 @@ serve(async (req) => {
         firstName: b.first_name, lastName: b.last_name, bookingId: b.id,
         serviceDate: b.service_date, timeSlot: b.time_slot, serviceType: b.service_type,
         totalAmount: b.payment_option === "full" ? Math.max(0, totalCents - fullDiscount) : depositCents,
-        balanceAmount: b.payment_option === "deposit" ? Math.max(0, totalCents - depositCents) : 0,
+        balanceAmount: balanceAfterDeposit,
         paymentOption: b.payment_option, checklistLink: cl,
       });
     }
 
     // 3. Customer confirmation SMS (GHL primary, Telnyx fallback).
+    // "Paid in full" only when remainingDueAfterUpfrontCents is 0 — preauth
+    // deposits must say Remaining $X, not paid in full.
     if (settled && b.phone) {
-      const amountDue = b.payment_option === "deposit" ? Math.max(0, totalCents - depositCents) : 0;
-      const tail = amountDue > 0 ? ` Remaining $${(amountDue / 100).toFixed(2)} due after service.` : " Paid in full - see you soon!";
+      const tail = confirmationSmsBalanceTail(b, "hyphen");
       const msg = `Novara Cleaning: Booking confirmed for ${fmtDate(b.service_date)}${b.time_slot ? ` (${b.time_slot})` : ""}.${tail}`;
       const smsOk = await fetch(`${url}/functions/v1/send-ghl-sms`, {
         method: "POST",
