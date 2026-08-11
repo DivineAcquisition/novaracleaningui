@@ -654,7 +654,14 @@ function BookingAssignBlock({
       .from("cleaners")
       .select("id, first_name, last_name, pay_tier, pay_percentage")
       .in("id", ids);
-    const byId = new Map((data || []).map((c: CleanerOption) => [c.id, c]));
+    type PayProfile = {
+      id: string;
+      first_name: string | null;
+      last_name: string | null;
+      pay_tier: string | null;
+      pay_percentage: number | null;
+    };
+    const byId = new Map(((data || []) as PayProfile[]).map((c) => [c.id, c]));
     return rows.map((r) => {
       const c = byId.get(r.cleaner_id);
       return c
@@ -685,8 +692,8 @@ function BookingAssignBlock({
       return;
     }
     void (async () => {
-      const { data } = await supabase
-        .from("job_assignments")
+      // Cast: generated types lag columns like crew_size_snapshot on job_assignments.
+      const { data } = await (supabase.from as any)("job_assignments")
         .select("id, cleaner_id, role, status, estimated_pay_cents, pay_percentage_snapshot, crew_size_snapshot")
         .eq("job_id", booking.job_id)
         .in("status", ["Confirmed", "Accepted", "Assigned", "Offered", "In Progress"]);
