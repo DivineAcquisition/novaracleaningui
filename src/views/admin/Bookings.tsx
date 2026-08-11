@@ -522,6 +522,24 @@ function crewMoney(cents?: number | null) {
   return (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
 }
 
+/** IRS-standard default used by Extra Pay / payroll mileage ($0.70/mi). */
+const MILEAGE_RATE_CENTS = 70;
+
+type MileageDraftRow = {
+  cleanerId: string;
+  name: string;
+  miles: string;
+  amount: string;
+  recommendedMiles: number | null;
+  recommendedAmountDollars: number | null;
+  include: boolean;
+};
+
+function recommendedMileageDollars(miles: number | null | undefined): number | null {
+  if (miles == null || !Number.isFinite(miles) || miles <= 0) return null;
+  return Math.round(miles * MILEAGE_RATE_CENTS) / 100;
+}
+
 interface SuggestedCleaner {
   id: string;
   first_name: string | null;
@@ -584,6 +602,13 @@ function BookingAssignBlock({
   const [bufferBlock, setBufferBlock] = useState<string | null>(null);
   const [bufferReason, setBufferReason] = useState("");
   const [checkedIn, setCheckedIn] = useState(Boolean(booking.check_in_time));
+  const [mileageOpen, setMileageOpen] = useState(false);
+  const [mileageRows, setMileageRows] = useState<MileageDraftRow[]>([]);
+  const [mileageLoading, setMileageLoading] = useState(false);
+  const [pendingAssign, setPendingAssign] = useState<{
+    allowUnpaid: boolean;
+    bufferOverrideReason?: string;
+  } | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -691,7 +716,119 @@ function BookingAssignBlock({
     });
   };
 
-  const assign = async (allowUnpaid = false, bufferOverrideReason?: string) => {
+  const buildMileageRows = (distanceById: Map<string, number | null>): MileageDraftRow[] =>
+    selectedIds.map((id) => {
+      const c = cleaners.find((x) => x.id === id);
+      const name = c ? `${c.first_name || ""} ${c.last_name || ""}`.trim() || "Cleaner" : "Cleaner";
+      const miles = distanceById.get(id) ?? null;
+      const recommended = recommendedMileageDollars(miles);
+      return {
+        cleanerId: id,
+        name,
+        miles: miles != null ? String(miles) : "",
+        amount: recommended != null ? recommended.toFixed(2) : "",
+        recommendedMiles: miles,
+        recommendedAmountDollars: recommended,
+        include: miles != null && miles > 0,
+      };
+    });
+
+  /** Open mileage popup before assign — recommended $0.70/mi from distance. */
+  const openMileageThenAssign = async (
+    allowUnpaid = false,
+    bufferOverrideReason?: string,
+  ) => {
+    if (selectedIds.length === 0) {
+      toast.error("Pick at least one cleaner from the directory.");
+      return;
+    }
+    setPendingAssign({ allowUnpaid, bufferOverrideReason });
+    setMileageLoading(true);
+    setMileageOpen(true);
+    try {
+      // Refresh distances for a wider set so directory picks (not just top
+      // suggestions) still get a recommended mileage when possible.
+      const distanceById = new Map<string, number | null>();
+      for (const s of suggestions) {
+        if (s.distance_miles != null) distanceById.set(s.id, Number(s.distance_miles));
+      }
+      const { data, error } = await supabase.functions.invoke("admin-booking-assign", {
+        body: { action: "suggest_cleaners", bookingId: booking.id, limit: 80 },
+      });
+      if (!error) {
+        const rows = (data as { suggestions?: SuggestedCleaner[] })?.suggestions || [];
+        for (const s of rows) {
+          if (s.distance_miles != null) distanceById.set(s.id, Number(s.distance_miles));
+        }
+      }
+      setMileageRows(buildMileageRows(distanceById));
+    } catch {
+      setMileageRows(buildMileageRows(new Map()));
+    } finally {
+      setMileageLoading(false);
+    }
+  };
+
+  const updateMileageRow = (
+    cleanerId: string,
+    patch: Partial<Pick<MileageDraftRow, "miles" | "amount" | "include">>,
+  ) => {
+    setMileageRows((prev) =>
+      prev.map((r) => {
+        if (r.cleanerId !== cleanerId) return r;
+        const next = { ...r, ...patch };
+        // Editing miles recalculates the recommended $ (admin can still
+        // override amount afterward).
+        if (patch.miles != null && patch.amount == null) {
+          const miles = parseFloat(patch.miles);
+          const rec = recommendedMileageDollars(Number.isFinite(miles) ? miles : null);
+          if (rec != null) next.amount = rec.toFixed(2);
+        }
+        return next;
+      }),
+    );
+  };
+
+  const recordAssignMileage = async (rows: MileageDraftRow[]) => {
+    let paid = 0;
+    let failed = 0;
+    for (const row of rows) {
+      if (!row.include) continue;
+      const miles = Math.max(0, parseFloat(row.miles) || 0);
+      const amountCents = Math.max(0, Math.round((parseFloat(row.amount) || 0) * 100));
+      if (amountCents <= 0) continue;
+      // admin-extra-pay stores miles × rate; derive rate so customized $ sticks.
+      const milesForApi = miles > 0 ? miles : 1;
+      const rateCents =
+        miles > 0 ? Math.max(1, Math.round(amountCents / miles)) : amountCents;
+      try {
+        const { data, error } = await supabase.functions.invoke("admin-extra-pay", {
+          body: {
+            action: "pay",
+            cleanerId: row.cleanerId,
+            bookingId: booking.id,
+            mileageMiles: milesForApi,
+            mileageRateCents: rateCents,
+            note: "Assign-time mileage",
+          },
+        });
+        if (error || (data as { error?: string })?.error) {
+          failed += 1;
+        } else {
+          paid += 1;
+        }
+      } catch {
+        failed += 1;
+      }
+    }
+    return { paid, failed };
+  };
+
+  const assign = async (
+    allowUnpaid = false,
+    bufferOverrideReason?: string,
+    mileage: MileageDraftRow[] | null = null,
+  ) => {
     if (selectedIds.length === 0) {
       toast.error("Pick at least one cleaner from the directory.");
       return;
@@ -723,6 +860,8 @@ function BookingAssignBlock({
       }
       if (payload?.code === "deposit_unpaid") {
         setDepositBlocked(true);
+        // Keep mileage draft so override can reuse it.
+        if (mileage) setMileageRows(mileage);
         toast.error(
           "Customer hasn't paid the deposit yet — assignment blocked. Use the override below for cash/comp jobs.",
         );
@@ -730,6 +869,7 @@ function BookingAssignBlock({
       }
       if (payload?.code === "buffer_conflict") {
         setBufferBlock(payload.error || "This start time leaves no buffer after the crew's earlier job.");
+        if (mileage) setMileageRows(mileage);
         toast.error("No buffer after this crew's earlier job — assignment blocked.");
         return;
       }
@@ -738,11 +878,20 @@ function BookingAssignBlock({
       setDepositBlocked(false);
       setBufferBlock(null);
       setBufferReason("");
+      setPendingAssign(null);
+
+      let mileageNote = "";
+      if (mileage && mileage.some((r) => r.include && (parseFloat(r.amount) || 0) > 0)) {
+        const { paid, failed } = await recordAssignMileage(mileage);
+        if (paid > 0) mileageNote = ` · mileage recorded for ${paid}`;
+        if (failed > 0) mileageNote += ` · ${failed} mileage failed`;
+      }
+
       const notes = (data as { notifications?: Array<{ email?: boolean; sms?: boolean }> })?.notifications;
       const emailed = notes?.filter((n) => n.email).length ?? 0;
       const texted = notes?.filter((n) => n.sms).length ?? 0;
       toast.success(
-        `Assigned · GHL synced · ${emailed} email · ${texted} SMS · GHL task(s) created when contact is linked`,
+        `Assigned · GHL synced · ${emailed} email · ${texted} SMS · GHL task(s) created when contact is linked${mileageNote}`,
       );
       onMutated();
     } catch (err) {
@@ -750,6 +899,12 @@ function BookingAssignBlock({
     } finally {
       setWorking(null);
     }
+  };
+
+  const confirmMileageAndAssign = async (withMileage: boolean) => {
+    const opts = pendingAssign || { allowUnpaid: false };
+    setMileageOpen(false);
+    await assign(opts.allowUnpaid, opts.bufferOverrideReason, withMileage ? mileageRows : []);
   };
 
   // Admin-approved offer blast: scores nearby cleaners and texts them the
@@ -1220,7 +1375,7 @@ function BookingAssignBlock({
                 variant="outline"
                 size="sm"
                 className="w-full border-amber-400 text-amber-900 hover:bg-amber-100"
-                onClick={() => assign(true)}
+                onClick={() => openMileageThenAssign(true)}
                 disabled={working === "assign"}
               >
                 Assign anyway (override — cash / comp job)
@@ -1244,7 +1399,7 @@ function BookingAssignBlock({
                 variant="outline"
                 size="sm"
                 className="w-full border-orange-400 text-orange-900 hover:bg-orange-100"
-                onClick={() => assign(false, bufferReason.trim())}
+                onClick={() => openMileageThenAssign(false, bufferReason.trim())}
                 disabled={working === "assign" || bufferReason.trim().length < 8}
               >
                 Assign inside the buffer anyway (logged override)
@@ -1252,7 +1407,7 @@ function BookingAssignBlock({
             </div>
           )}
           <Button
-            onClick={() => assign(false)}
+            onClick={() => openMileageThenAssign(false)}
             disabled={working === "assign"}
             className="w-full bg-indigo-600 hover:bg-indigo-700 text-white"
           >
@@ -1286,6 +1441,117 @@ function BookingAssignBlock({
           </p>
         </CardContent>
       </Card>
+
+      <Dialog
+        open={mileageOpen}
+        onOpenChange={(open) => {
+          setMileageOpen(open);
+          if (!open) setPendingAssign(null);
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Mileage for this assignment</DialogTitle>
+            <DialogDescription>
+              Recommended at ${(MILEAGE_RATE_CENTS / 100).toFixed(2)}/mi from each cleaner&apos;s
+              home to the job. Adjust miles or $ per person, or skip mileage entirely.
+            </DialogDescription>
+          </DialogHeader>
+          {mileageLoading ? (
+            <div className="py-8 flex justify-center">
+              <RiLoader4Line className="w-5 h-5 animate-spin text-slate-400" />
+            </div>
+          ) : (
+            <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
+              {mileageRows.map((row) => (
+                <div
+                  key={row.cleanerId}
+                  className="rounded-md border border-slate-200 bg-slate-50/60 p-3 space-y-2"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-900 truncate">{row.name}</p>
+                      <p className="text-[11px] text-slate-500">
+                        {row.recommendedMiles != null
+                          ? `Recommended ${row.recommendedMiles} mi · $${(row.recommendedAmountDollars ?? 0).toFixed(2)}`
+                          : "No distance on file — enter miles or $ manually"}
+                      </p>
+                    </div>
+                    <label className="flex items-center gap-1.5 text-xs text-slate-600 shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={row.include}
+                        onChange={(e) =>
+                          updateMileageRow(row.cleanerId, { include: e.target.checked })
+                        }
+                        className="rounded border-slate-300"
+                      />
+                      Include
+                    </label>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-xs text-slate-600">Miles</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        step="0.1"
+                        value={row.miles}
+                        disabled={!row.include}
+                        onChange={(e) =>
+                          updateMileageRow(row.cleanerId, { miles: e.target.value })
+                        }
+                        placeholder="0"
+                        className="bg-white mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-slate-600">Amount ($)</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={row.amount}
+                        disabled={!row.include}
+                        onChange={(e) =>
+                          updateMileageRow(row.cleanerId, { amount: e.target.value })
+                        }
+                        placeholder="0.00"
+                        className="bg-white mt-1"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <DialogFooter className="gap-2 sm:gap-2 flex-col sm:flex-row">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={working === "assign" || mileageLoading}
+              onClick={() => confirmMileageAndAssign(false)}
+            >
+              Assign without mileage
+            </Button>
+            <Button
+              type="button"
+              className="bg-indigo-600 hover:bg-indigo-700 text-white"
+              disabled={working === "assign" || mileageLoading}
+              onClick={() => confirmMileageAndAssign(true)}
+            >
+              {working === "assign" ? (
+                <>
+                  <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />
+                  Assigning…
+                </>
+              ) : (
+                "Confirm mileage & assign"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
