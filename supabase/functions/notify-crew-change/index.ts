@@ -156,6 +156,29 @@ serve(async (req) => {
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
+
+      // Admin Unassign / Drop from job write cleaner.withdrawn_sms_suppressed
+      // before flipping status to Withdrawn. Those paths are silent by design —
+      // only real reassignments (replace) should text "office reassigned it".
+      if (booking?.id) {
+        const since = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+        const { data: suppressed } = await admin
+          .from("events")
+          .select("id, cleaner_id, data")
+          .eq("event_type", "cleaner.withdrawn_sms_suppressed")
+          .eq("booking_id", booking.id)
+          .gte("created_at", since)
+          .limit(20);
+        const hit = (suppressed || []).some((e: {
+          cleaner_id?: string | null;
+          data?: { cleanerId?: string | null } | null;
+        }) => {
+          const cid = e.cleaner_id || e.data?.cleanerId || null;
+          return !cid || cid === assignment.cleaner_id;
+        });
+        if (hit) return json({ ok: true, skipped: "admin_unassign_silent" });
+      }
+
       const { data: cleaner } = await admin
         .from("cleaners").select("phone, first_name").eq("id", assignment.cleaner_id).maybeSingle();
       if (!cleaner?.phone) return json({ ok: true, skipped: "no_phone" });

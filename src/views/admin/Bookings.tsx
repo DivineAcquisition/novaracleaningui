@@ -34,7 +34,10 @@ import {
   RiListCheck2,
   RiArrowRightSLine,
   RiSubtractLine,
+  RiUserStarLine,
+  RiLoginCircleLine,
 } from "@remixicon/react";
+import { useAdminRole } from "@/hooks/use-admin-role";
 import imageCompression from "browser-image-compression";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -124,6 +127,7 @@ interface BookingRow {
   access_notes?: string | null;
   frequency?: string | null;
   checklist?: ChecklistSummary | null;
+  check_in_time?: string | null;
 }
 
 interface ScopeAdjustmentRow {
@@ -494,6 +498,28 @@ interface CleanerOption {
   last_name: string | null;
   phone: string | null;
   status: string | null;
+  pay_tier?: string | null;
+  pay_percentage?: number | null;
+}
+
+const PAY_TIER_LADDER = [
+  { tier: "foundation", pct: 35, label: "Foundation" },
+  { tier: "proven", pct: 40, label: "Proven" },
+  { tier: "elite", pct: 45, label: "Elite" },
+] as const;
+
+function nextPayTier(current: string | null | undefined) {
+  const raw = String(current || "foundation").toLowerCase();
+  const idx = Math.max(0, PAY_TIER_LADDER.findIndex((t) => t.tier === raw));
+  return {
+    current: PAY_TIER_LADDER[idx],
+    next: PAY_TIER_LADDER[idx + 1] ?? null,
+  };
+}
+
+function crewMoney(cents?: number | null) {
+  if (cents == null) return null;
+  return (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
 }
 
 interface SuggestedCleaner {
@@ -518,9 +544,17 @@ interface RiskInfo {
 }
 
 type BookingAssignee = {
+  id?: string | null;
   cleaner_id: string;
   role: string | null;
   status: string;
+  estimated_pay_cents?: number | null;
+  pay_percentage_snapshot?: number | null;
+  crew_size_snapshot?: number | null;
+  pay_tier?: string | null;
+  pay_percentage?: number | null;
+  first_name?: string | null;
+  last_name?: string | null;
 };
 
 function BookingAssignBlock({
@@ -534,6 +568,7 @@ function BookingAssignBlock({
   setWorking: (v: string | null) => void;
   onMutated: () => void;
 }) {
+  const { isAdmin } = useAdminRole();
   const [cleaners, setCleaners] = useState<CleanerOption[]>([]);
   const [suggestions, setSuggestions] = useState<SuggestedCleaner[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -548,6 +583,7 @@ function BookingAssignBlock({
   // admin types to force it — an override is only ever an explicit, logged act.
   const [bufferBlock, setBufferBlock] = useState<string | null>(null);
   const [bufferReason, setBufferReason] = useState("");
+  const [checkedIn, setCheckedIn] = useState(Boolean(booking.check_in_time));
 
   useEffect(() => {
     void (async () => {
@@ -556,7 +592,7 @@ function BookingAssignBlock({
       const [dir, sug, rsk] = await Promise.all([
         supabase
           .from("cleaners")
-          .select("id, first_name, last_name, phone, status")
+          .select("id, first_name, last_name, phone, status, pay_tier, pay_percentage")
           .eq("status", "active")
           .eq("approved", true)
           .order("last_name"),
@@ -583,29 +619,59 @@ function BookingAssignBlock({
   }, [booking.id]);
 
   useEffect(() => {
+    setCheckedIn(Boolean(booking.check_in_time));
+  }, [booking.check_in_time]);
+
+  const enrichAssignees = async (rows: BookingAssignee[]) => {
+    const ids = [...new Set(rows.map((r) => r.cleaner_id).filter(Boolean))];
+    if (ids.length === 0) return rows;
+    const { data } = await supabase
+      .from("cleaners")
+      .select("id, first_name, last_name, pay_tier, pay_percentage")
+      .in("id", ids);
+    const byId = new Map((data || []).map((c: CleanerOption) => [c.id, c]));
+    return rows.map((r) => {
+      const c = byId.get(r.cleaner_id);
+      return c
+        ? {
+            ...r,
+            first_name: c.first_name,
+            last_name: c.last_name,
+            pay_tier: c.pay_tier,
+            pay_percentage: c.pay_percentage,
+          }
+        : r;
+    });
+  };
+
+  useEffect(() => {
     setLoadingAssignees(true);
     if (!booking.job_id) {
-      const fallback = booking.cleaner_id
-        ? [{ cleaner_id: booking.cleaner_id, role: "Lead", status: "Assigned" }]
-        : [];
-      setAssignees(fallback);
-      setSelectedIds(fallback.map((a) => a.cleaner_id));
-      setLoadingAssignees(false);
+      void (async () => {
+        const fallback = booking.cleaner_id
+          ? await enrichAssignees([
+              { cleaner_id: booking.cleaner_id, role: "Lead", status: "Assigned" },
+            ])
+          : [];
+        setAssignees(fallback);
+        setSelectedIds(fallback.map((a) => a.cleaner_id));
+        setLoadingAssignees(false);
+      })();
       return;
     }
     void (async () => {
       const { data } = await supabase
         .from("job_assignments")
-        .select("cleaner_id, role, status")
+        .select("id, cleaner_id, role, status, estimated_pay_cents, pay_percentage_snapshot, crew_size_snapshot")
         .eq("job_id", booking.job_id)
-        .in("status", ["Confirmed", "Accepted", "Assigned", "Offered"]);
+        .in("status", ["Confirmed", "Accepted", "Assigned", "Offered", "In Progress"]);
       const rows = ((data || []) as BookingAssignee[])
         .filter((a) => a.cleaner_id)
         .slice()
         .sort((a, b) =>
           String(a.role || "").toLowerCase() === "lead" ? -1 : 1,
         );
-      setAssignees(rows);
+      setAssignees(await enrichAssignees(rows));
       // Pre-seed the replace form with the current crew so adding one person
       // doesn't accidentally wipe the rest on Save.
       const ids = rows.map((a) => a.cleaner_id).slice(0, 3);
@@ -711,12 +777,19 @@ function BookingAssignBlock({
     }
   };
 
-  const callUnassign = async (cleanerId?: string) => {
+  const authHeaders = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) throw new Error("Not signed in");
+    return {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${session.access_token}`,
+    };
+  };
+
+  const callUnassign = async (cleanerId?: string) => {
     const res = await fetch("/api/admin/unassign-job", {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+      headers: await authHeaders(),
       body: JSON.stringify(cleanerId ? { bookingId: booking.id, cleanerId } : { bookingId: booking.id }),
     });
     const json = await res.json();
@@ -724,11 +797,11 @@ function BookingAssignBlock({
   };
 
   const unassignOne = async (cleanerId: string, label: string) => {
-    if (!confirm(`Unassign ${label} from this job? It will drop off their dashboard.`)) return;
+    if (!confirm(`Unassign ${label} from this job? It will drop off their dashboard. No SMS is sent.`)) return;
     setWorking(`unassign-${cleanerId}`);
     try {
       await callUnassign(cleanerId);
-      toast.success(`${label} unassigned — removed from their dashboard, GHL + Airtable synced`);
+      toast.success(`${label} unassigned — removed from their dashboard (no SMS)`);
       onMutated();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
@@ -738,12 +811,103 @@ function BookingAssignBlock({
   };
 
   const unassignAll = async () => {
-    if (!confirm("Unassign all cleaners from this job? It will drop off their dashboards and the job reopens for assignment.")) return;
+    if (!confirm("Unassign all cleaners from this job? It will drop off their dashboards and the job reopens for assignment. No SMS is sent.")) return;
     setWorking("unassign-all");
     try {
       await callUnassign();
-      toast.success("All cleaners unassigned — removed from their dashboards, GHL + Airtable synced");
+      toast.success("All cleaners unassigned — dashboards cleared (no SMS)");
       onMutated();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setWorking(null);
+    }
+  };
+
+  const setLead = async (cleanerId: string, label: string) => {
+    if (!confirm(`Make ${label} the lead on this job?`)) return;
+    setWorking(`lead-${cleanerId}`);
+    try {
+      const res = await fetch("/api/admin/booking-crew", {
+        method: "POST",
+        headers: await authHeaders(),
+        body: JSON.stringify({ action: "set_lead", bookingId: booking.id, cleanerId }),
+      });
+      const json = await res.json();
+      if (!res.ok || json?.error) throw new Error(json?.error || "Could not set lead");
+      toast.success(`${label} is now lead`);
+      onMutated();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setWorking(null);
+    }
+  };
+
+  const increasePayoutTier = async (a: BookingAssignee, label: string) => {
+    const { current, next } = nextPayTier(a.pay_tier);
+    if (!next) {
+      toast.info(`${label} is already at Elite.`);
+      return;
+    }
+    if (
+      !confirm(
+        `Increase ${label}'s payout tier from ${current.label} (${a.pay_percentage ?? current.pct}%) to ${next.label} (${next.pct}%)?\n\nThey get an email about the raise. This job's locked pay snapshot stays until you re-assign or recalc; future jobs use the new tier.`,
+      )
+    ) {
+      return;
+    }
+    setWorking(`tier-${a.cleaner_id}`);
+    try {
+      const { data, error } = await supabase.functions.invoke("cleaner-admin-action", {
+        body: { action: "advance_pay_tier", cleanerId: a.cleaner_id },
+      });
+      if (error) throw error;
+      if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+      toast.success(`${label} → ${next.label} (${next.pct}%)`);
+      onMutated();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setWorking(null);
+    }
+  };
+
+  const checkInAssignee = async (a: BookingAssignee, label: string) => {
+    if (!a.id) {
+      toast.error("No assignment row for check-in — try re-assigning first.");
+      return;
+    }
+    if (!confirm(`Start this job / check in ${label}? Same as their portal Check in — texts the BEFORE-photos link.`)) return;
+    setWorking(`checkin-${a.cleaner_id}`);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-cleaner-jobs", {
+        body: { action: "check_in", assignmentId: a.id },
+      });
+      if (error) throw error;
+      const d = data as { ok?: boolean; error?: string; alreadyCheckedIn?: boolean };
+      if (d?.ok === false || d?.error) throw new Error(d?.error || "Check-in failed");
+      setCheckedIn(true);
+      toast.success(d?.alreadyCheckedIn ? "Job was already checked in." : `Checked in ${label} — before-photos link texted.`);
+      onMutated();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setWorking(null);
+    }
+  };
+
+  const sendCrewPhotoLink = async (a: BookingAssignee, phase: "before" | "after" | "both") => {
+    setWorking(`photo-${a.cleaner_id}-${phase}`);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-cleaner-sms", {
+        body: { cleanerId: a.cleaner_id, template: "photo_request", bookingId: booking.id, phase },
+      });
+      if (error) throw error;
+      if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+      toast.success(
+        phase === "before" ? "Before-photos link texted." : phase === "after" ? "After-photos link texted." : "Combined photo link texted.",
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
     } finally {
@@ -756,24 +920,38 @@ function BookingAssignBlock({
   const hasAssignment =
     assignees.length > 0 || Boolean(booking.cleaner_id) || (booking.num_cleaners_assigned ?? 0) > 0;
 
-  const cleanerName = (id: string) => {
-    const c = cleaners.find((x) => x.id === id);
+  const cleanerName = (a: BookingAssignee | string) => {
+    if (typeof a === "string") {
+      const c = cleaners.find((x) => x.id === a);
+      return c ? `${c.first_name} ${c.last_name}` : "Cleaner";
+    }
+    if (a.first_name || a.last_name) return `${a.first_name || ""} ${a.last_name || ""}`.trim();
+    const c = cleaners.find((x) => x.id === a.cleaner_id);
     return c ? `${c.first_name} ${c.last_name}` : "Cleaner";
   };
 
+  const crewBusy = Boolean(
+    working &&
+      (working.startsWith("unassign") ||
+        working.startsWith("lead-") ||
+        working.startsWith("tier-") ||
+        working.startsWith("checkin-") ||
+        working.startsWith("photo-")),
+  );
+
   return (
     <div className="space-y-3">
-      {/* Current crew — unassign only. Kept separate from assign/replace so VA/admin
-          don't mix "who is on it" with "who should be on it next". */}
+      {/* Current crew — manage who's on the job (separate from assign/replace). */}
       <Card className="border-rose-200 bg-rose-50/20">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm flex items-center gap-1.5 text-rose-900">
-            <RiCloseCircleLine className="w-4 h-4" />
+            <RiUserStarLine className="w-4 h-4" />
             Current crew
           </CardTitle>
           <CardDescription>
-            Unassign one cleaner or the whole crew. Dropped cleaners leave their dashboards
-            immediately; GHL + Airtable sync.
+            Manage who&apos;s on this job: lead, payout tier, check-in, photo links, or unassign.
+            Unassign / drop does not text the cleaner.
+            {checkedIn ? " · Job checked in ✓" : ""}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -789,34 +967,119 @@ function BookingAssignBlock({
                   assignment rows were found. You can still clear the crew below.
                 </p>
               ) : (
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   {assignees.map((a) => {
-                    const name = cleanerName(a.cleaner_id);
-                    const busy = working === `unassign-${a.cleaner_id}`;
+                    const name = cleanerName(a);
+                    const isLead = String(a.role || "").toLowerCase() === "lead" || a.cleaner_id === booking.cleaner_id;
+                    const { current, next } = nextPayTier(a.pay_tier);
+                    const payLabel = crewMoney(a.estimated_pay_cents);
+                    const tierPct = a.pay_percentage ?? current.pct;
+                    const snapPct = a.pay_percentage_snapshot;
                     return (
                       <div
-                        key={`${a.cleaner_id}-${a.status}`}
-                        className="flex items-center gap-2 rounded-md border border-rose-100 bg-white px-3 py-2"
+                        key={`${a.cleaner_id}-${a.status}-${a.id || ""}`}
+                        className="rounded-md border border-rose-100 bg-white px-3 py-2.5 space-y-2"
                       >
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium text-slate-900 truncate">{name}</p>
-                          <p className="text-[11px] text-slate-500">
-                            {a.role || "Support"} · {a.status}
-                          </p>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-slate-900 truncate">
+                              {name}
+                              {isLead ? (
+                                <Badge className="ml-1.5 bg-violet-100 text-violet-800 text-[10px] font-semibold">Lead</Badge>
+                              ) : null}
+                            </p>
+                            <p className="text-[11px] text-slate-500">
+                              {a.role || (isLead ? "Lead" : "Support")} · {a.status}
+                              {payLabel ? ` · est. ${payLabel}` : ""}
+                              {snapPct != null ? ` @ ${snapPct}%` : ""}
+                              {a.crew_size_snapshot != null && a.crew_size_snapshot > 1
+                                ? ` · crew of ${a.crew_size_snapshot}`
+                                : ""}
+                            </p>
+                            <p className="text-[11px] text-slate-500">
+                              Payout tier: {current.label} · {tierPct}%
+                              {next ? ` · next ${next.label} ${next.pct}%` : " · max tier"}
+                            </p>
+                          </div>
                         </div>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="shrink-0 border-rose-200 text-rose-700 hover:bg-rose-50"
-                          disabled={working?.startsWith("unassign")}
-                          onClick={() => unassignOne(a.cleaner_id, name)}
-                        >
-                          {busy ? (
-                            <RiLoader4Line className="w-4 h-4 animate-spin" />
-                          ) : (
-                            "Unassign"
+                        <div className="flex flex-wrap gap-1.5">
+                          {!isLead && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={crewBusy}
+                              onClick={() => setLead(a.cleaner_id, name)}
+                            >
+                              {working === `lead-${a.cleaner_id}` ? (
+                                <RiLoader4Line className="w-4 h-4 animate-spin" />
+                              ) : (
+                                "Make lead"
+                              )}
+                            </Button>
                           )}
-                        </Button>
+                          {isAdmin && next && (
+                            <Button
+                              size="sm"
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                              disabled={crewBusy}
+                              onClick={() => increasePayoutTier(a, name)}
+                            >
+                              {working === `tier-${a.cleaner_id}` ? (
+                                <RiLoader4Line className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <>
+                                  <RiUserStarLine className="w-3.5 h-3.5 mr-1" />
+                                  Increase payout tier
+                                </>
+                              )}
+                            </Button>
+                          )}
+                          {!checkedIn && a.id && (
+                            <Button
+                              size="sm"
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                              disabled={crewBusy}
+                              onClick={() => checkInAssignee(a, name)}
+                            >
+                              {working === `checkin-${a.cleaner_id}` ? (
+                                <RiLoader4Line className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <>
+                                  <RiLoginCircleLine className="w-3.5 h-3.5 mr-1" />
+                                  Check in
+                                </>
+                              )}
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={crewBusy}
+                            onClick={() => sendCrewPhotoLink(a, "both")}
+                          >
+                            {working === `photo-${a.cleaner_id}-both` ? (
+                              <RiLoader4Line className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <>
+                                <RiCameraLine className="w-3.5 h-3.5 mr-1" />
+                                Photo link
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-rose-200 text-rose-700 hover:bg-rose-50"
+                            disabled={crewBusy}
+                            onClick={() => unassignOne(a.cleaner_id, name)}
+                          >
+                            {working === `unassign-${a.cleaner_id}` ? (
+                              <RiLoader4Line className="w-4 h-4 animate-spin" />
+                            ) : (
+                              "Unassign"
+                            )}
+                          </Button>
+                        </div>
                       </div>
                     );
                   })}
@@ -824,7 +1087,7 @@ function BookingAssignBlock({
               )}
               <Button
                 onClick={unassignAll}
-                disabled={working?.startsWith("unassign")}
+                disabled={crewBusy}
                 variant="outline"
                 size="sm"
                 className="w-full border-rose-300 text-rose-800 hover:bg-rose-50"
