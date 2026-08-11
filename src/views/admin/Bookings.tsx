@@ -783,74 +783,63 @@ function BookingAssignBlock({
             <p className="text-xs text-slate-500">No cleaners assigned yet.</p>
           ) : (
             <>
-              <div className="space-y-1.5">
-                {assignees.map((a) => {
-                  const name = cleanerName(a.cleaner_id);
-                  const busy = working === `unassign-${a.cleaner_id}`;
-                  return (
-                    <div
-                      key={`${a.cleaner_id}-${a.status}`}
-                      className="flex items-center gap-2 rounded-md border border-rose-100 bg-white px-3 py-2"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-slate-900 truncate">{name}</p>
-                        <p className="text-[11px] text-slate-500">
-                          {a.role || "Support"} · {a.status}
-                        </p>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="shrink-0 border-rose-200 text-rose-700 hover:bg-rose-50"
-                        disabled={working?.startsWith("unassign")}
-                        onClick={() => unassignOne(a.cleaner_id, name)}
+              {assignees.length === 0 ? (
+                <p className="text-xs text-slate-500">
+                  Booking shows {booking.num_cleaners_assigned ?? 1} assigned, but no active
+                  assignment rows were found. You can still clear the crew below.
+                </p>
+              ) : (
+                <div className="space-y-1.5">
+                  {assignees.map((a) => {
+                    const name = cleanerName(a.cleaner_id);
+                    const busy = working === `unassign-${a.cleaner_id}`;
+                    return (
+                      <div
+                        key={`${a.cleaner_id}-${a.status}`}
+                        className="flex items-center gap-2 rounded-md border border-rose-100 bg-white px-3 py-2"
                       >
-                        {busy ? (
-                          <RiLoader4Line className="w-4 h-4 animate-spin" />
-                        ) : (
-                          "Unassign"
-                        )}
-                      </Button>
-                    </div>
-                  );
-                })}
-              </div>
-              {assignees.length > 1 && (
-                <Button
-                  onClick={unassignAll}
-                  disabled={working?.startsWith("unassign")}
-                  variant="outline"
-                  size="sm"
-                  className="w-full border-rose-300 text-rose-800 hover:bg-rose-50"
-                >
-                  {working === "unassign-all" ? (
-                    <>
-                      <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />
-                      Unassigning all…
-                    </>
-                  ) : (
-                    "Unassign entire crew"
-                  )}
-                </Button>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-slate-900 truncate">{name}</p>
+                          <p className="text-[11px] text-slate-500">
+                            {a.role || "Support"} · {a.status}
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="shrink-0 border-rose-200 text-rose-700 hover:bg-rose-50"
+                          disabled={working?.startsWith("unassign")}
+                          onClick={() => unassignOne(a.cleaner_id, name)}
+                        >
+                          {busy ? (
+                            <RiLoader4Line className="w-4 h-4 animate-spin" />
+                          ) : (
+                            "Unassign"
+                          )}
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
-              {assignees.length === 1 && (
-                <Button
-                  onClick={unassignAll}
-                  disabled={working?.startsWith("unassign")}
-                  variant="outline"
-                  size="sm"
-                  className="w-full border-rose-300 text-rose-800 hover:bg-rose-50"
-                >
-                  {working === "unassign-all" ? (
-                    <>
-                      <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />
-                      Unassigning…
-                    </>
-                  ) : (
-                    "Unassign & reopen job"
-                  )}
-                </Button>
-              )}
+              <Button
+                onClick={unassignAll}
+                disabled={working?.startsWith("unassign")}
+                variant="outline"
+                size="sm"
+                className="w-full border-rose-300 text-rose-800 hover:bg-rose-50"
+              >
+                {working === "unassign-all" ? (
+                  <>
+                    <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />
+                    Unassigning…
+                  </>
+                ) : assignees.length > 1 ? (
+                  "Unassign entire crew"
+                ) : (
+                  "Unassign & reopen job"
+                )}
+              </Button>
             </>
           )}
         </CardContent>
