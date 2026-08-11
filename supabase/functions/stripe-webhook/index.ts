@@ -3,6 +3,10 @@ import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { sendSms, formatServiceDate, formatTimeSlot } from "../_shared/sms.ts";
 import { smsActionTail } from "../_shared/booking-policy.ts";
+import {
+  confirmationSmsBalanceTail,
+  remainingDueAfterUpfrontCents,
+} from "../_shared/booking-balance.ts";
 import { resolveSecret } from "../_shared/app-secrets.ts";
 import { memberTag } from "../_shared/ghl-tags.ts";
 
@@ -458,7 +462,7 @@ serve(async (req) => {
                   timeSlot: confirmedBooking.time_slot,
                   serviceType: confirmedBooking.service_type,
                   totalAmount: confirmedBooking.payment_option === 'full' ? confirmedBooking.total_estimate_cents - (confirmedBooking.full_payment_discount || 0) : confirmedBooking.deposit_cents,
-                  balanceAmount: confirmedBooking.payment_option === 'deposit' ? confirmedBooking.total_estimate_cents - confirmedBooking.deposit_cents : 0,
+                  balanceAmount: remainingDueAfterUpfrontCents(confirmedBooking),
                   paymentOption: confirmedBooking.payment_option,
                 },
               }),
@@ -467,15 +471,11 @@ serve(async (req) => {
             logStep("Confirmation emails sent successfully");
 
               // Customer SMS confirmation — best-effort, non-blocking.
+              // "Paid in full" only when remaining balance is actually $0.
               try {
                 const dateLabel = formatServiceDate(confirmedBooking.service_date);
                 const timeLabel = formatTimeSlot(confirmedBooking.time_slot);
-                const amountDue = confirmedBooking.payment_option === 'deposit'
-                  ? Math.max(0, confirmedBooking.total_estimate_cents - (confirmedBooking.deposit_cents || 0))
-                  : 0;
-                const tail = amountDue > 0
-                  ? ` Remaining $${(amountDue / 100).toFixed(2)} is due after service.`
-                  : ` Paid in full — see you soon!`;
+                const tail = confirmationSmsBalanceTail(confirmedBooking, "emdash");
                 const smsMsg =
                   `Novara Cleaning: Booking confirmed for ${dateLabel}` +
                   (timeLabel ? ` (${timeLabel})` : "") +

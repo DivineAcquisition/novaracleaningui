@@ -30,6 +30,10 @@ type SupabaseClient = any;
 import { sendSms, formatServiceDate, formatTimeSlot } from "./sms.ts";
 import { smsActionTail } from "./booking-policy.ts";
 import {
+  confirmationSmsBalanceTail,
+  remainingDueAfterUpfrontCents,
+} from "./booking-balance.ts";
+import {
   calculateCleanerPayoutCents,
   DEFAULT_PAY_PERCENTAGE,
   getEstimatedHours,
@@ -260,10 +264,7 @@ async function sendConfirmationEmails(
   const finalCents = Number(booking.final_charge_cents || 0);
   const depositCents = Number(booking.deposit_cents || 0);
   const fullDiscount = Number(booking.full_payment_discount || 0);
-  const balanceAfterDeposit =
-    booking.payment_option === "full"
-      ? Math.max(0, totalCents - fullDiscount)
-      : Math.max(0, totalCents - depositCents);
+  const balanceAfterDeposit = remainingDueAfterUpfrontCents(booking);
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
@@ -352,10 +353,7 @@ async function sendConfirmationEmails(
               booking.payment_option === "full"
                 ? Math.max(0, totalCents - fullDiscount)
                 : depositCents,
-            balanceAmount:
-              booking.payment_option === "deposit"
-                ? Math.max(0, totalCents - depositCents)
-                : 0,
+            balanceAmount: remainingDueAfterUpfrontCents(booking),
             paymentOption: booking.payment_option,
             checklistLink,
           },
@@ -389,16 +387,7 @@ async function sendCustomerSms(
   try {
     const dateLabel = formatServiceDate(booking.service_date as string);
     const timeLabel = formatTimeSlot(booking.time_slot as string);
-    const totalCents = Number(booking.total_estimate_cents || 0);
-    const depositCents = Number(booking.deposit_cents || 0);
-    const amountDue =
-      booking.payment_option === "deposit"
-        ? Math.max(0, totalCents - depositCents)
-        : 0;
-    const tail =
-      amountDue > 0
-        ? ` Remaining $${(amountDue / 100).toFixed(2)} is due after service.`
-        : " Paid in full — see you soon!";
+    const tail = confirmationSmsBalanceTail(booking, "emdash");
     const msg =
       `Novara Cleaning: Booking confirmed for ${dateLabel}` +
       (timeLabel ? ` (${timeLabel})` : "") +
