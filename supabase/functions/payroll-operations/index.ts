@@ -193,7 +193,27 @@ serve(async (req) => {
       }
     }
 
-    // 4. Assemble per-job pay, deriving each cleaner's locked share.
+    // 4. Extra pay (surge/OT/job-value already folded into estimated_pay when
+    //    recorded; still add reimbursements + any extras so ops totals match
+    //    the portal). Keyed by booking_id + cleaner_id.
+    const extrasByBookingCleaner = new Map<string, number>();
+    const bookingIds = rows.map((b) => String(b.id));
+    if (bookingIds.length > 0) {
+      const { data: extras } = await admin
+        .from("job_extra_pay")
+        .select("booking_id, cleaner_id, total_cents, surge_cents, overtime_cents, job_value_cents, supply_cents, mileage_cents")
+        .in("booking_id", bookingIds)
+        .neq("status", "failed");
+      for (const e of extras || []) {
+        const key = `${e.booking_id}:${e.cleaner_id}`;
+        // Prefer reimbursements only when pay bumps are already in estimated_pay;
+        // still include full total so nothing is dropped if estimate wasn't bumped.
+        const reimb = (Number(e.supply_cents) || 0) + (Number(e.mileage_cents) || 0);
+        extrasByBookingCleaner.set(key, (extrasByBookingCleaner.get(key) || 0) + reimb);
+      }
+    }
+
+    // 5. Assemble per-job pay, deriving each cleaner's locked share.
     const jobs = rows.map((b) => {
       const revenueCents = Number(b.final_charge_cents || b.total_estimate_cents || 0);
       const jid = b.job_id ? String(b.job_id) : null;
@@ -208,18 +228,23 @@ serve(async (req) => {
         const tierPct = maxPayPercentage(pcts);
         const pool = calculateCleanerPoolCents(revenueCents, tierPct);
         const per = Math.floor(pool / Math.max(1, assigns.length));
-        cleaners = assigns.map((a) => ({
-          id: String(a.cleaner_id),
-          name: cleanerMap.get(String(a.cleaner_id))?.name || "Cleaner",
-          payCents: Number(a.estimated_pay_cents) || per,
-        }));
+        cleaners = assigns.map((a) => {
+          const cid = String(a.cleaner_id);
+          const extra = extrasByBookingCleaner.get(`${b.id}:${cid}`) || 0;
+          return {
+            id: cid,
+            name: cleanerMap.get(cid)?.name || "Cleaner",
+            payCents: (Number(a.estimated_pay_cents) || per) + extra,
+          };
+        });
       } else if (b.cleaner_id) {
         const c = cleanerMap.get(String(b.cleaner_id));
         const pool = calculateCleanerPoolCents(revenueCents, c?.pct || 35);
+        const extra = extrasByBookingCleaner.get(`${b.id}:${b.cleaner_id}`) || 0;
         cleaners = [{
           id: String(b.cleaner_id),
           name: c?.name || "Cleaner",
-          payCents: Number(b.cleaner_payout_cents) || pool,
+          payCents: (Number(b.cleaner_payout_cents) || pool) + extra,
         }];
       }
 

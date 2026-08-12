@@ -14,8 +14,13 @@
 //   { action: "pay", cleanerId, bookingId?, jobId?,
 //     supplyCents?, mileageMiles?, mileageRateCents?,   // default 70¢/mi
 //     surgeCents?, overtimeHours?, overtimeRateCents?,
-//     jobValueCents?, note? }
+//     jobValueCents?, note?,
+//     skipEstimateBump?: boolean }
 //       → records the row (status "pending") and texts the cleaner.
+//       → Unless skipEstimateBump, also folds surge/OT/job-value into
+//         job_assignments.estimated_pay_cents so admin/dispatch/cleaner
+//         UIs that read the snapshot show the adjusted total. Mileage and
+//         supplies stay reimbursement-only (not folded into the estimate).
 //   { action: "mark_paid", id }
 //       → flips a pending row to paid once the money was actually sent.
 
@@ -190,6 +195,33 @@ serve(async (req) => {
       if (overtimeCents > 0) parts.push(`overtime ${overtimeHours}h ${usd(overtimeCents)}`);
       if (jobValueCents > 0) parts.push(`job value increase ${usd(jobValueCents)}`);
 
+      // Fold pay bumps (not reimbursements) into the assignment estimate so
+      // Bookings crew, dashboards, dispatch, and payroll-ops that read
+      // estimated_pay_cents show the adjusted take-home. Callers that already
+      // wrote the bump into the snapshot (assign-time popup) pass
+      // skipEstimateBump to avoid double-counting.
+      const payBumpCents = surgeCents + overtimeCents + jobValueCents;
+      const skipEstimateBump = body?.skipEstimateBump === true;
+      let estimateBumped = false;
+      if (payBumpCents > 0 && !skipEstimateBump && jobId) {
+        try {
+          const { data: assign } = await admin
+            .from("job_assignments")
+            .select("id, estimated_pay_cents")
+            .eq("job_id", jobId)
+            .eq("cleaner_id", cleanerId)
+            .maybeSingle();
+          if (assign?.id) {
+            const prev = Number(assign.estimated_pay_cents) || 0;
+            const { error: bumpErr } = await admin
+              .from("job_assignments")
+              .update({ estimated_pay_cents: prev + payBumpCents })
+              .eq("id", assign.id);
+            estimateBumped = !bumpErr;
+          }
+        } catch (_) { /* non-blocking — ledger row is still authoritative */ }
+      }
+
       // Roll the extra pay into lifetime earnings (best-effort).
       await admin.from("cleaners")
         .update({ total_earnings_cents: (Number(cleaner.total_earnings_cents) || 0) + totalCents, updated_at: new Date().toISOString() })
@@ -220,7 +252,18 @@ serve(async (req) => {
         cleaner_id: cleanerId,
         source: "admin-extra-pay",
         summary: `${bookingRef} — extra pay ${usd(totalCents)} (${parts.join(", ")}) recorded for ${cleanerName}${note ? ` — "${note}"` : ""}. Pay via the usual payout method, then mark paid.`,
-        data: { extra_pay_id: row.id, by: actor, sms_sent: smsSent, supply_cents: supplyCents, mileage_cents: mileageCents, surge_cents: surgeCents, overtime_cents: overtimeCents, job_value_cents: jobValueCents },
+        data: {
+          extra_pay_id: row.id,
+          by: actor,
+          sms_sent: smsSent,
+          supply_cents: supplyCents,
+          mileage_cents: mileageCents,
+          surge_cents: surgeCents,
+          overtime_cents: overtimeCents,
+          job_value_cents: jobValueCents,
+          estimate_bumped: estimateBumped,
+          pay_bump_cents: payBumpCents,
+        },
       }).then(() => undefined, () => undefined);
 
       return json({
@@ -230,6 +273,7 @@ serve(async (req) => {
         totalCents,
         smsSent,
         cleanerName,
+        estimateBumped,
         breakdown: { supplyCents, mileageCents, surgeCents, overtimeCents, jobValueCents },
       });
     }

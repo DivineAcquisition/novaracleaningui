@@ -801,7 +801,9 @@ function BookingAssignBlock({
 
   /**
    * Record assign-time mileage and/or flat pay adjustment via job_extra_pay.
-   * Portal pay (get-cleaner-portal) already folds these extras into display.
+   * Portal pay (get-cleaner-portal) folds reimbursements on top of estimate;
+   * pay adjustments are already written into estimated_pay_cents at assign
+   * time (skipEstimateBump), so they show in admin/dispatch/email too.
    */
   const recordAssignExtras = async (rows: MileageDraftRow[]) => {
     let paid = 0;
@@ -819,6 +821,8 @@ function BookingAssignBlock({
         action: "pay",
         cleanerId: row.cleanerId,
         bookingId: booking.id,
+        // Assign already folded payAdjust into estimated_pay_cents + email.
+        skipEstimateBump: payAdjustCents > 0,
         note:
           amountCents > 0 && payAdjustCents > 0
             ? "Assign-time mileage + pay adjustment"
@@ -833,7 +837,7 @@ function BookingAssignBlock({
           miles > 0 ? Math.max(1, Math.round(amountCents / miles)) : amountCents;
       }
       if (payAdjustCents > 0) {
-        // Flat bump to cleaner pay — same ledger the portal shows as extras.
+        // Flat bump to cleaner pay — ledger + SMS; estimate already updated.
         body.surgeCents = payAdjustCents;
       }
 
@@ -862,6 +866,13 @@ function BookingAssignBlock({
     }
     setWorking("assign");
     try {
+      const payBonusByCleaner: Record<string, number> = {};
+      if (mileage) {
+        for (const row of mileage) {
+          const adj = Math.max(0, Math.round((parseFloat(row.payAdjust) || 0) * 100));
+          if (adj > 0) payBonusByCleaner[row.cleanerId] = adj;
+        }
+      }
       const { data, error } = await supabase.functions.invoke("admin-booking-assign", {
         body: {
           bookingId: booking.id,
@@ -869,6 +880,7 @@ function BookingAssignBlock({
           mode: "replace",
           allowUnpaid,
           bufferOverrideReason,
+          ...(Object.keys(payBonusByCleaner).length > 0 ? { payBonusByCleaner } : {}),
         },
       });
       // On non-2xx the supabase client returns a FunctionsHttpError whose
@@ -1488,8 +1500,8 @@ function BookingAssignBlock({
             <DialogTitle>Mileage &amp; pay for this assignment</DialogTitle>
             <DialogDescription>
               Mileage recommended at ${(MILEAGE_RATE_CENTS / 100).toFixed(2)}/mi from home to the
-              job. Optional pay adjustment is added on top of base cut and shows in the cleaner
-              portal as extras.
+              job. Pay adjustment updates estimated pay for this job (admin crew, assignment
+              email, cleaner portal) and is recorded as extra pay.
             </DialogDescription>
           </DialogHeader>
           {mileageLoading ? (
@@ -1570,7 +1582,8 @@ function BookingAssignBlock({
                       className="bg-white mt-1"
                     />
                     <p className="text-[10px] text-slate-500 mt-1">
-                      Flat bump to this cleaner&apos;s pay for the job (optional). Leave blank to skip.
+                      Flat bump added to this cleaner&apos;s estimated pay for the job
+                      (admin, email, portal). Leave blank to skip.
                     </p>
                   </div>
                 </div>

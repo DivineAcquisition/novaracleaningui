@@ -209,24 +209,47 @@ serve(async (req) => {
       .neq("status", "cancelled");
     for (const p of byBreakdown || []) tallyPayout(p);
 
-    // ── Per-job EXTRA pay (supplies, mileage, surge, OT, job-value increase),
-    //    paid immediately on top of the base payout. Folded into actual pay so
-    //    the portal reflects the FULL amount the cleaner was paid per job. ──
-    const extrasByBooking = new Map<string, { total: number; paid: number; pending: number }>();
+    // ── Per-job EXTRA pay (supplies, mileage, surge, OT, job-value increase).
+    //    Paid immediately on top of the base payout.
+    //    Display rules (avoid double-counting with estimated_pay_cents):
+    //      • When a manual_payout exists: add ALL extras (base payout is the
+    //        crew share only; extras are separate).
+    //      • When showing the assignment estimate: add reimbursements only
+    //        (supplies + mileage). Surge/OT/job-value are folded into
+    //        estimated_pay_cents by admin-extra-pay / assign-time bonus. ──
+    const extrasByBooking = new Map<string, {
+      total: number;
+      paid: number;
+      pending: number;
+      reimb: number;
+      payBump: number;
+    }>();
     try {
       const { data: extras } = await admin
         .from("job_extra_pay")
-        .select("booking_id, cleaner_id, total_cents, status")
+        .select(
+          "booking_id, cleaner_id, total_cents, status, supply_cents, mileage_cents, surge_cents, overtime_cents, job_value_cents",
+        )
         .eq("cleaner_id", cleanerId)
         .neq("status", "failed");
       for (const e of extras || []) {
         const cents = Number(e.total_cents) || 0;
+        const reimb =
+          (Number(e.supply_cents) || 0) + (Number(e.mileage_cents) || 0);
+        const payBump =
+          (Number(e.surge_cents) || 0) +
+          (Number(e.overtime_cents) || 0) +
+          (Number(e.job_value_cents) || 0);
         if (e.status === "paid") lifetimePaidCents += cents;
         else pendingCents += cents;
         if (e.booking_id) {
           attributedBookingIds.add(String(e.booking_id));
-          const g = extrasByBooking.get(e.booking_id) || { total: 0, paid: 0, pending: 0 };
+          const g = extrasByBooking.get(e.booking_id) || {
+            total: 0, paid: 0, pending: 0, reimb: 0, payBump: 0,
+          };
           g.total += cents;
+          g.reimb += reimb;
+          g.payBump += payBump;
           if (e.status === "paid") g.paid += cents; else g.pending += cents;
           extrasByBooking.set(e.booking_id, g);
         }
@@ -325,11 +348,21 @@ serve(async (req) => {
               ? Math.floor(Number(b.total_estimate_cents) * payPct / 100)
               : null;
         const extra = extrasByBooking.get(b.id) || null;
-        const extrasCents = extra ? extra.total : 0;
+        // With a recorded base payout: overlay ALL extras (payout is crew share).
+        // With estimate only: overlay reimbursements only — pay bumps (surge/
+        // OT/job value) are already inside estimated_pay_cents.
+        const extrasCents = extra
+          ? (baseCents != null ? extra.total : extra.reimb)
+          : 0;
+        const extrasDetailCents = extra ? extra.total : 0;
         // Actual pay = base payout (when recorded) + any extras — all real money.
-        const actualCents = baseCents != null || extrasCents > 0 ? (baseCents ?? 0) + extrasCents : null;
+        const actualCents = baseCents != null || extrasDetailCents > 0
+          ? (baseCents ?? 0) + extrasDetailCents
+          : null;
         const baseForDisplay = baseCents != null ? baseCents : estimateCents;
-        const displayCents = baseForDisplay != null ? baseForDisplay + extrasCents : (extrasCents > 0 ? extrasCents : null);
+        const displayCents = baseForDisplay != null
+          ? baseForDisplay + extrasCents
+          : (extrasCents > 0 ? extrasCents : null);
         // Split the actual money into paid vs pending portions (a job can have
         // a PAID base payout and a PENDING extra at the same time — one status
         // for the whole chip misstated both sides).
