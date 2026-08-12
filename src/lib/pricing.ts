@@ -62,9 +62,9 @@ export const SERVICE_TIER_PRICING: Record<ServiceType, { label: string; multipli
 // ─── Zones ───────────────────────────────────────────────────────────────
 export type ZoneId = "A" | "B" | "C";
 export const SERVICE_ZONES: Record<ZoneId, { id: ZoneId; label: string; modifier: number; areas: string }> = {
-  A: { id: "A", label: "Zone A (Premium)",  modifier: 1.15, areas: "Bethesda, Potomac, Chevy Chase, Rockville, Silver Spring" },
-  B: { id: "B", label: "Zone B (Standard)", modifier: 1.00, areas: "Rest of MoCo, PG County, Columbia, Ellicott City, Elkridge" },
-  C: { id: "C", label: "Zone C (Outer)",    modifier: 0.90, areas: "Frederick, Hagerstown, Annapolis, Baltimore suburbs" },
+  A: { id: "A", label: "Zone A (Premium)",  modifier: 1.15, areas: "Bethesda, Potomac, Chevy Chase, Rockville, Silver Spring, Arlington, McLean, Great Falls, Vienna, Falls Church, Alexandria Old Town" },
+  B: { id: "B", label: "Zone B (Standard)", modifier: 1.00, areas: "Rest of MoCo, PG County, Columbia, Ellicott City, Elkridge, Fairfax County, Loudoun (Ashburn/Leesburg/Reston/Herndon), Alexandria" },
+  C: { id: "C", label: "Zone C (Outer)",    modifier: 0.90, areas: "Frederick, Hagerstown, Annapolis, Baltimore suburbs, Prince William County, Manassas, outer Loudoun" },
 };
 
 // ─── Add-ons ─────────────────────────────────────────────────────────────
