@@ -6,7 +6,8 @@
 //
 // Body (assign):
 //   { bookingId, cleanerIds: string[], mode?: "replace" | "add", notify?: boolean,
-//     bufferOverrideReason?: string }
+//     bufferOverrideReason?: string,
+//     payBonusByCleaner?: Record<cleanerId, cents> }  // assign-popup pay adjust
 //
 // Body (suggest):
 //   { action: "suggest_cleaners", bookingId, limit?: number }
@@ -294,6 +295,17 @@ serve(async (req) => {
       .slice(0, 3);
     const mode = String(body?.mode || "replace").toLowerCase();
     const shouldNotify = body?.notify !== false;
+    // Optional per-cleaner pay bumps from the assign popup (cents). Folded into
+    // estimated_pay_cents + assignment email so take-home reflects immediately;
+    // Bookings still records the matching job_extra_pay row afterward with
+    // skipEstimateBump to avoid double-counting the snapshot.
+    const payBonusByCleaner: Record<string, number> = {};
+    if (body?.payBonusByCleaner && typeof body.payBonusByCleaner === "object") {
+      for (const [cid, raw] of Object.entries(body.payBonusByCleaner as Record<string, unknown>)) {
+        const cents = Math.max(0, Math.round(Number(raw) || 0));
+        if (cents > 0) payBonusByCleaner[String(cid)] = cents;
+      }
+    }
 
     if (cleanerIds.length === 0) return json({ error: "cleanerIds required (1–3)" }, 400);
 
@@ -453,6 +465,9 @@ serve(async (req) => {
       const cid = cleanerIds[i];
       const role = i === 0 ? "Lead" : "Support";
       const share = shareByCleaner.get(cid);
+      const bonusCents = payBonusByCleaner[cid] || 0;
+      const estimatedPayCents =
+        share?.shareCents != null ? share.shareCents + bonusCents : bonusCents > 0 ? bonusCents : null;
       const { error: upsertErr } = await admin.from("job_assignments").upsert(
         {
           job_id: jobId,
@@ -461,7 +476,7 @@ serve(async (req) => {
           status: "Confirmed",
           accepted_at: now,
           responded_at: now,
-          estimated_pay_cents: share?.shareCents ?? null,
+          estimated_pay_cents: estimatedPayCents,
           pay_percentage_snapshot: share?.ratePercent ?? null,
           crew_size_snapshot: share?.crewSize ?? cleanerIds.length,
         },
@@ -485,7 +500,7 @@ serve(async (req) => {
           rate_before: priorRate?.pay_percentage_snapshot ?? null,
           rate_after: share.ratePercent,
           pay_before_cents: prior,
-          pay_after_cents: share.shareCents,
+          pay_after_cents: estimatedPayCents,
         }).then(() => undefined, () => undefined);
       }
     }
@@ -556,7 +571,8 @@ serve(async (req) => {
         try {
         const notifyResult = await notifyCleanerOfAssignment(admin, booking, c, {
           role,
-          estimatedPayCents: shareByCleaner.get(c.id)?.shareCents,
+          estimatedPayCents:
+            (shareByCleaner.get(c.id)?.shareCents ?? 0) + (payBonusByCleaner[c.id] || 0),
           crewCleanerIds: cleanerIds,
         });
         let ghlTaskId: string | null = null;
