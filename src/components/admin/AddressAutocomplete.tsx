@@ -293,7 +293,7 @@ export function AddressAutocomplete({
 
       {status === "manual" && (
         <p className="text-[11px] text-slate-500">
-          Type a full address (e.g. &quot;123 Main St, Frederick, MD 21703&quot;) and we&apos;ll split the parts on blur.
+          Type a full address (e.g. &quot;123 Main St, Arlington, VA 22201&quot;) and we&apos;ll split the parts on blur.
         </p>
       )}
 

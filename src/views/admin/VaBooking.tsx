@@ -1940,7 +1940,7 @@ export default function VaBooking() {
           <FormSection
             number={1}
             title="Customer"
-            description="Who is this booking for?"
+            description="Who is this booking for? Serviceable in Maryland and Northern Virginia."
             icon={<RiUserLine className="w-4 h-4" />}
           >
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2013,7 +2013,7 @@ export default function VaBooking() {
                     value={state}
                     onChange={(e) => setState(e.target.value.toUpperCase())}
                     maxLength={2}
-                    placeholder="MD"
+                    placeholder="MD / VA"
                   />
                 </Field>
               </div>
@@ -2023,10 +2023,21 @@ export default function VaBooking() {
                     value={zipCode}
                     onChange={(e) => setZipCode(e.target.value)}
                     maxLength={5}
-                    placeholder="21201"
+                    placeholder="22201"
                   />
                 </Field>
               </div>
+              {zipDigits.length === 5 && dynQuote.served && dynQuote.zone?.code && (
+                <p className="col-span-12 text-[11px] text-emerald-700 -mt-2">
+                  Served · Zone {dynQuote.zone.code}
+                  {dynQuote.zone.name ? ` (${dynQuote.zone.name})` : ""} — Maryland &amp; Northern Virginia
+                </p>
+              )}
+              {zipDigits.length === 5 && !dynQuote.loading && !dynQuote.served && (
+                <p className="col-span-12 text-[11px] text-rose-700 -mt-2">
+                  Outside the service area (MD + Northern VA). Offer the waitlist — no quote.
+                </p>
+              )}
             </div>
           </FormSection>
 
