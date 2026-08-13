@@ -56,18 +56,26 @@ export const BookingCompletion = ({
             <DetailRow label="Booking ID" value={bookingId.substring(0, 8)} />
             <DetailRow label="Customer" value={customerName} />
             <DetailRow label="Service Date" value={formatDate(serviceDate)} />
-            <DetailRow label="Your Earnings" value={`$${(earnings / 100).toFixed(2)}`} />
+            <DetailRow label="Suggested pay" value={`$${(earnings / 100).toFixed(2)}`} />
             <DetailRow
               label="Payout Status"
-              value={payoutStatus === "processing" ? "Processing..." : "Initiated"}
+              value={
+                payoutStatus === "pending_confirmation"
+                  ? "Pending confirmation"
+                  : payoutStatus === "processing"
+                    ? "Processing..."
+                    : "Initiated"
+              }
             />
           </Highlight>
         </Section>
 
         <Text style={styles.paragraph}>
-          {payoutStatus === "processing"
-            ? "Your payout is being processed and will be transferred to your connected bank account shortly."
-            : "Your payout has been initiated and should arrive in your bank account within 2-3 business days."}
+          {payoutStatus === "pending_confirmation"
+            ? "We'll email you when your Stripe Connect payout is confirmed and sent."
+            : payoutStatus === "processing"
+              ? "Your payout is being processed and will be transferred to your connected Stripe account shortly."
+              : "Your payout has been initiated and should arrive in your bank account within 2-3 business days."}
         </Text>
 
         <Text style={styles.paragraph}>

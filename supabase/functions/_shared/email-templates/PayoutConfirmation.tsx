@@ -11,6 +11,9 @@ interface PayoutConfirmationProps {
   amount: number;
   transferId: string;
   transferDate: string;
+  bookingLabel?: string;
+  cleanerFullName?: string;
+  sourceLabel?: string;
 }
 
 export const PayoutConfirmation = ({
@@ -19,6 +22,9 @@ export const PayoutConfirmation = ({
   amount,
   transferId,
   transferDate,
+  bookingLabel,
+  cleanerFullName,
+  sourceLabel,
 }: PayoutConfirmationProps) => {
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -44,7 +50,7 @@ export const PayoutConfirmation = ({
         </Text>
 
         <Text style={styles.paragraph}>
-          Good news! Your payment has been successfully transferred to your bank account.
+          Good news! Your payout has been sent to your Stripe Connect account.
         </Text>
 
         <Section style={styles.highlightSection}>
@@ -52,15 +58,17 @@ export const PayoutConfirmation = ({
             <Text style={styles.highlightText}>
               <strong>Payment Details</strong>
             </Text>
-            <DetailRow label="Booking ID" value={bookingId.substring(0, 8)} />
+            {cleanerFullName ? <DetailRow label="Contractor" value={cleanerFullName} /> : null}
+            <DetailRow label="Job" value={bookingLabel || (bookingId ? bookingId.substring(0, 8) : "—")} />
+            {sourceLabel ? <DetailRow label="Type" value={sourceLabel} /> : null}
             <DetailRow label="Amount" value={`$${(amount / 100).toFixed(2)}`} />
             <DetailRow label="Transfer Date" value={formatDate(transferDate)} />
-            <DetailRow label="Transfer ID" value={transferId} />
+            <DetailRow label="Stripe Transfer ID" value={transferId} />
           </Highlight>
         </Section>
 
         <Text style={styles.paragraph}>
-          The funds should appear in your connected bank account within 2-3 business days, depending on your bank's processing time.
+          The funds should appear in your connected bank account within 2–3 business days, depending on your bank's processing time.
         </Text>
 
         <Text style={styles.paragraph}>

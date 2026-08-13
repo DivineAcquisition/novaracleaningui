@@ -1,12 +1,9 @@
 // admin-extra-pay
 //
 // Per-job EXTRA pay for contractors — supply reimbursement, mileage, surge
-// pay, overtime, and job value increases. Works like Custom Payout:
-// bookkeeping + notification only (payouts are released through the
-// company's alternative payout method for now, NOT Stripe Connect). Each
-// payment is recorded per (booking, cleaner) in public.job_extra_pay so the
-// money always ties back to a specific job, the cleaner is texted that the
-// money is on its way, and the admin flips it to "paid" once sent.
+// pay, overtime, and job value increases. Records the amount against a job
+// in public.job_extra_pay. Stripe Connect sends the exact cents from Extra
+// Pay or Run Payroll once platform funds are available.
 //
 // Body:
 //   { action: "list", cleanerId?, bookingId?, limit? }
@@ -161,8 +158,8 @@ serve(async (req) => {
       if (!cleaner) return json({ error: "Cleaner not found" }, 404);
       const cleanerName = `${cleaner.first_name || ""} ${cleaner.last_name || ""}`.trim() || "Cleaner";
 
-      // Record the extra pay (bookkeeping only — money moves via the
-      // company's alternative payout method, not Stripe Connect).
+      // Record the extra pay (pending). Stripe Connect sends it from Run
+      // Payroll or Extra Pay "Pay via Stripe" once platform funds are available.
       const { data: row, error: insErr } = await admin.from("job_extra_pay").insert({
         booking_id: bookingId,
         job_id: jobId,
@@ -190,13 +187,10 @@ serve(async (req) => {
       if (overtimeCents > 0) parts.push(`overtime ${overtimeHours}h ${usd(overtimeCents)}`);
       if (jobValueCents > 0) parts.push(`job value increase ${usd(jobValueCents)}`);
 
-      // Roll the extra pay into lifetime earnings (best-effort).
-      await admin.from("cleaners")
-        .update({ total_earnings_cents: (Number(cleaner.total_earnings_cents) || 0) + totalCents, updated_at: new Date().toISOString() })
-        .eq("id", cleanerId)
-        .then(() => undefined, () => undefined);
+      // Lifetime earnings increment when Stripe Connect actually transfers
+      // (pay-cleaner-transfer). Don't count pending extra pay twice.
 
-      // Text the cleaner their extra pay is on its way (best-effort).
+      // Text the cleaner their extra pay is recorded (best-effort).
       let smsSent = false;
       if (cleaner.phone) {
         try {
@@ -205,7 +199,7 @@ serve(async (req) => {
               phone: cleaner.phone,
               email: cleaner.email || undefined,
               firstName: cleaner.first_name,
-              message: `💸 Novara extra pay: $${(totalCents / 100).toFixed(2)} (${parts.join(", ")}) for ${bookingRef} is pending and on its way. Thanks for the great work! Reply STOP to opt out.`,
+              message: `Novara extra pay: $${(totalCents / 100).toFixed(2)} (${parts.join(", ")}) for ${bookingRef} is recorded. You'll be paid via Stripe Connect shortly. Reply STOP to opt out.`,
               type: "cleaner_extra_pay",
             },
           });
@@ -219,7 +213,7 @@ serve(async (req) => {
         job_id: jobId,
         cleaner_id: cleanerId,
         source: "admin-extra-pay",
-        summary: `${bookingRef} — extra pay ${usd(totalCents)} (${parts.join(", ")}) recorded for ${cleanerName}${note ? ` — "${note}"` : ""}. Pay via the usual payout method, then mark paid.`,
+        summary: `${bookingRef} — extra pay ${usd(totalCents)} (${parts.join(", ")}) recorded for ${cleanerName}${note ? ` — "${note}"` : ""}. Pay via Stripe Connect from Extra Pay or Run Payroll.`,
         data: { extra_pay_id: row.id, by: actor, sms_sent: smsSent, supply_cents: supplyCents, mileage_cents: mileageCents, surge_cents: surgeCents, overtime_cents: overtimeCents, job_value_cents: jobValueCents },
       }).then(() => undefined, () => undefined);
 
@@ -249,7 +243,7 @@ serve(async (req) => {
         event_type: "cleaner.extra_pay_paid",
         cleaner_id: row.cleaner_id,
         source: "admin-extra-pay",
-        summary: `Extra pay ${usd(Number(row.total_cents) || 0)} marked paid (sent via alternative payout method)`,
+        summary: `Extra pay ${usd(Number(row.total_cents) || 0)} marked paid`,
         data: { extra_pay_id: id, by: actor },
       }).then(() => undefined, () => undefined);
 

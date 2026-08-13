@@ -4,9 +4,12 @@
 // booking and stamps the payouts ledger.
 //
 // Called from:
-//   * the bookings_auto_payout_on_completion trigger (status → completed)
-//   * the admin Payroll page "Pay now" button (one-click manual release)
-//   * the admin Cleaners drawer "Trigger payout" button
+//   * (legacy) the bookings_auto_payout_on_completion trigger — now a no-op
+//     skip when source is db_trigger_auto_payout
+//   * remaining admin retry paths that still target a booking
+//
+// Custom Payout / Extra Pay / Run Payroll use pay-cleaner-transfer instead
+// (exact cents, Stripe Connect, balance-checked).
 //
 // Idempotent — short-circuits if booking.payout_status is already
 // 'completed' or 'processing', and if a payouts row already exists with
@@ -48,6 +51,14 @@ serve(async (req) => {
   try {
     const { bookingId, source } = await req.json();
     if (!bookingId) return jsonResponse({ error: "bookingId required" }, 400);
+
+    // Auto-payout on completion is disabled. Money moves only after an admin
+    // confirms Custom Payout / Extra Pay and Run Payroll (or Custom Payout
+    // confirm) fires an exact-amount Stripe Connect transfer.
+    if (source === "db_trigger_auto_payout") {
+      logStep("Skipping disabled auto-payout", { bookingId, source });
+      return jsonResponse({ skipped: true, reason: "auto_payout_disabled_use_custom_payout" }, 200);
+    }
 
     logStep("Processing payout", { bookingId, source });
 
