@@ -363,11 +363,12 @@ function asTransferIds(raw: unknown): TransferIdEntry[] {
   if (!Array.isArray(raw)) return [];
   return raw.map((x) => {
     const r = x as Record<string, unknown>;
+    const status: TransferIdEntry["status"] = r.status === "paid" || !!r.transferId ? "paid" : "failed";
     return {
       cleanerId: String(r.cleanerId || ""),
       amountCents: Math.round(Number(r.amountCents) || 0),
       transferId: r.transferId ? String(r.transferId) : undefined,
-      status: r.status === "paid" || r.transferId ? "paid" : "failed",
+      status,
       error: r.error ? String(r.error) : undefined,
     };
   }).filter((x) => x.cleanerId);

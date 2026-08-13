@@ -155,6 +155,7 @@ export default function SimplePayoutTab() {
   // Per-cleaner pay form: cleanerId → { selected, dollars }
   const [crewPay, setCrewPay] = useState<Record<string, { selected: boolean; dollars: string }>>({});
   const [note, setNote] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const [payingId, setPayingId] = useState<string | null>(null);
   const [period, setPeriod] = useState<"week" | "month" | "year">("month");
   // Inline job-cost (revenue) adjust on the selected job.
