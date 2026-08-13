@@ -154,8 +154,9 @@ serve(async (req) => {
             .eq("id", a.id);
         }
 
-        // process-payout transfers to the booking's lead cleaner, so stamp that
-        // cleaner's own share rather than an average.
+        // Stamp the lead cleaner's suggested share on the booking. Custom
+        // Payout / Run Payroll may send a different confirmed amount via
+        // Stripe Connect.
         const leadShare = shareFor(shares, booking.cleaner_id)
           || shares[0]
           || null;
@@ -180,7 +181,7 @@ serve(async (req) => {
     }
 
     // Mark booking as completed and stamp the (possibly updated)
-    // cleaner_payout_cents so process-payout uses it.
+    // cleaner_payout_cents as the suggested share for Custom Payout.
     const { error: updateError } = await supabase
       .from("bookings")
       .update({
@@ -489,22 +490,15 @@ serve(async (req) => {
       } catch (_) { /* ignore logging errors */ }
     }
 
-    // Trigger payout
-    const payoutResponse = await supabase.functions.invoke('process-payout', {
-      body: { bookingId },
-    });
+    // Payouts are NOT auto-fired here. Admin confirms the amount on Custom
+    // Payout (plus Extra Pay) and Stripe Connect transfers when funds are
+    // available — either immediately on confirm, or from Run Payroll.
+    logStep("Skipping auto payout — confirm in Custom Payout / Run Payroll", { bookingId });
 
-    if (payoutResponse.error) {
-      logStep("Payout trigger failed", { error: payoutResponse.error });
-    } else {
-      logStep("Payout triggered successfully");
-    }
+    // Send completion email to cleaner. Earnings figure is the suggested
+    // revenue-share amount; the actual Stripe transfer uses the confirmed
+    // Custom Payout (+ Extra Pay) cents.
 
-    // Send completion email to cleaner. Earnings figure now uses the
-    // cleaner's actual pay_percentage (40 / 45 / 50) rather than the
-    // legacy hardcoded 0.45. We prefer the booking's stored
-    // cleaner_payout_cents (already correct from process-payout) and
-    // fall back to revenue × cleaner.pay_percentage.
     if (booking.cleaner_id) {
       try {
         const { data: cleaner } = await supabase
@@ -533,7 +527,7 @@ serve(async (req) => {
                 earnings: estimatedEarnings,
                 payPercentage: pct,
                 jobRevenueCents: revenue,
-                payoutStatus: payoutResponse.error ? 'processing' : 'initiated',
+                payoutStatus: 'pending_confirmation',
               },
             },
           });

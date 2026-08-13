@@ -9,10 +9,8 @@
 //   • surge pay ($)
 //   • overtime (hours × $/hr)
 //   • job value increase ($ — job turned out bigger than booked)
-// and one click records the payment against that job in job_extra_pay and
-// texts the cleaner it's on the way. Money moves through the company's
-// alternative payout method for now (NOT Stripe Connect) — once sent, the
-// admin flips the row to "paid" from the history table below.
+// and one click records the payment against that job in job_extra_pay.
+// Stripe Connect sends the exact cents from Extra Pay or Run Payroll.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -149,7 +147,7 @@ export default function ExtraPayTab({ cleaners }: { cleaners: PayrollCleaner[] }
       ? `${selectedJob.bookingNumber || "job"} (${selectedJob.customer || "customer"})`
       : "no specific job";
     if (!confirm(
-      `Record ${usd(totalCents)} extra pay for ${cleanerName(cleaner)} — ${jobLabel} — and text them it's on the way?\n\n` +
+      `Record ${usd(totalCents)} extra pay for ${cleanerName(cleaner)} — ${jobLabel}?\n\n` +
       [
         supplyCents > 0 ? `• Supplies ${usd(supplyCents)}` : "",
         mileageCents > 0 ? `• Mileage ${mileageMiles} mi × ${usd(mileageRateCents)}/mi = ${usd(mileageCents)}` : "",
@@ -180,7 +178,7 @@ export default function ExtraPayTab({ cleaners }: { cleaners: PayrollCleaner[] }
       const d = data as { ok?: boolean; error?: string; smsSent?: boolean };
       if (d?.error || d?.ok === false) throw new Error(d?.error || "Failed to record extra pay");
       toast.success(
-        `Recorded ${usd(totalCents)} extra pay for ${cleanerName(cleaner)}${d.smsSent ? " — they've been texted" : ""}. Send the money via your usual payout method, then mark it paid below.`,
+        `Recorded ${usd(totalCents)} extra pay for ${cleanerName(cleaner)}${d.smsSent ? " — they've been texted" : ""}. Pay it via Stripe Connect below or from Run Payroll.`,
       );
       resetForm();
       await loadHistory(cleanerId);
@@ -191,18 +189,23 @@ export default function ExtraPayTab({ cleaners }: { cleaners: PayrollCleaner[] }
     }
   };
 
-  const markPaid = async (id: string) => {
+  const payViaStripe = async (id: string) => {
     setMarkingPaid(id);
     try {
-      const { data, error } = await supabase.functions.invoke("admin-extra-pay", {
-        body: { action: "mark_paid", id },
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Not signed in");
+      const res = await fetch("/api/payroll/custom", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ action: "execute_pending", extraPayId: id }),
       });
-      if (error) throw error;
-      if ((data as { error?: string })?.error) throw new Error((data as { error?: string }).error);
-      toast.success("Marked paid.");
+      const json = await res.json();
+      if (!res.ok || json?.error || json?.halted) throw new Error(json?.error || "Stripe could not send this payout");
+      if (!json.paidCount) throw new Error("Nothing was paid — check Stripe Connect and available balance.");
+      toast.success("Paid via Stripe Connect.");
       await loadHistory(cleanerId || undefined);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to mark paid");
+      toast.error(err instanceof Error ? err.message : "Failed to pay via Stripe");
     } finally {
       setMarkingPaid(null);
     }
@@ -215,9 +218,7 @@ export default function ExtraPayTab({ cleaners }: { cleaners: PayrollCleaner[] }
           <CardTitle className="text-base flex items-center gap-2">
             <RiMoneyDollarCircleLine className="w-4 h-4 text-violet-600" /> Extra pay — per job
           </CardTitle>
-          <CardDescription className="text-xs">
-            Supply reimbursement, mileage, surge pay, overtime &amp; job value increases — recorded per job and the cleaner is texted, just like Custom Payout. Send the money via your usual payout method, then mark it paid.
-          </CardDescription>
+          <CardDescription className="text-xs">Supply reimbursement, mileage, surge pay, overtime &amp; job value increases — recorded per job. Pay via Stripe Connect here or from Run Payroll (same amounts).</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Cleaner + job */}
@@ -315,7 +316,7 @@ export default function ExtraPayTab({ cleaners }: { cleaners: PayrollCleaner[] }
             </Button>
           </div>
           <p className="text-[11px] text-slate-400">
-            Records the extra pay against the selected job and texts the cleaner it&apos;s on the way. Send the money via your usual payout method, then hit &quot;Mark paid&quot; in the history below.
+            Records extra pay against the selected job. Run Payroll (or Pay via Stripe below) sends the exact amount through Stripe Connect when funds are available.
           </p>
         </CardContent>
       </Card>
@@ -389,11 +390,11 @@ export default function ExtraPayTab({ cleaners }: { cleaners: PayrollCleaner[] }
                             <Button
                               size="sm"
                               variant="outline"
-                              className="h-6 px-2 text-[10px] border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                              className="h-6 px-2 text-[10px] border-violet-200 text-violet-700 hover:bg-violet-50"
                               disabled={markingPaid === p.id}
-                              onClick={() => void markPaid(p.id)}
+                              onClick={() => void payViaStripe(p.id)}
                             >
-                              {markingPaid === p.id ? <RiLoader4Line className="w-3 h-3 animate-spin" /> : "Mark paid"}
+                              {markingPaid === p.id ? <RiLoader4Line className="w-3 h-3 animate-spin" /> : "Pay via Stripe"}
                             </Button>
                           )}
                         </div>

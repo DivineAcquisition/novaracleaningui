@@ -199,9 +199,8 @@ export default function CrewPayRatesCard() {
         <div>
           <p className="text-sm font-semibold text-slate-900">Crew-size pay rates</p>
           <p className="mt-0.5 text-xs text-slate-500">
-            A cleaner&apos;s rate depends on their tier and how many cleaners performed the job.
-            Two cleaners don&apos;t halve a job&apos;s time, so a crew earns a higher rate to keep
-            hourly pay fair.
+            Suggested crew rates for Custom Payout. Confirming a payout still sends the amount you type, via Stripe Connect.
+            Two cleaners don&apos;t halve a job&apos;s time, so a crew earns a higher rate to keep hourly pay fair.
           </p>
         </div>
 

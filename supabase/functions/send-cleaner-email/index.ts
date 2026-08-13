@@ -25,8 +25,8 @@ serve(async (req) => {
   }
 
   try {
-    const { type, email, data } = await req.json();
-    logStep("Sending cleaner email", { type, email });
+    const { type, email, data, cc, to } = await req.json();
+    logStep("Sending cleaner email", { type, email, cc, extraTo: to });
 
     const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
@@ -81,14 +81,17 @@ serve(async (req) => {
         break;
 
       case "payout":
-        subject = "Payment Sent to Your Account";
+        subject = `Payout sent — $${((Number(data.amount) || 0) / 100).toFixed(2)} via Stripe Connect`;
         html = await renderAsync(
           React.createElement(PayoutConfirmation, {
             cleanerFirstName: data.cleanerFirstName,
-            bookingId: data.bookingId,
+            bookingId: data.bookingId || "",
             amount: data.amount,
             transferId: data.transferId,
             transferDate: data.transferDate,
+            bookingLabel: data.bookingLabel,
+            cleanerFullName: data.cleanerFullName,
+            sourceLabel: data.sourceLabel,
           })
         );
         break;
@@ -254,9 +257,28 @@ serve(async (req) => {
         throw new Error(`Unknown email type: ${type}`);
     }
 
+    const toList = Array.from(
+      new Set(
+        [email, ...(Array.isArray(to) ? to : to ? [to] : [])]
+          .map((x: unknown) => String(x || "").trim().toLowerCase())
+          .filter((x: string) => x.includes("@")),
+      ),
+    );
+    const ccList = Array.from(
+      new Set(
+        (Array.isArray(cc) ? cc : cc ? [cc] : [])
+          .map((x: unknown) => String(x || "").trim().toLowerCase())
+          .filter((x: string) => x.includes("@") && !toList.includes(x)),
+      ),
+    );
+    if (toList.length === 0) {
+      throw new Error("No recipient email");
+    }
+
     const emailResponse = await resend.emails.send({
       from: "Novara Cleaning <hello@novaracleaning.com>",
-      to: [email],
+      to: toList,
+      ...(ccList.length ? { cc: ccList } : {}),
       subject,
       html,
     });

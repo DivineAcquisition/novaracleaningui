@@ -2,14 +2,20 @@
 //
 // Sends an EXACT-amount Stripe Connect transfer to a single cleaner. Unlike
 // process-payout (which computes the amount from the booking revenue × tier),
-// this pays precisely the cents you pass in — so the "Custom Payout" amount an
-// admin types is the amount the contractor actually receives.
+// this pays precisely the cents you pass in — so the Custom Payout / Extra Pay
+// amount an admin confirms is the amount the contractor actually receives.
+//
+// Actions:
+//   • (default) transfer — create the Connect transfer if platform funds
+//     are available, then email the contractor + confirming admin
+//     (CC contact@ + dispatch@).
+//   • balance — return the platform Stripe available/pending USD balance.
 //
 // Safety:
 //   • admin/VA JWT or internal CRON_SECRET / service-role auth
-//   • refreshes the cleaner's live Stripe status before paying (so a stale
-//     payouts_enabled flag can't block or mis-route a real, ready account)
+//   • refreshes the cleaner's live Stripe status before paying
 //   • STRIPE_ENV guard (never fire a live transfer from a test key or vice-versa)
+//   • platform available-balance check (halt if short — no transfer)
 //   • idempotency key so a double-click / retry never double-pays
 //   • $20k per-transfer fat-finger cap
 
@@ -28,6 +34,7 @@ function json(p: unknown, status = 200) {
 }
 
 const MAX_CENTS = 2_000_000; // $20k per-transfer ceiling
+const PAYOUT_OPS_CC = ["contact@novaracleaning.com", "dispatch@novaracleaning.com"];
 
 // deno-lint-ignore no-explicit-any
 type DB = any;
@@ -62,6 +69,27 @@ function envGuard(stripeEnv: string, key: string): string | null {
   return null;
 }
 
+function usdAvailable(bal: Stripe.Balance): number {
+  return ((bal.available || []) as Array<{ amount: number; currency: string }>)
+    .filter((b) => b.currency === "usd")
+    .reduce((a, b) => a + (b.amount || 0), 0);
+}
+
+function usdPending(bal: Stripe.Balance): number {
+  return ((bal.pending || []) as Array<{ amount: number; currency: string }>)
+    .filter((b) => b.currency === "usd")
+    .reduce((a, b) => a + (b.amount || 0), 0);
+}
+
+async function stripeClient(admin: DB): Promise<{ stripe: Stripe; stripeEnv: string }> {
+  const key = await resolveSecret(admin, "STRIPE_SECRET_KEY");
+  if (!key) throw Object.assign(new Error("STRIPE_SECRET_KEY not configured"), { status: 500 });
+  const stripeEnv = (await resolveSecret(admin, "STRIPE_ENV")) || "test";
+  const guardErr = envGuard(stripeEnv, key);
+  if (guardErr) throw Object.assign(new Error(guardErr), { status: 409 });
+  return { stripe: new Stripe(key, { apiVersion: "2025-08-27.basil" }), stripeEnv };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "POST required" }, 405);
@@ -75,11 +103,28 @@ serve(async (req) => {
     await authorize(admin, req);
 
     const body = await req.json().catch(() => ({}));
+    const action = String(body?.action || "transfer").toLowerCase();
+
+    const { stripe } = await stripeClient(admin);
+
+    if (action === "balance") {
+      const bal = await stripe.balance.retrieve();
+      return json({
+        ok: true,
+        availableUsd: usdAvailable(bal),
+        pendingUsd: usdPending(bal),
+      });
+    }
+
     const cleanerId = String(body?.cleanerId || "");
     const amountCents = Math.round(Number(body?.amountCents));
     const bookingId = body?.bookingId ? String(body.bookingId) : null;
     const label = body?.label ? String(body.label) : null;
+    const bookingLabel = body?.bookingLabel ? String(body.bookingLabel) : label;
+    const source = body?.source ? String(body.source) : "custom_payout";
+    const sourceLabel = body?.sourceLabel ? String(body.sourceLabel) : (source === "extra_pay" ? "Extra Pay" : "Custom Payout");
     const idemFromCaller = body?.idempotencyKey ? String(body.idempotencyKey) : null;
+    const notifyAdminEmail = body?.notifyAdminEmail ? String(body.notifyAdminEmail).trim() : "";
 
     if (!cleanerId) return json({ error: "cleanerId required" }, 400);
     if (!Number.isFinite(amountCents) || amountCents <= 0) return json({ error: "amountCents must be greater than 0" }, 400);
@@ -87,17 +132,10 @@ serve(async (req) => {
 
     const { data: cleaner } = await admin
       .from("cleaners")
-      .select("id, first_name, last_name, phone, stripe_account_id, payouts_enabled, onboarding_complete, total_earnings_cents")
+      .select("id, first_name, last_name, email, phone, stripe_account_id, payouts_enabled, onboarding_complete, total_earnings_cents")
       .eq("id", cleanerId)
       .maybeSingle();
     if (!cleaner) return json({ error: "Cleaner not found" }, 404);
-
-    const key = await resolveSecret(admin, "STRIPE_SECRET_KEY");
-    if (!key) return json({ error: "STRIPE_SECRET_KEY not configured" }, 500);
-    const stripeEnv = (await resolveSecret(admin, "STRIPE_ENV")) || "test";
-    const guardErr = envGuard(stripeEnv, key);
-    if (guardErr) return json({ error: guardErr }, 409);
-    const stripe = new Stripe(key, { apiVersion: "2025-08-27.basil" });
 
     let stripeAccountId = cleaner.stripe_account_id as string | null;
     let payoutsEnabled = !!cleaner.payouts_enabled;
@@ -120,6 +158,23 @@ serve(async (req) => {
     if (!stripeAccountId) return json({ error: "Cleaner has no Stripe Connect account." }, 400);
     if (!payoutsEnabled) return json({ error: "Payouts not enabled on this cleaner's Stripe account." }, 400);
 
+    let availableUsd = 0;
+    try {
+      const bal = await stripe.balance.retrieve();
+      availableUsd = usdAvailable(bal);
+    } catch (e) {
+      return json({
+        error: `Could not verify Stripe balance: ${e instanceof Error ? e.message : String(e)}. No transfer was sent.`,
+      }, 409);
+    }
+    if (availableUsd < amountCents) {
+      return json({
+        error: `Insufficient Stripe balance: $${(availableUsd / 100).toFixed(2)} available, $${(amountCents / 100).toFixed(2)} needed. No transfer was sent.`,
+        availableUsd,
+        neededCents: amountCents,
+      }, 409);
+    }
+
     const cleanerName = `${cleaner.first_name || ""} ${cleaner.last_name || ""}`.trim() || "Cleaner";
     const idempotencyKey = idemFromCaller ||
       `manualpay_${bookingId || "nobk"}_${cleanerId}_${amountCents}`;
@@ -131,17 +186,18 @@ serve(async (req) => {
           amount: amountCents,
           currency: "usd",
           destination: stripeAccountId,
-          description: label || `Novara custom payout — ${cleanerName}`,
+          description: label || `Novara ${sourceLabel} — ${cleanerName}`,
           metadata: {
             cleaner_id: cleanerId,
             booking_id: bookingId || "",
-            source: "custom_payout",
+            source,
           },
         },
         { idempotencyKey },
       );
     } catch (e) {
-      return json({ error: e instanceof Error ? e.message : String(e) }, 502);
+      const msg = e instanceof Error ? e.message : String(e);
+      return json({ error: msg }, 502);
     }
 
     // Roll the cleaner's lifetime earnings forward (best-effort).
@@ -163,10 +219,41 @@ serve(async (req) => {
       } catch (_) { /* non-blocking */ }
     }
 
-    return json({ success: true, transferId: transfer.id, amountCents, cleanerName });
+    let emailSent = false;
+    try {
+      const { error: mailErr } = await admin.functions.invoke("send-cleaner-email", {
+        body: {
+          type: "payout",
+          email: cleaner.email || notifyAdminEmail || PAYOUT_OPS_CC[0],
+          to: [cleaner.email, notifyAdminEmail].filter(Boolean),
+          cc: PAYOUT_OPS_CC,
+          data: {
+            cleanerFirstName: cleaner.first_name || cleanerName.split(" ")[0] || "there",
+            cleanerFullName: cleanerName,
+            bookingId: bookingId || "",
+            bookingLabel: bookingLabel || label || "your recent job",
+            amount: amountCents,
+            transferId: transfer.id,
+            transferDate: new Date().toISOString(),
+            sourceLabel,
+          },
+        },
+      });
+      emailSent = !mailErr;
+    } catch (_) { /* non-blocking */ }
+
+    return json({
+      success: true,
+      transferId: transfer.id,
+      amountCents,
+      cleanerName,
+      availableUsdAfter: availableUsd - amountCents,
+      emailSent,
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    const status = (e as { status?: number })?.status || (msg.includes("signed in") || msg.includes("only") ? 401 : 500);
     console.error("[pay-cleaner-transfer]", msg);
-    return json({ error: msg }, 500);
+    return json({ error: msg }, status);
   }
 });

@@ -76,6 +76,8 @@ interface CrewMember {
   hasContact: boolean;
   suggestedPayoutCents: number;
   alreadyPaid: boolean;
+  stripeAccountId: string | null;
+  payoutsEnabled: boolean;
 }
 
 interface JobOption {
@@ -153,7 +155,7 @@ export default function SimplePayoutTab() {
   // Per-cleaner pay form: cleanerId → { selected, dollars }
   const [crewPay, setCrewPay] = useState<Record<string, { selected: boolean; dollars: string }>>({});
   const [note, setNote] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const [payingId, setPayingId] = useState<string | null>(null);
   const [period, setPeriod] = useState<"week" | "month" | "year">("month");
   // Inline job-cost (revenue) adjust on the selected job.
   const [editingCost, setEditingCost] = useState(false);
@@ -337,7 +339,22 @@ export default function SimplePayoutTab() {
     }
     setSubmitting(true);
     try {
-      const res = await callApi<{ payout: { emailSent: number; smsSent: number; airtableSynced: boolean; cleanerCount: number } }>(
+      const res = await callApi<{
+        payout: {
+          emailSent: number;
+          airtableSynced: boolean;
+          cleanerCount: number;
+          status: string;
+          stripe?: {
+            halted?: boolean;
+            error?: string | null;
+            paidCount?: number;
+            failedCount?: number;
+            availableUsd?: number;
+            neededCents?: number;
+          };
+        };
+      }>(
         "submit",
         {
           bookingId: selected.bookingId,
@@ -345,10 +362,22 @@ export default function SimplePayoutTab() {
           note: note.trim() || undefined,
         },
       );
-      const { emailSent, smsSent, airtableSynced, cleanerCount } = res.payout;
-      toast.success(
-        `Payout logged for ${cleanerCount} cleaner(s). ${emailSent ? `${emailSent} email(s).` : ""} ${smsSent ? `${smsSent} SMS.` : ""}${airtableSynced ? " Synced to Airtable." : ""}`.trim(),
-      );
+      const { emailSent, airtableSynced, cleanerCount, status, stripe } = res.payout;
+      if (stripe?.halted || stripe?.error) {
+        toast.error(stripe.error || "Stripe could not send this payout yet", {
+          description: status === "pending"
+            ? "Amount is confirmed. Pay it from Run Payroll once funds are available."
+            : undefined,
+        });
+      } else if (status === "paid") {
+        toast.success(
+          `Paid ${cleanerCount} contractor(s) via Stripe Connect.${emailSent ? ` ${emailSent} email(s) sent.` : ""}${airtableSynced ? " Synced to Airtable." : ""}`.trim(),
+        );
+      } else {
+        toast.success(
+          `Confirmed for ${cleanerCount} contractor(s). ${stripe?.paidCount ? `${stripe.paidCount} sent.` : "Queued for Run Payroll."}${airtableSynced ? " Synced to Airtable." : ""}`.trim(),
+        );
+      }
       setSelected(null);
       setCrewPay({});
       setNote("");
@@ -360,13 +389,19 @@ export default function SimplePayoutTab() {
     }
   };
 
-  const markPaid = async (id: string) => {
+  const payPending = async (id: string) => {
+    setPayingId(id);
     try {
-      await callApi("mark_paid", { id });
-      toast.success("Marked paid.");
+      const res = await callApi<{
+        ok: boolean; halted?: boolean; error?: string | null; paidCount: number;
+      }>("execute_pending", { payoutId: id });
+      if (res.halted || res.error) throw new Error(res.error || "Stripe could not send this payout");
+      toast.success(`Paid via Stripe Connect (${res.paidCount} transfer${res.paidCount === 1 ? "" : "s"}).`);
       await load({ silent: true });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed");
+    } finally {
+      setPayingId(null);
     }
   };
 
@@ -380,7 +415,7 @@ export default function SimplePayoutTab() {
         <div>
           <h2 className="font-jakarta text-xl font-bold text-slate-900 tracking-tight">Custom Payouts</h2>
           <p className="text-sm text-slate-500 mt-1">
-            Pick a job, type a payout, and we notify the contractor + sync to Airtable. Profit and % paid out are calculated for you.
+            Confirm the payout for a job. If Stripe has available funds and the contractor is Connect-ready, we transfer immediately and email you + the contractor (CC contact@ and dispatch@).
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={() => load({ silent: true })} disabled={refreshing}>
@@ -418,8 +453,8 @@ export default function SimplePayoutTab() {
         {/* Payout form */}
         <Card className="border-slate-200">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Log a payout</CardTitle>
-            <CardDescription className="text-xs">Connected to live job data. Type any custom amount.</CardDescription>
+            <CardTitle className="text-base">Confirm a payout</CardTitle>
+            <CardDescription className="text-xs">Connected to live job data. Confirming sends a Stripe Connect transfer when funds are available.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {!selected ? (
@@ -546,6 +581,11 @@ export default function SimplePayoutTab() {
                               {!c.hasContact && (
                                 <p className="text-[10px] text-amber-600">No email/phone — won't be notified</p>
                               )}
+                              {c.payoutsEnabled && c.stripeAccountId ? (
+                                <p className="text-[10px] text-emerald-700">Stripe Connect ready</p>
+                              ) : (
+                                <p className="text-[10px] text-rose-600">Needs Stripe Connect</p>
+                              )}
                             </div>
                             <div className="relative w-28">
                               <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
@@ -631,13 +671,13 @@ export default function SimplePayoutTab() {
 
                 <Button onClick={submit} disabled={submitting || selectedCrew.length === 0} className="w-full bg-violet-600 hover:bg-violet-700 text-white">
                   {submitting ? (
-                    <><RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> Submitting…</>
+                    <><RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> Sending…</>
                   ) : (
-                    <><RiSendPlaneLine className="w-4 h-4 mr-2" /> Submit payout & notify {selectedCrew.length || ""} contractor{selectedCrew.length === 1 ? "" : "s"}</>
+                    <><RiSendPlaneLine className="w-4 h-4 mr-2" /> Confirm &amp; pay {selectedCrew.length || ""} contractor{selectedCrew.length === 1 ? "" : "s"} via Stripe</>
                   )}
                 </Button>
                 <p className="text-[11px] text-slate-400 text-center">
-                  Emails + texts each selected cleaner that their payout is pending for their amount, and syncs to Airtable.
+                  Transfers from Novara&apos;s Stripe balance to each contractor&apos;s Connect account. Emails you, the contractor, and CCs contact@novaracleaning.com + dispatch@novaracleaning.com.
                 </p>
               </div>
             )}
@@ -745,8 +785,8 @@ export default function SimplePayoutTab() {
                       </TableCell>
                       <TableCell className="text-right">
                         {p.status === "pending" && (
-                          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => markPaid(p.id)}>
-                            Mark paid
+                          <Button size="sm" variant="outline" className="h-7 text-xs" disabled={payingId === p.id} onClick={() => payPending(p.id)}>
+                            {payingId === p.id ? <RiLoader4Line className="w-3 h-3 animate-spin" /> : "Pay via Stripe"}
                           </Button>
                         )}
                       </TableCell>
