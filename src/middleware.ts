@@ -125,6 +125,10 @@ const ROUTE_OWNER: Array<[string, SubdomainKey]> = [
   // unlocks. Lives on try.* so the link works without any login.
   ["/membership-pay", "try"],
 
+  // Tokenized weekly ad spend log (no login). Lives on try.* so the emailed
+  // link works the same way as /pay and /photos.
+  ["/ad-spend", "try"],
+
   // VA end-of-day report (eod.novaracleaning.com). Signed-in VAs only —
   // identity comes from the session, never from the form.
   ["/eod", "eod"],
