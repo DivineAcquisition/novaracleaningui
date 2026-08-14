@@ -159,6 +159,13 @@ const NAV_ITEMS: NavItem[] = [
     adminOnly: true,
   },
   {
+    title: "Weekly Report",
+    url: "/admin/weekly-report",
+    icon: RiFileChartLine,
+    description: "Sales · retention · growth PDF",
+    adminOnly: true,
+  },
+  {
     title: "Team",
     url: "/admin/team",
     icon: RiTeamLine,

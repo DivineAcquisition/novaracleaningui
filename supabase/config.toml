@@ -708,3 +708,6 @@ verify_jwt = false
 
 [functions.va-eod-drive-mirror]
 verify_jwt = false
+
+[functions.weekly-report-generate]
+verify_jwt = false
