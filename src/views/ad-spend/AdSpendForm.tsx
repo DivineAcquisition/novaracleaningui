@@ -84,7 +84,7 @@ export default function AdSpendForm({ token }: { token: string }) {
   if (loading) {
     return (
       <div className="min-h-screen bg-[#FAFAFC] flex items-center justify-center text-sm text-slate-500">
-        Loading this week’s ad spend form…
+        Loading this month’s ad spend form…
       </div>
     );
   }
@@ -102,16 +102,17 @@ export default function AdSpendForm({ token }: { token: string }) {
       <div className="bg-gradient-to-br from-[#5C0FFE] to-[#8F7BFD] text-white px-5 py-8">
         <div className="max-w-2xl mx-auto">
           <p className="text-[11px] uppercase tracking-[0.14em] font-semibold text-white/80">Novara Cleaning</p>
-          <h1 className="font-jakarta text-2xl font-bold mt-1">Weekly ad spend log</h1>
+          <h1 className="font-jakarta text-2xl font-bold mt-1">Monthly ad spend log</h1>
           <p className="text-sm text-white/90 mt-2">{boot.rangeLabel}</p>
         </div>
       </div>
 
       <div className="max-w-2xl mx-auto px-5 py-6 space-y-4">
         <p className="text-sm text-slate-600">
-          Paid channels we already track: Facebook, LSA, Google, Instagram. Leave a channel blank if it
-          wasn’t running. Enter <span className="font-medium text-slate-800">0</span> if it ran but spent
-          nothing. Submitting writes the P&amp;L Google Sheet and Airtable.
+          Totals for the whole month. Paid channels we already track: Facebook, LSA, Google, Instagram.
+          Leave a channel blank if it wasn’t running. Enter{" "}
+          <span className="font-medium text-slate-800">0</span> if it ran but spent nothing. Submitting
+          writes the P&amp;L Google Sheet and Airtable.
         </p>
 
         {done && (

@@ -1,23 +1,26 @@
-// Monday–Sunday windows in America/New_York (same grain as the weekly report).
+// Calendar-month windows in America/New_York.
 
 export function ymd(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-export function addDays(iso: string, days: number): string {
-  const d = new Date(`${iso}T12:00:00.000Z`);
-  d.setUTCDate(d.getUTCDate() + days);
+export function firstOfMonth(dateYmd: string): string {
+  return `${dateYmd.slice(0, 7)}-01`;
+}
+
+export function lastOfMonth(dateYmd: string): string {
+  const d = new Date(`${firstOfMonth(dateYmd)}T12:00:00.000Z`);
+  d.setUTCMonth(d.getUTCMonth() + 1, 0);
   return ymd(d);
 }
 
-export function mondayOnOrBefore(dateYmd: string): string {
-  const d = new Date(`${dateYmd}T12:00:00.000Z`);
-  const dow = d.getUTCDay();
-  const back = dow === 0 ? 6 : dow - 1;
-  return addDays(dateYmd, -back);
+export function addMonths(dateYmd: string, months: number): string {
+  const d = new Date(`${firstOfMonth(dateYmd)}T12:00:00.000Z`);
+  d.setUTCMonth(d.getUTCMonth() + months);
+  return ymd(d).slice(0, 8) + "01";
 }
 
-export function priorCompletedWeek(now: Date, timeZone: string): { start: string; end: string } {
+function todayInZone(now: Date, timeZone: string): string {
   const local = Object.fromEntries(
     new Intl.DateTimeFormat("en-CA", {
       timeZone,
@@ -26,13 +29,25 @@ export function priorCompletedWeek(now: Date, timeZone: string): { start: string
       day: "2-digit",
     }).formatToParts(now).map((p) => [p.type, p.value]),
   ) as Record<string, string>;
-  const today = `${local.year}-${local.month}-${local.day}`;
-  const thisMonday = mondayOnOrBefore(today);
-  const start = addDays(thisMonday, -7);
-  return { start, end: addDays(start, 6) };
+  return `${local.year}-${local.month}-${local.day}`;
+}
+
+export function priorCompletedMonth(now: Date, timeZone: string): { start: string; end: string } {
+  const thisMonth = firstOfMonth(todayInZone(now, timeZone));
+  const start = addMonths(thisMonth, -1);
+  return { start, end: lastOfMonth(start) };
+}
+
+export function formatMonthLabel(start: string): string {
+  return new Date(`${firstOfMonth(start)}T12:00:00.000Z`).toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
 }
 
 export function formatRangeLabel(start: string, end: string): string {
+  if (start.endsWith("-01") && lastOfMonth(start) === end) return formatMonthLabel(start);
   const fmt = (iso: string) =>
     new Date(`${iso}T12:00:00.000Z`).toLocaleDateString("en-US", {
       month: "short",
@@ -43,12 +58,13 @@ export function formatRangeLabel(start: string, end: string): string {
   return `${fmt(start)} – ${fmt(end)}`;
 }
 
-export function weeksInclusive(firstMonday: string, lastMonday: string): Array<{ start: string; end: string }> {
+export function monthsInclusive(firstMonthStart: string, lastMonthStart: string): Array<{ start: string; end: string }> {
   const out: Array<{ start: string; end: string }> = [];
-  let cur = firstMonday;
-  while (cur <= lastMonday) {
-    out.push({ start: cur, end: addDays(cur, 6) });
-    cur = addDays(cur, 7);
+  let cur = firstOfMonth(firstMonthStart);
+  const last = firstOfMonth(lastMonthStart);
+  while (cur <= last) {
+    out.push({ start: cur, end: lastOfMonth(cur) });
+    cur = addMonths(cur, 1);
   }
   return out;
 }

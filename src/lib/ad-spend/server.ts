@@ -1,14 +1,14 @@
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 
-import { formatRangeLabel, mondayOnOrBefore, priorCompletedWeek, weeksInclusive } from "./period";
+import { firstOfMonth, formatRangeLabel, monthsInclusive, priorCompletedMonth } from "./period";
 import { ALL_PLATFORMS, PAID_PLATFORMS, type ChannelEntry, type PaidPlatform } from "./platforms";
 
-export { ALL_PLATFORMS, PAID_PLATFORMS, formatRangeLabel, priorCompletedWeek };
+export { ALL_PLATFORMS, PAID_PLATFORMS, formatRangeLabel, priorCompletedMonth };
 export type { ChannelEntry, PaidPlatform };
 
 const FROM_ADDRESS = "Novara Team <hello@novaracleaning.com>";
 const DEFAULT_PUBLIC_BASE = "https://try.novaracleaning.com";
-export const OPERATIONS_START = "2026-05-18"; // Monday of the first booking week
+export const OPERATIONS_START = "2026-05-01"; // First calendar month of operations
 
 export type AdSpendFormSettings = {
   enabled: boolean;
@@ -67,7 +67,7 @@ export async function loadSettings(): Promise<AdSpendFormSettings> {
     timezone: String(v.timezone || DEFAULT_SETTINGS.timezone),
     recipients: recipients.length ? recipients : DEFAULT_SETTINGS.recipients,
     platforms: platforms.length ? platforms : DEFAULT_SETTINGS.platforms,
-    operations_start: mondayOnOrBefore(String(v.operations_start || DEFAULT_SETTINGS.operations_start)),
+    operations_start: firstOfMonth(String(v.operations_start || DEFAULT_SETTINGS.operations_start)),
   };
 }
 
@@ -119,14 +119,13 @@ export async function loadToken(token: string): Promise<TokenRow | null> {
 
 export async function loadExistingEntries(
   periodStart: string,
-  periodEnd: string,
+  _periodEnd?: string,
 ): Promise<Partial<Record<PaidPlatform, ChannelEntry>>> {
   const { data } = await getAdminSupabase()
     .from("pl_ad_spend")
     .select("platform, spend_cents, leads_calls, booked_jobs, campaign_notes, date")
-    .gte("date", periodStart)
-    .lte("date", periodEnd)
-    .limit(200);
+    .eq("date", periodStart)
+    .limit(20);
   const out: Partial<Record<PaidPlatform, ChannelEntry>> = {};
   for (const row of (data || []) as Array<{
     platform: string;
@@ -171,8 +170,8 @@ export async function submitAdSpendForm(opts: {
 }): Promise<{ ok: true; platforms: string[]; sheet: unknown; airtable: unknown }> {
   const tok = await loadToken(opts.token);
   if (!tok) throw Object.assign(new Error("This link is invalid."), { status: 404 });
-  if (tok.expires_at && new Date(tok.expires_at).getTime() < Date.now()) {
-    throw Object.assign(new Error("This link has expired. Ask ops to resend the form."), { status: 410 });
+  if (tok.status === "expired" || (tok.expires_at && new Date(tok.expires_at).getTime() < Date.now())) {
+    throw Object.assign(new Error("This link has expired. Ask ops to resend the monthly form."), { status: 410 });
   }
 
   const rows = opts.entries
@@ -313,19 +312,19 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function renderSingleWeekEmail(range: string, url: string, platforms: string[]): string {
+function renderSingleMonthEmail(range: string, url: string, platforms: string[]): string {
   return `<!doctype html>
 <html>
   <body style="margin:0;padding:24px;background:#FAFAFC;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0F172A;">
     <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #E2E8F0;border-radius:16px;overflow:hidden;">
       <div style="background:linear-gradient(135deg,#5C0FFE 0%,#8F7BFD 100%);padding:20px 24px;">
-        <p style="margin:0;color:#fff;font-size:16px;font-weight:700;">Weekly ad spend log — ${escapeHtml(range)}</p>
+        <p style="margin:0;color:#fff;font-size:16px;font-weight:700;">Monthly ad spend log — ${escapeHtml(range)}</p>
       </div>
       <div style="padding:24px;">
-        <p style="margin:0 0 12px;font-size:15px;line-height:1.55;">Log last week's paid spend so the P&amp;L sheet, Airtable, and Monday morning weekly report stay accurate.</p>
+        <p style="margin:0 0 12px;font-size:15px;line-height:1.55;">Log last month's paid spend so the P&amp;L sheet and Airtable stay accurate. One form per calendar month.</p>
         <p style="margin:0 0 16px;font-size:14px;line-height:1.55;color:#475569;">Channels: ${escapeHtml(platforms.join(", "))}. Leave a channel blank if it wasn't running. Enter 0 if it ran but spent nothing.</p>
         <p style="margin:0 0 24px;">
-          <a href="${url}" style="display:inline-block;background:#5C0FFE;color:#fff;text-decoration:none;font-weight:600;font-size:15px;padding:12px 22px;border-radius:10px;">Open this week's form</a>
+          <a href="${url}" style="display:inline-block;background:#5C0FFE;color:#fff;text-decoration:none;font-weight:600;font-size:15px;padding:12px 22px;border-radius:10px;">Open ${escapeHtml(range)} form</a>
         </p>
         <p style="margin:0;font-size:12px;line-height:1.5;color:#94A3B8;word-break:break-all;">${url}</p>
       </div>
@@ -334,11 +333,11 @@ function renderSingleWeekEmail(range: string, url: string, platforms: string[]):
 </html>`;
 }
 
-function renderBackfillEmail(weeks: Array<{ range: string; url: string }>): string {
-  const buttons = weeks
+function renderBackfillEmail(months: Array<{ range: string; url: string }>): string {
+  const buttons = months
     .map(
-      (w) =>
-        `<p style="margin:0 0 10px;"><a href="${w.url}" style="display:inline-block;background:#5C0FFE;color:#fff;text-decoration:none;font-weight:600;font-size:14px;padding:10px 18px;border-radius:10px;">${escapeHtml(w.range)}</a></p>`,
+      (m) =>
+        `<p style="margin:0 0 10px;"><a href="${m.url}" style="display:inline-block;background:#5C0FFE;color:#fff;text-decoration:none;font-weight:600;font-size:14px;padding:10px 18px;border-radius:10px;">${escapeHtml(m.range)}</a></p>`,
     )
     .join("");
   return `<!doctype html>
@@ -346,10 +345,10 @@ function renderBackfillEmail(weeks: Array<{ range: string; url: string }>): stri
   <body style="margin:0;padding:24px;background:#FAFAFC;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0F172A;">
     <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #E2E8F0;border-radius:16px;overflow:hidden;">
       <div style="background:linear-gradient(135deg,#5C0FFE 0%,#8F7BFD 100%);padding:20px 24px;">
-        <p style="margin:0;color:#fff;font-size:16px;font-weight:700;">Ad spend catch-up — ${weeks.length} weeks</p>
+        <p style="margin:0;color:#fff;font-size:16px;font-weight:700;">Ad spend catch-up — ${months.length} months</p>
       </div>
       <div style="padding:24px;">
-        <p style="margin:0 0 12px;font-size:15px;line-height:1.55;">These are the weekly paid-channel logs from the start of operations through last completed week. Each link is one Mon–Sun form. Submitting writes the P&amp;L Google Sheet and Airtable.</p>
+        <p style="margin:0 0 12px;font-size:15px;line-height:1.55;">Please use these monthly forms instead of the weekly links sent earlier. Each button is one calendar month from the start of operations through last completed month. Submitting writes the P&amp;L Google Sheet and Airtable.</p>
         <p style="margin:0 0 18px;font-size:14px;line-height:1.55;color:#475569;">Facebook, LSA, Google, and Instagram. Leave a channel blank if it wasn't running.</p>
         ${buttons}
       </div>
@@ -381,7 +380,7 @@ async function markSent(ids: string[], recipients: string[]) {
     .in("id", ids);
 }
 
-export async function sendWeekForm(opts?: {
+export async function sendMonthForm(opts?: {
   periodStart?: string;
   periodEnd?: string;
   force?: boolean;
@@ -389,18 +388,18 @@ export async function sendWeekForm(opts?: {
   const settings = await loadSettings();
   if (!settings.enabled && !opts?.force) return { ok: false, emailed: false, url: "", range: "", skipped: "disabled" };
 
-  const week = opts?.periodStart && opts?.periodEnd
+  const month = opts?.periodStart && opts?.periodEnd
     ? { start: opts.periodStart, end: opts.periodEnd }
-    : priorCompletedWeek(new Date(), settings.timezone);
+    : priorCompletedMonth(new Date(), settings.timezone);
 
-  const tok = await ensureToken(week.start, week.end);
+  const tok = await ensureToken(month.start, month.end);
   const base = await publicBaseUrl();
   const url = formUrl(base, tok.token);
-  const range = formatRangeLabel(week.start, week.end);
+  const range = formatRangeLabel(month.start, month.end);
   const emailed = await sendEmail(
     settings.recipients,
-    `Weekly ad spend log — ${range}`,
-    renderSingleWeekEmail(range, url, settings.platforms),
+    `Monthly ad spend log — ${range}`,
+    renderSingleMonthEmail(range, url, settings.platforms),
   );
   if (emailed) await markSent([tok.id], settings.recipients);
 
@@ -409,7 +408,7 @@ export async function sendWeekForm(opts?: {
       event_type: "ad_spend.form.sent",
       source: "ad-spend-form",
       summary: `Ad spend form sent for ${range}${emailed ? "" : " (email failed)"}`,
-      data: { period_start: week.start, period_end: week.end, emailed, recipients: settings.recipients },
+      data: { period_start: month.start, period_end: month.end, emailed, recipients: settings.recipients },
     });
   } catch {
     /* best-effort */
@@ -421,23 +420,23 @@ export async function sendWeekForm(opts?: {
 export async function sendBackfillForms(opts?: { force?: boolean }): Promise<{
   ok: boolean;
   emailed: boolean;
-  weeks: number;
+  months: number;
   ranges: string[];
 }> {
   const settings = await loadSettings();
-  if (!settings.enabled && !opts?.force) return { ok: false, emailed: false, weeks: 0, ranges: [] };
+  if (!settings.enabled && !opts?.force) return { ok: false, emailed: false, months: 0, ranges: [] };
 
-  const prior = priorCompletedWeek(new Date(), settings.timezone);
-  const weeks = weeksInclusive(settings.operations_start, prior.start);
+  const prior = priorCompletedMonth(new Date(), settings.timezone);
+  const months = monthsInclusive(settings.operations_start, prior.start);
   const base = await publicBaseUrl();
   const packed: Array<{ id: string; range: string; url: string }> = [];
-  for (const w of weeks) {
-    const tok = await ensureToken(w.start, w.end);
-    packed.push({ id: tok.id, range: formatRangeLabel(w.start, w.end), url: formUrl(base, tok.token) });
+  for (const m of months) {
+    const tok = await ensureToken(m.start, m.end);
+    packed.push({ id: tok.id, range: formatRangeLabel(m.start, m.end), url: formUrl(base, tok.token) });
   }
   const emailed = await sendEmail(
     settings.recipients,
-    `Ad spend catch-up — ${packed.length} weeks since ${formatRangeLabel(settings.operations_start, addDaysSafe(settings.operations_start, 6))}`,
+    `Ad spend catch-up — ${packed.length} months since ${formatRangeLabel(settings.operations_start, months[0]?.end || settings.operations_start)}`,
     renderBackfillEmail(packed.map((p) => ({ range: p.range, url: p.url }))),
   );
   if (emailed) await markSent(packed.map((p) => p.id), settings.recipients);
@@ -446,18 +445,12 @@ export async function sendBackfillForms(opts?: { force?: boolean }): Promise<{
     await getAdminSupabase().from("events").insert({
       event_type: "ad_spend.form.backfill_sent",
       source: "ad-spend-form",
-      summary: `Ad spend catch-up sent (${packed.length} weeks)${emailed ? "" : " — email failed"}`,
-      data: { weeks: packed.length, ranges: packed.map((p) => p.range), emailed, recipients: settings.recipients },
+      summary: `Ad spend catch-up sent (${packed.length} months)${emailed ? "" : " — email failed"}`,
+      data: { months: packed.length, ranges: packed.map((p) => p.range), emailed, recipients: settings.recipients },
     });
   } catch {
     /* best-effort */
   }
 
-  return { ok: emailed, emailed, weeks: packed.length, ranges: packed.map((p) => p.range) };
-}
-
-function addDaysSafe(iso: string, days: number): string {
-  const d = new Date(`${iso}T12:00:00.000Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
+  return { ok: emailed, emailed, months: packed.length, ranges: packed.map((p) => p.range) };
 }

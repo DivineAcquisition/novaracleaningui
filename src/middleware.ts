@@ -125,7 +125,7 @@ const ROUTE_OWNER: Array<[string, SubdomainKey]> = [
   // unlocks. Lives on try.* so the link works without any login.
   ["/membership-pay", "try"],
 
-  // Tokenized weekly ad spend log (no login). Lives on try.* so the emailed
+  // Tokenized monthly ad spend log (no login). Lives on try.* so the emailed
   // link works the same way as /pay and /photos.
   ["/ad-spend", "try"],
 
