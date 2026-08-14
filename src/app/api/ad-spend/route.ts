@@ -12,6 +12,12 @@ export async function GET(req: Request): Promise<NextResponse> {
 
   const tok = await loadToken(token);
   if (!tok) return NextResponse.json({ ok: false, error: "This link is invalid." }, { status: 404 });
+  if (tok.status === "expired" || (tok.expires_at && new Date(tok.expires_at).getTime() < Date.now())) {
+    return NextResponse.json(
+      { ok: false, error: "This link has expired. Ask ops to resend the monthly form." },
+      { status: 410 },
+    );
+  }
 
   const settings = await loadSettings();
   const existing = await loadExistingEntries(tok.period_start, tok.period_end);

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { AdminAuthError, requireAdmin } from "@/lib/admin-auth";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
-import { sendBackfillForms, sendWeekForm } from "@/lib/ad-spend/server";
+import { sendBackfillForms, sendMonthForm } from "@/lib/ad-spend/server";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -52,7 +52,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       return NextResponse.json({ ok: true, ...report });
     }
     if (action === "send") {
-      const report = await sendWeekForm({
+      const report = await sendMonthForm({
         periodStart: body.periodStart,
         periodEnd: body.periodEnd,
         force: Boolean(body.force) || Boolean(auth.cron),
@@ -75,6 +75,6 @@ export async function GET(req: Request): Promise<NextResponse> {
   if (!expected || provided !== expected) {
     return NextResponse.json({ ok: false, error: "Not authorised." }, { status: 401 });
   }
-  const report = await sendWeekForm({ force: true });
+  const report = await sendMonthForm({ force: true });
   return NextResponse.json({ ok: true, ...report });
 }

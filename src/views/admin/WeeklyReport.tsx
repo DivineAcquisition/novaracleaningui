@@ -151,13 +151,13 @@ export default function WeeklyReport() {
         ok?: boolean;
         error?: string;
         range?: string;
-        weeks?: number;
+        months?: number;
         emailed?: boolean;
       };
       if (!res.ok || json.ok === false) throw new Error(json.error || "Send failed");
       toast.success(
         action === "backfill"
-          ? `Catch-up sent (${json.weeks || 0} weeks)`
+          ? `Catch-up sent (${json.months || 0} months)`
           : `Ad spend form sent${json.range ? ` — ${json.range}` : ""}`,
       );
     } catch (err) {
@@ -259,19 +259,19 @@ export default function WeeklyReport() {
       )}
 
       <Card className="p-4 border-slate-200 space-y-3">
-        <p className="text-sm font-semibold text-slate-900">Weekly ad spend log</p>
+        <p className="text-sm font-semibold text-slate-900">Monthly ad spend log</p>
         <p className="text-sm text-slate-500">
           Tokenized form for Facebook, LSA, Google, and Instagram. Submit writes{" "}
           <span className="font-medium text-slate-700">pl_ad_spend</span>, the P&amp;L Google Sheet
-          Ad Spend tab, and Airtable. Cron emails last week every Monday 7am ET.
+          Ad Spend tab, and Airtable. Cron emails last month on the 1st at 7am ET.
         </p>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" disabled={busy} onClick={() => void sendAdSpend("send")}>
             <RiMailSendLine className="w-4 h-4 mr-1.5" />
-            Email last week
+            Email last month
           </Button>
           <Button variant="outline" size="sm" disabled={busy} onClick={() => void sendAdSpend("backfill")}>
-            Email every week since launch
+            Email every month since launch
           </Button>
         </div>
       </Card>

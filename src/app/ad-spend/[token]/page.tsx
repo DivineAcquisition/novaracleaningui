@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import AdSpendForm from "@/views/ad-spend/AdSpendForm";
 
 export const metadata: Metadata = {
-  title: "Weekly ad spend log — Novara",
+  title: "Monthly ad spend log — Novara",
   robots: { index: false, follow: false, nocache: true },
 };
 
