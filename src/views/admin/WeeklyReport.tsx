@@ -8,6 +8,7 @@ import {
   RiExternalLinkLine,
   RiFileChartLine,
   RiLoader4Line,
+  RiMailSendLine,
   RiPlayLine,
   RiRefreshLine,
   RiSettings3Line,
@@ -134,6 +135,38 @@ export default function WeeklyReport() {
     await invoke({ action: "save_settings", settings }, "Schedule saved");
   };
 
+  const sendAdSpend = async (action: "send" | "backfill") => {
+    setBusy(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const res = await fetch("/api/ad-spend/send", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${sessionData.session?.access_token || ""}`,
+        },
+        body: JSON.stringify({ action, force: true }),
+      });
+      const json = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        range?: string;
+        weeks?: number;
+        emailed?: boolean;
+      };
+      if (!res.ok || json.ok === false) throw new Error(json.error || "Send failed");
+      toast.success(
+        action === "backfill"
+          ? `Catch-up sent (${json.weeks || 0} weeks)`
+          : `Ad spend form sent${json.range ? ` — ${json.range}` : ""}`,
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Send failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="max-w-5xl mx-auto space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -224,6 +257,24 @@ export default function WeeklyReport() {
           </Button>
         </Card>
       )}
+
+      <Card className="p-4 border-slate-200 space-y-3">
+        <p className="text-sm font-semibold text-slate-900">Weekly ad spend log</p>
+        <p className="text-sm text-slate-500">
+          Tokenized form for Facebook, LSA, Google, and Instagram. Submit writes{" "}
+          <span className="font-medium text-slate-700">pl_ad_spend</span>, the P&amp;L Google Sheet
+          Ad Spend tab, and Airtable. Cron emails last week every Monday 7am ET.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" disabled={busy} onClick={() => void sendAdSpend("send")}>
+            <RiMailSendLine className="w-4 h-4 mr-1.5" />
+            Email last week
+          </Button>
+          <Button variant="outline" size="sm" disabled={busy} onClick={() => void sendAdSpend("backfill")}>
+            Email every week since launch
+          </Button>
+        </div>
+      </Card>
 
       <Card className="p-4 border-slate-200 space-y-3">
         <Label className="text-xs text-slate-500">On-demand custom range (Mon–Sun recommended)</Label>
