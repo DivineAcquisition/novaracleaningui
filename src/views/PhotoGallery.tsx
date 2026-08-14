@@ -18,11 +18,14 @@ import {
   RiCloseLine,
   RiImage2Line,
   RiMapPinLine,
+  RiPlayCircleLine,
   RiSparklingLine,
 } from "@remixicon/react";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SEO } from "@/components/SEO";
+import { MediaThumb } from "@/components/job-media/MediaThumb";
+import { isVideoUrl } from "@/lib/job-media";
 import { cn } from "@/lib/utils";
 
 interface GalleryData {
@@ -216,7 +219,7 @@ function PhotoSection({
     <section>
       <div className="mb-3 flex items-center justify-between">
         <h2 className={cn("text-sm font-bold uppercase tracking-widest", accent)}>{label}</h2>
-        <span className="text-xs text-slate-400">{urls.length} photo{urls.length === 1 ? "" : "s"}</span>
+        <span className="text-xs text-slate-400">{urls.length} file{urls.length === 1 ? "" : "s"}</span>
       </div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {urls.map((u, i) => (
@@ -226,12 +229,16 @@ function PhotoSection({
             onClick={() => onOpen(i)}
             className="group relative aspect-square overflow-hidden rounded-xl border border-slate-200 bg-slate-100"
           >
-            <img
-              src={u}
-              alt={`${label} photo ${i + 1}`}
-              loading="lazy"
+            <MediaThumb
+              url={u}
+              alt={`${label} ${i + 1}`}
               className="absolute inset-0 h-full w-full object-cover transition group-hover:scale-105"
             />
+            {isVideoUrl(u) && (
+              <span className="absolute inset-0 flex items-center justify-center bg-black/20">
+                <RiPlayCircleLine className="h-10 w-10 text-white drop-shadow" />
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -289,12 +296,23 @@ function Lightbox({
           </button>
         </>
       )}
-      <img
-        src={urls[index]}
-        alt={`Photo ${index + 1}`}
-        className="max-h-[85vh] max-w-full rounded-lg object-contain"
-        onClick={(e) => e.stopPropagation()}
-      />
+      {isVideoUrl(urls[index]) ? (
+        <video
+          src={urls[index]}
+          controls
+          playsInline
+          autoPlay
+          className="max-h-[85vh] max-w-full rounded-lg"
+          onClick={(e) => e.stopPropagation()}
+        />
+      ) : (
+        <img
+          src={urls[index]}
+          alt={`Photo ${index + 1}`}
+          className="max-h-[85vh] max-w-full rounded-lg object-contain"
+          onClick={(e) => e.stopPropagation()}
+        />
+      )}
       {urls.length > 1 && (
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-white/10 px-3 py-1 text-xs text-white">
           {index + 1} / {urls.length}

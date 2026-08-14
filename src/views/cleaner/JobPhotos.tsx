@@ -1,6 +1,6 @@
 "use client";
 
-// ─── /cleaner/job-photos/[token] — public photo-upload form ───────────────
+// ─── /cleaner/job-photos/[token] — public photo + video upload form ───────
 //
 // Cleaner-facing page reached via the SMS that complete-booking fires
 // when a job is marked completed. No login required — the URL carries
@@ -10,7 +10,8 @@
 // bookings.before_photos / after_photos via `submit-cleaner-photos`.
 //
 // Designed mobile-first — cleaners almost always tap the link from a
-// phone in the field.
+// phone in the field. Photos and short videos are both accepted: this
+// is the contractor's proof of work if a customer later disputes quality.
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
@@ -21,13 +22,17 @@ import {
   RiCloseCircleLine,
   RiImageAddLine,
   RiLoader4Line,
+  RiShieldCheckLine,
   RiSparklingLine,
+  RiVideoLine,
 } from "@remixicon/react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import { MediaThumb } from "@/components/job-media/MediaThumb";
+import { isVideoFile, videoTooLargeMessage } from "@/lib/job-media";
 import { cn } from "@/lib/utils";
 
 interface BookingInfo {
@@ -56,6 +61,11 @@ const BUCKET = "cleaner-job-photos";
 async function prepareForUpload(
   file: File,
 ): Promise<{ blob: Blob; ext: string; contentType: string }> {
+  if (isVideoFile(file)) {
+    const rawExt = (file.name.split(".").pop() || "mp4").toLowerCase();
+    const ext = rawExt === "qt" ? "mov" : rawExt;
+    return { blob: file, ext, contentType: file.type || "video/mp4" };
+  }
   try {
     const compressed = await imageCompression(file, {
       maxSizeMB: 1.5,
@@ -166,6 +176,11 @@ export default function CleanerJobPhotosPage() {
     const added: string[] = [];
     try {
       for (const file of Array.from(files)) {
+        const tooBig = videoTooLargeMessage(file);
+        if (tooBig) {
+          toast.error(tooBig);
+          continue;
+        }
         const { blob, ext, contentType } = await prepareForUpload(file);
         const key = `bookings/${info.bookingId}/${kind}/${Date.now()}-${Math.random()
           .toString(36)
@@ -179,11 +194,12 @@ export default function CleanerJobPhotosPage() {
         const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(key);
         added.push(pub.publicUrl);
       }
+      if (!added.length) return;
       const nextBefore = kind === "before" ? [...beforeUrls, ...added] : beforeUrls;
       const nextAfter = kind === "after" ? [...afterUrls, ...added] : afterUrls;
       setBeforeUrls(nextBefore);
       setAfterUrls(nextAfter);
-      toast.success(`Added ${added.length} ${kind} photo${added.length === 1 ? "" : "s"}`);
+      toast.success(`Added ${added.length} ${kind} file${added.length === 1 ? "" : "s"}`);
       void saveProgress(nextBefore, nextAfter);
     } catch (err) {
       toast.error("Upload failed: " + (err as Error).message);
@@ -203,7 +219,7 @@ export default function CleanerJobPhotosPage() {
   const submit = async () => {
     const relevant = phase === "before" ? beforeUrls : phase === "after" ? afterUrls : [...beforeUrls, ...afterUrls];
     if (relevant.length === 0) {
-      toast.error(`Add at least one ${phase || ""} photo first.`.replace("  ", " "));
+      toast.error(`Add at least one ${phase || ""} photo or video first.`.replace("  ", " "));
       return;
     }
     setSubmitting(true);
@@ -215,7 +231,7 @@ export default function CleanerJobPhotosPage() {
       const d = data as { ok?: boolean; reason?: string };
       if (!d?.ok) throw new Error(d?.reason || "Submit failed");
       setSubmitted(true);
-      toast.success("Photos submitted. Thanks!");
+      toast.success("Photos & videos submitted. Thanks!");
     } catch (err) {
       toast.error((err as Error).message);
     } finally {
@@ -237,9 +253,9 @@ export default function CleanerJobPhotosPage() {
     return (
       <div className="min-h-screen bg-slate-50 p-4 max-w-md mx-auto">
         <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-900">
-          <p className="font-semibold">This photo-upload link isn't valid anymore.</p>
+          <p className="font-semibold">This upload link isn't valid anymore.</p>
           <p className="text-xs mt-1">
-            If you still need to submit photos for a completed job, text your
+            If you still need to submit photos or videos for a completed job, text your
             dispatcher and they'll send you a fresh link.
           </p>
         </div>
@@ -270,11 +286,11 @@ export default function CleanerJobPhotosPage() {
             <RiCheckLine className="w-6 h-6" />
           </div>
           <p className="font-semibold text-emerald-900">
-            {phase === "before" ? "Before photos are in." : phase === "after" ? "After photos are in." : "Photos are in."}
+            {phase === "before" ? "Before photos & videos are in." : phase === "after" ? "After photos & videos are in." : "Photos & videos are in."}
           </p>
           <p className="text-xs text-emerald-800 mt-1">
             {phase === "before"
-              ? "You're all set to start the clean. You'll get a link for after photos once the job is marked complete."
+              ? "You're all set to start the clean. You'll get a link for after photos & videos once the job is marked complete."
               : "Your payout should appear in your Stripe payouts within 1–2 business days."}
           </p>
           <Button
@@ -282,7 +298,7 @@ export default function CleanerJobPhotosPage() {
             className="mt-4 border-emerald-300 text-emerald-800"
             onClick={() => setForceForm(true)}
           >
-            <RiCameraLine className="w-4 h-4 mr-1.5" /> Add more photos
+            <RiCameraLine className="w-4 h-4 mr-1.5" /> Add more photos or videos
           </Button>
         </div>
       </div>
@@ -297,11 +313,11 @@ export default function CleanerJobPhotosPage() {
             <RiCheckLine className="w-6 h-6" />
           </div>
           <p className="font-semibold text-emerald-900">
-            {phase === "before" ? "Before photos submitted." : phase === "after" ? "After photos submitted." : "Photos submitted."}
+            {phase === "before" ? "Before photos & videos submitted." : phase === "after" ? "After photos & videos submitted." : "Photos & videos submitted."}
           </p>
           <p className="text-xs text-emerald-800 mt-1">
             {phase === "before"
-              ? "You're all set to start the clean. You'll get a link for after photos once the job is marked complete."
+              ? "You're all set to start the clean. You'll get a link for after photos & videos once the job is marked complete."
               : "Thanks! Your payout should appear in your Stripe payouts within 1–2 business days."}
           </p>
           <Button
@@ -312,7 +328,7 @@ export default function CleanerJobPhotosPage() {
               setForceForm(true);
             }}
           >
-            <RiCameraLine className="w-4 h-4 mr-1.5" /> Add more photos
+            <RiCameraLine className="w-4 h-4 mr-1.5" /> Add more photos or videos
           </Button>
         </div>
       </div>
@@ -328,17 +344,17 @@ export default function CleanerJobPhotosPage() {
             <p className="text-sm font-semibold">
               Hi {info.cleanerFirstName || "team"} —{" "}
               {phase === "before"
-                ? "drop your BEFORE photos"
+                ? "drop your BEFORE photos & videos"
                 : phase === "after"
-                  ? "drop your AFTER photos"
-                  : "drop your photos"}
+                  ? "drop your AFTER photos & videos"
+                  : "drop your photos & videos"}
             </p>
           </div>
           {phase && (
             <p className="mt-1 text-[11px] text-emerald-50/90">
               {phase === "before"
-                ? "Snap a few before shots when you arrive, before you start cleaning."
-                : "Snap the after shots now that the clean is done — these go to the customer."}
+                ? "Snap a few before shots — and a short video walkthrough — when you arrive, before you start cleaning."
+                : "Snap the after shots and a short walkthrough now that the clean is done — these go on file with the job."}
             </p>
           )}
           <p className="mt-2 text-xs text-emerald-50 leading-snug">
@@ -362,15 +378,30 @@ export default function CleanerJobPhotosPage() {
               </span>
             ) : (
               <span className="text-[10px] text-emerald-50/80">
-                Photos auto-save — you can close this page and come back to add more.
+                Photos &amp; videos auto-save — you can close this page and come back to add more.
               </span>
             )}
           </div>
         </header>
 
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 flex gap-3">
+          <span className="shrink-0 inline-flex h-9 w-9 items-center justify-center rounded-full bg-amber-100 text-amber-800">
+            <RiShieldCheckLine className="w-5 h-5" />
+          </span>
+          <div>
+            <p className="text-sm font-semibold text-amber-950">This is your protection</p>
+            <p className="mt-1 text-xs leading-relaxed text-amber-900">
+              Photos and videos of this job are on file if a customer later claims the work
+              wasn&apos;t good. They show the condition when you arrived and when you left.
+              A short video walkthrough of each area is even stronger than photos alone — take
+              both whenever you can.
+            </p>
+          </div>
+        </div>
+
         {showBefore && (
           <PhotoGroup
-            title="Before photos"
+            title="Before photos & videos"
             urls={beforeUrls}
             uploading={uploadingKind === "before"}
             onAdd={(files) => handleFiles("before", files)}
@@ -379,7 +410,7 @@ export default function CleanerJobPhotosPage() {
         )}
         {showAfter && (
           <PhotoGroup
-            title="After photos"
+            title="After photos & videos"
             urls={afterUrls}
             uploading={uploadingKind === "after"}
             onAdd={(files) => handleFiles("after", files)}
@@ -421,7 +452,7 @@ export default function CleanerJobPhotosPage() {
             ) : (
               <>
                 <RiCheckLine className="w-5 h-5 mr-2" />{" "}
-                {phase === "before" ? "Submit before photos" : phase === "after" ? "Submit after photos" : "Submit photos"}
+                {phase === "before" ? "Submit before photos & videos" : phase === "after" ? "Submit after photos & videos" : "Submit photos & videos"}
               </>
             )}
           </Button>
@@ -455,8 +486,8 @@ function PhotoGroup({
       {urls.length > 0 && (
         <div className="grid grid-cols-3 gap-2">
           {urls.map((u) => (
-            <div key={u} className="relative aspect-square rounded-lg overflow-hidden border border-slate-200">
-              <img src={u} alt="" className="absolute inset-0 w-full h-full object-cover" />
+            <div key={u} className="relative aspect-square rounded-lg overflow-hidden border border-slate-200 bg-slate-100">
+              <MediaThumb url={u} className="absolute inset-0 w-full h-full object-cover" />
               <button
                 type="button"
                 onClick={() => onRemove(u)}
@@ -483,14 +514,15 @@ function PhotoGroup({
           <>
             <RiCameraLine className="w-4 h-4 text-emerald-600" />
             <span className="text-xs font-medium text-slate-700">
-              Tap to take or pick photos
+              Tap to take or pick photos or videos
             </span>
+            <RiVideoLine className="w-4 h-4 text-slate-400" />
             <RiImageAddLine className="w-4 h-4 text-slate-400" />
           </>
         )}
         <input
           type="file"
-          accept="image/*"
+          accept="image/*,video/*"
           multiple
           onChange={(e) => {
             onAdd(e.target.files);

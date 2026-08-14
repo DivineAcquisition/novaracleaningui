@@ -74,7 +74,7 @@ async function deliverBeforePhotosSms(supabase: any, booking: any, cleanerId: st
     const link = `https://contractor.novaracleaning.com/cleaner/job-photos/${token}?phase=before`;
     const msg =
       `Novara: you're checked in${booking.first_name ? ` at ${booking.first_name}'s` : ""} — nice. ` +
-      `First step before you start: upload your BEFORE photos here:\n${link}`;
+      `First step before you start: upload your BEFORE photos & videos here:\n${link}`;
     const ok = await sendSms(supabase, { toPhone: cleaner.phone, message: msg, type: "reminder" });
     if (ok) {
       await supabase
