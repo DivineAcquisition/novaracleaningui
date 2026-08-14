@@ -76,8 +76,8 @@ export default function WeeklyReport() {
   const load = useCallback(async () => {
     setLoading(true);
     const [{ data, error }, invoked] = await Promise.all([
-      supabase
-        .from("weekly_reports" as any)
+      (supabase as any)
+        .from("weekly_reports")
         .select(
           "id, period_start, period_end, status, trigger, executive_summary, insight_model, insight_model_version, insights, watch_list, unavailable_sources, pdf_path, pdf_last_error, drive_url, generated_at, created_at, metrics",
         )
@@ -121,7 +121,7 @@ export default function WeeklyReport() {
       toast.error("No PDF stored for this report yet.");
       return;
     }
-    const { data, error } = await supabase.storage.from("weekly-reports" as any).createSignedUrl(row.pdf_path, 3600);
+    const { data, error } = await supabase.storage.from("weekly-reports").createSignedUrl(row.pdf_path, 3600);
     if (error || !data?.signedUrl) {
       toast.error(error?.message || "Could not sign PDF URL");
       return;
