@@ -1,8 +1,7 @@
 "use client";
 
-// Run Payroll — Stripe Connect payout of confirmed Custom Payout + Extra Pay.
-// Amounts come only from those two ledgers. Platform available balance is
-// checked before any transfer fires.
+// Run Payroll — Stripe Connect payout of Extra Pay.
+// Custom Payout Stripe transfers are paused (mark paid + notify instead).
 
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -139,8 +138,9 @@ export default function RunPayrollTab({ cleaners }: { cleaners: PayrollCleaner[]
         <CardContent className="p-4 space-y-2 text-sm text-slate-700">
           <p className="font-semibold text-violet-900">Stripe Connect payroll</p>
           <p className="text-slate-600">
-            This pays <strong>exactly</strong> what you confirmed in Custom Payout plus Extra Pay.
-            Transfers only fire when the platform Stripe balance covers the total.
+            This pays <strong>exactly</strong> what you recorded in Extra Pay.
+            Custom Payout Stripe transfers are paused — confirm and mark those paid on the Custom Payout tab.
+            Extra Pay transfers only fire when the platform Stripe balance covers the total.
           </p>
         </CardContent>
       </Card>
@@ -190,7 +190,7 @@ export default function RunPayrollTab({ cleaners }: { cleaners: PayrollCleaner[]
       ) : runs.length === 0 ? (
         <Card className="border-slate-200">
           <CardContent className="py-10 text-center text-sm text-slate-500">
-            Nothing pending. Confirm amounts in Custom Payout or Extra Pay, then run payroll here.
+            Nothing pending Extra Pay. Custom Payout is confirm + notify, then Mark paid — Stripe for those is paused.
           </CardContent>
         </Card>
       ) : (

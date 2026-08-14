@@ -9,6 +9,7 @@
 //     amount, see live profit + % paid out, and submit.
 //   • On submit we record the payout, notify the contractor (email + SMS that
 //     their payout is pending for that amount), and sync to Airtable.
+//     Stripe Connect transfers are paused — mark paid when you've paid off-platform.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -343,17 +344,10 @@ export default function SimplePayoutTab() {
       const res = await callApi<{
         payout: {
           emailSent: number;
+          smsSent: number;
           airtableSynced: boolean;
           cleanerCount: number;
           status: string;
-          stripe?: {
-            halted?: boolean;
-            error?: string | null;
-            paidCount?: number;
-            failedCount?: number;
-            availableUsd?: number;
-            neededCents?: number;
-          };
         };
       }>(
         "submit",
@@ -363,22 +357,10 @@ export default function SimplePayoutTab() {
           note: note.trim() || undefined,
         },
       );
-      const { emailSent, airtableSynced, cleanerCount, status, stripe } = res.payout;
-      if (stripe?.halted || stripe?.error) {
-        toast.error(stripe.error || "Stripe could not send this payout yet", {
-          description: status === "pending"
-            ? "Amount is confirmed. Pay it from Run Payroll once funds are available."
-            : undefined,
-        });
-      } else if (status === "paid") {
-        toast.success(
-          `Paid ${cleanerCount} contractor(s) via Stripe Connect.${emailSent ? ` ${emailSent} email(s) sent.` : ""}${airtableSynced ? " Synced to Airtable." : ""}`.trim(),
-        );
-      } else {
-        toast.success(
-          `Confirmed for ${cleanerCount} contractor(s). ${stripe?.paidCount ? `${stripe.paidCount} sent.` : "Queued for Run Payroll."}${airtableSynced ? " Synced to Airtable." : ""}`.trim(),
-        );
-      }
+      const { emailSent, smsSent, airtableSynced, cleanerCount } = res.payout;
+      toast.success(
+        `Logged for ${cleanerCount} contractor(s).${emailSent ? ` ${emailSent} email(s)` : ""}${smsSent ? `${emailSent ? "," : ""} ${smsSent} text(s)` : ""}${emailSent || smsSent ? " sent." : " Notified if we have contact info."}${airtableSynced ? " Synced to Airtable." : ""}`.trim(),
+      );
       setSelected(null);
       setCrewPay({});
       setNote("");
@@ -390,14 +372,11 @@ export default function SimplePayoutTab() {
     }
   };
 
-  const payPending = async (id: string) => {
+  const markPaid = async (id: string) => {
     setPayingId(id);
     try {
-      const res = await callApi<{
-        ok: boolean; halted?: boolean; error?: string | null; paidCount: number;
-      }>("execute_pending", { payoutId: id });
-      if (res.halted || res.error) throw new Error(res.error || "Stripe could not send this payout");
-      toast.success(`Paid via Stripe Connect (${res.paidCount} transfer${res.paidCount === 1 ? "" : "s"}).`);
+      await callApi("mark_paid", { id });
+      toast.success("Marked paid.");
       await load({ silent: true });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed");
@@ -416,7 +395,8 @@ export default function SimplePayoutTab() {
         <div>
           <h2 className="font-jakarta text-xl font-bold text-slate-900 tracking-tight">Custom Payouts</h2>
           <p className="text-sm text-slate-500 mt-1">
-            Confirm the payout for a job. If Stripe has available funds and the contractor is Connect-ready, we transfer immediately and email you + the contractor (CC contact@ and dispatch@).
+            Confirm the payout for a job. We email and text the contractor that it&apos;s pending.
+            Mark paid here when you&apos;ve actually paid them. Stripe Connect transfers are paused for now.
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={() => load({ silent: true })} disabled={refreshing}>
@@ -455,7 +435,7 @@ export default function SimplePayoutTab() {
         <Card className="border-slate-200">
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Confirm a payout</CardTitle>
-            <CardDescription className="text-xs">Connected to live job data. Confirming sends a Stripe Connect transfer when funds are available.</CardDescription>
+            <CardDescription className="text-xs">Connected to live job data. Confirming notifies the contractor; it does not send a Stripe transfer.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {!selected ? (
@@ -580,12 +560,7 @@ export default function SimplePayoutTab() {
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium text-slate-900 truncate">{c.name}</p>
                               {!c.hasContact && (
-                                <p className="text-[10px] text-amber-600">No email/phone — won't be notified</p>
-                              )}
-                              {c.payoutsEnabled && c.stripeAccountId ? (
-                                <p className="text-[10px] text-emerald-700">Stripe Connect ready</p>
-                              ) : (
-                                <p className="text-[10px] text-rose-600">Needs Stripe Connect</p>
+                                <p className="text-[10px] text-amber-600">No email/phone — won&apos;t be notified</p>
                               )}
                             </div>
                             <div className="relative w-28">
@@ -674,11 +649,11 @@ export default function SimplePayoutTab() {
                   {submitting ? (
                     <><RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> Sending…</>
                   ) : (
-                    <><RiSendPlaneLine className="w-4 h-4 mr-2" /> Confirm &amp; pay {selectedCrew.length || ""} contractor{selectedCrew.length === 1 ? "" : "s"} via Stripe</>
+                    <><RiSendPlaneLine className="w-4 h-4 mr-2" /> Confirm &amp; notify {selectedCrew.length || ""} contractor{selectedCrew.length === 1 ? "" : "s"}</>
                   )}
                 </Button>
                 <p className="text-[11px] text-slate-400 text-center">
-                  Transfers from Novara&apos;s Stripe balance to each contractor&apos;s Connect account. Emails you, the contractor, and CCs contact@novaracleaning.com + dispatch@novaracleaning.com.
+                  Records the amount, emails + texts each contractor that their payout is pending, and syncs Airtable. Mark paid below once you&apos;ve paid them.
                 </p>
               </div>
             )}
@@ -786,8 +761,8 @@ export default function SimplePayoutTab() {
                       </TableCell>
                       <TableCell className="text-right">
                         {p.status === "pending" && (
-                          <Button size="sm" variant="outline" className="h-7 text-xs" disabled={payingId === p.id} onClick={() => payPending(p.id)}>
-                            {payingId === p.id ? <RiLoader4Line className="w-3 h-3 animate-spin" /> : "Pay via Stripe"}
+                          <Button size="sm" variant="outline" className="h-7 text-xs" disabled={payingId === p.id} onClick={() => markPaid(p.id)}>
+                            {payingId === p.id ? <RiLoader4Line className="w-3 h-3 animate-spin" /> : "Mark paid"}
                           </Button>
                         )}
                       </TableCell>

@@ -3,11 +3,10 @@
 // ─── /admin/payroll ────────────────────────────────────────────────────
 //
 // Four tabs only:
-//   Custom Payout — confirm the job amount; Stripe Connect pays if funds exist
+//   Custom Payout — confirm the job amount, notify the cleaner, mark paid
 //   Extra Pay     — supplies / mileage / surge / OT / job-value (paid via Connect)
 //   Pay Rates     — crew-size revenue-share configuration
-//   Run Payroll   — Stripe Connect batch of whatever is actually in Custom
-//                   Payout + Extra Pay (not auto-calculated booking share)
+//   Run Payroll   — Stripe Connect batch of Extra Pay (Custom Payout Stripe paused)
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -32,8 +31,9 @@ export default function AdminPayroll() {
       <div>
         <h1 className="font-jakarta text-2xl font-bold text-slate-900 tracking-tight">Payroll</h1>
         <p className="text-sm text-slate-500 mt-1">
-          Confirm amounts in Custom Payout and Extra Pay, then send them through Stripe Connect.
-          Run Payroll pays exactly those confirmed amounts — as long as funds are available in Stripe.
+          Confirm amounts in Custom Payout (notifies the cleaner) and Extra Pay.
+          Stripe transfers for Custom Payout are paused — mark paid when you&apos;ve paid them.
+          Run Payroll still sends Extra Pay through Stripe Connect when funds are available.
         </p>
       </div>
       <Tabs defaultValue="payout" className="space-y-4">

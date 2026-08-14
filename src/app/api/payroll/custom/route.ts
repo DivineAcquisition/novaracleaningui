@@ -3,11 +3,14 @@
 // One endpoint backing the simplified Payroll module:
 //   • action "jobs"            → candidate jobs (real bookings) + revenue + crew
 //   • action "summary"         → roster + totals + recent custom payouts
-//   • action "submit"          → confirm a custom payout and, when Stripe has
-//                                available funds, execute Connect transfers
-//   • action "run_preview"     → pending Custom Payout + Extra Pay for Run Payroll
-//   • action "execute_pending" → Stripe Connect transfers for pending lines
-//   • action "mark_paid"       → bookkeeping fallback (no Stripe)
+//   • action "submit"          → record a custom payout, notify the cleaner
+//                                (email + SMS), sync Airtable. No Stripe transfer.
+//   • action "mark_paid"       → flip pending → paid (bookkeeping + Airtable)
+//   • action "run_preview"     → pending Extra Pay for Run Payroll (Stripe)
+//   • action "execute_pending" → Stripe Connect transfers for Extra Pay
+//
+// Custom Payout Stripe transfers are paused on purpose. Re-enable later by
+// calling executeLines on submit / includeCustom on collectPendingLines.
 //
 // Admin/VA gated server-side via requireAdmin. All money is integer cents.
 
@@ -31,6 +34,19 @@ function startOfWeek(d: Date): Date {
   const dow = c.getDay(); // 0=Sun
   c.setDate(c.getDate() + (dow === 0 ? -6 : 1 - dow)); // Monday
   return c;
+}
+
+async function notify(
+  supabase: ReturnType<typeof getAdminSupabase>,
+  fn: string,
+  body: Record<string, unknown>,
+): Promise<boolean> {
+  try {
+    const { error } = await supabase.functions.invoke(fn, { body });
+    return !error;
+  } catch {
+    return false;
+  }
 }
 
 export async function POST(req: Request): Promise<NextResponse> {
@@ -398,13 +414,19 @@ function bookingRef(n: unknown): string | null {
 
 async function collectPendingLines(
   supabase: SB,
-  filter: { cleanerId?: string | null; payoutId?: string | null; extraPayId?: string | null } = {},
+  filter: {
+    cleanerId?: string | null;
+    payoutId?: string | null;
+    extraPayId?: string | null;
+    /** Stripe for Custom Payout is paused; pass true to re-enable. */
+    includeCustom?: boolean;
+  } = {},
 ): Promise<PendingLine[]> {
   const lines: PendingLine[] = [];
   const onlyExtra = !!filter.extraPayId && !filter.payoutId;
   const onlyCustom = !!filter.payoutId && !filter.extraPayId;
 
-  if (!onlyExtra) {
+  if (!onlyExtra && filter.includeCustom) {
 
   let pq = supabase
     .from("manual_payouts")
@@ -612,7 +634,7 @@ async function executeLines(
   return { ok: results.every((r) => r.ok), availableUsd, neededCents, results };
 }
 
-// ─── submit: record a custom payout and pay via Stripe Connect ─────────────
+// ─── submit: record a custom payout, notify cleaner, no Stripe ─────────────
 interface CrewPayInput {
   cleanerId: string;
   amountCents: number;
@@ -692,7 +714,7 @@ async function submitPayout(
     .maybeSingle();
 
   if (existing?.status === "paid") {
-    return { error: "This job is already paid via Stripe Connect. Use Extra Pay for an additional amount." };
+    return { error: "This job is already marked paid. Use Extra Pay for an additional amount." };
   }
 
   const primary = breakdown.find((b) => b.cleanerId === booking.cleaner_id) || breakdown[0];
@@ -735,17 +757,53 @@ async function submitPayout(
     .eq("id", bookingId)
     .then(() => undefined, () => undefined);
 
-  // Confirm → Stripe Connect transfer (halted if platform funds are short).
-  const exec = await executeLines(
-    supabase,
-    await collectPendingLines(supabase, { payoutId }),
-    principal,
-  );
+  let emailSent = 0;
+  let smsSent = 0;
+  for (const member of breakdown) {
+    if (member.amountCents <= 0) continue;
+    const dollars = (member.amountCents / 100).toFixed(2);
+    const firstName = member.cleanerName.split(" ")[0] || "there";
+    const memberPct = pct(member.amountCents, revenueCents);
+    if (member.cleanerEmail) {
+      const ok = await notify(supabase, "send-cleaner-email", {
+        type: "payout_pending",
+        email: member.cleanerEmail,
+        data: {
+          cleanerFirstName: firstName,
+          bookingId,
+          bookingLabel,
+          serviceDate,
+          amount: member.amountCents,
+          pctPaid: memberPct,
+        },
+      });
+      if (ok) emailSent += 1;
+    }
+    if (member.cleanerPhone) {
+      const msg = `Novara: Your payout of $${dollars} for ${bookingLabel} is pending and on its way. Thanks for the great work! Reply STOP to opt out.`;
+      const ok = await notify(supabase, "send-ghl-sms", {
+        phone: member.cleanerPhone,
+        email: member.cleanerEmail || undefined,
+        firstName,
+        message: msg,
+        type: "cleaner_payout_pending",
+      });
+      if (ok) smsSent += 1;
+    }
+  }
+
+  await supabase
+    .from("manual_payouts")
+    .update({
+      email_sent_at: emailSent > 0 ? new Date().toISOString() : null,
+      sms_sent_at: smsSent > 0 ? new Date().toISOString() : null,
+    })
+    .eq("id", payoutId)
+    .then(() => undefined, () => undefined);
 
   let airtableSynced = false;
-  const allPaid = exec.ok && exec.results.length > 0 && exec.results.every((r) => r.ok);
   try {
-    const recId = await syncManualPayoutJob(bookingId, totalCents, allPaid ? "paid" : "pending", breakdown.length);
+    const recId = await syncManualPayoutJob(bookingId, totalCents, "pending", breakdown.length);
     airtableSynced = !!recId;
     if (airtableSynced) {
       await supabase
@@ -761,17 +819,12 @@ async function submitPayout(
     event_type: "payroll.custom_payout",
     booking_id: bookingId,
     source: "payroll-custom",
-    summary: allPaid
-      ? `Custom payout $${(totalCents / 100).toFixed(2)} sent via Stripe Connect across ${breakdown.length} cleaner(s) — ${bookingLabel}`
-      : `Custom payout $${(totalCents / 100).toFixed(2)} confirmed — Stripe ${exec.halted ? "halted" : "partial"} (${exec.error || "see results"}) — ${bookingLabel}`,
+    summary: `Custom payout $${(totalCents / 100).toFixed(2)} logged for ${breakdown.length} cleaner(s) — ${bookingLabel}`,
     data: {
       payoutId, totalCents, revenueCents, profitCents, pctPaid,
-      crew: breakdown.length, airtableSynced, stripe: exec,
+      crew: breakdown.length, emailSent, smsSent, airtableSynced,
     },
   }).then(() => undefined, () => undefined);
-
-  const paidCount = exec.results.filter((r) => r.ok).length;
-  const emailSent = exec.results.filter((r) => r.emailSent).length;
 
   return {
     ok: true,
@@ -782,25 +835,10 @@ async function submitPayout(
       profitCents,
       pctPaid,
       cleanerCount: breakdown.length,
-      status: allPaid ? "paid" : "pending",
+      status: "pending",
       emailSent,
+      smsSent,
       airtableSynced,
-      stripe: {
-        halted: !!exec.halted,
-        error: exec.error || null,
-        availableUsd: exec.availableUsd,
-        neededCents: exec.neededCents,
-        paidCount,
-        failedCount: exec.results.length - paidCount,
-        results: exec.results.map((r) => ({
-          cleanerId: r.cleanerId,
-          cleanerName: r.cleanerName,
-          amountCents: r.amountCents,
-          ok: r.ok,
-          transferId: r.transferId,
-          error: r.error,
-        })),
-      },
     },
   };
 }
