@@ -181,8 +181,25 @@ function safeName(s: string): string {
 }
 
 function extFromUrl(url: string): string {
-  const m = url.split("?")[0].match(/\.(jpe?g|png|webp|gif|heic)$/i);
+  const m = url.split("?")[0].match(/\.(jpe?g|png|webp|gif|heic|mp4|mov|webm|m4v|3gp)$/i);
   return m ? m[1].toLowerCase().replace("jpeg", "jpg") : "jpg";
+}
+
+function isVideoExt(ext: string): boolean {
+  return ["mp4", "mov", "webm", "m4v", "3gp"].includes(ext.toLowerCase());
+}
+
+function mimeFromExt(ext: string): string {
+  const e = ext.toLowerCase();
+  if (e === "png") return "image/png";
+  if (e === "webp") return "image/webp";
+  if (e === "gif") return "image/gif";
+  if (e === "mp4") return "video/mp4";
+  if (e === "mov") return "video/quicktime";
+  if (e === "webm") return "video/webm";
+  if (e === "m4v") return "video/mp4";
+  if (e === "3gp") return "video/3gpp";
+  return "image/jpeg";
 }
 
 interface DocRow {
@@ -876,9 +893,10 @@ async function mirrorOne(supabase: SB, token: string, rootFolderId: string, doc:
   const uploadSet = async (urls: string[], folderId: string, prefix: string, existing: Set<string>) => {
     for (let i = 0; i < urls.length; i++) {
       const url = urls[i];
-      const name = `${prefix}-${String(i + 1).padStart(2, "0")}.${extFromUrl(url)}`;
+      const ext = extFromUrl(url);
+      const name = `${prefix}-${String(i + 1).padStart(2, "0")}.${ext}`;
       const needsUpload = !existing.has(name);
-      const needsPdfCopy = pdfBytesTotal < MAX_PDF_PHOTO_BYTES;
+      const needsPdfCopy = !isVideoExt(ext) && pdfBytesTotal < MAX_PDF_PHOTO_BYTES;
       if (!needsUpload && !needsPdfCopy) continue;
       if (needsUpload && (Date.now() > budget.deadline || budget.uploadsLeft <= 0)) {
         throw new BudgetExhausted();
@@ -888,12 +906,12 @@ async function mirrorOne(supabase: SB, token: string, rootFolderId: string, doc:
         if (!res.ok) { failures.push(`${name}: fetch ${res.status}`); continue; }
         const bytes = new Uint8Array(await res.arrayBuffer());
         if (bytes.length === 0) { failures.push(`${name}: empty`); continue; }
-        if (needsPdfCopy) {
+        if (needsPdfCopy && !isVideoExt(ext)) {
           photoBytes.push({ label: `${prefix.toUpperCase()} ${i + 1} — ${doc.booking_ref || ""}`, bytes });
           pdfBytesTotal += bytes.length;
         }
         if (needsUpload) {
-          const mime = name.endsWith(".png") ? "image/png" : "image/jpeg";
+          const mime = mimeFromExt(ext);
           await uploadFile(token, folderId, name, bytes, mime);
           uploaded++;
           budget.uploadsLeft--;

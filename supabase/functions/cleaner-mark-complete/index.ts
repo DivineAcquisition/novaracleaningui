@@ -164,7 +164,7 @@ serve(async (req) => {
           .select("id");
         if (Array.isArray(claimed) && claimed.length > 0) {
           const msg =
-            `Novara: Job marked complete — thanks! Please upload your AFTER photos here so the office can finalize and release your payout:\n${photoUploadUrl}\n\nReply STOP to opt out.`;
+            `Novara: Job marked complete — thanks! Please upload your AFTER photos & videos here so the office can finalize and release your payout:\n${photoUploadUrl}\n\nReply STOP to opt out.`;
           await supabase.functions.invoke("send-ghl-sms", {
             body: {
               phone: cleaner.phone,

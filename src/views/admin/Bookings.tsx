@@ -48,6 +48,8 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { MediaThumb } from "@/components/job-media/MediaThumb";
+import { isVideoFile, videoTooLargeMessage } from "@/lib/job-media";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -2581,10 +2583,10 @@ function BookingSheet({
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-1.5">
                   <RiInformationLine className="w-4 h-4 text-violet-700" />
-                  Before &amp; after photos
+                  Before &amp; after photos &amp; videos
                 </CardTitle>
                 <CardDescription>
-                  Text the assigned cleaner a secure upload link, or upload the before/after photos yourself.
+                  Text the assigned cleaner a secure upload link, or upload the before/after photos and videos yourself.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -3613,7 +3615,7 @@ function LivePhotoGallery({ bookingId }: { bookingId: string }) {
         <div className="flex gap-1.5 overflow-x-auto pb-1">
           {urls.map((u, i) => (
             <a key={i} href={u} target="_blank" rel="noreferrer" className="shrink-0">
-              <img src={u} alt={`${label} ${i + 1}`} className="h-16 w-16 object-cover rounded-md border border-slate-200" loading="lazy" />
+              <MediaThumb url={u} alt={`${label} ${i + 1}`} className="h-16 w-16 object-cover rounded-md border border-slate-200" />
             </a>
           ))}
         </div>
@@ -3623,7 +3625,7 @@ function LivePhotoGallery({ bookingId }: { bookingId: string }) {
   return (
     <div className="space-y-2 rounded-lg border border-emerald-200 bg-emerald-50/40 p-3">
       <p className="text-xs font-semibold text-emerald-800 flex items-center gap-1.5">
-        <RiCameraLine className="w-4 h-4" /> Uploaded photos (live)
+        <RiCameraLine className="w-4 h-4" /> Uploaded photos &amp; videos (live)
       </p>
       {strip("Before", before)}
       {strip("After", after)}
@@ -3642,6 +3644,11 @@ const PHOTO_BUCKET = "cleaner-job-photos";
 async function prepareAdminPhoto(
   file: File,
 ): Promise<{ blob: Blob; ext: string; contentType: string }> {
+  if (isVideoFile(file)) {
+    const rawExt = (file.name.split(".").pop() || "mp4").toLowerCase();
+    const ext = rawExt === "qt" ? "mov" : rawExt;
+    return { blob: file, ext, contentType: file.type || "video/mp4" };
+  }
   try {
     const compressed = await imageCompression(file, {
       maxSizeMB: 1.5,
@@ -3669,6 +3676,11 @@ function AdminPhotoSubmit({ booking, onSubmitted }: { booking: BookingRow; onSub
     const added: string[] = [];
     try {
       for (const file of Array.from(files)) {
+        const tooBig = videoTooLargeMessage(file);
+        if (tooBig) {
+          toast.error(tooBig);
+          continue;
+        }
         const { blob, ext, contentType } = await prepareAdminPhoto(file);
         const key = `bookings/${booking.id}/${kind}/${Date.now()}-${Math.random()
           .toString(36)
@@ -3682,9 +3694,10 @@ function AdminPhotoSubmit({ booking, onSubmitted }: { booking: BookingRow; onSub
         const { data: pub } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(key);
         added.push(pub.publicUrl);
       }
+      if (!added.length) return;
       if (kind === "before") setBeforeUrls((prev) => [...prev, ...added]);
       else setAfterUrls((prev) => [...prev, ...added]);
-      toast.success(`Added ${added.length} ${kind} photo${added.length === 1 ? "" : "s"}`);
+      toast.success(`Added ${added.length} ${kind} file${added.length === 1 ? "" : "s"}`);
     } catch (err) {
       toast.error("Upload failed: " + (err instanceof Error ? err.message : String(err)));
     } finally {
@@ -3699,7 +3712,7 @@ function AdminPhotoSubmit({ booking, onSubmitted }: { booking: BookingRow; onSub
 
   const submit = async () => {
     if (beforeUrls.length === 0 && afterUrls.length === 0) {
-      toast.error("Add at least one photo first.");
+      toast.error("Add at least one photo or video first.");
       return;
     }
     setSubmitting(true);
@@ -3727,14 +3740,14 @@ function AdminPhotoSubmit({ booking, onSubmitted }: { booking: BookingRow; onSub
         <RiUploadCloud2Line className="w-4 h-4 text-violet-700" /> Upload photos yourself
       </p>
       <AdminPhotoGroup
-        title="Before photos"
+        title="Before photos & videos"
         urls={beforeUrls}
         uploading={uploadingKind === "before"}
         onAdd={(files) => handleFiles("before", files)}
         onRemove={(u) => removeUrl("before", u)}
       />
       <AdminPhotoGroup
-        title="After photos"
+        title="After photos & videos"
         urls={afterUrls}
         uploading={uploadingKind === "after"}
         onAdd={(files) => handleFiles("after", files)}
@@ -3778,7 +3791,7 @@ function AdminPhotoGroup({
         <div className="grid grid-cols-4 gap-2">
           {urls.map((u) => (
             <div key={u} className="relative aspect-square rounded-md overflow-hidden border border-slate-200">
-              <img src={u} alt="" className="absolute inset-0 w-full h-full object-cover" />
+              <MediaThumb url={u} className="absolute inset-0 w-full h-full object-cover" />
               <button
                 type="button"
                 onClick={() => onRemove(u)}
@@ -3804,13 +3817,13 @@ function AdminPhotoGroup({
         ) : (
           <>
             <RiCameraLine className="w-4 h-4 text-violet-600" />
-            <span className="text-xs font-medium text-slate-700">Tap to take or pick photos</span>
+            <span className="text-xs font-medium text-slate-700">Tap to take or pick photos or videos</span>
             <RiImageAddLine className="w-4 h-4 text-slate-400" />
           </>
         )}
         <input
           type="file"
-          accept="image/*"
+          accept="image/*,video/*"
           multiple
           onChange={(e) => {
             onAdd(e.target.files);

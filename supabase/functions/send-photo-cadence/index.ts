@@ -244,7 +244,7 @@ serve(async (req) => {
             const link = `${CONTRACTOR}/cleaner/job-photos/${token}?phase=before`;
             const msg =
               `Novara: your clean for ${cleanerName} starts soon. ` +
-              `Before you begin, upload your BEFORE photos here:\n${link}`;
+              `Before you begin, upload your BEFORE photos & videos here:\n${link}`;
             const ok = await sendSms(supabase, c.phone, msg);
             if (ok) { results.before_sent++; logStep("BEFORE link sent", { bookingId: booking.id }); }
             else { results.failed++; logStep("BEFORE link SMS failed", { bookingId: booking.id }); }
@@ -273,7 +273,7 @@ serve(async (req) => {
             const link = `${CONTRACTOR}/cleaner/job-photos/${token}?phase=after`;
             const msg =
               `Novara: your clean for ${cleanerName} should be wrapping up. ` +
-              `Please upload your AFTER photos here so we can finalize and release your payout:\n${link}`;
+              `Please upload your AFTER photos & videos here so we can finalize and release your payout:\n${link}`;
             const ok = await sendSms(supabase, c.phone, msg);
             if (ok) { results.after_sent++; logStep("AFTER link sent", { bookingId: booking.id }); }
             else { results.failed++; logStep("AFTER link SMS failed", { bookingId: booking.id }); }

@@ -569,7 +569,7 @@ serve(async (req) => {
               .select("id");
             const shouldSendPhotoSms = Array.isArray(claimedPhoto) && claimedPhoto.length > 0;
             if (shouldSendPhotoSms) {
-              const msg = `Novara: Job marked completed. Please upload your AFTER photos here so we can wrap this up and release your payout:\n${photoUploadUrl}\n\nReply STOP to opt out.`;
+              const msg = `Novara: Job marked completed. Please upload your AFTER photos & videos here so we can wrap this up and release your payout:\n${photoUploadUrl}\n\nReply STOP to opt out.`;
               await supabase.functions.invoke("send-ghl-sms", {
                 body: {
                   phone: cleaner.phone,

@@ -90,10 +90,10 @@ serve(async (req) => {
         ? `${CONTRACTOR}/cleaner/job-photos/${token}`
         : `${CONTRACTOR}/cleaner/job-photos/${token}?phase=${phase}`;
       message = phase === "before"
-        ? `Novara: Please upload your BEFORE photos for this job before you start:\n${url}\n\nReply STOP to opt out.`
+        ? `Novara: Please upload your BEFORE photos & videos for this job before you start:\n${url}\n\nReply STOP to opt out.`
         : phase === "after"
-          ? `Novara: Please upload your AFTER photos so we can wrap up this job and release your payout:\n${url}\n\nReply STOP to opt out.`
-          : `Novara: Please upload your before & after photos for this job so we can wrap it up and release your payout:\n${url}\n\nReply STOP to opt out.`;
+          ? `Novara: Please upload your AFTER photos & videos so we can wrap up this job and release your payout:\n${url}\n\nReply STOP to opt out.`
+          : `Novara: Please upload your before & after photos & videos for this job so we can wrap it up and release your payout:\n${url}\n\nReply STOP to opt out.`;
     } else if (template === "mobile_dashboard") {
       message = message || `Novara: Please open your cleaner dashboard for job details and updates:\n${CONTRACTOR}/cleaner/mobile-dashboard`;
     } else {
