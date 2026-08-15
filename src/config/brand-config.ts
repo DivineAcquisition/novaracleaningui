@@ -21,6 +21,7 @@ export const COMPANY = {
     state: "MD",
     serviceAreas: [
       "Maryland",
+      "Washington, DC",
       "Northern Virginia",
       "Arlington",
       "Alexandria",

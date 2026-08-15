@@ -195,7 +195,7 @@ BUSINESS CONTEXT
 - Default deposit posture: 50% deposit on first invoice, remaining 50% pre-authorized as a Stripe hold a few days before service.
 - Bi-weekly membership: full standard clean every 2 weeks, same cleaner, 2-3 laundry loads included, no contracts.
 - First bi-weekly visit adds a one-time $75 Deep Clean baseline fee.
-- Service area: DMV / Maryland focus.
+- Service area: Maryland, Washington DC, and Northern Virginia.
 - Support: (844) 735-2070.
 
 GHL CUSTOM FIELDS YOU CAN POPULATE
