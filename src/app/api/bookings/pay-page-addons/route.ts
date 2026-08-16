@@ -20,7 +20,7 @@
 
 import { NextResponse } from "next/server";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
-import { ADD_ONS, type AddOnId } from "@/lib/pricing";
+import { ADD_ONS, OPS_ONLY_ADD_ON_IDS, type AddOnId } from "@/lib/pricing";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -89,14 +89,16 @@ async function loadOrRespond(
 }
 
 function catalogue(serviceType: string | null, selected: string[]) {
-  return (Object.keys(ADD_ONS) as AddOnId[]).map((id) => ({
-    id,
-    label: ADD_ONS[id].label,
-    note: ADD_ONS[id].note,
-    priceCents: priceCents(id, serviceType),
-    includedFree: isFreeForService(id, serviceType),
-    selected: selected.includes(id),
-  }));
+  return (Object.keys(ADD_ONS) as AddOnId[])
+    .filter((id) => !OPS_ONLY_ADD_ON_IDS.has(id) || selected.includes(id))
+    .map((id) => ({
+      id,
+      label: ADD_ONS[id].label,
+      note: ADD_ONS[id].note,
+      priceCents: priceCents(id, serviceType),
+      includedFree: isFreeForService(id, serviceType),
+      selected: selected.includes(id),
+    }));
 }
 
 export async function GET(req: Request): Promise<NextResponse> {
@@ -143,11 +145,12 @@ export async function POST(req: Request): Promise<NextResponse> {
   }
 
   const requested = Array.isArray(body.addOns) ? body.addOns.map(String) : [];
-  // Unknown ids are dropped rather than rejected: a stale page shouldn't be a
-  // dead end, and anything we don't recognise has no price anyway.
-  const nextAddOns = [...new Set(requested)].filter((id) => id in ADD_ONS);
-
   const prevAddOns = (booking.add_ons || []).filter(Boolean);
+  const nextAddOns = [...new Set(requested)].filter((id) => {
+    if (!(id in ADD_ONS)) return false;
+    if (OPS_ONLY_ADD_ON_IDS.has(id) && !prevAddOns.includes(id)) return false;
+    return true;
+  });
   const prevCents = prevAddOns.reduce((s, id) => s + priceCents(id, booking.service_type), 0);
   const nextCents = nextAddOns.reduce((s, id) => s + priceCents(id, booking.service_type), 0);
   const deltaCents = nextCents - prevCents;

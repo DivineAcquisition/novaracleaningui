@@ -55,6 +55,8 @@ const ADD_ON_LABELS: Record<string, string> = {
   basement: 'Basement clean',
   cateringEvent: 'Catering / event cleanup',
   firstCleanDeep: 'First-clean deep clean',
+  pestLight: 'Pest — Light',
+  moldMinor: 'Mold — Minor (surface)',
 };
 
 export const BookingModification = ({ bookingData }: BookingModificationProps) => {

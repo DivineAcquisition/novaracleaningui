@@ -75,9 +75,13 @@ export const ADD_ONS: Record<string, { price: number }> = {
   deepBathroomDetail: { price: 45 },
   cateringEvent: { price: 85 },
   firstCleanDeep: { price: 75 },
+  pestLight: { price: 65 },
+  moldMinor: { price: 65 },
 };
 
 export const FIRST_CLEAN_DEEP_ID = "firstCleanDeep";
+export const PEST_LIGHT_ID = "pestLight";
+export const MOLD_MINOR_ID = "moldMinor";
 
 export function chargeableAddOnIds(addOns: string[], serviceType: string): string[] {
   const ids = (addOns || []).filter(Boolean);

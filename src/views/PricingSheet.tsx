@@ -26,6 +26,7 @@ import {
   MEMBERSHIP_PRICES,
   calculatePrice,
   getServicePrice,
+  OPS_ONLY_ADD_ON_IDS,
 } from "@/lib/pricing-system";
 import { SEO } from "@/components/SEO";
 import { useBooking } from "@/contexts/BookingContext";
@@ -490,7 +491,9 @@ export default function PricingSheet() {
           <p className="text-sm text-muted-foreground mt-1">Available with any service. Same price everywhere we serve.</p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {Object.entries(ADD_ONS).map(([key, addon]) => (
+          {Object.entries(ADD_ONS)
+            .filter(([key]) => !OPS_ONLY_ADD_ON_IDS.has(key))
+            .map(([key, addon]) => (
             <Card key={key} className="border border-border/60 hover:border-primary/30 transition-all">
               <CardContent className="p-4 text-center space-y-1">
                 <p className="font-semibold">{addon.label}</p>

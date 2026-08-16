@@ -65,6 +65,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import {
   ADD_ONS,
   FIRST_CLEAN_DEEP_ID,
+  MOLD_MINOR_ID,
+  PEST_LIGHT_ID,
   type AddOnId,
   calculatePrice,
   SERVICE_TIER_PRICING,
@@ -2863,7 +2865,7 @@ function BookingSheet({
                                 className={cn(
                                   "text-xs px-2 py-1 rounded-full border transition-colors",
                                   on
-                                    ? id === FIRST_CLEAN_DEEP_ID
+                                    ? id === FIRST_CLEAN_DEEP_ID || id === MOLD_MINOR_ID || id === PEST_LIGHT_ID
                                       ? "bg-amber-600 text-white border-amber-600"
                                       : "bg-violet-600 text-white border-violet-600"
                                     : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50",
@@ -4083,6 +4085,8 @@ function AddonDialog({
                     {def.label}
                     {id === FIRST_CLEAN_DEEP_ID ? (
                       <span className="ml-1 text-[10px] uppercase tracking-wide text-amber-700">Glow first-clean</span>
+                    ) : id === MOLD_MINOR_ID || id === PEST_LIGHT_ID ? (
+                      <span className="ml-1 text-[10px] uppercase tracking-wide text-amber-700">On-site finding</span>
                     ) : null}
                   </span>
                   {!on || free ? (

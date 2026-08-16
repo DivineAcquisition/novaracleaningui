@@ -22,7 +22,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { calculatePrice, ADD_ONS } from "@/lib/pricing-system";
+import { calculatePrice, ADD_ONS, OPS_ONLY_ADD_ON_IDS } from "@/lib/pricing-system";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 
@@ -176,8 +176,8 @@ export function ModifyBookingDialog({
     () =>
       serviceType === "moveInOut"
         ? Object.entries(ADD_ONS).filter(([id]) => id === "windows")
-        : Object.entries(ADD_ONS),
-    [serviceType],
+        : Object.entries(ADD_ONS).filter(([id]) => !OPS_ONLY_ADD_ON_IDS.has(id) || selectedAddOns.includes(id)),
+    [serviceType, selectedAddOns],
   );
 
   if (!booking) return null;

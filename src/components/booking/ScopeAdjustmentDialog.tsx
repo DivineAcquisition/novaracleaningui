@@ -48,7 +48,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, FIRST_CLEAN_DEEP_ID } from "@/lib/pricing";
+import { HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, FIRST_CLEAN_DEEP_ID, MOLD_MINOR_ID, PEST_LIGHT_ID, SCOPE_REASON_ADD_ONS } from "@/lib/pricing";
 import {
   draftJustificationMessage,
   suggestScopeAdjustment,
@@ -81,6 +81,13 @@ interface Context {
   reasons: ScopeReason[];
   evidencePhotos: { before: string[]; after: string[] };
   history: Array<Record<string, unknown>>;
+  fieldFlags: Array<{
+    id: string;
+    issue_number: number | null;
+    title: string | null;
+    description: string | null;
+    issue_type?: string | null;
+  }>;
 }
 
 export function ScopeAdjustmentDialog({
@@ -220,8 +227,9 @@ export function ScopeAdjustmentDialog({
   const toggleReason = (code: string) =>
     setSelectedReasons((prev) => {
       const next = prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code];
-      if (code === "first_clean_deep") {
-        const on = next.includes("first_clean_deep");
+      const addonId = SCOPE_REASON_ADD_ONS[code];
+      if (addonId) {
+        const on = next.includes(code);
         const alreadyDeep =
           adjustedServiceType === "deep" ||
           adjustedServiceType === "combo" ||
@@ -229,15 +237,18 @@ export function ScopeAdjustmentDialog({
           ctx?.booking.serviceType === "deep" ||
           ctx?.booking.serviceType === "combo" ||
           ctx?.booking.serviceType === "moveInOut";
+        const skipStack = addonId === FIRST_CLEAN_DEEP_ID && alreadyDeep;
         setAdjustedAddOns((addons) => {
-          const has = addons.includes(FIRST_CLEAN_DEEP_ID);
-          if (on && !has && !alreadyDeep) return [...addons, FIRST_CLEAN_DEEP_ID];
-          if (!on && has && !(ctx?.booking.addOns || []).includes(FIRST_CLEAN_DEEP_ID)) {
-            return addons.filter((id) => id !== FIRST_CLEAN_DEEP_ID);
+          const has = addons.includes(addonId);
+          if (on && !has && !skipStack) return [...addons, addonId];
+          if (!on && has && !(ctx?.booking.addOns || []).includes(addonId)) {
+            return addons.filter((id) => id !== addonId);
           }
           return addons;
         });
-        setFirstCleanChoice((prev) => ({ ...prev, includeDeepClean: on && !alreadyDeep }));
+        if (addonId === FIRST_CLEAN_DEEP_ID) {
+          setFirstCleanChoice((choice) => ({ ...choice, includeDeepClean: on && !skipStack }));
+        }
       }
       return next;
     });
@@ -351,6 +362,20 @@ export function ScopeAdjustmentDialog({
                 </p>
               </div>
             </div>
+
+            {(ctx.fieldFlags || []).length > 0 && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 space-y-1">
+                <p className="text-sm font-medium text-amber-950">Crew flagged this job</p>
+                {(ctx.fieldFlags || []).map((f) => (
+                  <p key={f.id} className="text-xs text-amber-900">
+                    {f.title || f.description || "Field report open."}
+                    {f.issue_type === "site_finding"
+                      ? " — use Pest — Light or Mold — Minor below (reason + add-on)."
+                      : ""}
+                  </p>
+                ))}
+              </div>
+            )}
 
             {/* Reasons */}
             <div className="space-y-2">
@@ -471,8 +496,9 @@ export function ScopeAdjustmentDialog({
               <div>
                 <Label className="text-xs">Add-ons performed (catalog)</Label>
                 <p className="text-[11px] text-slate-500 mt-0.5 mb-1.5">
-                  Same list as Internal Booking and the Bookings tab. First-clean deep is the $75 Glow reset —
-                  the prompt above (or the matching reason) adds it automatically.
+                  Same list as Internal Booking and the Bookings tab. Pest — Light and Mold — Minor (surface)
+                  are the in-scope site findings ($65, Focused Clean area rate). Selecting the matching reason
+                  adds them automatically. First-clean deep is the $75 Glow reset.
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {Object.entries(ADD_ONS).map(([id, def]) => {
@@ -486,7 +512,7 @@ export function ScopeAdjustmentDialog({
                         className={cn(
                           "text-xs px-2 py-1 rounded-full border transition-colors",
                           on
-                            ? id === FIRST_CLEAN_DEEP_ID
+                            ? id === FIRST_CLEAN_DEEP_ID || id === MOLD_MINOR_ID || id === PEST_LIGHT_ID
                               ? "bg-amber-600 text-white border-amber-600"
                               : "bg-violet-600 text-white border-violet-600"
                             : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50",

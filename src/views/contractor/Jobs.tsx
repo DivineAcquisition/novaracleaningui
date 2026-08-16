@@ -142,6 +142,8 @@ const ADDON_LABELS: Record<string, string> = {
   trashHaul: "Trash haul",
   cateringEvent: "Catering / event cleanup",
   firstCleanDeep: "First-clean deep clean",
+  pestLight: "Pest — Light",
+  moldMinor: "Mold — Minor (surface)",
   petHair: "Heavy pet-hair removal",
   basement: "Basement clean",
   insideFridge: "Inside fridge",

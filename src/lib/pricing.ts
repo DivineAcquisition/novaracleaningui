@@ -91,10 +91,26 @@ export const ADD_ONS = {
   deepBathroomDetail: { label: "Deep bathroom detail", price: 45, note: "Per bathroom" },
   cateringEvent: { label: "Catering / event cleanup", price: 85, note: "Post-event catering mess & dish volume" },
   firstCleanDeep: { label: "First-clean deep clean", price: 75, note: "One-time Glow reset. $75 on the first visit — surge if skipped and the home needs it." },
+  pestLight: { label: "Pest — Light", price: 65, note: "Dead bugs, webs, minor trails. Confined surface work at the Focused Clean area rate. Active infestation / bed bugs are stop-and-report, not this add-on." },
+  moldMinor: { label: "Mold — Minor (surface)", price: 65, note: "Small non-porous surface area. Confined work at the Focused Clean area rate. Spread work may use Heavy condition instead. Over ~10 sq ft / porous / hidden-source odor is stop-and-report." },
 } as const;
 
 /** Catalog id for the Glow first-clean deep add-on (the public/admin prompt). */
 export const FIRST_CLEAN_DEEP_ID = "firstCleanDeep" as const;
+
+/** In-scope site findings — priced on the job / scope adjustment, not a public menu item. */
+export const PEST_LIGHT_ID = "pestLight" as const;
+export const MOLD_MINOR_ID = "moldMinor" as const;
+
+/** Add-ons that are ops/on-site only (not offered on the public pricing sheet or pay page). */
+export const OPS_ONLY_ADD_ON_IDS: ReadonlySet<string> = new Set([PEST_LIGHT_ID, MOLD_MINOR_ID]);
+
+/** Scope-adjustment reason code → catalog add-on to attach automatically. */
+export const SCOPE_REASON_ADD_ONS: Record<string, string> = {
+  first_clean_deep: FIRST_CLEAN_DEEP_ID,
+  pest_light: PEST_LIGHT_ID,
+  mold_minor: MOLD_MINOR_ID,
+};
 
 /**
  * Add-ons that actually price. Fridge/oven are included in Move-In/Out.
