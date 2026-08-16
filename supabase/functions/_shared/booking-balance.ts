@@ -16,6 +16,10 @@ export type BookingBalanceFields = {
   balance_amount_cents?: unknown;
   balance_charged_at?: unknown;
   balance_payment_intent_id?: unknown;
+  completion_hold_status?: unknown;
+  completion_hold_amount_cents?: unknown;
+  completion_hold_captured_amount?: unknown;
+  completion_hold_captured_at?: unknown;
 };
 
 function cents(value: unknown): number {
@@ -51,17 +55,44 @@ export function collectedTowardJobCents(b: BookingBalanceFields): number {
 }
 
 /**
+ * Completion-time captures already on the booking (hold + off-session
+ * remaining), not including the original deposit or separately charged add-ons.
+ *
+ * Keep in lock-step with src/lib/booking-balance.ts.
+ */
+export function completionCapturedCents(b: BookingBalanceFields): number {
+  const balance = cents(b.balance_amount_cents);
+  const holdStatus = String(b.completion_hold_status || "");
+  const holdCaptured = holdStatus === "captured" || b.completion_hold_captured_at
+    ? cents(b.completion_hold_captured_amount) || (holdStatus === "captured" ? cents(b.completion_hold_amount_cents) : 0)
+    : 0;
+  return Math.max(balance, holdCaptured);
+}
+
+/**
  * Amount to collect off-session when the job is marked complete.
  *
- * billed = final_charge_cents ?? total_estimate_cents
- * collected = original quote for full-pay / credit visits, otherwise deposit
- * remaining = max(0, billed − collected)
- *
- * Scope adjustments write final_charge_cents and leave total_estimate_cents
- * alone, so extras are billed here — not when the adjustment is recorded.
+ * billed − deposit/full-pay/credit − completion captures − immediately billed add-ons.
  */
-export function remainingDueAtCompletionCents(b: BookingBalanceFields): number {
-  return Math.max(0, billedTotalCents(b) - collectedTowardJobCents(b));
+export function remainingDueAtCompletionCents(
+  b: BookingBalanceFields,
+  paidAddonCents = 0,
+): number {
+  const billed = billedTotalCents(b);
+  const base = collectedTowardJobCents(b);
+  const already = completionCapturedCents(b);
+  const option = String(b.payment_option || "").toLowerCase();
+  const usesCredit = b.uses_credit === true || option === "credit";
+  const addonDeduction = usesCredit || option === "full" ? 0 : cents(paidAddonCents);
+  return Math.max(0, billed - base - already - addonDeduction);
+}
+
+/** What Stripe should already have captured for this job. */
+export function capturedTowardJobCents(
+  b: BookingBalanceFields,
+  paidAddonCents = 0,
+): number {
+  return Math.max(0, billedTotalCents(b) - remainingDueAtCompletionCents(b, paidAddonCents));
 }
 
 /**

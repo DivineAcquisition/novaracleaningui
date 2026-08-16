@@ -1,8 +1,9 @@
 // ─── admin-charge-booking-balance ────────────────────────────────────────
 //
 // Ops: off-session charge remaining balance on the Stripe account tied to
-// STRIPE_SECRET_KEY (env / app_secrets). Idempotent when
-// balance_payment_intent_id is already set on the booking row.
+// STRIPE_SECRET_KEY (env / app_secrets). Remaining is billed total minus
+// deposit / completion captures / immediately billed add-ons — not "skip if
+// the deposit payment_intent_id is already on the row."
 //
 // Body: { bookingId: string, force?: boolean }
 
@@ -11,7 +12,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { resolveSecret } from "../_shared/app-secrets.ts";
 import { resolveOffSessionPaymentMethod } from "../_shared/resolve-off-session-payment-method.ts";
-import { billedTotalCents, remainingDueAtCompletionCents } from "../_shared/booking-balance.ts";
+import { remainingDueAtCompletionCents } from "../_shared/booking-balance.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -31,6 +32,7 @@ serve(async (req) => {
     const body = await req.json();
     const bookingId = String(body.bookingId || "");
     const force = Boolean(body.force);
+    log("start", { bookingId, force });
     if (!bookingId) {
       return new Response(JSON.stringify({ error: "bookingId required" }), {
         status: 400,
@@ -56,31 +58,19 @@ serve(async (req) => {
       });
     }
 
-    const remainingCents = remainingDueAtCompletionCents(booking);
+    const { data: addonChargeRows } = await supabase
+      .from("booking_addon_charges")
+      .select("amount_cents, status")
+      .eq("booking_id", bookingId);
+    const paidAddonCents = (addonChargeRows || [])
+      .filter((r: { status: string | null }) => r.status === "paid" || r.status === "charged")
+      .reduce((s: number, r: { amount_cents: number | null }) => s + (Number(r.amount_cents) || 0), 0);
+
+    const remainingCents = remainingDueAtCompletionCents(booking, paidAddonCents);
     if (remainingCents <= 0) {
       return new Response(JSON.stringify({ success: true, skipped: true, reason: "no-balance" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
-    }
-
-    const existingBalancePi = booking.payment_intent_id as string | null;
-    if (existingBalancePi?.startsWith("pi_") && !force) {
-      const stripeKeyCheck = await resolveSecret(supabase, "STRIPE_SECRET_KEY");
-      if (stripeKeyCheck) {
-        try {
-          const stripeCheck = new Stripe(stripeKeyCheck, { apiVersion: "2025-08-27.basil" });
-          const existing = await stripeCheck.paymentIntents.retrieve(existingBalancePi);
-          if (existing.status === "succeeded" && (existing.amount_received || 0) >= remainingCents) {
-            return new Response(JSON.stringify({
-              success: true,
-              alreadyCharged: true,
-              paymentIntentId: existingBalancePi,
-            }), {
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            });
-          }
-        } catch (_) { /* proceed */ }
-      }
     }
 
     const stripeKey = await resolveSecret(supabase, "STRIPE_SECRET_KEY");
@@ -142,9 +132,7 @@ serve(async (req) => {
 
     const patch: Record<string, unknown> = {
       customer_id: customerId,
-      payment_intent_id: charge.id,
-      final_charge_cents: billedTotalCents(booking),
-      payment_received_at: booking.payment_received_at || new Date().toISOString(),
+      balance_amount_cents: (Number(booking.balance_amount_cents) || 0) + remainingCents,
       team_notes: [
         (booking.team_notes as string | null) || "",
         `Balance $${(remainingCents / 100).toFixed(2)} charged off-session ${charge.id} (${new Date().toISOString().slice(0, 10)}).`,

@@ -39,7 +39,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const BOOKING_FIELDS =
-  "id, booking_number, first_name, last_name, email, phone, address, city, state, status, service_type, home_size_id, add_ons, membership_plan, uses_credit, service_date, time_slot, total_estimate_cents, final_charge_cents, deposit_cents, payment_option, customer_id, balance_amount_cents, balance_charged_at, balance_payment_intent_id, team_notes, cleaner_payout_cents, payout_status, cleaner_id, job_id, before_photos, after_photos";
+  "id, booking_number, first_name, last_name, email, phone, address, city, state, status, service_type, home_size_id, add_ons, membership_plan, uses_credit, service_date, time_slot, total_estimate_cents, final_charge_cents, deposit_cents, payment_option, payment_received_at, customer_id, balance_amount_cents, balance_payment_intent_id, completion_hold_status, completion_hold_amount_cents, completion_hold_captured_amount, completion_hold_captured_at, team_notes, cleaner_payout_cents, payout_status, cleaner_id, job_id, before_photos, after_photos";
 
 interface BookingContext {
   id: string;
@@ -63,10 +63,14 @@ interface BookingContext {
   final_charge_cents: number | null;
   deposit_cents: number | null;
   payment_option: string | null;
+  payment_received_at: string | null;
   customer_id: string | null;
   balance_amount_cents: number | null;
-  balance_charged_at: string | null;
   balance_payment_intent_id: string | null;
+  completion_hold_status: string | null;
+  completion_hold_amount_cents: number | null;
+  completion_hold_captured_amount: number | null;
+  completion_hold_captured_at: string | null;
   team_notes: string | null;
   cleaner_payout_cents: number | null;
   payout_status: string | null;
@@ -342,7 +346,15 @@ export async function POST(req: Request): Promise<NextResponse> {
     // final_charge_cents). Already-complete jobs: complete-booking will not
     // run again, so collect the extra now. Never fail the adjustment if Stripe
     // declines — the extra is still on the booking.
-    const chargeNowCents = scopeAdjustmentChargeNowCents(booking, adjustedPriceCents);
+    const { data: addonChargeRows } = await supabase
+      .from("booking_addon_charges")
+      .select("amount_cents, status")
+      .eq("booking_id", bookingId);
+    const paidAddonCents = (addonChargeRows || [])
+      .filter((r: { status: string | null }) => r.status === "paid" || r.status === "charged")
+      .reduce((s: number, r: { amount_cents: number | null }) => s + (Number(r.amount_cents) || 0), 0);
+
+    const chargeNowCents = scopeAdjustmentChargeNowCents(booking, adjustedPriceCents, paidAddonCents);
     let chargeStatus: "deferred_until_complete" | "charged" | "failed" | "missing_card" | "skipped" =
       chargeNowCents > 0 ? "skipped" : "deferred_until_complete";
     let chargeError: string | null = null;
@@ -653,7 +665,6 @@ async function chargeScopeExtraOffSession(
       .update({
         customer_id: customerId,
         balance_payment_intent_id: booking.balance_payment_intent_id || piId,
-        balance_charged_at: new Date().toISOString(),
         balance_amount_cents: already + amountCents,
         team_notes: [
           booking.team_notes || "",

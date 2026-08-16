@@ -6,7 +6,7 @@ import { mirrorToLeadConnector } from "../_shared/leadconnector-mirror.ts";
 import { resolveSecret } from "../_shared/app-secrets.ts";
 import { computeCrewPay, shareFor } from "../_shared/crew-pay.ts";
 import { documentBookingAddonsInQcSafe } from "../_shared/addon-qc.ts";
-import { remainingDueAtCompletionCents } from "../_shared/booking-balance.ts";
+import { remainingDueAtCompletionCents, billedTotalCents } from "../_shared/booking-balance.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -274,16 +274,26 @@ serve(async (req) => {
     }
 
     // ─── Auto-charge remaining balance off-session ──────────────────────
-    // Deposit jobs: remaining 50% (+ any scope extras on final_charge_cents).
-    // Paid-in-full / credit visits: only scope extras above the original quote.
-    // Recurring billed-at-completion: the whole visit (and extras).
-    // Idempotent: if we've already charged (balance_payment_intent_id set), skip.
+    // billed (final_charge ?? estimate) − deposit/full-pay/credit − add-ons
+    // already charged − completion captures already on the row.
+    // Do not skip just because a deposit PI or hold PI id is on the row —
+    // those are not the scope extra.
     let balanceChargeStatus: "skipped_full_payment" | "skipped_no_balance" |
       "already_charged" | "charged" | "captured_hold" | "failed" = "skipped_no_balance";
     let balanceChargeError: string | null = null;
     let photoUploadToken: string | null = null;
     let photoUploadUrl: string | null = null;
-    const remainingCents = remainingDueAtCompletionCents(booking);
+
+    const { data: addonChargeRows } = await supabase
+      .from("booking_addon_charges")
+      .select("amount_cents, status")
+      .eq("booking_id", bookingId);
+    const paidAddonCents = (addonChargeRows || [])
+      .filter((r: { status: string | null }) => r.status === "paid" || r.status === "charged")
+      .reduce((s: number, r: { amount_cents: number | null }) => s + (Number(r.amount_cents) || 0), 0);
+
+    let remainingCents = remainingDueAtCompletionCents(booking, paidAddonCents);
+    const dueAtCompletionCents = remainingCents;
     try {
       if (remainingCents <= 0) {
         balanceChargeStatus = booking.payment_option === "full"
@@ -291,10 +301,7 @@ serve(async (req) => {
           : "skipped_no_balance";
         logStep(balanceChargeStatus === "skipped_full_payment"
           ? "No balance charge needed — paid in full"
-          : "No balance to charge", { remainingCents });
-      } else if (booking.balance_payment_intent_id) {
-        balanceChargeStatus = "already_charged";
-        logStep("Balance already charged on a previous call");
+          : "No balance to charge", { remainingCents, paidAddonCents });
       } else {
         const stripeKey = await resolveSecret(supabase, "STRIPE_SECRET_KEY");
         if (!stripeKey) {
@@ -302,43 +309,82 @@ serve(async (req) => {
         }
         const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
 
-        // ─── Path 1: capture an existing pre-authorized hold ─────────
-        //
-        // The cron-driven prepare-completion-hold worker normally places
-        // a manual-capture (auth-only) PaymentIntent on the saved card
-        // ~5 days before service. If we have an authorized hold here,
-        // capture it for the actual final amount instead of creating a
-        // fresh off-session charge — money was already reserved on the
-        // customer's card so capture cannot decline.
+        const persistMoney = async (patch: Record<string, unknown>) => {
+          const { error } = await supabase.from("bookings").update(patch).eq("id", bookingId);
+          if (error) {
+            logStep("Failed to persist capture on booking", {
+              error: error.message,
+              keys: Object.keys(patch),
+            });
+          }
+        };
+
+        const chargeOverage = async (
+          customerRef: string,
+          overageCents: number,
+          kind: string,
+        ): Promise<number> => {
+          if (overageCents <= 0) return 0;
+          const pms = await stripe.paymentMethods.list({
+            customer: customerRef,
+            type: "card",
+            limit: 1,
+          });
+          const pmId = pms.data[0]?.id;
+          if (!pmId) throw new Error("No saved card on file for off-session charge");
+          const supplemental = await stripe.paymentIntents.create({
+            amount: overageCents,
+            currency: "usd",
+            customer: customerRef,
+            payment_method: pmId,
+            off_session: true,
+            confirm: true,
+            description: `${kind} — ${booking.service_type} clean on ${booking.service_date}`,
+            metadata: {
+              bookingId,
+              bookingNumber: String(booking.booking_number ?? ""),
+              chargeType: kind === "Overage" ? "completion_overage" : "balance_auto_charge",
+            },
+          }, {
+            idempotencyKey: `${kind === "Overage" ? "overage" : "balance"}-${bookingId}-${overageCents}`,
+          });
+          logStep(kind === "Overage" ? "Supplemental overage charged" : "Balance charged off-session", {
+            paymentIntentId: supplemental.id,
+            amountCents: overageCents,
+            status: supplemental.status,
+          });
+          return overageCents;
+        };
+
         const heldPiId = booking.completion_hold_pi_id as string | null;
-        const heldStatus = booking.completion_hold_status as string | null;
         const heldAmount = (booking.completion_hold_amount_cents as number | null) ?? 0;
 
-        if (heldPiId && heldStatus === "authorized") {
+        if (heldPiId) {
           try {
             const heldPi = await stripe.paymentIntents.retrieve(heldPiId);
             if (heldPi.status === "requires_capture") {
-              // Capture for the SMALLER of the held auth and the actual
-              // remaining balance. If the actual cost ran higher
-              // (overtime etc.) we capture the held amount in full and
-              // create a small supplemental off-session charge for the
-              // overage below.
-              const captureAmount = Math.min(heldAmount, remainingCents);
+              const captureAmount = Math.min(heldAmount || heldPi.amount, remainingCents);
               const captured = await stripe.paymentIntents.capture(heldPiId, {
                 amount_to_capture: captureAmount,
               });
-              await supabase
-                .from("bookings")
-                .update({
-                  balance_payment_intent_id: heldPiId,
-                  balance_charged_at: new Date().toISOString(),
-                  balance_amount_cents: captureAmount,
-                  payment_status: "paid",
-                  completion_hold_status: "captured",
-                  completion_hold_captured_at: new Date().toISOString(),
-                  completion_hold_captured_amount: captureAmount,
-                })
-                .eq("id", bookingId);
+              let chargedCompletion = captureAmount;
+              const overageCents = remainingCents - captureAmount;
+              if (overageCents > 0) {
+                try {
+                  chargedCompletion += await chargeOverage(heldPi.customer as string, overageCents, "Overage");
+                } catch (overageErr) {
+                  logStep("Supplemental overage charge failed (non-blocking)", {
+                    error: overageErr instanceof Error ? overageErr.message : String(overageErr),
+                  });
+                }
+              }
+              await persistMoney({
+                balance_payment_intent_id: heldPiId,
+                balance_amount_cents: chargedCompletion,
+                completion_hold_status: "captured",
+                completion_hold_captured_at: new Date().toISOString(),
+                completion_hold_captured_amount: captureAmount,
+              });
               try {
                 await supabase.from("completion_hold_log").insert({
                   booking_id: bookingId,
@@ -348,59 +394,45 @@ serve(async (req) => {
                   amount_cents: captureAmount,
                 });
               } catch (_) { /* best effort */ }
-
               balanceChargeStatus = "captured_hold";
+              remainingCents = Math.max(0, remainingCents - chargedCompletion);
               logStep("Hold captured", {
                 paymentIntentId: heldPiId,
                 amountCents: captureAmount,
-                heldAmountCents: heldAmount,
-                actualRemainingCents: remainingCents,
+                chargedCompletionCents: chargedCompletion,
                 stripeStatus: captured.status,
               });
-
-              // ─── Supplemental for overage (off-session) ────────────
-              const overageCents = remainingCents - captureAmount;
-              if (overageCents > 0) {
+            } else if (heldPi.status === "succeeded") {
+              const already = heldPi.amount_received || heldAmount;
+              // DB often still says "authorized" because an earlier persist
+              // included columns that don't exist on bookings.
+              remainingCents = Math.max(0, remainingCents - already);
+              let chargedCompletion = already;
+              if (remainingCents > 0 && heldPi.customer) {
                 try {
-                  const pms = await stripe.paymentMethods.list({
-                    customer: heldPi.customer as string,
-                    type: "card",
-                    limit: 1,
-                  });
-                  const pmId = pms.data[0]?.id;
-                  if (pmId) {
-                    const supplemental = await stripe.paymentIntents.create({
-                      amount: overageCents,
-                      currency: "usd",
-                      customer: heldPi.customer as string,
-                      payment_method: pmId,
-                      off_session: true,
-                      confirm: true,
-                      description: `Overage — ${booking.service_type} clean on ${booking.service_date}`,
-                      metadata: {
-                        bookingId,
-                        bookingNumber: String(booking.booking_number ?? ""),
-                        chargeType: "completion_overage",
-                      },
-                    }, {
-                      idempotencyKey: `overage-${bookingId}-${overageCents}`,
-                    });
-                    logStep("Supplemental overage charged", {
-                      paymentIntentId: supplemental.id,
-                      amountCents: overageCents,
-                    });
-                  }
+                  chargedCompletion += await chargeOverage(heldPi.customer as string, remainingCents, "Overage");
+                  remainingCents = 0;
                 } catch (overageErr) {
                   logStep("Supplemental overage charge failed (non-blocking)", {
                     error: overageErr instanceof Error ? overageErr.message : String(overageErr),
                   });
                 }
               }
+              await persistMoney({
+                balance_payment_intent_id: booking.balance_payment_intent_id || heldPiId,
+                balance_amount_cents: chargedCompletion,
+                completion_hold_status: "captured",
+                completion_hold_captured_at: booking.completion_hold_captured_at || new Date().toISOString(),
+                completion_hold_captured_amount: already,
+              });
+              balanceChargeStatus = "captured_hold";
+              logStep("Hold already captured in Stripe — recorded on booking", {
+                paymentIntentId: heldPiId,
+                alreadyCents: already,
+                chargedCompletionCents: chargedCompletion,
+              });
             } else {
-              // The PI exists but isn't capturable anymore (likely
-              // expired or already captured). Fall through to the
-              // off-session path below.
-              logStep("Hold not in requires_capture state — falling back", {
+              logStep("Hold not capturable — falling back to off-session", {
                 heldPiId,
                 heldStatus: heldPi.status,
               });
@@ -412,14 +444,7 @@ serve(async (req) => {
           }
         }
 
-        // ─── Path 2: legacy off-session charge ──────────────────────
-        //
-        // Only runs when there's no usable pre-authorized hold (cron
-        // never got to it, hold expired, capture failed, etc.). Same
-        // behavior as before this change — verifies the card is still
-        // on file and creates a fresh off-session PaymentIntent for
-        // the remaining balance.
-        if (balanceChargeStatus !== "captured_hold") {
+        if (balanceChargeStatus !== "captured_hold" && remainingCents > 0) {
           let customerId: string | null = null;
           if (booking.customer_id && typeof booking.customer_id === "string" && booking.customer_id.startsWith("cus_")) {
             customerId = booking.customer_id;
@@ -430,51 +455,13 @@ serve(async (req) => {
           if (!customerId) {
             throw new Error(`No Stripe customer found for ${booking.email}`);
           }
-
-          const pms = await stripe.paymentMethods.list({ customer: customerId, type: "card", limit: 1 });
-          const pmId = pms.data[0]?.id;
-          if (!pmId) {
-            throw new Error("No saved card on file for off-session charge");
-          }
-
-          const charge = await stripe.paymentIntents.create({
-            amount: remainingCents,
-            currency: "usd",
-            customer: customerId,
-            payment_method: pmId,
-            off_session: true,
-            confirm: true,
-            description: `Remaining balance — ${booking.service_type} clean on ${booking.service_date}`,
-            metadata: {
-              bookingId,
-              bookingNumber: String(booking.booking_number ?? ""),
-              chargeType: "balance_auto_charge",
-            },
-          }, {
-            // Idempotency key keyed on booking + amount so a duplicate /
-            // concurrent invocation (double-click "Mark complete", cron
-            // overlap, retry) returns the SAME PaymentIntent instead of
-            // charging the card again. A legitimately different balance
-            // (after a service adjustment) uses a new key.
-            idempotencyKey: `balance-${bookingId}-${remainingCents}`,
+          await chargeOverage(customerId, remainingCents, "Remaining balance");
+          await persistMoney({
+            balance_payment_intent_id: booking.balance_payment_intent_id,
+            balance_amount_cents: (Number(booking.balance_amount_cents) || 0) + remainingCents,
           });
-
-          await supabase
-            .from("bookings")
-            .update({
-              balance_payment_intent_id: charge.id,
-              balance_charged_at: new Date().toISOString(),
-              balance_amount_cents: remainingCents,
-              payment_status: "paid",
-            })
-            .eq("id", bookingId);
-
           balanceChargeStatus = "charged";
-          logStep("Balance charged off-session", {
-            paymentIntentId: charge.id,
-            status: charge.status,
-            amountCents: remainingCents,
-          });
+          remainingCents = 0;
         }
       }
     } catch (chargeErr: any) {
@@ -611,7 +598,7 @@ serve(async (req) => {
             city: booking.city,
             state: booking.state,
             zipCode: booking.zip_code,
-            totalAmount: booking.total_estimate_cents,
+            totalAmount: billedTotalCents(booking),
           },
         },
       });
@@ -626,8 +613,12 @@ serve(async (req) => {
         const dateLabel = formatServiceDate(booking.service_date);
         let smsBody = `Novara Cleaning: Your cleaning${dateLabel ? ` on ${dateLabel}` : ""} is complete — thank you!`;
         if (balanceChargeStatus === "charged" || balanceChargeStatus === "captured_hold") {
-          smsBody += ` Your remaining balance of $${(remainingCents / 100).toFixed(2)} has been charged to the card on file.`;
-        } else if (balanceChargeStatus === "skipped_full_payment") {
+          const chargedNow = Math.max(0, dueAtCompletionCents - remainingCents);
+          if (remainingCents > 0 && chargedNow > 0) {
+            smsBody += ` $${(chargedNow / 100).toFixed(2)} was charged to the card on file. $${(remainingCents / 100).toFixed(2)} is still due.`;
+          } else if (dueAtCompletionCents > 0) {
+            smsBody += ` Your remaining balance of $${(dueAtCompletionCents / 100).toFixed(2)} has been charged to the card on file.`;
+          } else if (balanceChargeStatus === "skipped_full_payment") {
           smsBody += ` Paid in full at booking — nothing more to do.`;
         } else if (balanceChargeStatus === "failed") {
           smsBody += ` We had trouble charging the balance on your card — our team will reach out shortly.`;

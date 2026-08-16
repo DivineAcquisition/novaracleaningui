@@ -22,6 +22,10 @@ export type BookingBalanceFields = {
   balance_amount_cents?: unknown;
   balance_charged_at?: unknown;
   balance_payment_intent_id?: unknown;
+  completion_hold_status?: unknown;
+  completion_hold_amount_cents?: unknown;
+  completion_hold_captured_amount?: unknown;
+  completion_hold_captured_at?: unknown;
 };
 
 function cents(value: unknown): number {
@@ -80,14 +84,46 @@ export function remainingDueAfterUpfrontCents(b: BookingBalanceFields): number {
 }
 
 /**
- * Amount to collect off-session when the job is marked complete.
+ * Completion-time captures already on the booking (hold + off-session
+ * remaining), not including the original deposit or separately charged add-ons.
+ */
+export function completionCapturedCents(b: BookingBalanceFields): number {
+  const balance = cents(b.balance_amount_cents);
+  const holdStatus = String(b.completion_hold_status || "");
+  const holdCaptured = holdStatus === "captured" || b.completion_hold_captured_at
+    ? cents(b.completion_hold_captured_amount) || (holdStatus === "captured" ? cents(b.completion_hold_amount_cents) : 0)
+    : 0;
+  return Math.max(balance, holdCaptured);
+}
+
+/**
+ * Amount still owed when the job is marked complete (or charged afterwards).
  *
  * billed = final_charge_cents ?? total_estimate_cents
- * collected = original quote for full-pay / credit visits, otherwise deposit
- * remaining = max(0, billed − collected)
+ * minus deposit / paid-in-full quote / credit coverage
+ * minus completion captures already on the row
+ * minus add-ons already charged off-session (deposit jobs only — on full-pay
+ * those add-ons already sit inside total_estimate_cents)
  */
-export function remainingDueAtCompletionCents(b: BookingBalanceFields): number {
-  return Math.max(0, billedTotalCents(b) - collectedTowardJobCents(b));
+export function remainingDueAtCompletionCents(
+  b: BookingBalanceFields,
+  paidAddonCents = 0,
+): number {
+  const billed = billedTotalCents(b);
+  const base = collectedTowardJobCents(b);
+  const already = completionCapturedCents(b);
+  const option = String(b.payment_option || "").toLowerCase();
+  const usesCredit = b.uses_credit === true || option === "credit";
+  const addonDeduction = usesCredit || option === "full" ? 0 : cents(paidAddonCents);
+  return Math.max(0, billed - base - already - addonDeduction);
+}
+
+/** What Stripe should already have captured for this job. */
+export function capturedTowardJobCents(
+  b: BookingBalanceFields,
+  paidAddonCents = 0,
+): number {
+  return Math.max(0, billedTotalCents(b) - remainingDueAtCompletionCents(b, paidAddonCents));
 }
 
 /**
@@ -98,18 +134,13 @@ export function remainingDueAtCompletionCents(b: BookingBalanceFields): number {
 export function scopeAdjustmentChargeNowCents(
   booking: BookingBalanceFields,
   newFinalCents: number,
+  paidAddonCents = 0,
 ): number {
   if (String(booking.status || "") !== "completed") return 0;
-  const newDue = remainingDueAtCompletionCents({
-    ...booking,
-    final_charge_cents: newFinalCents,
-  });
-  const priorDue = remainingDueAtCompletionCents(booking);
-  const extra = Math.max(0, newDue - priorDue);
-  const alreadySettled = Boolean(
-    booking.balance_charged_at || booking.balance_payment_intent_id,
+  return remainingDueAtCompletionCents(
+    { ...booking, final_charge_cents: newFinalCents },
+    paidAddonCents,
   );
-  return alreadySettled ? extra : newDue;
 }
 
 /** True only when remainingDueAfterUpfrontCents is 0. */
