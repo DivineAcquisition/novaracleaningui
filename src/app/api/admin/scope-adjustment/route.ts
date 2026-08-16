@@ -195,6 +195,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   const adjustedPriceCents = Math.round(Number(body.adjustedPriceCents));
   const adjustedServiceType = body.adjustedServiceType ? String(body.adjustedServiceType) : null;
   const adjustedHomeSizeId = body.adjustedHomeSizeId ? String(body.adjustedHomeSizeId) : null;
+  const adjustedAddOns = Array.isArray(body.adjustedAddOns) ? body.adjustedAddOns.map(String) : null;
   const evidencePhotos = Array.isArray(body.evidencePhotos) ? body.evidencePhotos.map(String) : [];
   const evidenceOverrideNote = String(body.evidenceOverrideNote || "").trim();
   const overrideNote = String(body.overrideNote || "").trim();
@@ -288,6 +289,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       originalServiceType: booking.service_type,
       adjustedServiceType,
       adjustedHomeSizeId,
+      adjustedAddOns: adjustedAddOns || booking.add_ons || [],
       originalPriceCents,
     });
     const amountOverridden =
@@ -312,6 +314,12 @@ export async function POST(req: Request): Promise<NextResponse> {
     };
     if (adjustedServiceType && adjustedServiceType !== booking.service_type) {
       bookingUpdate.service_type = adjustedServiceType;
+    }
+    if (adjustedHomeSizeId && adjustedHomeSizeId !== booking.home_size_id) {
+      bookingUpdate.home_size_id = adjustedHomeSizeId;
+    }
+    if (adjustedAddOns) {
+      bookingUpdate.add_ons = adjustedAddOns;
     }
     const { error: updErr } = await supabase.from("bookings").update(bookingUpdate).eq("id", bookingId);
     if (updErr) throw updErr;

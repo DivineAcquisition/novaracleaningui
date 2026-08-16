@@ -18,6 +18,8 @@ interface DeepCleanPromptProps {
   /** Surcharge amount in whole dollars (default 75). */
   priceDollars?: number;
   className?: string;
+  /** Admin copy talks about "this home" / the customer instead of "your home". */
+  variant?: "customer" | "admin";
 }
 
 /**
@@ -30,7 +32,14 @@ interface DeepCleanPromptProps {
  * caller can forward `includeDeepClean` / `deepCleanedBefore` to
  * create-membership-intent (public Glow funnel) or create-checkout (VA).
  */
-export function DeepCleanPrompt({ value, onChange, priceDollars = 75, className }: DeepCleanPromptProps) {
+export function DeepCleanPrompt({
+  value,
+  onChange,
+  priceDollars = 75,
+  className,
+  variant = "customer",
+}: DeepCleanPromptProps) {
+  const admin = variant === "admin";
   const setAnswer = (answer: DeepCleanedBefore) => {
     // Recently deep cleaned → default to skipping the add-on. Otherwise we
     // recommend adding it. The customer can still override via the checkbox.
@@ -46,15 +55,18 @@ export function DeepCleanPrompt({ value, onChange, priceDollars = 75, className 
         <div>
           <p className="font-semibold text-sm">First-clean deep clean</p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            New memberships start with a one-time deep clean to reset your home so recurring
-            cleans stay effortless.
+            {admin
+              ? "Same prompt as public Glow checkout. One-time $75 reset on the first visit so recurring cleans stay on a Standard cadence. Does not copy to later visits."
+              : "New memberships start with a one-time deep clean to reset your home so recurring cleans stay effortless."}
           </p>
         </div>
       </div>
 
       <div className="space-y-2">
         <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Has your home had a professional deep clean in the last 3 months?
+          {admin
+            ? "Has this home had a professional deep clean in the last 3 months?"
+            : "Has your home had a professional deep clean in the last 3 months?"}
         </p>
         <div className="grid grid-cols-2 gap-2">
           {([
@@ -91,7 +103,9 @@ export function DeepCleanPrompt({ value, onChange, priceDollars = 75, className 
         <span className="text-sm">
           <span className="font-semibold">Add the one-time deep clean (+${priceDollars})</span>
           <span className="block text-xs text-muted-foreground mt-0.5">
-            Recommended for the first visit. Added once to your first month.
+            {admin
+              ? "Recommended for the first Glow visit. Charged once — not on the recurring schedule."
+              : "Recommended for the first visit. Added once to your first month."}
           </span>
         </span>
       </label>
@@ -100,9 +114,19 @@ export function DeepCleanPrompt({ value, onChange, priceDollars = 75, className 
         <div className="flex items-start gap-2.5 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50/70 dark:bg-amber-950/20 p-3">
           <RiAlertLine className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
           <p className="text-xs text-amber-800 dark:text-amber-300">
-            You&apos;ve chosen to skip the first-clean deep clean. If your cleaner determines your
-            home needs a deep clean upon arrival, a <span className="font-semibold">surge charge
-            may apply</span> based on its condition.
+            {admin ? (
+              <>
+                First-clean deep skipped. If the cleaner determines the home needs a reset on
+                arrival, a <span className="font-semibold">surge charge may apply</span>. Add it
+                now, or apply it later from this booking or via scope adjustment.
+              </>
+            ) : (
+              <>
+                You&apos;ve chosen to skip the first-clean deep clean. If your cleaner determines your
+                home needs a deep clean upon arrival, a <span className="font-semibold">surge charge
+                may apply</span> based on its condition.
+              </>
+            )}
           </p>
         </div>
       )}

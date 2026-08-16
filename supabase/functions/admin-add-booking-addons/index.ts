@@ -44,6 +44,7 @@ const ADD_ONS: Record<string, { price: number; label: string }> = {
   trashHaul: { price: 75, label: "Trash haul" },
   deepBathroomDetail: { price: 45, label: "Deep bathroom detail" },
   cateringEvent: { price: 85, label: "Catering / event cleanup" },
+  firstCleanDeep: { price: 75, label: "First-clean deep clean" },
 };
 const labelOf = (id: string) => ADD_ONS[id]?.label || id;
 const priceOf = (id: string, overrides?: Record<string, number>) => {
@@ -134,7 +135,11 @@ serve(async (req) => {
     // Add-on price delta (server-authoritative). Move-In/Out already includes
     // fridge + oven, so those two are free there; everything else is billable.
     const st = String(booking.service_type || "standard");
-    const chargeable = (a: string) => st === "moveInOut" ? (a !== "fridge" && a !== "oven") : true;
+    const chargeable = (a: string) => {
+      if (st === "moveInOut" && (a === "fridge" || a === "oven")) return false;
+      if ((st === "deep" || st === "combo") && a === "firstCleanDeep") return false;
+      return true;
+    };
     const sumC = (ids: string[], useOverrides: boolean) =>
       ids.filter(chargeable).reduce((s, a) => {
         const dollars = useOverrides ? priceOf(a, addOnPrices) : priceOf(a);

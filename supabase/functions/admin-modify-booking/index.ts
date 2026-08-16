@@ -56,6 +56,7 @@ const ADD_ON_LABELS: Record<string, string> = {
   trashHaul: "Trash haul",
   deepBathroomDetail: "Deep bathroom detail",
   cateringEvent: "Catering / event cleanup",
+  firstCleanDeep: "First-clean deep clean",
 };
 
 function addOnLabel(id: string): string {

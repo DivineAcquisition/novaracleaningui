@@ -90,7 +90,27 @@ export const ADD_ONS = {
   trashHaul:    { label: "Trash haul",             price: 75, note: "Haul away trash / junk" },
   deepBathroomDetail: { label: "Deep bathroom detail", price: 45, note: "Per bathroom" },
   cateringEvent: { label: "Catering / event cleanup", price: 85, note: "Post-event catering mess & dish volume" },
+  firstCleanDeep: { label: "First-clean deep clean", price: 75, note: "One-time Glow reset. $75 on the first visit — surge if skipped and the home needs it." },
 } as const;
+
+/** Catalog id for the Glow first-clean deep add-on (the public/admin prompt). */
+export const FIRST_CLEAN_DEEP_ID = "firstCleanDeep" as const;
+
+/**
+ * Add-ons that actually price. Fridge/oven are included in Move-In/Out.
+ * First-clean deep is a $75 membership reset on a Standard visit — it does
+ * not stack on a job that is already Deep / Combo / Move-In/Out.
+ */
+export function chargeableAddOnIds(addOns: string[], serviceType: string): string[] {
+  const ids = (addOns || []).filter(Boolean);
+  if (serviceType === "moveInOut") {
+    return ids.filter((a) => a !== "fridge" && a !== "oven");
+  }
+  if (serviceType === "deep" || serviceType === "combo") {
+    return ids.filter((a) => a !== FIRST_CLEAN_DEEP_ID);
+  }
+  return ids;
+}
 
 export type AddOnId = keyof typeof ADD_ONS;
 
@@ -275,15 +295,11 @@ export function calculatePrice(
   const serviceDiscount = Math.max(0, serviceListPrice - serviceFinalPrice);
 
   // Add-ons. Move-In/Out already includes fridge + oven, so those two are
-  // free there; every other selected add-on is still chargeable.
-  let addOnsTotal = 0;
-  if (serviceType === "moveInOut") {
-    addOnsTotal = addOns
-      .filter((a) => a !== "fridge" && a !== "oven")
-      .reduce((sum, a) => sum + (ADD_ONS[a as AddOnId]?.price || 0), 0);
-  } else {
-    addOnsTotal = addOns.reduce((sum, a) => sum + (ADD_ONS[a as AddOnId]?.price || 0), 0);
-  }
+  // free there; first-clean deep does not stack on a Deep/Combo job.
+  const addOnsTotal = chargeableAddOnIds(addOns, String(serviceType)).reduce(
+    (sum, a) => sum + (ADD_ONS[a as AddOnId]?.price || 0),
+    0,
+  );
 
   const subtotal = serviceListPrice + addOnsTotal;
   const creditCoverage = useCredit ? Math.min(basePrice, 150) : 0;

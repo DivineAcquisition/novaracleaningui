@@ -326,12 +326,27 @@ export async function provisionGlowMembership(opts: {
     };
 
     if (subMeta.existing_booking_id) {
+      const wantsDeep = subMeta.deep_clean_included !== "false";
+      const { data: existingRow } = await supabase
+        .from("bookings")
+        .select("add_ons, team_notes")
+        .eq("id", subMeta.existing_booking_id)
+        .maybeSingle();
+      const addOns = Array.isArray(existingRow?.add_ons) ? [...existingRow.add_ons] : [];
+      if (wantsDeep && !addOns.includes("firstCleanDeep")) addOns.push("firstCleanDeep");
+      const skipBit = wantsDeep
+        ? ""
+        : " First-clean deep declined; surge may apply if condition requires a reset.";
       const { error: linkErr } = await supabase
         .from("bookings")
         .update({
           membership_plan: plan,
           uses_credit: true,
           customer_id: customerId,
+          add_ons: addOns,
+          ...(skipBit && !String(existingRow?.team_notes || "").includes("First-clean deep declined")
+            ? { team_notes: `${existingRow?.team_notes || ""}${existingRow?.team_notes ? " ·" : ""}${skipBit}`.trim() }
+            : {}),
         })
         .eq("id", subMeta.existing_booking_id);
       if (linkErr) {
@@ -359,9 +374,15 @@ export async function provisionGlowMembership(opts: {
 
       if (autoServiceDate) {
         const autoDepositCents = subMeta.deposit_cents ? parseInt(subMeta.deposit_cents, 10) || 0 : 0;
-        const autoTeamNotes = autoDepositCents > 0
-          ? `MEMBERSHIP AUTO-BOOKING — $${(autoDepositCents / 100).toFixed(2)} first-clean deposit collected at signup. Confirm date with customer before dispatching`
-          : "MEMBERSHIP AUTO-BOOKING — confirm date with customer before dispatching";
+        const wantsDeep = subMeta.deep_clean_included !== "false";
+        const autoTeamNotes = [
+          autoDepositCents > 0
+            ? `MEMBERSHIP AUTO-BOOKING — $${(autoDepositCents / 100).toFixed(2)} first-clean deposit collected at signup. Confirm date with customer before dispatching`
+            : "MEMBERSHIP AUTO-BOOKING — confirm date with customer before dispatching",
+          wantsDeep
+            ? "Includes first-clean deep."
+            : "First-clean deep declined; surge may apply if condition requires a reset.",
+        ].join(" ");
 
         const { error: autoBookErr } = await supabase.from("bookings").insert({
           email,
@@ -373,7 +394,8 @@ export async function provisionGlowMembership(opts: {
           state: subMeta.state,
           zip_code: subMeta.zip_code || "",
           home_size_id: subMeta.home_size_id,
-          service_type: "standard",
+          service_type: wantsDeep ? "deep" : "standard",
+          add_ons: wantsDeep ? ["firstCleanDeep"] : [],
           membership_plan: plan,
           uses_credit: true,
           service_date: autoServiceDate,

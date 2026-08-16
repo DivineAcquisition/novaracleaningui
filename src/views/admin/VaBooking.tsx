@@ -939,7 +939,7 @@ export default function VaBooking() {
     addOns,
     serviceDate: serviceDateStr,
     membershipPlan: isRecurring ? cadence : "none",
-    firstMonth: isRecurring,
+    firstMonth: isRecurring && deepClean.includeDeepClean,
     csrName: csrName || undefined,
     quoteId: savedQuoteId,
   });
@@ -949,6 +949,7 @@ export default function VaBooking() {
   const dealSignature = JSON.stringify([
     zipCode, serviceType, homeSizeId, condition, [...addOns].sort(),
     serviceDateStr, focusedComposition, isRecurring ? cadence : "none",
+    isRecurring && deepClean.includeDeepClean,
   ]);
   const lockSignatureRef = useRef<string | null>(null);
   useEffect(() => {
@@ -1068,7 +1069,7 @@ export default function VaBooking() {
           zip_code: zipCode || null,
           home_size_id: homeSizeId,
           service_type: "standard", // recurring plans are always standard cleans
-          add_ons: addOns,
+          add_ons: addOns.filter((id) => id !== "firstCleanDeep"),
           cadence,
           preferred_time_slot: selectedTime || null,
           preferred_cleaner_id: preferredCleanerId === "auto" ? null : preferredCleanerId,
@@ -1077,7 +1078,13 @@ export default function VaBooking() {
           membership_plan: usesCredit || createGlowLink ? membershipPlan : null,
           next_service_date: firstServiceDate,
           active: true,
-          notes: [teamNotes.trim() || null, overrideNote].filter(Boolean).join(" · ") || null,
+          notes: [
+            teamNotes.trim() || null,
+            overrideNote,
+            deepClean.includeDeepClean
+              ? "First-clean deep: include (+$75 on first visit only)."
+              : `First-clean deep declined${deepClean.deepCleanedBefore === "yes" ? " (recently deep cleaned)" : ""}; surge may apply if condition requires a reset.`,
+          ].filter(Boolean).join(" · ") || null,
         })
         .select("id")
         .single();
@@ -1095,6 +1102,34 @@ export default function VaBooking() {
           if (error) throw error;
           if ((data as any)?.error) throw new Error((data as any).error);
           firstCleanStatus = (data as any)?.results?.[0]?.status || "done";
+          const firstBookingId = (data as any)?.results?.[0]?.bookingId as string | undefined;
+          if (firstBookingId) {
+            const { data: firstRow } = await (supabase.from as any)("bookings")
+              .select("add_ons, team_notes")
+              .eq("id", firstBookingId)
+              .maybeSingle();
+            const nextAddOns: string[] = Array.isArray(firstRow?.add_ons) ? [...firstRow.add_ons] : [...addOns];
+            if (deepClean.includeDeepClean) {
+              if (!nextAddOns.includes("firstCleanDeep")) nextAddOns.push("firstCleanDeep");
+            } else {
+              const idx = nextAddOns.indexOf("firstCleanDeep");
+              if (idx >= 0) nextAddOns.splice(idx, 1);
+            }
+            const skipNote = deepClean.includeDeepClean
+              ? "Includes first-clean deep."
+              : `First-clean deep declined${deepClean.deepCleanedBefore === "yes" ? " (recently deep cleaned)" : ""}; surge may apply if condition requires a reset.`;
+            const notes = [firstRow?.team_notes, skipNote].filter(Boolean).join(" · ");
+            await (supabase.from as any)("bookings")
+              .update({
+                add_ons: nextAddOns,
+                // Marker + deep checklist on visit 1 only. The $75 is billed on
+                // the Glow first invoice (create-checkout / create-membership-intent),
+                // not copied onto later generated visits.
+                service_type: deepClean.includeDeepClean ? "deep" : "standard",
+                team_notes: notes,
+              })
+              .eq("id", firstBookingId);
+          }
         } catch (e) {
           firstCleanStatus = "error";
           toast.warning(
@@ -1806,7 +1841,7 @@ export default function VaBooking() {
         <div className="inline-flex w-full sm:w-auto rounded-2xl border border-slate-200 bg-slate-50 p-1 shadow-[0_1px_2px_0_rgba(15,23,42,0.04)]">
           {[
             { id: "one-time" as BookingType, label: "One-time clean", icon: RiSparklingLine, sub: "Single booking + invoice" },
-            { id: "recurring" as BookingType, label: "Recurring plan", icon: RiRepeatLine, sub: "Auto-books every cycle" },
+            { id: "recurring" as BookingType, label: "Recurring / Glow", icon: RiRepeatLine, sub: "Membership + first-clean deep prompt" },
           ].map((opt) => {
             const activeTab = bookingType === opt.id;
             const Icon = opt.icon;
@@ -2283,10 +2318,20 @@ export default function VaBooking() {
                   })}
                 </div>
                 <p className="text-[11px] text-slate-500">
-                  Recurring plans are standard cleans. Need a first-visit deep clean?
-                  Add it in the summary (initial deep clean).
+                  Recurring plans are standard cleans after the first visit. Answer the first-clean
+                  deep prompt below — it is the same $75 Glow reset as public checkout.
                 </p>
               </div>
+            )}
+
+            {isRecurring && (
+              <DeepCleanPrompt
+                variant="admin"
+                value={deepClean}
+                onChange={setDeepClean}
+                priceDollars={75}
+                className="border-amber-300 bg-amber-50/60"
+              />
             )}
 
             <div className="space-y-2">
@@ -2294,7 +2339,7 @@ export default function VaBooking() {
                 Add-ons
               </Label>
               <div className="flex flex-wrap gap-2">
-                {ADD_ON_LIST.map((a) => {
+                {ADD_ON_LIST.filter((a) => !(isRecurring && a.id === "firstCleanDeep")).map((a) => {
                   const checked = addOns.includes(a.id);
                   return (
                     <button
@@ -3008,9 +3053,13 @@ export default function VaBooking() {
                 )}
 
                 {isRecurring && (
-                  <div className="mt-3">
-                    <DeepCleanPrompt value={deepClean} onChange={setDeepClean} priceDollars={75} />
-                  </div>
+                  <p className="mt-3 text-[11px] text-slate-600">
+                    First-clean deep:{" "}
+                    <span className="font-semibold">
+                      {deepClean.includeDeepClean ? "+$75 on the first visit" : "declined — surge may apply on arrival"}
+                    </span>
+                    . Prompt is with Add-ons above.
+                  </p>
                 )}
 
                 <Button

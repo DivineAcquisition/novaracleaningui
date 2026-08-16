@@ -9,6 +9,13 @@ export type MembershipVisitFields = {
   membership_plan?: string | null;
 };
 
+export const GLOW_PLANS = ["weekly", "biweekly", "monthly"] as const;
+
+/** Glow membership cadence — not commercial `is_recurring`. */
+export function isGlowMembershipPlan(plan?: string | null): boolean {
+  return (GLOW_PLANS as readonly string[]).includes(String(plan || "").trim().toLowerCase());
+}
+
 export function isMembershipVisit(b: MembershipVisitFields): boolean {
   if (b.recurring_schedule_id) return true;
   if ((b.booking_channel || "").trim().toLowerCase() === "recurring") return true;

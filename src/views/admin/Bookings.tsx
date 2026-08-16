@@ -57,11 +57,14 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { RescheduleDialog } from "@/components/booking/RescheduleDialog";
 import { DelayBookingDialog } from "@/components/booking/DelayBookingDialog";
+import { DeepCleanPrompt, type DeepCleanChoice } from "@/components/booking/DeepCleanPrompt";
 import { ScopeAdjustmentDialog } from "@/components/booking/ScopeAdjustmentDialog";
 import { isJobStillActive, isScopeAdjustable } from "@/lib/scope-adjustment";
+import { isGlowMembershipPlan } from "@/lib/membership-visit";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import {
   ADD_ONS,
+  FIRST_CLEAN_DEEP_ID,
   type AddOnId,
   calculatePrice,
   SERVICE_TIER_PRICING,
@@ -1669,6 +1672,10 @@ function BookingSheet({
   const [scopeOpen, setScopeOpen] = useState(false);
   const [scopeHistory, setScopeHistory] = useState<ScopeAdjustmentRow[]>([]);
   const [scopeFlags, setScopeFlags] = useState<Array<{ id: string; issue_number: number | null; title: string | null; description: string | null }>>([]);
+  const [firstCleanChoice, setFirstCleanChoice] = useState<DeepCleanChoice>({
+    deepCleanedBefore: "",
+    includeDeepClean: true,
+  });
 
   useEffect(() => {
     if (!booking) return;
@@ -1704,6 +1711,7 @@ function BookingSheet({
     setSvcAddOns([]);
     setAddOnPrices({});
     setTotalOverride("");
+    setFirstCleanChoice({ deepCleanedBefore: "", includeDeepClean: true });
     // add_ons + suppress_review_request — refresh from the row so the sheet
     // stays correct even if the list payload is stale / missing a column.
     void (async () => {
@@ -1798,6 +1806,65 @@ function BookingSheet({
       onMutated();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not retry add-on charge");
+    } finally {
+      setWorking(null);
+    }
+  };
+
+  const glowJob = isGlowMembershipPlan(booking.membership_plan);
+  const alreadyDeepTier =
+    booking.service_type === "deep" || booking.service_type === "combo" || booking.service_type === "moveInOut";
+  const firstCleanOnVisit = currentAddOns.includes(FIRST_CLEAN_DEEP_ID);
+
+  const applyFirstCleanDeep = async () => {
+    if (!booking || booking.status === "cancelled") return;
+    setWorking("first-clean-deep");
+    try {
+      if (firstCleanChoice.includeDeepClean) {
+        if (firstCleanOnVisit) {
+          toast.info("First-clean deep is already on this visit.");
+          return;
+        }
+        if (alreadyDeepTier) {
+          toast.info("This visit is already a Deep / Combo / Move-In/Out — the $75 reset does not stack.");
+          return;
+        }
+        const { data, error } = await supabase.functions.invoke("admin-add-booking-addons", {
+          body: {
+            bookingId: booking.id,
+            addOns: [...currentAddOns, FIRST_CLEAN_DEEP_ID],
+            charge: true,
+            addOnPrices: { [FIRST_CLEAN_DEEP_ID]: 75 },
+          },
+        });
+        if (error) throw error;
+        const d = data as { error?: string; status?: string; deltaCents?: number };
+        if (d?.error) throw new Error(d.error);
+        if (d?.status === "paid") toast.success(`First-clean deep added and charged ${fmtMoney(d.deltaCents)}.`);
+        else if (d?.status === "charge_failed") {
+          toast.warning("First-clean deep saved — no card on file, so $75 stays on the booking balance.");
+        } else toast.success("First-clean deep added to this visit.");
+        onMutated();
+        return;
+      }
+      const skipNote = `First-clean deep declined${firstCleanChoice.deepCleanedBefore === "yes" ? " (recently deep cleaned)" : ""}; surge may apply if condition requires a reset.`;
+      const { data: row } = await (supabase.from as any)("bookings")
+        .select("team_notes")
+        .eq("id", booking.id)
+        .maybeSingle();
+      const existing = String(row?.team_notes || "");
+      if (existing.includes("First-clean deep declined")) {
+        toast.success("Skip already recorded on this visit.");
+      } else {
+        const { error } = await (supabase.from as any)("bookings")
+          .update({ team_notes: [existing, skipNote].filter(Boolean).join(" · ") })
+          .eq("id", booking.id);
+        if (error) throw error;
+        toast.success("Skip recorded. Surge may apply if the home needs a reset on arrival.");
+        onMutated();
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not update first-clean deep");
     } finally {
       setWorking(null);
     }
@@ -2253,8 +2320,68 @@ function BookingSheet({
                     ? currentAddOns.map((a) => ADD_ONS[a as AddOnId]?.label || a).join(", ")
                     : "—"}
                 </span>
+                {(() => {
+                  const glow = isGlowMembershipPlan(booking.membership_plan);
+                  if (!glow && !currentAddOns.includes(FIRST_CLEAN_DEEP_ID)) return null;
+                  const included = currentAddOns.includes(FIRST_CLEAN_DEEP_ID);
+                  return (
+                    <>
+                      <span className="text-slate-500">First-clean deep</span>
+                      <span className={cn("text-right", included ? "text-emerald-700" : "text-amber-800")}>
+                        {included
+                          ? "Included ($75)"
+                          : "Not on this visit — use the prompt below or scope adjustment"}
+                      </span>
+                    </>
+                  );
+                })()}
               </CardContent>
             </Card>
+
+            {(glowJob || firstCleanOnVisit) && booking.status !== "cancelled" && (
+              <Card className="border-amber-200 bg-amber-50/40">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-1.5">
+                    <RiPriceTag3Line className="w-4 h-4 text-amber-700" />
+                    First-clean deep clean
+                  </CardTitle>
+                  <CardDescription>
+                    Same prompt as public Glow checkout and Internal Booking. $75 one-time reset on this visit only — it does not copy to later membership cleans.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {alreadyDeepTier && !firstCleanOnVisit ? (
+                    <p className="text-sm text-slate-700">
+                      This visit is already a Deep / Combo / Move-In/Out. The $75 Glow reset does not stack on that price.
+                    </p>
+                  ) : firstCleanOnVisit ? (
+                    <p className="text-sm text-emerald-800 font-medium">Included on this visit ($75).</p>
+                  ) : (
+                    <>
+                      <DeepCleanPrompt
+                        variant="admin"
+                        value={firstCleanChoice}
+                        onChange={setFirstCleanChoice}
+                        priceDollars={75}
+                        className="border-amber-300 bg-white"
+                      />
+                      <Button
+                        className="w-full bg-amber-700 hover:bg-amber-800 text-white"
+                        onClick={applyFirstCleanDeep}
+                        disabled={working === "first-clean-deep"}
+                      >
+                        {working === "first-clean-deep" ? (
+                          <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />
+                        ) : null}
+                        {firstCleanChoice.includeDeepClean
+                          ? "Add first-clean deep & charge $75"
+                          : "Record skip (surge may apply on arrival)"}
+                      </Button>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Edit customer personal info on this booking */}
             <Card className="border-slate-200">
@@ -2539,6 +2666,11 @@ function BookingSheet({
                   </CardTitle>
                   <CardDescription>
                     Add services and charge the customer{booking.status === "completed" ? " — even after this job is completed" : ""}. Charges the card on file (or emails a secure invoice), updates the total, and emails the customer.
+                    {isGlowMembershipPlan(booking.membership_plan) ? (
+                      currentAddOns.includes(FIRST_CLEAN_DEEP_ID)
+                        ? " First-clean deep is on this visit."
+                        : " First-clean deep is the Glow $75 reset — use the prompt above, or add it here if they skipped it at booking."
+                    ) : ""}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -2731,7 +2863,9 @@ function BookingSheet({
                                 className={cn(
                                   "text-xs px-2 py-1 rounded-full border transition-colors",
                                   on
-                                    ? "bg-violet-600 text-white border-violet-600"
+                                    ? id === FIRST_CLEAN_DEEP_ID
+                                      ? "bg-amber-600 text-white border-amber-600"
+                                      : "bg-violet-600 text-white border-violet-600"
                                     : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50",
                                 )}
                               >
@@ -3861,7 +3995,12 @@ function AddonDialog({
   }, [open, booking.id, booking.add_ons]);
 
   const isMoveInOut = booking.service_type === "moveInOut";
-  const chargeable = (id: string) => (isMoveInOut ? id !== "fridge" && id !== "oven" : true);
+  const isDeepTier = booking.service_type === "deep" || booking.service_type === "combo";
+  const chargeable = (id: string) => {
+    if (isMoveInOut && (id === "fridge" || id === "oven")) return false;
+    if (isDeepTier && id === FIRST_CLEAN_DEEP_ID) return false;
+    return true;
+  };
   const catalogPrice = (id: string) => (ADD_ONS as Record<string, { price: number }>)[id]?.price ?? 0;
   const priceDollars = (id: string) => {
     const raw = addOnPrices[id];
@@ -3942,6 +4081,9 @@ function AddonDialog({
                   <span className="flex items-center gap-2 text-sm">
                     <input type="checkbox" checked={on} onChange={() => toggle(id)} />
                     {def.label}
+                    {id === FIRST_CLEAN_DEEP_ID ? (
+                      <span className="ml-1 text-[10px] uppercase tracking-wide text-amber-700">Glow first-clean</span>
+                    ) : null}
                   </span>
                   {!on || free ? (
                     <span className="text-xs text-slate-500 tabular-nums">{free ? "Included" : `$${def.price}`}</span>

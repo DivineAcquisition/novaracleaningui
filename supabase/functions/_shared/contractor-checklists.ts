@@ -404,4 +404,5 @@ export const CONTRACTOR_ADDON_CATALOG: Record<string, { label: string; price: nu
   trashHaul: { label: "Trash haul", price: 75, note: "Haul away trash / junk" },
   deepBathroomDetail: { label: "Deep bathroom detail", price: 45, note: "Per bathroom" },
   cateringEvent: { label: "Catering / event cleanup", price: 85, note: "Post-event catering mess & dish volume" },
+  firstCleanDeep: { label: "First-clean deep clean", price: 75, note: "One-time Glow reset. $75 on the first visit." },
 };

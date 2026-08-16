@@ -252,6 +252,11 @@ serve(async (req) => {
 
     const serviceType = wantsDeepClean ? "deep" : "standard";
     const tracking = bookingData.tracking || null;
+    const addOns = Array.isArray(bookingData.addOns) ? [...bookingData.addOns] : [];
+    if (wantsDeepClean && !addOns.includes("firstCleanDeep")) addOns.push("firstCleanDeep");
+    const skipNote = wantsDeepClean
+      ? " (includes first-clean deep)"
+      : ` — first-clean deep declined${bookingData.deepCleanedBefore === "yes" ? " (recently deep cleaned)" : ""}; surge may apply if condition requires a reset`;
 
     const { data: booking, error: bookingError } = await supabase
       .from("bookings")
@@ -267,7 +272,7 @@ serve(async (req) => {
         home_size_id: homeSizeId,
         service_type: serviceType,
         offer_type: serviceType,
-        add_ons: Array.isArray(bookingData.addOns) ? bookingData.addOns : [],
+        add_ons: addOns,
         service_date: bookingData.serviceDate,
         time_slot: bookingData.timeSlot,
         membership_plan: membershipPlan,
@@ -283,7 +288,7 @@ serve(async (req) => {
         payment_option: "full",
         booking_channel: "web",
         estimated_duration_hours: getEstimatedHours(homeSizeId),
-        team_notes: `GLOW ${membershipPlan.toUpperCase()} — first month collected in-funnel${wantsDeepClean ? " (includes first-clean deep)" : ""}`,
+        team_notes: `GLOW ${membershipPlan.toUpperCase()} — first month collected in-funnel${skipNote}`,
         referral_code: bookingData.referralCode || null,
         tracking,
         utm_source: bookingData.utmSource || tracking?.utm_source || null,

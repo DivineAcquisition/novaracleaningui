@@ -74,7 +74,19 @@ export const ADD_ONS: Record<string, { price: number }> = {
   trashHaul:    { price: 75 },
   deepBathroomDetail: { price: 45 },
   cateringEvent: { price: 85 },
+  firstCleanDeep: { price: 75 },
 };
+
+export const FIRST_CLEAN_DEEP_ID = "firstCleanDeep";
+
+export function chargeableAddOnIds(addOns: string[], serviceType: string): string[] {
+  const ids = (addOns || []).filter(Boolean);
+  if (serviceType === "moveInOut") return ids.filter((a) => a !== "fridge" && a !== "oven");
+  if (serviceType === "deep" || serviceType === "combo") {
+    return ids.filter((a) => a !== FIRST_CLEAN_DEEP_ID);
+  }
+  return ids;
+}
 
 export const MEMBERSHIP_PRICES: Record<string, { monthly: number; biweekly: number; weekly: number }> = {
   "0_999":     { monthly: 129, biweekly: 199, weekly: 349 },
@@ -190,12 +202,10 @@ export function calculatePrice(
   const serviceFinalPrice = getServiceFinalPrice(homeSizeId, serviceType, zone, membershipPlan);
   const serviceDiscount = Math.max(0, serviceListPrice - serviceFinalPrice);
 
-  let addOnsTotal = 0;
-  if (serviceType === "moveInOut") {
-    addOnsTotal = addOns.filter((a) => a !== "fridge" && a !== "oven").reduce((sum, a) => sum + (ADD_ONS[a]?.price || 0), 0);
-  } else {
-    addOnsTotal = addOns.reduce((sum, a) => sum + (ADD_ONS[a]?.price || 0), 0);
-  }
+  const addOnsTotal = chargeableAddOnIds(addOns, String(serviceType)).reduce(
+    (sum, a) => sum + (ADD_ONS[a]?.price || 0),
+    0,
+  );
 
   const subtotal = serviceListPrice + addOnsTotal;
   const creditCoverage = useCredit ? Math.min(basePrice, 150) : 0;

@@ -71,6 +71,8 @@ export interface ScopeSuggestionInput {
   adjustedServiceType?: string | null;
   /** Reclassified sqft band, for "larger than booked". Defaults to original. */
   adjustedHomeSizeId?: string | null;
+  /** Add-ons actually performed. Defaults to the booked set. */
+  adjustedAddOns?: string[] | null;
   /** What the customer is actually on the hook for today, in cents. */
   originalPriceCents: number;
   zone?: ZoneId;
@@ -89,6 +91,7 @@ export interface ScopeSuggestion {
     membershipPlan: string;
     usesCredit: boolean;
     addOns: string[];
+    adjustedAddOns: string[];
     fromServiceType: string | null;
     toServiceType: string | null;
     fromHomeSizeId: string | null;
@@ -112,13 +115,14 @@ export function suggestScopeAdjustment(input: ScopeSuggestionInput): ScopeSugges
   const zone = input.zone || DEFAULT_ZONE;
   const membershipPlan = input.membershipPlan || "none";
   const addOns = input.addOns || [];
+  const adjustedAddOns = input.adjustedAddOns || addOns;
   const fromType = (input.originalServiceType || "standard") as ServiceType;
   const toType = (input.adjustedServiceType || input.originalServiceType || "standard") as ServiceType;
   const fromSize = input.homeSizeId || "";
   const toSize = input.adjustedHomeSizeId || input.homeSizeId || "";
 
   const booked = calculatePrice(fromSize, fromType, addOns, membershipPlan, input.usesCredit, zone);
-  const delivered = calculatePrice(toSize, toType, addOns, membershipPlan, input.usesCredit, zone);
+  const delivered = calculatePrice(toSize, toType, adjustedAddOns, membershipPlan, input.usesCredit, zone);
 
   const bookedCents = toCents(booked.total);
   const deliveredCents = toCents(delivered.total);
@@ -134,6 +138,7 @@ export function suggestScopeAdjustment(input: ScopeSuggestionInput): ScopeSugges
       membershipPlan,
       usesCredit: input.usesCredit,
       addOns,
+      adjustedAddOns,
       fromServiceType: input.originalServiceType || null,
       toServiceType: toType,
       fromHomeSizeId: input.homeSizeId || null,

@@ -48,12 +48,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { HOME_SIZE_RANGES, SERVICE_TIER_PRICING } from "@/lib/pricing";
+import { HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, FIRST_CLEAN_DEEP_ID } from "@/lib/pricing";
 import {
   draftJustificationMessage,
   suggestScopeAdjustment,
   type ScopeReason,
 } from "@/lib/scope-adjustment";
+import { isGlowMembershipPlan } from "@/lib/membership-visit";
+import { DeepCleanPrompt, type DeepCleanChoice } from "@/components/booking/DeepCleanPrompt";
 import { cn } from "@/lib/utils";
 
 const fmtMoney = (cents: number | null | undefined) =>
@@ -99,6 +101,7 @@ export function ScopeAdjustmentDialog({
   const [selectedReasons, setSelectedReasons] = useState<string[]>([]);
   const [adjustedServiceType, setAdjustedServiceType] = useState<string>("");
   const [adjustedHomeSizeId, setAdjustedHomeSizeId] = useState<string>("");
+  const [adjustedAddOns, setAdjustedAddOns] = useState<string[]>([]);
   const [amount, setAmount] = useState("");
   const [overrideNote, setOverrideNote] = useState("");
   const [selectedPhotos, setSelectedPhotos] = useState<string[]>([]);
@@ -108,6 +111,10 @@ export function ScopeAdjustmentDialog({
   const [messageTouched, setMessageTouched] = useState(false);
   const [sendSms, setSendSms] = useState(true);
   const [sendEmail, setSendEmail] = useState(true);
+  const [firstCleanChoice, setFirstCleanChoice] = useState<DeepCleanChoice>({
+    deepCleanedBefore: "",
+    includeDeepClean: true,
+  });
 
   const authedFetch = useCallback(async (url: string, init?: RequestInit) => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -142,6 +149,13 @@ export function ScopeAdjustmentDialog({
         setCtx(data as Context);
         setAdjustedServiceType(data.booking.serviceType || "standard");
         setAdjustedHomeSizeId(data.booking.homeSizeId || "");
+        setAdjustedAddOns(Array.isArray(data.booking.addOns) ? [...data.booking.addOns] : []);
+        setFirstCleanChoice({
+          deepCleanedBefore: "",
+          includeDeepClean: Array.isArray(data.booking.addOns)
+            ? data.booking.addOns.includes(FIRST_CLEAN_DEEP_ID)
+            : false,
+        });
         // Condition evidence is what justifies the increase, so start with
         // every photo on the job attached rather than making it opt-in.
         setSelectedPhotos([...data.evidencePhotos.before, ...data.evidencePhotos.after]);
@@ -170,9 +184,10 @@ export function ScopeAdjustmentDialog({
       originalServiceType: ctx.booking.serviceType,
       adjustedServiceType,
       adjustedHomeSizeId,
+      adjustedAddOns,
       originalPriceCents: ctx.booking.originalPriceCents,
     });
-  }, [ctx, adjustedServiceType, adjustedHomeSizeId]);
+  }, [ctx, adjustedServiceType, adjustedHomeSizeId, adjustedAddOns]);
 
   // Follow the suggestion until the admin types their own number.
   const [amountTouched, setAmountTouched] = useState(false);
@@ -203,7 +218,32 @@ export function ScopeAdjustmentDialog({
   }, [ctx, selectedReasons, adjustedServiceType, amountCents, evidenceMissing, messageTouched]);
 
   const toggleReason = (code: string) =>
-    setSelectedReasons((prev) => (prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code]));
+    setSelectedReasons((prev) => {
+      const next = prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code];
+      if (code === "first_clean_deep") {
+        const on = next.includes("first_clean_deep");
+        const alreadyDeep =
+          adjustedServiceType === "deep" ||
+          adjustedServiceType === "combo" ||
+          adjustedServiceType === "moveInOut" ||
+          ctx?.booking.serviceType === "deep" ||
+          ctx?.booking.serviceType === "combo" ||
+          ctx?.booking.serviceType === "moveInOut";
+        setAdjustedAddOns((addons) => {
+          const has = addons.includes(FIRST_CLEAN_DEEP_ID);
+          if (on && !has && !alreadyDeep) return [...addons, FIRST_CLEAN_DEEP_ID];
+          if (!on && has && !(ctx?.booking.addOns || []).includes(FIRST_CLEAN_DEEP_ID)) {
+            return addons.filter((id) => id !== FIRST_CLEAN_DEEP_ID);
+          }
+          return addons;
+        });
+        setFirstCleanChoice((prev) => ({ ...prev, includeDeepClean: on && !alreadyDeep }));
+      }
+      return next;
+    });
+
+  const toggleAddOn = (id: string) =>
+    setAdjustedAddOns((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
 
   const togglePhoto = (url: string) =>
     setSelectedPhotos((prev) => (prev.includes(url) ? prev.filter((u) => u !== url) : [...prev, url]));
@@ -232,6 +272,7 @@ export function ScopeAdjustmentDialog({
           reasonCodes: selectedReasons,
           adjustedServiceType,
           adjustedHomeSizeId: adjustedHomeSizeId || undefined,
+          adjustedAddOns,
           adjustedPriceCents: amountCents,
           evidencePhotos: selectedPhotos,
           evidenceOverrideNote: evidenceOverrideNote.trim() || undefined,
@@ -358,11 +399,50 @@ export function ScopeAdjustmentDialog({
 
             <Separator />
 
-            {/* Reclassification + pricing-engine suggestion */}
+            {/* Reclassified scope */}
             <div className="space-y-3">
               <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Reclassified scope
               </Label>
+              {isGlowMembershipPlan(ctx.booking.membershipPlan) && (
+                <div className="space-y-2">
+                  <Label className="text-xs">First-clean deep — Glow reset</Label>
+                  {adjustedServiceType === "deep" ||
+                  adjustedServiceType === "combo" ||
+                  adjustedServiceType === "moveInOut" ? (
+                    <p className="text-xs text-slate-600">
+                      This visit is already a Deep / Combo / Move-In/Out. The $75 first-clean reset does not stack.
+                    </p>
+                  ) : (ctx.booking.addOns || []).includes(FIRST_CLEAN_DEEP_ID) ? (
+                    <p className="text-sm text-emerald-800 font-medium">Already on this visit ($75).</p>
+                  ) : (
+                    <DeepCleanPrompt
+                      variant="admin"
+                      value={firstCleanChoice}
+                      onChange={(next) => {
+                        setFirstCleanChoice(next);
+                        if (next.includeDeepClean) {
+                          setSelectedReasons((r) =>
+                            r.includes("first_clean_deep") ? r : [...r, "first_clean_deep"],
+                          );
+                          setAdjustedAddOns((a) =>
+                            a.includes(FIRST_CLEAN_DEEP_ID) ? a : [...a, FIRST_CLEAN_DEEP_ID],
+                          );
+                        } else {
+                          setSelectedReasons((r) => r.filter((c) => c !== "first_clean_deep"));
+                          setAdjustedAddOns((a) =>
+                            (ctx.booking.addOns || []).includes(FIRST_CLEAN_DEEP_ID)
+                              ? a
+                              : a.filter((id) => id !== FIRST_CLEAN_DEEP_ID),
+                          );
+                        }
+                      }}
+                      priceDollars={75}
+                      className="border-amber-300 bg-white"
+                    />
+                  )}
+                </div>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <Label className="text-xs">Service type</Label>
@@ -385,6 +465,38 @@ export function ScopeAdjustmentDialog({
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-xs">Add-ons performed (catalog)</Label>
+                <p className="text-[11px] text-slate-500 mt-0.5 mb-1.5">
+                  Same list as Internal Booking and the Bookings tab. First-clean deep is the $75 Glow reset —
+                  the prompt above (or the matching reason) adds it automatically.
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {Object.entries(ADD_ONS).map(([id, def]) => {
+                    const on = adjustedAddOns.includes(id);
+                    const booked = (ctx.booking.addOns || []).includes(id);
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => toggleAddOn(id)}
+                        className={cn(
+                          "text-xs px-2 py-1 rounded-full border transition-colors",
+                          on
+                            ? id === FIRST_CLEAN_DEEP_ID
+                              ? "bg-amber-600 text-white border-amber-600"
+                              : "bg-violet-600 text-white border-violet-600"
+                            : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50",
+                        )}
+                      >
+                        {def.label} (${def.price})
+                        {on && !booked ? " +" : ""}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -413,8 +525,8 @@ export function ScopeAdjustmentDialog({
                 </div>
               ) : (
                 <p className="text-xs text-slate-500">
-                  Nothing is reclassified yet, so the pricing engine has no suggestion. Change the service type or
-                  size band to price this off the model, or set an amount and explain it below.
+                  Nothing is reclassified yet, so the pricing engine has no suggestion. Change the service type,
+                  size band, or add-ons to price this off the model, or set an amount and explain it below.
                 </p>
               )}
 
