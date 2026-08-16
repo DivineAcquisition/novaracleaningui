@@ -714,3 +714,6 @@ verify_jwt = false
 
 [functions.weekly-report-generate]
 verify_jwt = false
+
+[functions.recover-connect-overpay]
+verify_jwt = false
