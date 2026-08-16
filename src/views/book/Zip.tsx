@@ -32,6 +32,8 @@ export default function BookingZip() {
   const { updateBookingData } = useBooking();
   const referralCode = searchParams.get('ref');
   const fbclid = searchParams.get('fbclid');
+  const membershipParam = searchParams.get('membership');
+  const homeSizeParam = searchParams.get('homeSize');
 
   // Capture referral code from URL on mount
   useEffect(() => {
@@ -39,6 +41,19 @@ export default function BookingZip() {
       updateBookingData({ referralCode: referralCode.toUpperCase() });
     }
   }, [referralCode]);
+
+  // Glow plan pages hand off into this same funnel so membership signup
+  // uses Location → Size → Service → Checkout → Details → Confirm.
+  useEffect(() => {
+    const plan = (membershipParam || "").toLowerCase();
+    if (plan === "monthly" || plan === "biweekly" || plan === "weekly") {
+      updateBookingData({ membershipPlan: plan, serviceType: "standard" });
+    }
+    if (homeSizeParam) {
+      updateBookingData({ homeSizeId: homeSizeParam });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [membershipParam, homeSizeParam]);
   
   const [zipCode, setZipCode] = useState("");
   const [isValidating, setIsValidating] = useState(false);

@@ -71,7 +71,9 @@ export default function BookingOffer() {
   const [showMembershipModal, setShowMembershipModal] = useState(false);
   const [showComparisonModal, setShowComparisonModal] = useState(false);
   const [selectedService, setSelectedService] = useState<'standard' | 'deep' | 'combo' | 'membership' | 'focused' | null>(
-    bookingData.serviceType === 'focused' ? 'focused' : null,
+    bookingData.membershipPlan && bookingData.membershipPlan !== "none"
+      ? "membership"
+      : bookingData.serviceType === 'focused' ? 'focused' : null,
   );
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(
     bookingData.serviceDate ? new Date(bookingData.serviceDate + 'T12:00:00') : undefined
@@ -147,6 +149,14 @@ export default function BookingOffer() {
 
   // Check for custom quote requirement (5000+ sq ft)
   const requiresCustomQuote = selectedHomeSize?.id === '5000_plus';
+  const glowPlan: "monthly" | "biweekly" | "weekly" =
+    bookingData.membershipPlan === "monthly" || bookingData.membershipPlan === "weekly"
+      ? bookingData.membershipPlan
+      : "biweekly";
+  const glowMonthly = prices.membership[glowPlan];
+  const glowCleans = glowPlan === "weekly" ? 4 : glowPlan === "monthly" ? 1 : 2;
+  const glowPerClean = Math.round((glowMonthly / glowCleans) * 100) / 100;
+  const glowPlanLabel = glowPlan === "weekly" ? "Weekly" : glowPlan === "monthly" ? "Monthly" : "Bi-Weekly";
 
   const handleSelectStandard = () => {
     setSelectedService('standard');
@@ -190,17 +200,24 @@ export default function BookingOffer() {
     }, 100);
   };
 
-  const handleSelectMembership = () => {
+  const handleSelectMembership = (plan?: "monthly" | "biweekly" | "weekly") => {
+    const nextPlan =
+      plan ||
+      (bookingData.membershipPlan === "monthly" ||
+      bookingData.membershipPlan === "weekly" ||
+      bookingData.membershipPlan === "biweekly"
+        ? bookingData.membershipPlan
+        : "biweekly");
     setSelectedService('membership');
     updateBookingData({
       serviceType: 'standard',
-      membershipPlan: 'biweekly',
+      membershipPlan: nextPlan,
       focusedAreas: [],
       isSameDay: false,
       sameDayAcknowledgedAt: null,
       paymentOption: 'deposit',
     });
-    trackViewContent(prices.membership.biweekly, 'Novara Glow Membership — Bi-Weekly');
+    trackViewContent(prices.membership[nextPlan], `Novara Glow Membership — ${nextPlan}`);
     setTimeout(() => {
       document.getElementById('schedule-section')?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
@@ -773,7 +790,7 @@ export default function BookingOffer() {
                   ? "border-primary shadow-lg ring-2 ring-primary/20"
                   : "border-primary/20 hover:border-primary/50",
               )}
-              onClick={handleSelectMembership}
+              onClick={() => handleSelectMembership()}
             >
               <CardContent className="pt-6 pb-6 px-5 space-y-4">
                 <div className="flex items-center justify-between">
@@ -801,20 +818,36 @@ export default function BookingOffer() {
                 <div>
                   <div className="flex items-baseline gap-2">
                     <span className="font-jakarta text-3xl md:text-4xl font-extrabold bg-gradient-primary bg-clip-text text-transparent">
-                      ${prices.membership.biweekly}
+                      ${glowMonthly}
                     </span>
                     <span className="text-sm text-muted-foreground">/month</span>
                   </div>
                   <p className="text-xs text-primary font-semibold mt-1.5">
-                    Bi-Weekly · 2 cleans/month at ${prices.membership.biweeklyPerClean}/clean
+                    {glowPlanLabel} · {glowCleans} clean{glowCleans > 1 ? "s" : ""}/month at ${glowPerClean}/clean
                   </p>
                   <div className="flex flex-wrap gap-2 pt-2">
-                    <Badge variant="secondary" className="text-[10px]">
-                      Monthly: ${prices.membership.monthly}/mo
-                    </Badge>
-                    <Badge variant="secondary" className="text-[10px]">
-                      Weekly: ${prices.membership.weekly}/mo
-                    </Badge>
+                    {([
+                      { id: "monthly" as const, label: `Monthly: $${prices.membership.monthly}/mo` },
+                      { id: "biweekly" as const, label: `Bi-Weekly: $${prices.membership.biweekly}/mo` },
+                      { id: "weekly" as const, label: `Weekly: $${prices.membership.weekly}/mo` },
+                    ]).map((opt) => (
+                      <Badge
+                        key={opt.id}
+                        variant="secondary"
+                        className={cn(
+                          "text-[10px] cursor-pointer",
+                          bookingData.membershipPlan === opt.id && selectedService === "membership"
+                            ? "bg-primary text-white"
+                            : "",
+                        )}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSelectMembership(opt.id);
+                        }}
+                      >
+                        {opt.label}
+                      </Badge>
+                    ))}
                   </div>
                   <p className="text-xs text-muted-foreground mt-2">
                     Membership pricing already discounted — 25%-off promo does not stack.

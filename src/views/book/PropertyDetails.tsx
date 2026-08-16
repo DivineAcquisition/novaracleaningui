@@ -26,6 +26,8 @@ import { US_STATES, parseAddressString } from "@/lib/address-formatter";
 import { lookupZip, stateFromZip } from "@/lib/zip-lookup";
 import { buildSignedAgreementBase64 } from "@/lib/service-agreement";
 import { capturePageForEvidence } from "@/lib/page-capture";
+import { membershipPlanLabel } from "@/lib/membership-visit";
+import { MEMBERSHIP_PLANS, MEMBERSHIP_PRICES } from "@/lib/pricing-system";
 import {
   VALUE_STACK_HEADLINES,
   checklistPathForServiceType,
@@ -80,6 +82,9 @@ type BookingDetailsRow = {
   second_visit_time_slot: string | null;
   status: string | null;
   payment_intent_id: string | null;
+  payment_received_at: string | null;
+  membership_plan: string | null;
+  home_size_id: string | null;
 };
 
 const FLOORING_TYPES = [
@@ -147,7 +152,9 @@ export default function PropertyDetails() {
     serviceType: string | null;
     serviceDate: string | null;
     isCombo: boolean;
-  }>({ serviceType: null, serviceDate: null, isCombo: false });
+    membershipPlan: string | null;
+    homeSizeId: string | null;
+  }>({ serviceType: null, serviceDate: null, isCombo: false, membershipPlan: null, homeSizeId: null });
   const [secondVisitDate, setSecondVisitDate] = useState<string>("");
   const [secondVisitSlot, setSecondVisitSlot] = useState<string>("");
   const [isHydrating, setIsHydrating] = useState(true);
@@ -224,7 +231,7 @@ export default function PropertyDetails() {
       const { data: raw, error } = await supabase
         .from("bookings")
         .select(
-          "service_type, service_date, total_estimate_cents, deposit_cents, first_name, last_name, email, address, city, state, zip_code, bedrooms, bathrooms, dwelling_type, flooring_type, pets, access_notes, second_visit_date, second_visit_time_slot, status, payment_intent_id",
+          "service_type, service_date, total_estimate_cents, deposit_cents, first_name, last_name, email, address, city, state, zip_code, bedrooms, bathrooms, dwelling_type, flooring_type, pets, access_notes, second_visit_date, second_visit_time_slot, status, payment_intent_id, payment_received_at, membership_plan, home_size_id",
         )
         .eq("id", id)
         .maybeSingle();
@@ -240,6 +247,7 @@ export default function PropertyDetails() {
       // Only block when checkout was never started (no Stripe PI on file).
       const paidOrInProgress =
         data.payment_intent_id ||
+        data.payment_received_at ||
         data.status === "pending_details" ||
         data.status === "confirmed" ||
         data.status === "booked" ||
@@ -256,6 +264,8 @@ export default function PropertyDetails() {
         serviceType: data.service_type,
         serviceDate: data.service_date,
         isCombo,
+        membershipPlan: data.membership_plan || null,
+        homeSizeId: data.home_size_id || null,
       });
       setAgreementMeta({
         totalCents: Number(data.total_estimate_cents || 0),
@@ -337,15 +347,26 @@ export default function PropertyDetails() {
     });
   };
 
-  // Human-readable service label for the agreement PDF.
-  const serviceLabel = (() => {
-    switch (bookingMeta.serviceType) {
-      case "combo": return "Deep + Standard Combo";
-      case "deep": return "Deep Clean";
-      case "standard": return "Standard Clean";
-      default: return bookingMeta.serviceType || "Cleaning";
-    }
+  const isMembershipSignup = (() => {
+    const plan = (bookingMeta.membershipPlan || bookingData.membershipPlan || "").toLowerCase();
+    return plan === "monthly" || plan === "biweekly" || plan === "weekly";
   })();
+  const membershipLabel =
+    membershipPlanLabel(bookingMeta.membershipPlan || bookingData.membershipPlan) ||
+    MEMBERSHIP_PLANS[(bookingMeta.membershipPlan || bookingData.membershipPlan) as keyof typeof MEMBERSHIP_PLANS]?.label ||
+    "Glow membership";
+
+  // Human-readable service label for the agreement PDF.
+  const serviceLabel = isMembershipSignup
+    ? membershipLabel
+    : (() => {
+        switch (bookingMeta.serviceType) {
+          case "combo": return "Deep + Standard Combo";
+          case "deep": return "Deep Clean";
+          case "standard": return "Standard Clean";
+          default: return bookingMeta.serviceType || "Cleaning";
+        }
+      })();
 
   // Build the signed One-Time Service Agreement in-browser and hand it to
   // store-service-agreement (stores PDF + records acceptance + emails the
@@ -376,6 +397,20 @@ export default function PropertyDetails() {
         depositCents: deposit,
         balanceCents: balance,
         signatureDataUrl,
+        ...(isMembershipSignup
+          ? {
+              variant: "membership" as const,
+              planLabel: membershipLabel,
+              perCleanCents: (() => {
+                const plan = (bookingMeta.membershipPlan || bookingData.membershipPlan || "") as
+                  "monthly" | "biweekly" | "weekly";
+                const homeSizeId = bookingMeta.homeSizeId || bookingData.homeSizeId;
+                const monthly = Number(MEMBERSHIP_PRICES[homeSizeId]?.[plan] || 0);
+                const cleans = MEMBERSHIP_PLANS[plan]?.cleansPerMonth || 1;
+                return monthly > 0 ? Math.round((monthly / cleans) * 100) : undefined;
+              })(),
+            }
+          : {}),
       });
       await supabase.functions.invoke("store-service-agreement", {
         body: {
@@ -383,7 +418,8 @@ export default function PropertyDetails() {
           email,
           name: fullName,
           serviceType: serviceLabel,
-          source: "details",
+          source: isMembershipSignup ? "details_membership" : "details",
+          agreementType: isMembershipSignup ? "membership" : "one_time_service",
           // Policies are presented for review on the checkout step and the
           // customer accepts them by signing here, so each is recorded true.
           agreed: { terms: true, disclaimer: true, refund: true, serviceAgreement: true },
@@ -410,7 +446,9 @@ export default function PropertyDetails() {
     }
 
     if (!signatureDataUrl) {
-      toast.error("Please sign the One-Time Service Agreement to complete your booking");
+      toast.error(isMembershipSignup
+        ? "Please sign the Membership / Recurring Service Agreement to complete your booking"
+        : "Please sign the One-Time Service Agreement to complete your booking");
       return;
     }
 
@@ -859,11 +897,13 @@ export default function PropertyDetails() {
 
             {/* Sign Your Service Agreement — moved here from the Checkout
                 step. Customer reviews the policies on checkout, then signs
-                the One-Time Service Agreement here to finalize the booking. */}
+                here to finalize the booking. */}
             <div className="space-y-4 border-t pt-6">
               <div className="flex items-center gap-2">
                 <RiSparklingLine className="w-5 h-5 text-primary" />
-                <h3 className="text-base md:text-lg font-semibold">Sign Your Service Agreement</h3>
+                <h3 className="text-base md:text-lg font-semibold">
+                  {isMembershipSignup ? "Sign Your Membership Agreement" : "Sign Your Service Agreement"}
+                </h3>
               </div>
               <div className="rounded-xl border border-primary/15 bg-primary/5 p-3 space-y-2">
                 <p className="text-xs font-semibold text-foreground">All that&apos;s included</p>
@@ -890,8 +930,16 @@ export default function PropertyDetails() {
                 By signing you agree to the{" "}
                 <a href="https://novaracleaning.com/terms" target="_blank" rel="noopener noreferrer" className="text-primary underline">Terms of Service</a>,{" "}
                 <a href="https://novaracleaning.com/disclaimer" target="_blank" rel="noopener noreferrer" className="text-primary underline">Disclaimer</a>,{" "}
-                <a href="https://novaracleaning.com/refund-policy" target="_blank" rel="noopener noreferrer" className="text-primary underline">Refund Policy</a>, and the{" "}
-                <a href="/agreements/one-time-service-agreement.pdf" target="_blank" rel="noopener noreferrer" className="text-primary underline">One-Time Service Agreement</a>. A signed copy is emailed to you.
+                <a href="https://novaracleaning.com/refund-policy" target="_blank" rel="noopener noreferrer" className="text-primary underline">Refund Policy</a>
+                {isMembershipSignup ? (
+                  <>, and the Membership / Recurring Service Agreement. A signed copy is emailed to you.</>
+                ) : (
+                  <>
+                    , and the{" "}
+                    <a href="/agreements/one-time-service-agreement.pdf" target="_blank" rel="noopener noreferrer" className="text-primary underline">One-Time Service Agreement</a>
+                    . A signed copy is emailed to you.
+                  </>
+                )}
               </p>
               <div className="space-y-1.5">
                 <Label>

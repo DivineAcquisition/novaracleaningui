@@ -74,7 +74,9 @@ export default function BookingHome() {
               How big is your home?
             </h1>
             <p className="text-sm md:text-base text-muted-foreground">
-              Select your home size to see instant pricing for a professional deep clean
+              {bookingData.membershipPlan && bookingData.membershipPlan !== "none"
+                ? "Confirm your home size — Glow monthly price depends on square footage"
+                : "Select your home size to see instant pricing for a professional deep clean"}
             </p>
             
             {/* Google Guaranteed Badge */}

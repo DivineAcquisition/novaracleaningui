@@ -38,7 +38,7 @@ import { BottomNavigation } from "@/components/booking/BottomNavigation";
 // SavingsVisualizer retired — replaced by the inline pricing breakdown
 // card below (original strikethrough + discounts + 50% deposit + remaining).
 import { Skeleton } from "@/components/ui/skeleton";
-import { calculatePrice, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, MEMBERSHIP_PLANS, getEstimatedHours } from "@/lib/pricing-system";
+import { calculatePrice, HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, MEMBERSHIP_PLANS, MEMBERSHIP_PRICES, getEstimatedHours } from "@/lib/pricing-system";
 import {
   FOCUSED_SAME_DAY_DEFAULTS,
   calculateFocusedPrice,
@@ -232,7 +232,11 @@ export default function BookingCheckout() {
   // on a whole-home service) keeps the 50% deposit.
   const isFocused = bookingData.serviceType === "focused";
   const effectivePaymentOption: "deposit" | "full" = isFocused ? "full" : "deposit";
-  const isNewMembershipSignup = bookingData.membershipPlan !== 'none' && !bookingData.useCredit;
+  const isGlowPlan =
+    bookingData.membershipPlan === "monthly" ||
+    bookingData.membershipPlan === "biweekly" ||
+    bookingData.membershipPlan === "weekly";
+  const isNewMembershipSignup = isGlowPlan && !bookingData.useCredit;
   const isMemberUsingCredit = bookingData.useCredit === true;
   const [deepClean, setDeepClean] = useState<DeepCleanChoice>({ deepCleanedBefore: '', includeDeepClean: true });
 
@@ -411,7 +415,9 @@ export default function BookingCheckout() {
 
     const onPopState = () => {
       const leave = window.confirm(
-        "Leave checkout? Your appointment is not reserved until you pay the deposit.",
+        isNewMembershipSignup
+          ? "Leave checkout? Your Glow membership is not started until you pay the first month."
+          : "Leave checkout? Your appointment is not reserved until you pay the deposit.",
       );
       if (!leave) {
         history.pushState({ checkoutGuard: true }, "", url);
@@ -420,7 +426,7 @@ export default function BookingCheckout() {
 
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, []);
+  }, [isNewMembershipSignup]);
 
   // Check if new customer and auto-apply best promo
   useEffect(() => {
@@ -459,7 +465,9 @@ export default function BookingCheckout() {
 
   const confirmLeaveCheckout = () =>
     window.confirm(
-      "Go back to service selection? Your appointment is not reserved until you pay the deposit.",
+      isNewMembershipSignup
+        ? "Go back to service selection? Your Glow membership is not started until you pay the first month."
+        : "Go back to service selection? Your appointment is not reserved until you pay the deposit.",
     );
 
   const handleBack = () => {
@@ -505,6 +513,15 @@ export default function BookingCheckout() {
         };
       })();
   const depositPricing = basePricing;
+  const membershipMonthlyDollars = isNewMembershipSignup
+    ? Number(
+        MEMBERSHIP_PRICES[bookingData.homeSizeId]?.[
+          bookingData.membershipPlan as "monthly" | "biweekly" | "weekly"
+        ] || 0,
+      )
+    : 0;
+  const membershipDeepDollars = isNewMembershipSignup && deepClean.includeDeepClean ? 75 : 0;
+  const membershipDueDollars = membershipMonthlyDollars + membershipDeepDollars;
 
   // Handle Referral Code
   const handleApplyReferral = async () => {
@@ -609,71 +626,6 @@ export default function BookingCheckout() {
   };
   // handlePaymentOptionChange removed — the customer no longer chooses a
   // payment option. The deposit amount is fixed at 50% of the total.
-  const handleMembershipCheckout = async () => {
-    setIsCreatingIntent(true);
-    setInitError(null);
-    try {
-      // Membership = a RECURRING Stripe subscription, not a one-time
-      // charge. We MUST hit the standalone subscription path in
-      // create-checkout (mode: 'subscription'); sending the raw
-      // bookingData would fall through to the one-time payment path and
-      // the customer would never actually be subscribed.
-      //
-      // Map the day-of-week the customer already picked on the offer
-      // step into the preferred_day_of_week the subscription webhook
-      // uses to auto-book their first clean, and forward the exact
-      // selected date/time so the first clean honors their choice.
-      const plan = bookingData.membershipPlan; // 'monthly' | 'biweekly' | 'weekly'
-      let preferredDayOfWeek: string | undefined;
-      if (bookingData.serviceDate) {
-        const days = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-        const d = new Date(bookingData.serviceDate + "T12:00:00");
-        if (!Number.isNaN(d.getTime())) preferredDayOfWeek = days[d.getDay()];
-      }
-
-      const { data, error } = await supabase.functions.invoke("create-checkout", {
-        body: {
-          mode: "subscription",
-          membershipPlan: plan,
-          homeSizeId: bookingData.homeSizeId,
-          email: bookingData.email || undefined,
-          firstName: bookingData.firstName || undefined,
-          lastName: bookingData.lastName || undefined,
-          phone: bookingData.phone || undefined,
-          address: bookingData.address || undefined,
-          city: bookingData.city || undefined,
-          state: bookingData.state || undefined,
-          zipCode: bookingData.zipCode || undefined,
-          preferredDayOfWeek,
-          preferredTimeWindow: bookingData.timeSlot || undefined,
-          // Exact first-clean selection from the booking funnel — the
-          // webhook prefers these over the computed preferred day.
-          firstServiceDate: bookingData.serviceDate || undefined,
-          firstTimeSlot: bookingData.timeSlot || undefined,
-          // First-clean deep clean choice (optional surcharge + surge
-          // disclaimer when declined).
-          includeDeepClean: deepClean.includeDeepClean,
-          deepCleanedBefore: deepClean.deepCleanedBefore,
-        },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      if (data?.url) {
-        clearCheckoutSnapshot();
-        // Same-tab redirect so the popup blocker can't swallow it (a new
-        // tab opened after an await is frequently blocked).
-        window.location.href = data.url;
-        toast.success("Redirecting to secure checkout...");
-      } else {
-        throw new Error("No checkout URL returned");
-      }
-    } catch (error: any) {
-      setInitError(error.message || "Failed to create checkout session");
-      toast.error("Failed to start checkout. Please try again.");
-    } finally {
-      setIsCreatingIntent(false);
-    }
-  };
   const handleInitializePayment = async (attempt = 0) => {
     const email = bookingData.email?.trim();
     if (!email || !bookingData.homeSizeId) {
@@ -685,41 +637,51 @@ export default function BookingCheckout() {
     setIsCreatingIntent(true);
     if (attempt === 0) setInitError(null);
 
-    // Pull attribution from localStorage (populated by UTMTracker
-    // since the customer's first visit) so the booking row stamps
-    // the same UTM/landing/referrer values the lead-capture event
-    // sent to GHL.
     const tracking = getStoredTrackingData();
     const trackingPayload = getTrackingPayload();
-
-    // Focused = pay in full; everything else stays deposit.
-    const payload = {
-      ...bookingData,
-      email,
-      customerEmail: email, // Also send as customerEmail for backward compatibility
-      paymentOption: (bookingData.serviceType === "focused" ? "full" : "deposit") as "full" | "deposit",
-      focusedAreas: bookingData.focusedAreas || [],
-      conditionLevel: bookingData.conditionLevel || "normal",
-      isSameDay: Boolean(bookingData.isSameDay),
-      sameDayAcknowledgedAt: bookingData.sameDayAcknowledgedAt || null,
-      tracking: trackingPayload,
-      utmSource: tracking.utm_source || undefined,
-      utmMedium: tracking.utm_medium || undefined,
-      utmCampaign: tracking.utm_campaign || undefined,
-      utmContent: tracking.utm_content || undefined,
-      utmTerm: tracking.utm_term || undefined,
-      landingPage: tracking.landing_page || undefined,
-      referrer: tracking.referrer || undefined,
-      fbclid: tracking.fbclid || undefined,
-      gclid: tracking.gclid || undefined,
-      firstVisitTimestamp: tracking.first_visit_timestamp || undefined,
-      // Apply wallet credit (capped server-side to balance + post-promo
-      // total). create-payment-intent reserves the credit at quote time
-      // and a DB trigger deducts it from the customer_credits ledger
-      // when the payment confirms.
-      applyWalletCents: applyWallet ? walletBalanceCents : 0,
-    };
-    const FUNCTION_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sxdraeptzuamsgjcvfeg.supabase.co'}/functions/v1/create-payment-intent`;
+    const functionName = isNewMembershipSignup ? "create-membership-intent" : "create-payment-intent";
+    const payload = isNewMembershipSignup
+      ? {
+          ...bookingData,
+          email,
+          customerEmail: email,
+          includeDeepClean: deepClean.includeDeepClean,
+          deepCleanedBefore: deepClean.deepCleanedBefore,
+          tracking: trackingPayload,
+          utmSource: tracking.utm_source || undefined,
+          utmMedium: tracking.utm_medium || undefined,
+          utmCampaign: tracking.utm_campaign || undefined,
+          utmContent: tracking.utm_content || undefined,
+          utmTerm: tracking.utm_term || undefined,
+          landingPage: tracking.landing_page || undefined,
+          referrer: tracking.referrer || undefined,
+          fbclid: tracking.fbclid || undefined,
+          gclid: tracking.gclid || undefined,
+          firstVisitTimestamp: tracking.first_visit_timestamp || undefined,
+        }
+      : {
+          ...bookingData,
+          email,
+          customerEmail: email,
+          paymentOption: (bookingData.serviceType === "focused" ? "full" : "deposit") as "full" | "deposit",
+          focusedAreas: bookingData.focusedAreas || [],
+          conditionLevel: bookingData.conditionLevel || "normal",
+          isSameDay: Boolean(bookingData.isSameDay),
+          sameDayAcknowledgedAt: bookingData.sameDayAcknowledgedAt || null,
+          tracking: trackingPayload,
+          utmSource: tracking.utm_source || undefined,
+          utmMedium: tracking.utm_medium || undefined,
+          utmCampaign: tracking.utm_campaign || undefined,
+          utmContent: tracking.utm_content || undefined,
+          utmTerm: tracking.utm_term || undefined,
+          landingPage: tracking.landing_page || undefined,
+          referrer: tracking.referrer || undefined,
+          fbclid: tracking.fbclid || undefined,
+          gclid: tracking.gclid || undefined,
+          firstVisitTimestamp: tracking.first_visit_timestamp || undefined,
+          applyWalletCents: applyWallet ? walletBalanceCents : 0,
+        };
+    const FUNCTION_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://sxdraeptzuamsgjcvfeg.supabase.co'}/functions/v1/${functionName}`;
     const API_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN4ZHJhZXB0enVhbXNnamN2ZmVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzNzYzMzMsImV4cCI6MjA3NDk1MjMzM30.g7Ipg_qYJiC7uASufDsDqIMtRGPg_dJbSZClJCuAa5I';
     try {
       console.log(`[Checkout] Initializing payment intent (attempt ${attempt + 1}/${MAX_RETRIES + 1})`);
@@ -728,7 +690,7 @@ export default function BookingCheckout() {
 
       // Try supabase.functions.invoke first
       try {
-        const result = await supabase.functions.invoke("create-payment-intent", {
+        const result = await supabase.functions.invoke(functionName, {
           body: payload
         });
         if (result.error) {
@@ -821,11 +783,8 @@ export default function BookingCheckout() {
 
   // Initialize payment when all required fields are present
   useEffect(() => {
-    // Membership signups (and members redeeming a credit) don't pay a
-    // one-time deposit here — they go through the recurring subscription
-    // Checkout or the $0 credit flow. Skip the payment-intent init so we
-    // don't create an unused PaymentIntent.
-    if (isNewMembershipSignup || isMemberUsingCredit) return;
+    // Existing members redeeming a credit don't pay here.
+    if (isMemberUsingCredit) return;
     const email = bookingData.email?.trim();
     const hasRequiredData = email && bookingData.homeSizeId && bookingData.serviceDate && bookingData.timeSlot;
     if (!hasRequiredData) {
@@ -861,13 +820,16 @@ export default function BookingCheckout() {
     walletBalanceCents,
     isNewMembershipSignup,
     isMemberUsingCredit,
+    deepClean.includeDeepClean,
   ]);
 
   // Re-mount Stripe when priced inputs change after the PI was created
   // (e.g. returning-customer check finishes, wallet toggle).
   useEffect(() => {
     if (!clientSecret || paymentAmount <= 0) return;
-    const expectedCents = Math.max(100, Math.round(depositPricing.deposit * 100));
+    const expectedCents = isNewMembershipSignup
+      ? Math.max(100, Math.round(membershipDueDollars * 100))
+      : Math.max(100, Math.round(depositPricing.deposit * 100));
     if (Math.abs(expectedCents - paymentAmount) > 1) {
       setClientSecret(null);
       setBookingId(null);
@@ -875,8 +837,8 @@ export default function BookingCheckout() {
       paymentInitStarted.current = false;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [depositPricing.deposit, isNewCustomer, applyWallet, walletBalanceCents, bookingData.isSameDay, bookingData.focusedAreas, bookingData.conditionLevel]);
-  const currentAmount = depositPricing.deposit;
+  }, [depositPricing.deposit, membershipDueDollars, isNewMembershipSignup, isNewCustomer, applyWallet, walletBalanceCents, bookingData.isSameDay, bookingData.focusedAreas, bookingData.conditionLevel, deepClean.includeDeepClean]);
+  const currentAmount = isNewMembershipSignup ? membershipDueDollars : depositPricing.deposit;
   const totalSavings = (depositPricing.newCustomerDiscount || 0) + (depositPricing.membershipDiscount || 0) + promoDiscount + referralDiscount;
   const addOnLabels = bookingData.addOns?.map(id => ADD_ONS[id as keyof typeof ADD_ONS]?.label).filter(Boolean) || [];
 
@@ -899,7 +861,9 @@ export default function BookingCheckout() {
       <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8">
         <SEO
           title="Checkout"
-          description={isFocused
+          description={isNewMembershipSignup
+            ? "Start Glow on this site — pay the first month with the same checkout as a one-time booking."
+            : isFocused
             ? "Pay in full to lock in your focused clean."
             : "Complete your booking with a secure 50% deposit. Balance auto-charged after service."}
           noindex
@@ -917,7 +881,9 @@ export default function BookingCheckout() {
               Review &amp; Reserve
             </h1>
             <p className="text-base md:text-lg text-muted-foreground max-w-xl mx-auto">
-              {isFocused
+              {isNewMembershipSignup
+                ? "Pay the first month of Glow here — same card form as a one-time booking. Recurring monthly after that. You'll add your address and sign the membership agreement on the next step."
+                : isFocused
                 ? "Focused cleans are paid in full at booking — we schedule and dispatch only after payment succeeds."
                 : "Lock in your cleaning with a 50% deposit today. Your card is securely saved on file — the remaining 50% is automatically charged after your cleaning is complete."}
             </p>
@@ -938,7 +904,11 @@ export default function BookingCheckout() {
             <CardContent className="space-y-3 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Service</span>
-                <span className="font-semibold">{serviceTier?.label || "Standard"}</span>
+                <span className="font-semibold">
+                  {isNewMembershipSignup
+                    ? (membership?.label || "Glow membership")
+                    : (serviceTier?.label || "Standard")}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Home Size</span>
@@ -1060,6 +1030,38 @@ export default function BookingCheckout() {
               ) : null}
 
               {/* Service total after discounts */}
+              {isNewMembershipSignup ? (
+                <>
+                  <div className="flex items-baseline justify-between text-sm">
+                    <span className="font-semibold">{membership?.label || "Glow membership"}</span>
+                    <span className="font-semibold">${membershipMonthlyDollars.toFixed(2)}/mo</span>
+                  </div>
+                  {membershipDeepDollars > 0 ? (
+                    <div className="flex items-baseline justify-between text-sm">
+                      <span className="font-medium">First-clean deep clean</span>
+                      <span className="font-semibold">+${membershipDeepDollars.toFixed(2)}</span>
+                    </div>
+                  ) : null}
+                  <Separator />
+                  <div className="flex items-baseline justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Badge className="bg-gradient-primary text-white text-[10px] uppercase tracking-wider px-2 py-0.5">
+                          First month
+                        </Badge>
+                        <span className="font-bold text-base">Pay now</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Then ${membershipMonthlyDollars.toFixed(2)}/month · cancel anytime
+                      </p>
+                    </div>
+                    <span className="text-2xl md:text-3xl font-extrabold bg-gradient-primary bg-clip-text text-transparent">
+                      ${membershipDueDollars.toFixed(2)}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <>
               <div className="flex items-baseline justify-between text-sm">
                 <span className="font-semibold">Service total</span>
                 <span className="font-semibold">${(depositPricing.total - (depositPricing.sameDayUpcharge || 0)).toFixed(2)}</span>
@@ -1105,6 +1107,8 @@ export default function BookingCheckout() {
                   </span>
                 </div>
               ) : null}
+                </>
+              )}
             </CardContent>
           </Card>
 
@@ -1192,8 +1196,8 @@ export default function BookingCheckout() {
             </CardContent>
           </Card>
 
-          {/* Discount Codes Section - Collapsible */}
-          <Collapsible open={discountSectionOpen} onOpenChange={setDiscountSectionOpen}>
+          {/* Discount Codes Section - Collapsible (one-time only) */}
+          {!isNewMembershipSignup && <Collapsible open={discountSectionOpen} onOpenChange={setDiscountSectionOpen}>
             <Card className="border-primary/10">
               <CollapsibleTrigger asChild>
                 <CardHeader className="pb-3 cursor-pointer hover:bg-muted/30 transition-colors">
@@ -1324,7 +1328,7 @@ export default function BookingCheckout() {
                 </CardContent>
               </CollapsibleContent>
             </Card>
-          </Collapsible>
+          </Collapsible>}
 
           {/* Payment Section */}
           <Card className="border-primary/20 shadow-lg">
@@ -1334,32 +1338,14 @@ export default function BookingCheckout() {
                 Payment Details
               </CardTitle>
               <CardDescription>
-                {isFocused
+                {isNewMembershipSignup
+                  ? `Pay $${currentAmount.toFixed(2)} for the first month${membershipDeepDollars > 0 ? " (includes first-clean deep)" : ""} • then $${membershipMonthlyDollars.toFixed(2)}/month`
+                  : isFocused
                   ? `Pay $${currentAmount.toFixed(2)} in full now`
                   : `Pay $${currentAmount.toFixed(2)} deposit now • $${depositPricing.balanceDue.toFixed(2)} auto-charged after service`}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              
-              {/* Membership Signup Flow */}
-              {isNewMembershipSignup && <div className="space-y-4">
-                  <div className="bg-primary/5 rounded-lg p-4 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold">Membership: {membership?.label}</span>
-                      <Badge className="bg-primary text-white">${membership?.monthlyPrice}/mo</Badge>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      {membership?.cleansPerMonth} cleaning credit/month • {membership?.discount}% off extras • Cancel anytime
-                    </p>
-                  </div>
-
-                  <DeepCleanPrompt value={deepClean} onChange={setDeepClean} priceDollars={75} />
-
-                  <Button onClick={handleMembershipCheckout} size="lg" className="w-full bg-gradient-primary hover:opacity-90" disabled={isCreatingIntent}>
-                    {isCreatingIntent ? <><RiLoader4Line className="mr-2 w-4 h-4 animate-spin" />Processing...</> : <>Subscribe & Book First Clean</>}
-                  </Button>
-                </div>}
-
               {/* Member Using Credit */}
               {isMemberUsingCredit && <div className="text-center space-y-4">
                   <div className="bg-green-50 border border-green-200 rounded-lg p-6">
@@ -1372,8 +1358,12 @@ export default function BookingCheckout() {
                   </Button>
                 </div>}
 
-              {/* Regular Stripe Payment */}
-              {!isNewMembershipSignup && !isMemberUsingCredit && <>
+              {/* Stripe Payment Element — one-time deposit and Glow first month */}
+              {!isMemberUsingCredit && <>
+                  {isNewMembershipSignup && (
+                    <DeepCleanPrompt value={deepClean} onChange={setDeepClean} priceDollars={75} />
+                  )}
+
                   {/* Error State */}
                   {initError && !isCreatingIntent && <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4 text-center">
                       <RiErrorWarningLine className="w-8 h-8 text-destructive mx-auto mb-2" />
@@ -1399,9 +1389,8 @@ export default function BookingCheckout() {
                   {clientSecret && paymentAmount > 0 && !initError && (
                     <div className="space-y-4">
                       {/* Stripe payment form — ALWAYS loaded. The signed
-                          One-Time Service Agreement is captured on the next
-                          (Details) step, so nothing here gates payment. */}
-                      <Elements stripe={stripePromise} options={{ clientSecret }}>
+                          agreement is captured on the next (Details) step. */}
+                      <Elements stripe={stripePromise} options={{ clientSecret }} key={clientSecret}>
                         <StripePaymentForm
                           amount={paymentAmount}
                           onSuccess={handlePaymentSuccess}
@@ -1409,17 +1398,14 @@ export default function BookingCheckout() {
                           customerEmail={bookingData.email}
                           bookingId={bookingId}
                           clientSecret={clientSecret}
+                          returnUrl={isNewMembershipSignup ? "/book/details" : undefined}
                         />
                       </Elements>
 
-                      {/* View-only policies + agreement preview. No
-                          checkboxes — the policies are listed for review and
-                          the customer signs the One-Time Service Agreement on
-                          the next step. */}
                       <div className="rounded-lg border border-primary/20 bg-primary/[0.03] p-4 space-y-3">
                         <p className="font-semibold text-sm flex items-center gap-2">
                           <RiShieldLine className="w-4 h-4 text-primary" />
-                          Service Agreement &amp; Policies
+                          {isNewMembershipSignup ? "Membership Agreement & Policies" : "Service Agreement & Policies"}
                         </p>
                         <ul className="text-sm space-y-1.5">
                           <li className="flex items-center gap-2">
@@ -1436,7 +1422,7 @@ export default function BookingCheckout() {
                           </li>
                         </ul>
 
-                        {/* One-Time Service Agreement — link to view if needed */}
+                        {!isNewMembershipSignup && (
                         <ul className="text-sm">
                           <li className="flex items-center gap-2">
                             <RiFileTextLine className="w-3.5 h-3.5 text-primary flex-shrink-0" />
@@ -1451,9 +1437,12 @@ export default function BookingCheckout() {
                             </a>
                           </li>
                         </ul>
+                        )}
 
                         <p className="text-xs text-muted-foreground">
-                          By paying your deposit you agree to the Terms of Service, Disclaimer, Refund Policy, and the One-Time Service Agreement. You&apos;ll add your signature on the next step.
+                          {isNewMembershipSignup
+                            ? "By paying the first month you agree to the Terms of Service, Disclaimer, Refund Policy, and the Membership / Recurring Service Agreement. You'll add your signature on the next step."
+                            : "By paying your deposit you agree to the Terms of Service, Disclaimer, Refund Policy, and the One-Time Service Agreement. You'll add your signature on the next step."}
                         </p>
                       </div>
                     </div>

@@ -28,7 +28,7 @@ interface DeepCleanPromptProps {
  * we clearly disclose that a surge charge may apply if the cleaner determines
  * a deep clean is needed on arrival. The chosen state is reported up so the
  * caller can forward `includeDeepClean` / `deepCleanedBefore` to
- * create-checkout.
+ * create-membership-intent (public Glow funnel) or create-checkout (VA).
  */
 export function DeepCleanPrompt({ value, onChange, priceDollars = 75, className }: DeepCleanPromptProps) {
   const setAnswer = (answer: DeepCleanedBefore) => {

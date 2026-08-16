@@ -676,13 +676,13 @@ export default function BookingSuccess() {
   const heroTitle = depositPending
     ? 'Deposit Not Received Yet'
     : isConfirmed
-    ? (bookingData.membershipPlan !== 'none' ? 'Welcome to Novara!' : 'Booking Confirmed!')
+    ? (bookingData.membershipPlan !== 'none' ? 'Welcome to Glow!' : 'Booking Confirmed!')
     : 'Locking In Your Booking…';
   const heroSubtitle = depositPending
     ? 'We haven\'t received your deposit yet — your booking isn\'t fully locked in until it\'s paid. Use your secure payment link below to finish up.'
     : isConfirmed
     ? (bookingData.membershipPlan !== 'none'
-        ? 'Your membership is active and your first credit is ready to use.'
+        ? 'Your Glow membership is active. First clean is on the calendar — you signed the membership agreement on the last step.'
         : bookingData.useCredit
         ? 'Your booking is confirmed with your membership credit.'
         : bookingData.paymentOption === 'full'

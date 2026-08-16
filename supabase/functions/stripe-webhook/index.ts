@@ -8,8 +8,7 @@ import {
   remainingDueAfterUpfrontCents,
 } from "../_shared/booking-balance.ts";
 import { resolveSecret } from "../_shared/app-secrets.ts";
-import { memberTag } from "../_shared/ghl-tags.ts";
-import { pingEnsureMembershipAgreement } from "../_shared/ensure-membership-agreement.ts";
+import { provisionGlowMembership } from "../_shared/provision-glow-membership.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -752,441 +751,13 @@ serve(async (req) => {
 
       case 'customer.subscription.created': {
         const subscription = event.data.object as Stripe.Subscription;
-        const customerId = subscription.customer as string;
-        logStep("Processing subscription creation", { subscriptionId: subscription.id });
-
-        // Plan resolution order, robust against Stripe-account swaps:
-        //   1. subscription.metadata.membership_plan  ← set by create-checkout
-        //   2. legacy hardcoded priceId map (old NovaraCleaning account)
-        //   3. derive from price.unit_amount tier
-        //   4. fall back to 'monthly'
-        const subMeta = (subscription.metadata || {}) as Record<string, string>;
-        const priceId = subscription.items.data[0]?.price.id;
-        const unitAmount = subscription.items.data[0]?.price.unit_amount || 0;
-        const LEGACY_PRICE_MAP: Record<string, string> = {
-          'price_1SR2UhGc7k6gIVcMiKbuq1mo': 'monthly',
-          'price_1SR2VNGc7k6gIVcMMI6Fuxga': 'biweekly',
-          'price_1SR2VYGc7k6gIVcML2W0jVKS': 'weekly',
-        };
-        let plan: string = subMeta.membership_plan
-          || LEGACY_PRICE_MAP[priceId]
-          || (unitAmount >= 60000 ? 'weekly' : unitAmount >= 25000 ? 'biweekly' : 'monthly');
-        if (!['monthly', 'biweekly', 'weekly'].includes(plan)) plan = 'monthly';
-
-        const creditsPerMonth = { monthly: 1, biweekly: 2, weekly: 4 }[plan] || 1;
-        const planLabels: Record<string, string> = {
-          monthly: 'Novara Monthly',
-          biweekly: 'Novara Bi-Weekly',
-          weekly: 'Novara Weekly',
-        };
-
-        // Get customer email and name
-        const customer = await stripe.customers.retrieve(customerId);
-        const email = (customer as Stripe.Customer).email || '';
-        const name = (customer as Stripe.Customer).name || '';
-        const phone = (customer as Stripe.Customer).phone || subMeta.phone || '';
-
-        const monthlyPriceCentsMeta = subMeta.monthly_price_cents
-          ? parseInt(subMeta.monthly_price_cents, 10) || unitAmount
-          : unitAmount;
-
-        // Stripe API version 2025-08-27.basil moved `current_period_*`
-        // from the Subscription root to each SubscriptionItem. Read
-        // from the item first and fall back to the (now removed) root
-        // for compatibility with older webhook replays.
-        // deno-lint-ignore no-explicit-any
-        const subAny = subscription as any;
-        // deno-lint-ignore no-explicit-any
-        const itemAny = subscription.items?.data?.[0] as any;
-        const periodStart = itemAny?.current_period_start ?? subAny.current_period_start;
-        const periodEnd = itemAny?.current_period_end ?? subAny.current_period_end;
-
-        // Create membership_credits entry
-        const { error: creditsError } = await supabase
-          .from('membership_credits')
-          .upsert({
-            customer_id: customerId,
-            email,
-            membership_plan: plan,
-            credits_per_month: creditsPerMonth,
-            credits_remaining: creditsPerMonth,
-            credits_used: 0,
-            current_period_start: periodStart ? new Date(periodStart * 1000).toISOString() : null,
-            current_period_end: periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
-            subscription_id: subscription.id,
-            credit_available_date: new Date().toISOString(),
-            home_size_id: subMeta.home_size_id || null,
-            monthly_price_cents: monthlyPriceCentsMeta || null,
-            preferred_day_of_week: subMeta.preferred_day_of_week || null,
-            preferred_time_window: subMeta.preferred_time_window || null,
-            status: 'active',
-          });
-        
-        if (creditsError) {
-          logStep("Error creating membership credits", creditsError);
-        } else {
-          logStep("Membership credits created", { customerId, plan, credits: creditsPerMonth });
-          
-          // Create or get customer record and generate referral code
-          try {
-            const { data: existingCustomer } = await supabase
-              .from('customers')
-              .select('id, referral_code')
-              .eq('email', email)
-              .maybeSingle();
-
-            let customerRecord = existingCustomer;
-
-            if (!existingCustomer) {
-              // Create customer record
-              const { data: newCustomer, error: customerError } = await supabase
-                .from('customers')
-                .insert({
-                  email,
-                  first_name: name.split(' ')[0] || '',
-                  last_name: name.split(' ').slice(1).join(' ') || '',
-                })
-                .select()
-                .single();
-
-              if (customerError) {
-                logStep("Error creating customer", customerError);
-              } else {
-                customerRecord = newCustomer;
-              }
-            }
-
-            // Generate referral code if customer doesn't have one
-            if (customerRecord && !customerRecord.referral_code) {
-              const referralResponse = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/generate-referral-code`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
-                },
-                body: JSON.stringify({
-                  customerId: customerRecord.id,
-                  email,
-                }),
-              });
-
-              if (referralResponse.ok) {
-                const { code } = await referralResponse.json();
-                logStep("Referral code generated", { code, customerId: customerRecord.id });
-              }
-            }
-          } catch (referralError) {
-            logStep("Error handling referral code (non-blocking)", { error: referralError });
-          }
-          
-          // Send welcome email
-          await sendMembershipEmail('welcome', email, {
-            name,
-            plan: planLabels[plan],
-            credits: creditsPerMonth,
-          });
-
-          // Membership agreement once at purchase. Idempotent per email;
-          // skips when the customer already signed on the membership pay page.
-          try {
-            const serviceAddress = [
-              subMeta.address,
-              subMeta.city,
-              [subMeta.state, subMeta.zip_code].filter(Boolean).join(" "),
-            ].filter(Boolean).join(", ");
-            await pingEnsureMembershipAgreement(supabase, {
-              email,
-              name,
-              phone,
-              plan: planLabels[plan] || plan,
-              serviceAddress: serviceAddress || null,
-              firstServiceDate: subMeta.first_service_date || null,
-              membershipRateCents: monthlyPriceCentsMeta || null,
-              homeSizeId: subMeta.home_size_id || null,
-            });
-          } catch (agErr) {
-            logStep("membership agreement ensure failed (non-blocking)", {
-              error: agErr instanceof Error ? agErr.message : String(agErr),
-            });
-          }
-
-          // Persist membership preferences on the customers row so the
-          // portal + admin tools can show them without joining
-          // membership_credits, and so GHL custom-field sync uses them
-          // as the source of truth.
-          try {
-            await supabase
-              .from('customers')
-              .upsert({
-                email,
-                first_name: subMeta.first_name || (name.split(' ')[0] || ''),
-                last_name: subMeta.last_name || (name.split(' ').slice(1).join(' ') || ''),
-                phone: phone || null,
-                address: subMeta.address || null,
-                city: subMeta.city || null,
-                state: subMeta.state || null,
-                zip: subMeta.zip_code || null,
-                membership_status: 'active',
-                membership_plan: plan,
-                preferred_day_of_week: subMeta.preferred_day_of_week || null,
-                preferred_time_window: subMeta.preferred_time_window || null,
-              }, { onConflict: 'email' });
-          } catch (custErr) {
-            logStep("customers upsert failed (non-blocking)", { error: custErr instanceof Error ? custErr.message : String(custErr) });
-          }
-
-          // ─── GHL sync on subscription creation ───────────
-          // Mirror the new member into GoHighLevel: contact + open
-          // opportunity in the pipeline so the team can pick the
-          // first booking date manually if the customer didn't pick
-          // one during signup. Custom fields capture the
-          // membership tier, monthly price, and schedule
-          // preferences so workflow automations (SMS, email
-          // sequences) can route on them.
-          try {
-            const { upsertContact, createOpportunity, updateOpportunity, fmtMoney } =
-              await import("../_shared/ghl-client.ts");
-            // File the membership opportunity on the SALES pipeline (never
-            // hiring/dispatch). Prefer the configured sales pipeline secret.
-            let salesPipelineId: string | undefined;
-            let salesStageId: string | undefined;
-            try {
-              const { data: secs } = await supabase
-                .from("app_secrets")
-                .select("key, value")
-                .in("key", ["GHL_SALES_PIPELINE_ID", "GHL_SALES_PIPELINE_STAGE_ID"]);
-              for (const s of secs || []) {
-                if (s.key === "GHL_SALES_PIPELINE_ID" && s.value) salesPipelineId = String(s.value).trim();
-                if (s.key === "GHL_SALES_PIPELINE_STAGE_ID" && s.value) salesStageId = String(s.value).trim();
-              }
-            } catch (_) { /* fall back to auto-discovery */ }
-
-            const contactId = await upsertContact({
-              email,
-              phone: phone || null,
-              firstName: subMeta.first_name || (name.split(' ')[0] || null),
-              lastName: subMeta.last_name || (name.split(' ').slice(1).join(' ') || null),
-              address1: subMeta.address || null,
-              city: subMeta.city || null,
-              state: subMeta.state || null,
-              postalCode: subMeta.zip_code || null,
-              source: "Novara Membership Signup",
-              // Home size and preferred day are custom fields, not tags.
-              tags: ["member", memberTag(plan)].filter(Boolean) as string[],
-              mergeTags: true,
-              customFieldsByKey: {
-                membership_status: "Active",
-                membership_plan: plan,
-                cleaning_type: planLabels[plan],
-                market: subMeta.state || undefined,
-                customer_source: "Novara Membership",
-                stripe_customer_id: customerId,
-                monthly_membership_price: fmtMoney(monthlyPriceCentsMeta),
-                preferred_day_of_week: subMeta.preferred_day_of_week || undefined,
-                preferred_time_window: subMeta.preferred_time_window || undefined,
-              },
-            });
-
-            // Promote the lead opportunity create-checkout already filed
-            // (id threaded through subscription metadata) to "won" instead of
-            // creating a duplicate. Fall back to creating one only when no
-            // pre-created opportunity exists (e.g. legacy links).
-            const preOppId = (subMeta.ghl_opportunity_id || "").trim();
-            const oppName = `Novara Membership — ${planLabels[plan]} (${(name || email).trim()})`;
-            const oppMonetary = monthlyPriceCentsMeta ? Math.round(monthlyPriceCentsMeta / 100) : undefined;
-            const oppCustomFields = {
-              membership_plan: plan,
-              membership_status: "Active",
-              preferred_day_of_week: subMeta.preferred_day_of_week || undefined,
-              preferred_time_window: subMeta.preferred_time_window || undefined,
-            };
-            if (preOppId) {
-              await updateOpportunity(preOppId, {
-                name: oppName,
-                status: "won",
-                monetaryValue: oppMonetary,
-                pipelineId: salesPipelineId,
-                pipelineStageId: salesStageId,
-                customFieldsByKey: oppCustomFields,
-              });
-              logStep("GHL membership opportunity promoted to won", { preOppId });
-            } else if (contactId) {
-              await createOpportunity({
-                contactId,
-                name: oppName,
-                status: "won",
-                source: "Novara Membership Signup",
-                pipelineId: salesPipelineId,
-                pipelineStageId: salesStageId,
-                monetaryValue: oppMonetary,
-                customFieldsByKey: oppCustomFields,
-              });
-            }
-            logStep("GHL membership sync complete", { email, plan });
-          } catch (ghlErr) {
-            logStep("GHL membership sync failed (non-blocking)", { error: ghlErr instanceof Error ? ghlErr.message : String(ghlErr) });
-          }
-
-          // ─── Mirror to LeadConnector inbound webhook ─────
-          // Lets the GHL workflow trigger "membership.created"
-          // automations (welcome SMS, welcome email, dispatch to
-          // the success squad) without a polling loop.
-          try {
-            const { mirrorToLeadConnector } = await import("../_shared/leadconnector-mirror.ts");
-            await mirrorToLeadConnector({
-              event: "membership.created",
-              payload: {
-                email,
-                phone,
-                name,
-                plan,
-                planLabel: planLabels[plan],
-                creditsPerMonth,
-                stripeCustomerId: customerId,
-                subscriptionId: subscription.id,
-                homeSizeId: subMeta.home_size_id || null,
-                monthlyPriceCents: monthlyPriceCentsMeta,
-                preferredDayOfWeek: subMeta.preferred_day_of_week || null,
-                preferredTimeWindow: subMeta.preferred_time_window || null,
-              },
-            });
-          } catch (mirrorErr) {
-            logStep("LeadConnector mirror failed (non-blocking)", { error: mirrorErr instanceof Error ? mirrorErr.message : String(mirrorErr) });
-          }
-
-          // ─── Welcome SMS so the customer immediately knows
-          //     where to schedule their first clean. Includes
-          //     their preferred day / window in the copy if they
-          //     selected one during signup. Best-effort.
-          if (phone) {
-            try {
-              const { sendSms } = await import("../_shared/sms.ts");
-              const dayLabel = subMeta.preferred_day_of_week
-                ? subMeta.preferred_day_of_week.charAt(0).toUpperCase() + subMeta.preferred_day_of_week.slice(1)
-                : null;
-              const windowLabel = subMeta.preferred_time_window || null;
-              const preferenceLine = dayLabel
-                ? ` We'll prefer ${dayLabel}${windowLabel ? ` (${windowLabel})` : ''} for your recurring cleans.`
-                : '';
-              const smsMessage =
-                `Novara: Welcome to ${planLabels[plan]}! ${creditsPerMonth} credit${creditsPerMonth > 1 ? 's' : ''}/mo unlocked.${preferenceLine} ` +
-                `Schedule your first clean: https://app.novaracleaning.com/portal/book — Reply HELP for help.`;
-              await sendSms(supabase, { toPhone: phone, message: smsMessage, type: "confirmation" });
-            } catch (smsErr) {
-              logStep("Welcome SMS failed (non-blocking)", { error: smsErr instanceof Error ? smsErr.message : String(smsErr) });
-            }
-          }
-
-          // ─── First-clean handling for the new member ──────────────
-          //
-          // Three cases, in priority order:
-          //   1. existing_booking_id — an admin/VA started the membership
-          //      against a booking they already created. Convert that row
-          //      into a membership clean (no duplicate, no double charge).
-          //   2. first_service_date — the member picked an exact slot in
-          //      the booking funnel. Honor it.
-          //   3. preferred_day_of_week — compute the next matching date.
-          //
-          // Cases 2 & 3 still require a full service address; without it
-          // we leave scheduling to the customer via /portal/book.
-          if (!creditsError) {
-            try {
-              const DOW_MAP: Record<string, number> = {
-                sunday: 0, monday: 1, tuesday: 2, wednesday: 3,
-                thursday: 4, friday: 5, saturday: 6,
-              };
-
-              if (subMeta.existing_booking_id) {
-                // Case 1 — link/convert the admin-created booking.
-                const { error: linkErr } = await supabase
-                  .from("bookings")
-                  .update({
-                    membership_plan: plan,
-                    uses_credit: true,
-                    customer_id: customerId,
-                    team_notes: "MEMBERSHIP BOOKING — recurring subscription started",
-                  })
-                  .eq("id", subMeta.existing_booking_id);
-                if (linkErr) {
-                  logStep("Linking existing booking to membership failed (non-blocking)", { error: linkErr.message });
-                } else {
-                  logStep("Linked existing booking to new membership", { bookingId: subMeta.existing_booking_id, plan });
-                }
-              } else if (
-                subMeta.home_size_id && subMeta.address && subMeta.city && subMeta.state
-              ) {
-                // Resolve the first-clean date: explicit slot wins, else
-                // compute from the preferred day of week.
-                let autoServiceDate: string | null = null;
-                let autoTimeSlot = subMeta.first_time_slot ||
-                  subMeta.preferred_time_window || "10:00 AM - 12:00 PM";
-
-                if (subMeta.first_service_date && /^\d{4}-\d{2}-\d{2}$/.test(subMeta.first_service_date)) {
-                  // Case 2 — exact date picked in the funnel.
-                  autoServiceDate = subMeta.first_service_date;
-                } else if (subMeta.preferred_day_of_week) {
-                  // Case 3 — next matching weekday, ≥3 days out.
-                  const targetDow = DOW_MAP[subMeta.preferred_day_of_week.toLowerCase()];
-                  if (targetDow !== undefined) {
-                    const candidate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
-                    candidate.setHours(0, 0, 0, 0);
-                    while (candidate.getDay() !== targetDow) {
-                      candidate.setDate(candidate.getDate() + 1);
-                    }
-                    autoServiceDate = candidate.toISOString().split("T")[0];
-                  }
-                }
-
-                if (autoServiceDate) {
-                  // Reflect any admin first-clean deposit collected on the
-                  // subscription Checkout so the booking row mirrors what was
-                  // actually charged (instead of all-zeros). `deposit_cents`
-                  // is set by create-checkout when a deposit invoice mode was
-                  // used on the Internal Booking recurring path.
-                  const autoDepositCents = subMeta.deposit_cents
-                    ? parseInt(subMeta.deposit_cents, 10) || 0
-                    : 0;
-                  const autoTeamNotes = autoDepositCents > 0
-                    ? `MEMBERSHIP AUTO-BOOKING — $${(autoDepositCents / 100).toFixed(2)} first-clean deposit collected at signup. Confirm date with customer before dispatching`
-                    : "MEMBERSHIP AUTO-BOOKING — confirm date with customer before dispatching";
-
-                  const { error: autoBookErr } = await supabase
-                    .from("bookings")
-                    .insert({
-                      email,
-                      first_name: subMeta.first_name || (name.split(" ")[0] || ""),
-                      last_name: subMeta.last_name || (name.split(" ").slice(1).join(" ") || ""),
-                      phone: phone || "",
-                      address: subMeta.address,
-                      city: subMeta.city,
-                      state: subMeta.state,
-                      zip_code: subMeta.zip_code || "",
-                      home_size_id: subMeta.home_size_id,
-                      service_type: "standard",
-                      membership_plan: plan,
-                      uses_credit: true,
-                      service_date: autoServiceDate,
-                      time_slot: autoTimeSlot,
-                      base_price_cents: 0,
-                      deposit_cents: autoDepositCents,
-                      total_estimate_cents: autoDepositCents,
-                      status: "pending_details",
-                      customer_id: customerId,
-                      team_notes: autoTeamNotes,
-                    });
-
-                  if (autoBookErr) {
-                    logStep("Auto-booking creation failed (non-blocking)", { error: autoBookErr.message });
-                  } else {
-                    logStep("Auto-booking created for new member", { autoServiceDate, autoTimeSlot, plan, email });
-                  }
-                }
-              }
-            } catch (autoErr) {
-              logStep("First-clean handling error (non-blocking)", { error: autoErr instanceof Error ? autoErr.message : String(autoErr) });
-            }
-          }
-        }
+        await provisionGlowMembership({
+          stripe,
+          supabase,
+          subscription,
+          sendMembershipEmail,
+          logStep,
+        });
         break;
       }
 
@@ -1194,6 +765,21 @@ serve(async (req) => {
         const subscription = event.data.object as Stripe.Subscription;
         const previousAttributes = event.data.previous_attributes as any;
         logStep("Processing subscription update", { subscriptionId: subscription.id });
+
+        const prevStatus = String(previousAttributes?.status || "");
+        const becamePaid =
+          (prevStatus === "incomplete" || prevStatus === "incomplete_expired") &&
+          (subscription.status === "active" || subscription.status === "trialing");
+        if (becamePaid) {
+          await provisionGlowMembership({
+            stripe,
+            supabase,
+            subscription,
+            sendMembershipEmail,
+            logStep,
+          });
+        }
+
 
         // Resilient period-end resolution — see customer.subscription.created.
         // deno-lint-ignore no-explicit-any
@@ -1576,6 +1162,58 @@ serve(async (req) => {
               logStep(`${fn} after deposit invoice failed (non-blocking)`, {
                 error: fanoutErr instanceof Error ? fanoutErr.message : String(fanoutErr),
               });
+            }
+          }
+        }
+
+        // Glow first-month invoice (on-site Payment Element). Stamp payment
+        // received and hold at pending_details until /book/details is filled —
+        // same gate as payment_intent.succeeded. Do NOT auto-confirm.
+        const membershipInvoiceBookingId =
+          (invoice.metadata?.purpose === "membership_first" && invoice.metadata?.booking_id) ||
+          "";
+        if (membershipInvoiceBookingId || invoice.billing_reason === "subscription_create") {
+          let glowBookingId = String(membershipInvoiceBookingId || "").trim();
+          if (!glowBookingId && invoice.id) {
+            const { data: byInvoice } = await supabase
+              .from("bookings")
+              .select("id, status, payment_received_at, booking_channel, bedrooms, bathrooms, dwelling_type, address")
+              .eq("stripe_invoice_id", invoice.id)
+              .maybeSingle();
+            glowBookingId = byInvoice?.id || "";
+          }
+          if (glowBookingId) {
+            const { data: glowBooking } = await supabase
+              .from("bookings")
+              .select("*")
+              .eq("id", glowBookingId)
+              .maybeSingle();
+            if (glowBooking) {
+              if (!glowBooking.payment_received_at) {
+                await supabase
+                  .from("bookings")
+                  .update({ payment_received_at: new Date().toISOString() })
+                  .eq("id", glowBooking.id);
+              }
+              const detailsComplete = hasHomeDetails(glowBooking);
+              const isAdminChannel = glowBooking.booking_channel === "admin";
+              if (glowBooking.status !== "confirmed") {
+                if (!detailsComplete && !isAdminChannel) {
+                  await supabase
+                    .from("bookings")
+                    .update({ status: "pending_details" })
+                    .eq("id", glowBooking.id)
+                    .in("status", ["pending_payment", "pending_details", "booked"]);
+                  logStep("Glow first invoice paid — holding at pending_details", { bookingId: glowBooking.id });
+                } else {
+                  await supabase
+                    .from("bookings")
+                    .update({ status: "confirmed", confirmed_at: new Date().toISOString() })
+                    .eq("id", glowBooking.id)
+                    .in("status", ["pending_payment", "pending_details", "booked"]);
+                  logStep("Glow first invoice paid — booking confirmed", { bookingId: glowBooking.id });
+                }
+              }
             }
           }
         }

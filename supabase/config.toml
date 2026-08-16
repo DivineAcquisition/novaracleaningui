@@ -24,6 +24,9 @@ verify_jwt = false
 [functions.create-payment-intent]
 verify_jwt = false
 
+[functions.create-membership-intent]
+verify_jwt = false
+
 [functions.get-stripe-publishable-key]
 verify_jwt = false
 

@@ -7,23 +7,18 @@ import {
   RiCheckLine,
   RiCheckboxCircleLine,
   RiGroupLine,
-  RiLoader4Line,
   RiRepeatLine,
   RiShieldLine,
   RiSparklingLine,
   RiStarLine,
-  RiTimeLine,
   RiVipCrownLine
 } from "@remixicon/react";
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { toast } from "sonner";
 import { HOME_SIZES } from "@/config/brand-config";
@@ -31,7 +26,6 @@ import { MEMBERSHIP_PRICES } from "@/lib/pricing-system";
 
 import { cn } from "@/lib/utils";
 import { SEO } from "@/components/SEO";
-import { DeepCleanPrompt, type DeepCleanChoice } from "@/components/booking/DeepCleanPrompt";
 
 const PLAN_META = {
   monthly: {
@@ -78,34 +72,11 @@ const PLAN_META = {
 
 type PlanId = keyof typeof PLAN_META;
 
-const DAYS_OF_WEEK = [
-  { id: "monday", label: "Mon" },
-  { id: "tuesday", label: "Tue" },
-  { id: "wednesday", label: "Wed" },
-  { id: "thursday", label: "Thu" },
-  { id: "friday", label: "Fri" },
-] as const;
-
-const TIME_WINDOWS = [
-  { id: "morning", label: "Morning", hint: "8 AM – 12 PM" },
-  { id: "afternoon", label: "Afternoon", hint: "12 PM – 4 PM" },
-  { id: "evening", label: "Evening", hint: "4 PM – 6 PM" },
-] as const;
-
 export default function PlanDetail() {
   const { planId } = useParams<{ planId: string }>();
   const router = useRouter();
-  const { user } = useAuth();
   const [selectedHomeSize, setSelectedHomeSize] = useState("1501_2000");
-  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [termsOpen, setTermsOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  // Day-of-week / time-window preferences captured at signup so the
-  // post-checkout webhook can pre-fill GHL custom fields and the
-  // /portal/book flow can hint the customer's preferred slot.
-  const [preferredDay, setPreferredDay] = useState<string>("");
-  const [preferredWindow, setPreferredWindow] = useState<string>("");
-  const [deepClean, setDeepClean] = useState<DeepCleanChoice>({ deepCleanedBefore: "", includeDeepClean: true });
 
   const plan = PLAN_META[planId as PlanId];
   if (!plan) {
@@ -125,50 +96,16 @@ export default function PlanDetail() {
   const startingPrice = MEMBERSHIP_PRICES["0_999"]?.[planId as keyof typeof prices] || 0;
   const selectableSizes = HOME_SIZES.filter(s => s.basePrice > 0);
 
-  const handleSubscribe = async () => {
-    if (!agreedToTerms) {
-      toast.error("Please agree to the Terms of Service");
+  const handleContinue = () => {
+    if (!selectedHomeSize) {
+      toast.error("Select your home size to see your monthly rate");
       return;
     }
-
-    if (!preferredDay || !preferredWindow) {
-      toast.error("Pick a preferred day & time window for your cleanings");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      // Guest-friendly: no sign-in required. Logged-in members pass their
-      // email so we reuse their Stripe customer; guests leave it blank and
-      // Stripe Checkout collects it (the subscription webhook provisions the
-      // membership keyed by whatever email is used at checkout). This makes
-      // membership checkout work for the public on try.* without bouncing
-      // visitors over to the app.* sign-in page.
-      const { data, error } = await supabase.functions.invoke("create-checkout", {
-        body: {
-          mode: "subscription",
-          membershipPlan: planId,
-          homeSizeId: selectedHomeSize,
-          email: user?.email || undefined,
-          preferredDayOfWeek: preferredDay,
-          preferredTimeWindow: preferredWindow,
-          includeDeepClean: deepClean.includeDeepClean,
-          deepCleanedBefore: deepClean.deepCleanedBefore,
-        },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      if (data?.url) {
-        window.location.href = data.url;
-      } else {
-        throw new Error("No checkout URL returned");
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to start checkout. Please try again.");
-    } finally {
-      setLoading(false);
-    }
+    const params = new URLSearchParams({
+      membership: String(planId),
+      homeSize: selectedHomeSize,
+    });
+    router.push(`/book/zip?${params.toString()}`);
   };
 
   return (
@@ -253,11 +190,7 @@ export default function PlanDetail() {
             <CardContent className="py-4 flex items-center justify-between">
               <div>
                 <p className="font-semibold text-sm">Your monthly price</p>
-                <p className="text-xs text-muted-foreground">
-                  {deepClean.includeDeepClean
-                    ? `First month: $${selectedPrice + 75} (includes $75 deep clean)`
-                    : `First month: $${selectedPrice}`}
-                </p>
+                <p className="text-xs text-muted-foreground">Billed monthly · first clean scheduled in the next steps</p>
               </div>
               <p className="text-2xl md:text-3xl font-bold text-primary">${selectedPrice}<span className="text-xs font-normal text-muted-foreground">/mo</span></p>
             </CardContent>
@@ -286,90 +219,17 @@ export default function PlanDetail() {
 
         <Separator />
 
-        {/* Preferred Schedule */}
-        <section className="space-y-5 animate-fade-in-up stagger-3">
-          <div className="text-center">
-            <h2 className="text-xl md:text-2xl font-bold font-jakarta">Pick Your Preferred Schedule</h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              We&apos;ll use this to prefer the same day &amp; time slot for every recurring clean. You can change it any time.
-            </p>
-          </div>
-
-          <div className="space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Preferred day of the week</p>
-            <div className="grid grid-cols-5 gap-2">
-              {DAYS_OF_WEEK.map((d) => {
-                const isSelected = preferredDay === d.id;
-                return (
-                  <button
-                    key={d.id}
-                    type="button"
-                    onClick={() => setPreferredDay(d.id)}
-                    className={cn(
-                      "rounded-xl border-2 py-3 text-sm font-semibold transition-all",
-                      isSelected
-                        ? "border-primary bg-primary/10 text-primary shadow-sm"
-                        : "border-border hover:border-primary/30 text-foreground/80"
-                    )}
-                  >
-                    {d.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Preferred arrival window</p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              {TIME_WINDOWS.map((w) => {
-                const isSelected = preferredWindow === w.id;
-                return (
-                  <button
-                    key={w.id}
-                    type="button"
-                    onClick={() => setPreferredWindow(w.id)}
-                    className={cn(
-                      "rounded-xl border-2 p-3 text-left transition-all",
-                      isSelected
-                        ? "border-primary bg-primary/10 shadow-sm"
-                        : "border-border hover:border-primary/30"
-                    )}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className={cn("font-semibold text-sm", isSelected && "text-primary")}>{w.label}</span>
-                      <RiTimeLine className={cn("w-4 h-4", isSelected ? "text-primary" : "text-muted-foreground")} />
-                    </div>
-                    <p className="text-[11px] text-muted-foreground mt-1">{w.hint}</p>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <p className="text-[11px] text-muted-foreground text-center">
-            We honor your preference whenever scheduling allows. You&apos;ll pick the exact date for your first clean right after checkout.
-          </p>
-        </section>
-
-        <Separator />
-
-        {/* First-clean deep clean */}
-        <section className="space-y-4 animate-fade-in-up stagger-3">
-          <DeepCleanPrompt value={deepClean} onChange={setDeepClean} priceDollars={75} />
-        </section>
-
-        <Separator />
-
-        {/* How It Works */}
+        {/* How It Works — same steps as a one-time public booking */}
         <section className="space-y-5 animate-fade-in-up stagger-3">
           <h2 className="text-xl md:text-2xl font-bold font-jakarta text-center">How It Works</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-center">
             {[
-              { step: "1", label: "Subscribe", desc: "Choose your plan & home size" },
-              { step: "2", label: "Schedule", desc: "Book your first cleaning" },
-              { step: "3", label: "We Clean", desc: "Our team arrives on time" },
-              { step: "4", label: "Repeat", desc: "Credits renew monthly" },
+              { step: "1", label: "Location", desc: "ZIP + your contact info" },
+              { step: "2", label: "Home size", desc: "Confirm square footage" },
+              { step: "3", label: "First clean", desc: "Pick date & arrival window" },
+              { step: "4", label: "Checkout", desc: "Pay the first month on this site" },
+              { step: "5", label: "Details", desc: "Address + membership agreement" },
+              { step: "6", label: "Confirm", desc: "You're on Glow" },
             ].map((s) => (
               <div key={s.step} className="space-y-2">
                 <div className="mx-auto w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: 'var(--gradient-lavender)' }}>
@@ -408,48 +268,25 @@ export default function PlanDetail() {
           </CollapsibleContent>
         </Collapsible>
 
-        {/* Subscribe CTA */}
+        {/* Continue into the public booking funnel */}
         <Card className="border-0 shadow-lg overflow-hidden">
           <div className="h-0.5 w-full" style={{ background: 'var(--gradient-primary)' }} />
           <CardHeader className="text-center">
-            <CardTitle className="text-lg">Ready to join?</CardTitle>
+            <CardTitle className="text-lg">Continue to book your first clean</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-start gap-3">
-              <Checkbox
-                id="terms"
-                checked={agreedToTerms}
-                onCheckedChange={(v) => setAgreedToTerms(v === true)}
-              />
-              <label htmlFor="terms" className="text-sm text-muted-foreground cursor-pointer leading-relaxed">
-                I agree to the{" "}
-                <a href="https://novaracleaning.com/terms" target="_blank" rel="noopener noreferrer" className="text-primary underline">
-                  Terms of Service
-                </a>{" "}
-                and acknowledge the recurring billing, cancellation, and refund policies above.
-              </label>
-            </div>
-
+            <p className="text-sm text-center text-muted-foreground">
+              Same steps as a one-time booking: location, home size, first-clean date, then pay on this site. You&apos;ll sign the membership agreement after payment.
+            </p>
             <Button
-              onClick={handleSubscribe}
-              disabled={loading || !agreedToTerms || !preferredDay || !preferredWindow}
+              onClick={handleContinue}
               className="w-full h-13 text-base bg-gradient-primary shadow-lg rounded-xl"
             >
-              {loading ? (
-                <><RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> Processing...</>
-              ) : (
-                <>
-                  Subscribe — ${selectedPrice}/mo
-                  <RiArrowRightLine className="w-5 h-5 ml-2" />
-                </>
-              )}
+              Continue — ${selectedPrice}/mo
+              <RiArrowRightLine className="w-5 h-5 ml-2" />
             </Button>
-
             <p className="text-[11px] text-center text-muted-foreground">
-              {deepClean.includeDeepClean
-                ? `First month total: $${selectedPrice + 75} (includes $75 deep clean). `
-                : `First month total: $${selectedPrice}. `}
-              Cancel anytime with 14 days&apos; notice.
+              First month is billed at checkout. Recurring monthly after that. Cancel anytime with 14 days&apos; notice.
             </p>
           </CardContent>
         </Card>
