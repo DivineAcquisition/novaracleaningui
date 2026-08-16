@@ -4,10 +4,12 @@
 // for a Glow / recurring signup. Optionally attach a held Stripe payment
 // URL in metadata — when the customer finishes signing, the DocuSeal
 // webhook releases that pay link by email/SMS (agree → then pay).
+// Idempotent per email: a second click returns alreadySent instead of
+// mailing another copy.
 
 import { NextResponse } from "next/server";
 import { requireAdmin, AdminAuthError } from "@/lib/admin-auth";
-import { buildMembershipValues, sendAgreement } from "@/lib/docuseal";
+import { ensureMembershipAgreement } from "@/lib/ensure-membership-agreement";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,66 +35,34 @@ export async function POST(req: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "email is required" }, { status: 400 });
   }
 
-  const name = body.name ? String(body.name).trim() : undefined;
-  const phone = body.phone ? String(body.phone).trim() : undefined;
-  const plan = body.plan ? String(body.plan) : undefined;
-  const serviceAddress = body.serviceAddress ? String(body.serviceAddress) : undefined;
-  const firstServiceDate = body.firstServiceDate ? String(body.firstServiceDate) : undefined;
   const membershipRateCents =
     body.membershipRateCents != null ? Math.round(Number(body.membershipRateCents)) : undefined;
   const oneTimeRateCents =
     body.oneTimeRateCents != null ? Math.round(Number(body.oneTimeRateCents)) : undefined;
-  const initialDeepClean =
-    body.initialDeepClean != null ? String(body.initialDeepClean) : undefined;
   const paymentUrl = body.paymentUrl ? String(body.paymentUrl).trim() : undefined;
-  const holdPayment = body.holdPayment !== false && Boolean(paymentUrl);
-  const sendEmail = body.sendEmail !== false;
 
   try {
-    const values = buildMembershipValues({
-      name,
+    const result = await ensureMembershipAgreement({
       email,
-      serviceAddress,
-      plan,
+      name: body.name ? String(body.name).trim() : undefined,
+      phone: body.phone ? String(body.phone).trim() : undefined,
+      plan: body.plan ? String(body.plan) : undefined,
+      serviceAddress: body.serviceAddress ? String(body.serviceAddress) : undefined,
+      firstServiceDate: body.firstServiceDate ? String(body.firstServiceDate) : undefined,
       membershipRateCents:
-        membershipRateCents != null && Number.isFinite(membershipRateCents)
-          ? membershipRateCents
-          : undefined,
+        membershipRateCents != null && Number.isFinite(membershipRateCents) ? membershipRateCents : undefined,
       oneTimeRateCents:
-        oneTimeRateCents != null && Number.isFinite(oneTimeRateCents)
-          ? oneTimeRateCents
-          : undefined,
-      firstServiceDate,
-      initialDeepClean,
-    });
-
-    const result = await sendAgreement({
-      audience: "membership",
-      email,
-      name,
-      values,
-      sendEmail,
+        oneTimeRateCents != null && Number.isFinite(oneTimeRateCents) ? oneTimeRateCents : undefined,
+      initialDeepClean: body.initialDeepClean != null ? String(body.initialDeepClean) : undefined,
+      homeSizeId: body.homeSizeId ? String(body.homeSizeId) : undefined,
+      scheduleId: body.scheduleId ? String(body.scheduleId) : undefined,
+      paymentUrl,
+      holdPayment: body.holdPayment !== false && Boolean(paymentUrl),
+      sendEmail: body.sendEmail !== false,
       createdBy: admin.email,
-      metadata: {
-        kind: "membership_agree_then_pay",
-        hold_payment: holdPayment,
-        payment_url: paymentUrl || null,
-        phone: phone || null,
-        plan: plan || null,
-        name: name || null,
-        first_name: name ? name.split(/\s+/)[0] : null,
-        membership_rate_cents: membershipRateCents ?? null,
-        first_service_date: firstServiceDate || null,
-        home_size_id: body.homeSizeId ? String(body.homeSizeId) : null,
-        schedule_id: body.scheduleId ? String(body.scheduleId) : null,
-      },
     });
 
-    return NextResponse.json({
-      ...result,
-      holdPayment,
-      paymentUrl: holdPayment ? paymentUrl : null,
-    });
+    return NextResponse.json(result);
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error("[memberships/send-agreement]", (err as Error).message);

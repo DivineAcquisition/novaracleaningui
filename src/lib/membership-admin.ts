@@ -34,6 +34,8 @@ export async function sendMembershipAgreement(input: {
   if (!res.ok) throw new Error(data?.error || `Agreement send failed (${res.status})`);
   return data as {
     ok?: boolean;
+    alreadySent?: boolean;
+    skipped?: string;
     signingUrl?: string | null;
     submissionId?: string | null;
     holdPayment?: boolean;

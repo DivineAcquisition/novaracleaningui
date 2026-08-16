@@ -19,6 +19,7 @@
 import { NextResponse } from "next/server";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import { sendAgreement, buildOneTimeValues } from "@/lib/docuseal";
+import { isMembershipVisit } from "@/lib/membership-visit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,12 +49,18 @@ export async function POST(req: Request): Promise<NextResponse> {
     const { data: booking } = await supabase
       .from("bookings")
       .select(
-        "id, email, first_name, last_name, status, phone, address, city, state, zip_code, service_date, service_type, total_estimate_cents, deposit_cents, full_payment_discount, payment_option, pay_page_token",
+        "id, email, first_name, last_name, status, phone, address, city, state, zip_code, service_date, service_type, total_estimate_cents, deposit_cents, full_payment_discount, payment_option, pay_page_token, is_recurring, booking_channel, membership_plan, recurring_schedule_id",
       )
       .eq("pay_page_token", token)
       .maybeSingle();
     if (!booking) return NextResponse.json({ error: "not_found" }, { status: 404 });
     if (!booking.email) return NextResponse.json({ ok: true, skipped: "no email" });
+    // Membership / recurring jobs use the membership agreement (signed on
+    // the membership pay page or sent once at purchase). Do not mirror a
+    // one-time Service Agreement onto those visits.
+    if (isMembershipVisit(booking)) {
+      return NextResponse.json({ ok: true, skipped: "membership visit — one-time agreement not used" });
+    }
 
     // Gate: only mirror to DocuSeal once the customer has actually signed on
     // the pay page (a service_agreements row with source='pay_page' and all

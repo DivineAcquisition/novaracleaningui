@@ -535,7 +535,6 @@ export default function VaBooking() {
   const [overridePerClean, setOverridePerClean] = useState("");
   const [generateFirstClean, setGenerateFirstClean] = useState(true);
   const [textManageLink, setTextManageLink] = useState(true);
-  const [sendAgreement, setSendAgreement] = useState(true);
   const [createGlowLink, setCreateGlowLink] = useState(false);
   const [monthlyGlowOverride, setMonthlyGlowOverride] = useState("");
 
@@ -1226,7 +1225,10 @@ export default function VaBooking() {
         }
       }
 
-      if (!hostedPayUrl && sendAgreement) {
+      // Recurring plans always get the membership agreement once at initiate
+      // (hosted pay page already captures it in-browser). Later visits must
+      // not receive the one-time Service Agreement.
+      if (!hostedPayUrl) {
         try {
           const ag = await sendMembershipAgreement({
             email: email.trim().toLowerCase(),
@@ -2824,13 +2826,9 @@ export default function VaBooking() {
                     />
                     Send cleaning checklist (email/SMS)
                   </label>
-                  <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
-                    <Checkbox
-                      checked={sendAgreement}
-                      onCheckedChange={(v) => setSendAgreement(v === true)}
-                    />
-                    Send membership agreement (DocuSeal)
-                  </label>
+                  <p className="text-sm text-slate-600">
+                    The membership agreement is sent once when this plan starts — not on every visit.
+                  </p>
                 </>
               ) : (
                 <>

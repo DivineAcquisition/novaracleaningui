@@ -2,32 +2,26 @@
 //
 // Auto-sends the one-time Service Agreement (DocuSeal) to a customer when their
 // booking is confirmed. Fired by a DB trigger (pg_net) on the confirm
-// transition. Secret-gated (BOOKING_AGREEMENT_SECRET in app_secrets) since the
-// caller is the database. Idempotent: skips if an agreement was already sent for
-// this booking.
+// transition and by the reconcile cron. Secret-gated (BOOKING_AGREEMENT_SECRET).
+//
+// Membership / recurring visits never get the one-time document. Those accounts
+// receive the Recurring Service & Membership Agreement once (ensure-agreement).
 
 import { NextResponse } from "next/server";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
+import { hasBookingAgreementSecret } from "@/lib/booking-agreement-secret";
 import { sendAgreement, buildOneTimeValues } from "@/lib/docuseal";
+import { ensureMembershipAgreement } from "@/lib/ensure-membership-agreement";
+import { isMembershipVisit, membershipPlanLabel } from "@/lib/membership-visit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-async function resolveSecret(name: string): Promise<string> {
-  try {
-    const supabase = getAdminSupabase();
-    const { data } = await supabase.from("app_secrets").select("value").eq("key", name).maybeSingle();
-    if (data?.value) return String(data.value).trim();
-  } catch {
-    /* fall through */
-  }
-  return (process.env[name] || "").trim();
-}
+const BOOKING_AGREEMENT_SELECT =
+  "id, email, first_name, last_name, status, phone, address, city, state, zip_code, service_date, service_type, total_estimate_cents, deposit_cents, full_payment_discount, payment_option, pay_page_token, is_recurring, booking_channel, membership_plan, recurring_schedule_id";
 
 export async function POST(req: Request): Promise<NextResponse> {
-  const expected = await resolveSecret("BOOKING_AGREEMENT_SECRET");
-  const provided = new URL(req.url).searchParams.get("secret") || req.headers.get("x-booking-secret") || "";
-  if (!expected || provided !== expected) {
+  if (!(await hasBookingAgreementSecret(req))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -44,9 +38,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     const supabase = getAdminSupabase();
     const { data: booking } = await supabase
       .from("bookings")
-      .select(
-        "id, email, first_name, last_name, status, phone, address, city, state, zip_code, service_date, service_type, total_estimate_cents, deposit_cents, full_payment_discount, payment_option, pay_page_token",
-      )
+      .select(BOOKING_AGREEMENT_SELECT)
       .eq("id", bookingId)
       .maybeSingle();
     if (!booking) return NextResponse.json({ error: "Booking not found" }, { status: 404 });
@@ -55,6 +47,30 @@ export async function POST(req: Request): Promise<NextResponse> {
     if (booking.status !== "confirmed" && booking.status !== "completed") {
       return NextResponse.json({ ok: true, skipped: `status=${booking.status}` });
     }
+
+    const addressLine = [booking.address, booking.city, [booking.state, booking.zip_code].filter(Boolean).join(" ")]
+      .filter(Boolean)
+      .join(", ");
+    const name = `${booking.first_name || ""} ${booking.last_name || ""}`.trim() || undefined;
+
+    if (isMembershipVisit(booking)) {
+      const result = await ensureMembershipAgreement({
+        email: String(booking.email),
+        name,
+        phone: booking.phone || undefined,
+        plan: membershipPlanLabel(booking.membership_plan) || booking.membership_plan || undefined,
+        serviceAddress: addressLine || undefined,
+        firstServiceDate: booking.service_date || undefined,
+        oneTimeRateCents: booking.total_estimate_cents != null ? Number(booking.total_estimate_cents) : undefined,
+        scheduleId: booking.recurring_schedule_id || undefined,
+        holdPayment: false,
+        sendEmail: true,
+        createdBy: "auto:booking-confirm-membership",
+        metadata: { source: "booking-confirm", booking_id: bookingId },
+      });
+      return NextResponse.json({ ok: true, membership: true, ...result });
+    }
+
     // Pay-page bookings NEVER get the DocuSeal auto-send: the customer signs
     // the agreement ON the pay page (legal step gates payment), and that
     // signed copy is the binding artifact. Emailing a DocuSeal e-sign at
@@ -85,8 +101,6 @@ export async function POST(req: Request): Promise<NextResponse> {
       return NextResponse.json({ ok: true, alreadySent: true });
     }
 
-    const name = `${booking.first_name || ""} ${booking.last_name || ""}`.trim() || undefined;
-
     // Pre-fill the Client-role fields so the customer just reviews + signs.
     const totalCents = Number(booking.total_estimate_cents || 0);
     const depositCents = Number(booking.deposit_cents || 0);
@@ -94,9 +108,6 @@ export async function POST(req: Request): Promise<NextResponse> {
     const balanceCents = booking.payment_option === "full"
       ? Math.max(0, totalCents - fullDiscount)
       : Math.max(0, totalCents - depositCents);
-    const addressLine = [booking.address, booking.city, [booking.state, booking.zip_code].filter(Boolean).join(" ")]
-      .filter(Boolean)
-      .join(", ");
 
     const values = buildOneTimeValues({
       name,

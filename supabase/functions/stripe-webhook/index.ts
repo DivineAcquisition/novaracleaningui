@@ -9,6 +9,7 @@ import {
 } from "../_shared/booking-balance.ts";
 import { resolveSecret } from "../_shared/app-secrets.ts";
 import { memberTag } from "../_shared/ghl-tags.ts";
+import { pingEnsureMembershipAgreement } from "../_shared/ensure-membership-agreement.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -884,6 +885,30 @@ serve(async (req) => {
             plan: planLabels[plan],
             credits: creditsPerMonth,
           });
+
+          // Membership agreement once at purchase. Idempotent per email;
+          // skips when the customer already signed on the membership pay page.
+          try {
+            const serviceAddress = [
+              subMeta.address,
+              subMeta.city,
+              [subMeta.state, subMeta.zip_code].filter(Boolean).join(" "),
+            ].filter(Boolean).join(", ");
+            await pingEnsureMembershipAgreement(supabase, {
+              email,
+              name,
+              phone,
+              plan: planLabels[plan] || plan,
+              serviceAddress: serviceAddress || null,
+              firstServiceDate: subMeta.first_service_date || null,
+              membershipRateCents: monthlyPriceCentsMeta || null,
+              homeSizeId: subMeta.home_size_id || null,
+            });
+          } catch (agErr) {
+            logStep("membership agreement ensure failed (non-blocking)", {
+              error: agErr instanceof Error ? agErr.message : String(agErr),
+            });
+          }
 
           // Persist membership preferences on the customers row so the
           // portal + admin tools can show them without joining

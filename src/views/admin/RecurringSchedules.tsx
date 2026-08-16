@@ -1109,7 +1109,7 @@ function MemberSheet({
         (member.home_size_id && MEMBERSHIP_PRICES[member.home_size_id]
           ? Math.round((MEMBERSHIP_PRICES[member.home_size_id][planKey] || 0) * 100)
           : undefined);
-      await sendMembershipAgreement({
+      const ag = await sendMembershipAgreement({
         email: member.email,
         name,
         phone: member.customer?.phone || undefined,
@@ -1119,7 +1119,11 @@ function MemberSheet({
         holdPayment: false,
         sendEmail: true,
       });
-      toast.success("Membership agreement emailed for e-sign");
+      toast.success(
+        ag.alreadySent
+          ? "Membership agreement already on file"
+          : "Membership agreement emailed",
+      );
     } catch (e) {
       toast.error(errMsg(e));
     } finally {
@@ -1609,7 +1613,7 @@ function ScheduleRow({
               title="Send membership agreement"
               onClick={async () => {
                 try {
-                  await sendMembershipAgreement({
+                  const ag = await sendMembershipAgreement({
                     email: s.email,
                     name: `${s.first_name || ""} ${s.last_name || ""}`.trim() || undefined,
                     phone: s.phone || undefined,
@@ -1623,7 +1627,11 @@ function ScheduleRow({
                     holdPayment: false,
                     sendEmail: true,
                   });
-                  toast.success("Membership agreement emailed");
+                  toast.success(
+                    ag.alreadySent
+                      ? "Membership agreement already on file"
+                      : "Membership agreement emailed",
+                  );
                 } catch (e) {
                   toast.error(errMsg(e));
                 }

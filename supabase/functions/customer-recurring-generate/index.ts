@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.80.0";
 import { notifyCleanerOfAssignment } from "../_shared/notify-cleaner-assignment.ts";
 import { checkScheduleBuffer } from "../_shared/schedule-buffer.ts";
 import { jobServiceTypeForBooking } from "../_shared/contractor-checklists.ts";
+import { pingEnsureMembershipAgreement } from "../_shared/ensure-membership-agreement.ts";
 
 // customer-recurring-generate
 //
@@ -241,6 +242,26 @@ async function generateOne(admin: any, sched: any, opts: { force?: boolean }): P
   } catch (e) { console.error("manage-link sms:", e); }
 
   console.log("[customer-recurring-generate] generated", { scheduleId: sched.id, bookingId: booking.id, serviceDate, cleanerId });
+
+  // Safety net: if purchase/initiate never sent the membership agreement,
+  // the first generated visit still ensures it (once per email).
+  const serviceAddress = [sched.address, sched.city, [sched.state, sched.zip_code].filter(Boolean).join(" ")]
+    .filter(Boolean)
+    .join(", ");
+  await pingEnsureMembershipAgreement(admin, {
+    email: sched.email,
+    name: `${sched.first_name || ""} ${sched.last_name || ""}`.trim() || null,
+    phone: sched.phone || null,
+    plan: sched.membership_plan || sched.cadence || null,
+    serviceAddress: serviceAddress || null,
+    firstServiceDate: serviceDate,
+    oneTimeRateCents: sched.price_cents ?? null,
+    homeSizeId: sched.home_size_id || null,
+    scheduleId: sched.id,
+  }).catch((e) => {
+    console.error("[customer-recurring-generate] membership agreement ensure failed", e);
+  });
+
   return { status: "created", bookingId: booking.id, date: serviceDate };
 }
 
