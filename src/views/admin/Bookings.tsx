@@ -2567,8 +2567,9 @@ function BookingSheet({
                   </CardTitle>
                   <CardDescription>
                     For a job that turned out materially different from what was booked. Requires a defined reason
-                    and the job&apos;s condition photos, prices off the pricing engine, sends the customer a written
-                    justification, and pays the crew off the adjusted value.
+                    and the job&apos;s condition photos, prices off the pricing engine, notifies the customer now,
+                    and charges the extra to the card on file when the job is marked complete (or immediately if
+                    it already is). Crew pay follows the adjusted value.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">

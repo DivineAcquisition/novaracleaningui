@@ -25,6 +25,7 @@ import { requireAdmin, AdminAuthError } from "@/lib/admin-auth";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import { computeCrewPay, shareFor } from "@/lib/crew-pay";
 import { syncJobByBookingId, DEFAULT_LIVE_ENTRY_SOURCE } from "@/lib/airtable/sync";
+import { scopeAdjustmentChargeNowCents } from "@/lib/booking-balance";
 import {
   draftJustificationMessage,
   isScopeAdjustable,
@@ -38,7 +39,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const BOOKING_FIELDS =
-  "id, booking_number, first_name, last_name, email, phone, address, city, state, status, service_type, home_size_id, add_ons, membership_plan, uses_credit, service_date, time_slot, total_estimate_cents, final_charge_cents, cleaner_payout_cents, payout_status, cleaner_id, job_id, before_photos, after_photos";
+  "id, booking_number, first_name, last_name, email, phone, address, city, state, status, service_type, home_size_id, add_ons, membership_plan, uses_credit, service_date, time_slot, total_estimate_cents, final_charge_cents, deposit_cents, payment_option, customer_id, balance_amount_cents, balance_charged_at, balance_payment_intent_id, team_notes, cleaner_payout_cents, payout_status, cleaner_id, job_id, before_photos, after_photos";
 
 interface BookingContext {
   id: string;
@@ -60,6 +61,13 @@ interface BookingContext {
   time_slot: string | null;
   total_estimate_cents: number | null;
   final_charge_cents: number | null;
+  deposit_cents: number | null;
+  payment_option: string | null;
+  customer_id: string | null;
+  balance_amount_cents: number | null;
+  balance_charged_at: string | null;
+  balance_payment_intent_id: string | null;
+  team_notes: string | null;
   cleaner_payout_cents: number | null;
   payout_status: string | null;
   cleaner_id: string | null;
@@ -308,6 +316,9 @@ export async function POST(req: Request): Promise<NextResponse> {
     }
 
     // ─── Apply the new revenue (and the reclassified service) ────────────
+    // final_charge_cents is the adjusted total. Leave total_estimate_cents
+    // alone so complete-booking can tell original quote from extras:
+    // remaining = final − collected(original).
     const bookingUpdate: Record<string, unknown> = {
       final_charge_cents: adjustedPriceCents,
       updated_at: new Date().toISOString(),
@@ -327,6 +338,25 @@ export async function POST(req: Request): Promise<NextResponse> {
     // ─── Cleaner pay follows the work actually performed ─────────────────
     const pay = await protectCleanerPay(supabase, booking, adjustedPriceCents);
 
+    // In-progress jobs: extra waits for complete-booking (which reads
+    // final_charge_cents). Already-complete jobs: complete-booking will not
+    // run again, so collect the extra now. Never fail the adjustment if Stripe
+    // declines — the extra is still on the booking.
+    const chargeNowCents = scopeAdjustmentChargeNowCents(booking, adjustedPriceCents);
+    let chargeStatus: "deferred_until_complete" | "charged" | "failed" | "missing_card" | "skipped" =
+      chargeNowCents > 0 ? "skipped" : "deferred_until_complete";
+    let chargeError: string | null = null;
+    let chargePaymentIntentId: string | null = null;
+    if (chargeNowCents > 0) {
+      const charged = await chargeScopeExtraOffSession(supabase, booking, chargeNowCents, {
+        bookingId,
+        adjustmentDeltaCents: adjustedPriceCents - originalPriceCents,
+      });
+      chargeStatus = charged.status;
+      chargeError = charged.error;
+      chargePaymentIntentId = charged.paymentIntentId;
+    }
+
     // ─── QC documentation link ───────────────────────────────────────────
     const { data: docRow } = await supabase
       .from("job_documentation")
@@ -334,6 +364,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       .eq("booking_id", bookingId)
       .maybeSingle();
 
+    const chargeAt = chargeStatus === "charged" || booking.status === "completed" ? "now" : "completion";
     const message =
       customerMessage ||
       draftJustificationMessage({
@@ -342,9 +373,16 @@ export async function POST(req: Request): Promise<NextResponse> {
         selectedCodes: reasonCodes,
         adjustedServiceType: adjustedServiceType || booking.service_type,
         adjustedPriceCents,
+        originalPriceCents,
         serviceDate: booking.service_date,
         hasPhotoEvidence: !evidenceMissing,
+        chargeAt,
       });
+
+    const chargeWhen =
+      chargeStatus === "charged"
+        ? "Charged to the card on file"
+        : "When this clean is completed";
 
     // ─── Notify the customer, then archive exactly what was sent ─────────
     const channels: string[] = [];
@@ -380,6 +418,7 @@ export async function POST(req: Request): Promise<NextResponse> {
               serviceLabel: serviceLabelFor(adjustedServiceType || booking.service_type, reasons),
               justification: message,
               photoCount: evidencePhotos.length,
+              chargeWhen,
             },
           },
         });
@@ -445,6 +484,9 @@ export async function POST(req: Request): Promise<NextResponse> {
           evidenceMissing,
           evidencePhotoCount: evidencePhotos.length,
           channels,
+          chargeStatus,
+          chargeNowCents,
+          chargePaymentIntentId,
           payout: pay,
           by: principal.userId,
         },
@@ -490,6 +532,9 @@ export async function POST(req: Request): Promise<NextResponse> {
       amountOverridden,
       evidenceMissing,
       channels,
+      chargeStatus,
+      chargeNowCents,
+      chargeError,
       payout: pay,
       airtableSynced,
     });
@@ -498,6 +543,131 @@ export async function POST(req: Request): Promise<NextResponse> {
     // eslint-disable-next-line no-console
     console.error("[scope-adjustment:POST]", message);
     return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+type ChargeResult = {
+  status: "charged" | "failed" | "missing_card";
+  error: string | null;
+  paymentIntentId: string | null;
+};
+
+async function stripeSecret(supabase: SupabaseClient): Promise<string> {
+  const { data } = await supabase
+    .from("app_secrets")
+    .select("value")
+    .eq("key", "STRIPE_SECRET_KEY")
+    .maybeSingle();
+  return ((data?.value as string) || process.env.STRIPE_SECRET_KEY || "").trim();
+}
+
+async function stripeCall(
+  key: string,
+  method: "GET" | "POST",
+  path: string,
+  params?: Record<string, string>,
+  idempotencyKey?: string,
+): Promise<Record<string, unknown>> {
+  const url = new URL(`https://api.stripe.com/v1/${path}`);
+  const headers: Record<string, string> = { Authorization: `Bearer ${key}` };
+  if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
+  const init: RequestInit = { method, headers };
+  if (params && method === "GET") {
+    for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+  } else if (params) {
+    headers["Content-Type"] = "application/x-www-form-urlencoded";
+    init.body = new URLSearchParams(params).toString();
+  }
+  const res = await fetch(url, init);
+  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!res.ok) {
+    const err = data?.error as { message?: string } | undefined;
+    throw new Error(err?.message || `Stripe ${res.status}`);
+  }
+  return data;
+}
+
+/**
+ * Off-session charge for a scope extra on a job that is already complete.
+ * Best-effort: never throws.
+ */
+async function chargeScopeExtraOffSession(
+  supabase: SupabaseClient,
+  booking: BookingContext,
+  amountCents: number,
+  meta: { bookingId: string; adjustmentDeltaCents: number },
+): Promise<ChargeResult> {
+  if (amountCents <= 0) return { status: "failed", error: "nothing to charge", paymentIntentId: null };
+  try {
+    const key = await stripeSecret(supabase);
+    if (!key) throw new Error("STRIPE_SECRET_KEY not configured");
+
+    let customerId: string | null =
+      booking.customer_id && booking.customer_id.startsWith("cus_") ? booking.customer_id : null;
+    if (!customerId && booking.email) {
+      const { data: custRow } = await supabase
+        .from("customers")
+        .select("stripe_customer_id")
+        .eq("email", booking.email)
+        .maybeSingle();
+      const fromRow = String(custRow?.stripe_customer_id || "");
+      if (fromRow.startsWith("cus_")) customerId = fromRow;
+    }
+    if (!customerId && booking.email) {
+      const listed = await stripeCall(key, "GET", "customers", { email: booking.email, limit: "1" });
+      const data = listed.data as Array<{ id?: string }> | undefined;
+      customerId = data?.[0]?.id || null;
+    }
+    if (!customerId) throw new Error("No Stripe customer on file");
+
+    const pms = await stripeCall(key, "GET", "payment_methods", {
+      customer: customerId,
+      type: "card",
+      limit: "1",
+    });
+    const pmId = (pms.data as Array<{ id?: string }> | undefined)?.[0]?.id;
+    if (!pmId) return { status: "missing_card", error: "No saved card on file", paymentIntentId: null };
+
+    const bookingRef = booking.booking_number
+      ? `NVC-${String(booking.booking_number).padStart(4, "0")}`
+      : `BK-${meta.bookingId.slice(0, 8)}`;
+
+    const pi = await stripeCall(key, "POST", "payment_intents", {
+      amount: String(amountCents),
+      currency: "usd",
+      customer: customerId,
+      payment_method: pmId,
+      off_session: "true",
+      confirm: "true",
+      description: `${bookingRef} — Scope adjustment extra`,
+      "metadata[bookingId]": meta.bookingId,
+      "metadata[bookingNumber]": String(booking.booking_number ?? ""),
+      "metadata[chargeType]": "scope_adjustment",
+      "metadata[deltaCents]": String(meta.adjustmentDeltaCents),
+    }, `scope-adj-${meta.bookingId}-${amountCents}`);
+
+    const piId = String(pi.id || "");
+    const already = Number(booking.balance_amount_cents || 0);
+    await supabase
+      .from("bookings")
+      .update({
+        customer_id: customerId,
+        balance_payment_intent_id: booking.balance_payment_intent_id || piId,
+        balance_charged_at: new Date().toISOString(),
+        balance_amount_cents: already + amountCents,
+        team_notes: [
+          booking.team_notes || "",
+          `Scope extra $${(amountCents / 100).toFixed(2)} charged off-session ${piId} (${new Date().toISOString().slice(0, 10)}).`,
+        ].filter(Boolean).join("\n"),
+      })
+      .eq("id", meta.bookingId);
+
+    return { status: "charged", error: null, paymentIntentId: piId || null };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    // eslint-disable-next-line no-console
+    console.warn("[scope-adjustment] off-session charge failed (non-blocking)", message);
+    return { status: "failed", error: message, paymentIntentId: null };
   }
 }
 

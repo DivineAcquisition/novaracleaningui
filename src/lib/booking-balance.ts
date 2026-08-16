@@ -1,8 +1,14 @@
 // ─── Booking balance helpers ────────────────────────────────────────────────
 //
-// Used by confirmation SMS/email copy. The old logic treated anything that
-// wasn't payment_option === "deposit" as "paid in full", which wrongly told
-// preauth (deposit + card-on-file) customers they owed nothing.
+// Two different "what's left" questions:
+//
+//   remainingDueAfterUpfrontCents — confirmation copy at booking time.
+//   remainingDueAtCompletionCents — what to charge the card when the job is
+//   marked complete. Scope adjustments write final_charge_cents and leave
+//   total_estimate_cents alone, so extras surface here and are billed then
+//   (not when the adjustment is recorded), unless the job is already complete.
+//
+// Keep in lock-step with supabase/functions/_shared/booking-balance.ts.
 
 export type BookingBalanceFields = {
   total_estimate_cents?: unknown;
@@ -36,8 +42,6 @@ export function billedTotalCents(b: BookingBalanceFields): number {
  * Money already applied to the original quote (deposit, full pay, or a
  * membership credit covering the visit). Scope extras live in final_charge
  * above this figure.
- *
- * Keep in lock-step with src/lib/booking-balance.ts.
  */
 export function collectedTowardJobCents(b: BookingBalanceFields): number {
   const total = cents(b.total_estimate_cents);
@@ -51,22 +55,9 @@ export function collectedTowardJobCents(b: BookingBalanceFields): number {
 }
 
 /**
- * Amount to collect off-session when the job is marked complete.
- *
- * billed = final_charge_cents ?? total_estimate_cents
- * collected = original quote for full-pay / credit visits, otherwise deposit
- * remaining = max(0, billed − collected)
- *
- * Scope adjustments write final_charge_cents and leave total_estimate_cents
- * alone, so extras are billed here — not when the adjustment is recorded.
- */
-export function remainingDueAtCompletionCents(b: BookingBalanceFields): number {
-  return Math.max(0, billedTotalCents(b) - collectedTowardJobCents(b));
-}
-
-/**
  * Remaining customer balance after upfront collection.
  * Only returns 0 when we can tell they truly have nothing left to pay.
+ * Booking-time confirmation copy — do not use this to charge at completion.
  */
 export function remainingDueAfterUpfrontCents(b: BookingBalanceFields): number {
   const total = Math.max(0, Number(b.total_estimate_cents || 0));
@@ -80,14 +71,45 @@ export function remainingDueAfterUpfrontCents(b: BookingBalanceFields): number {
   const option = String(b.payment_option || "").toLowerCase();
   const deposit = Math.max(0, Number(b.deposit_cents || 0));
 
-  // Full pay at booking — only after payment actually cleared.
   if (option === "full") {
     if (!b.payment_received_at) return net;
     return 0;
   }
 
-  // deposit / preauth / unknown: remaining = net − upfront deposit collected
   return Math.max(0, net - deposit);
+}
+
+/**
+ * Amount to collect off-session when the job is marked complete.
+ *
+ * billed = final_charge_cents ?? total_estimate_cents
+ * collected = original quote for full-pay / credit visits, otherwise deposit
+ * remaining = max(0, billed − collected)
+ */
+export function remainingDueAtCompletionCents(b: BookingBalanceFields): number {
+  return Math.max(0, billedTotalCents(b) - collectedTowardJobCents(b));
+}
+
+/**
+ * If a scope adjustment lands after complete-booking already ran, charge this
+ * now (the completion path will not run again). In-progress jobs return 0 —
+ * extras wait for complete-booking.
+ */
+export function scopeAdjustmentChargeNowCents(
+  booking: BookingBalanceFields,
+  newFinalCents: number,
+): number {
+  if (String(booking.status || "") !== "completed") return 0;
+  const newDue = remainingDueAtCompletionCents({
+    ...booking,
+    final_charge_cents: newFinalCents,
+  });
+  const priorDue = remainingDueAtCompletionCents(booking);
+  const extra = Math.max(0, newDue - priorDue);
+  const alreadySettled = Boolean(
+    booking.balance_charged_at || booking.balance_payment_intent_id,
+  );
+  return alreadySettled ? extra : newDue;
 }
 
 /** True only when remainingDueAfterUpfrontCents is 0. */

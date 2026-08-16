@@ -11,6 +11,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { resolveSecret } from "../_shared/app-secrets.ts";
 import { resolveOffSessionPaymentMethod } from "../_shared/resolve-off-session-payment-method.ts";
+import { billedTotalCents, remainingDueAtCompletionCents } from "../_shared/booking-balance.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -55,10 +56,7 @@ serve(async (req) => {
       });
     }
 
-    const remainingCents = Math.max(
-      0,
-      (booking.total_estimate_cents || 0) - (booking.deposit_cents || 0),
-    );
+    const remainingCents = remainingDueAtCompletionCents(booking);
     if (remainingCents <= 0) {
       return new Response(JSON.stringify({ success: true, skipped: true, reason: "no-balance" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -145,7 +143,7 @@ serve(async (req) => {
     const patch: Record<string, unknown> = {
       customer_id: customerId,
       payment_intent_id: charge.id,
-      final_charge_cents: booking.total_estimate_cents,
+      final_charge_cents: billedTotalCents(booking),
       payment_received_at: booking.payment_received_at || new Date().toISOString(),
       team_notes: [
         (booking.team_notes as string | null) || "",

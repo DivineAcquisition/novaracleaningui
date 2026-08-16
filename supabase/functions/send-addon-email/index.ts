@@ -78,6 +78,8 @@ interface AddonEmailData {
   justification?: string;
   /** How many condition photos back the adjustment up. */
   photoCount?: number;
+  /** When the extra is billed, e.g. "When this clean is completed". */
+  chargeWhen?: string;
   // ─── site_finding (pest light / mold minor) ─────────────────────────
   subject?: string;
   bodyText?: string;
@@ -214,6 +216,7 @@ function build(type: string, d: AddonEmailData): { subject: string; html: string
           { label: "Classified as", value: d.serviceLabel || "" },
           { label: "Original price", value: d.originalAmount || "" },
           { label: "Adjusted price", value: d.amount || "" },
+          { label: "When you'll be charged", value: d.chargeWhen || "When this clean is completed" },
         ],
       }),
     };

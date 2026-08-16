@@ -6,6 +6,7 @@ import { mirrorToLeadConnector } from "../_shared/leadconnector-mirror.ts";
 import { resolveSecret } from "../_shared/app-secrets.ts";
 import { computeCrewPay, shareFor } from "../_shared/crew-pay.ts";
 import { documentBookingAddonsInQcSafe } from "../_shared/addon-qc.ts";
+import { remainingDueAtCompletionCents } from "../_shared/booking-balance.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -273,25 +274,24 @@ serve(async (req) => {
     }
 
     // ─── Auto-charge remaining balance off-session ──────────────────────
-    // For deposit bookings, charge the remaining 50% to the saved card.
-    // For paid-in-full bookings, this is a no-op. Idempotent: if we've
-    // already charged (balance_payment_intent_id set), skip.
+    // Deposit jobs: remaining 50% (+ any scope extras on final_charge_cents).
+    // Paid-in-full / credit visits: only scope extras above the original quote.
+    // Recurring billed-at-completion: the whole visit (and extras).
+    // Idempotent: if we've already charged (balance_payment_intent_id set), skip.
     let balanceChargeStatus: "skipped_full_payment" | "skipped_no_balance" |
       "already_charged" | "charged" | "captured_hold" | "failed" = "skipped_no_balance";
     let balanceChargeError: string | null = null;
     let photoUploadToken: string | null = null;
     let photoUploadUrl: string | null = null;
+    const remainingCents = remainingDueAtCompletionCents(booking);
     try {
-      const remainingCents = Math.max(
-        0,
-        (booking.total_estimate_cents || 0) - (booking.deposit_cents || 0),
-      );
-      if (booking.payment_option === "full") {
-        balanceChargeStatus = "skipped_full_payment";
-        logStep("No balance charge needed — paid in full");
-      } else if (remainingCents <= 0) {
-        balanceChargeStatus = "skipped_no_balance";
-        logStep("No balance to charge");
+      if (remainingCents <= 0) {
+        balanceChargeStatus = booking.payment_option === "full"
+          ? "skipped_full_payment"
+          : "skipped_no_balance";
+        logStep(balanceChargeStatus === "skipped_full_payment"
+          ? "No balance charge needed — paid in full"
+          : "No balance to charge", { remainingCents });
       } else if (booking.balance_payment_intent_id) {
         balanceChargeStatus = "already_charged";
         logStep("Balance already charged on a previous call");
@@ -625,11 +625,7 @@ serve(async (req) => {
       if (booking.phone) {
         const dateLabel = formatServiceDate(booking.service_date);
         let smsBody = `Novara Cleaning: Your cleaning${dateLabel ? ` on ${dateLabel}` : ""} is complete — thank you!`;
-        if (balanceChargeStatus === "charged") {
-          const remainingCents = Math.max(
-            0,
-            (booking.total_estimate_cents || 0) - (booking.deposit_cents || 0),
-          );
+        if (balanceChargeStatus === "charged" || balanceChargeStatus === "captured_hold") {
           smsBody += ` Your remaining balance of $${(remainingCents / 100).toFixed(2)} has been charged to the card on file.`;
         } else if (balanceChargeStatus === "skipped_full_payment") {
           smsBody += ` Paid in full at booking — nothing more to do.`;
