@@ -43,7 +43,7 @@ const log = (s: string, d?: unknown) =>
 // deno-lint-ignore no-explicit-any
 type SB = any;
 
-const ISSUE_TYPES = ["complaint", "reclean", "damage", "no_show", "late", "quality_flag", "payment", "other"];
+const ISSUE_TYPES = ["complaint", "reclean", "damage", "no_show", "late", "quality_flag", "payment", "other", "site_finding"];
 const SEVERITIES = ["low", "medium", "high", "critical"];
 const STATUSES = ["open", "investigating", "awaiting_customer", "resolved", "escalated"];
 
@@ -151,6 +151,7 @@ async function createIssue(admin: SB, opts: {
   reporterName: string;
   cleanerId?: string | null;
   cleanerName?: string | null;
+  details?: Record<string, unknown> | null;
 }) {
   const ref = bookingRef(opts.booking);
   // ALL cleaners on the job get attached; the reporter (field reports) or
@@ -187,6 +188,7 @@ async function createIssue(admin: SB, opts: {
       status: "open",
       title: opts.title,
       description: opts.description,
+      details: opts.details && typeof opts.details === "object" ? opts.details : {},
       reported_via: opts.reportedVia,
       reported_by: opts.reporterId,
       reported_by_name: opts.reporterName,

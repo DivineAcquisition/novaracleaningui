@@ -78,6 +78,12 @@ interface AddonEmailData {
   justification?: string;
   /** How many condition photos back the adjustment up. */
   photoCount?: number;
+  // ─── site_finding (pest light / mold minor) ─────────────────────────
+  subject?: string;
+  bodyText?: string;
+  finding?: string;
+  location?: string;
+  recurrenceNote?: string;
 }
 
 function renderHtml(opts: { heading: string; bodyHtml: string; rows: Array<{ label: string; value: string }>; ctaLabel?: string; ctaUrl?: string }): string {
@@ -208,6 +214,32 @@ function build(type: string, d: AddonEmailData): { subject: string; html: string
           { label: "Classified as", value: d.serviceLabel || "" },
           { label: "Original price", value: d.originalAmount || "" },
           { label: "Adjusted price", value: d.amount || "" },
+        ],
+      }),
+    };
+  }
+  if (type === "site_finding_priced" || type === "site_finding_info") {
+    const priced = type === "site_finding_priced";
+    const body = String(d.bodyText || "").trim();
+    const paragraphs = (body || `${hi} During today's visit our team handled a documented finding.`)
+      .split(/\n+/)
+      .map((p) => `<p>${p}</p>`)
+      .join("");
+    return {
+      subject: d.subject || "A quick update on today's clean",
+      html: renderHtml({
+        heading: "A quick update on today's clean",
+        bodyHtml: paragraphs,
+        rows: [
+          { label: "Booking", value: d.bookingRef || "" },
+          { label: "Service date", value: d.serviceDate || "" },
+          { label: "Service address", value: d.serviceAddress || "" },
+          { label: "Finding", value: d.finding || "" },
+          { label: "Location", value: d.location || "" },
+          { label: "Pricing", value: d.serviceLabel || "" },
+          { label: "Original total", value: priced ? (d.originalAmount || "") : "" },
+          { label: "Today's total", value: priced ? (d.amount || "") : "Unchanged" },
+          { label: "Photos on file", value: d.photoCount ? String(d.photoCount) : "Yes" },
         ],
       }),
     };

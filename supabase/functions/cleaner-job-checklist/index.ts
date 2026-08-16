@@ -18,6 +18,9 @@
 //   { token, action:'conditions_found', sectionIndex, note, photos? }
 //   { token, action:'request_scope_addition', note }
 //   { token, action:'request_addon', addonId, note? }
+//   { token, action:'report_site_finding', findingType, location, confined,
+//     infestationOrBedBugs?, overThreshold?, areaId?, beforePhotoUrl }
+//   { token, action:'complete_site_finding', findingId, afterPhotoUrl }
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
@@ -36,6 +39,18 @@ import {
   type FocusedAreaSelection,
   type FocusedSameDaySettings,
 } from "../_shared/focused-same-day.ts";
+import {
+  completeSiteFinding,
+  createSiteFindingQc,
+  evaluateSiteFindingScope,
+  httpUrls,
+  isSiteFindingType,
+  listSiteFindings,
+  lookupRecurrence,
+  pendingAfterFinding,
+  previewSiteFindingPrice,
+  stopFieldReportText,
+} from "../_shared/site-finding.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -235,7 +250,7 @@ serve(async (req) => {
       || String(serviceTypeRaw).toLowerCase() === "single_area"
       || String(checklistRow.service_type).toLowerCase() === "focused";
 
-    const focusedSettings = isFocused ? await loadFocusedSettings(supabase) : FOCUSED_SAME_DAY_DEFAULTS;
+    const focusedSettings = await loadFocusedSettings(supabase);
     const spec = getContractorChecklist(checklistRow.service_type, focusedAreas, focusedSettings);
     const totalItems = countChecklistItems(spec);
     const nowIso = new Date().toISOString();
@@ -282,7 +297,8 @@ serve(async (req) => {
     // ─── Mutations ───────────────────────────────────────────────────────
     if (action === "toggle" || action === "skip" || action === "complete"
       || action === "save_section_photos" || action === "conditions_found"
-      || action === "request_scope_addition") {
+      || action === "request_scope_addition"
+      || action === "report_site_finding" || action === "complete_site_finding") {
       if (!canWrite) return json({ ok: false, error: "This link is view-only." }, 403);
     }
 
@@ -419,6 +435,144 @@ serve(async (req) => {
       } catch (_) { /* event already recorded */ }
     }
 
+    if (action === "report_site_finding") {
+      if (!booking?.id) return json({ ok: false, error: "No booking on this job." }, 400);
+      if (!isSiteFindingType(body?.findingType)) {
+        return json({ ok: false, error: "Pick Pest — Light or Mold — Minor." }, 400);
+      }
+      const location = String(body?.location || "").trim().slice(0, 120);
+      if (location.length < 2) {
+        return json({ ok: false, error: "Say where on the property this is (room / area)." }, 400);
+      }
+      const beforeUrls = httpUrls(
+        body?.beforePhotoUrl ? [body.beforePhotoUrl] : (Array.isArray(body?.beforePhotoUrls) ? body.beforePhotoUrls : []),
+        4,
+      );
+      if (beforeUrls.length === 0) {
+        return json({ ok: false, error: "A before photo of the area is required before proceeding." }, 400);
+      }
+      if (body.findingType === "pest_light" && typeof body?.infestationOrBedBugs !== "boolean") {
+        return json({ ok: false, error: "Confirm whether this looks like an active infestation or bed bugs." }, 400);
+      }
+      if (body.findingType === "mold_minor" && typeof body?.overThreshold !== "boolean") {
+        return json({ ok: false, error: "Confirm whether the mold is over ~10 sq ft, porous, or has a hidden-source odor." }, 400);
+      }
+      const scope = evaluateSiteFindingScope({
+        findingType: body.findingType,
+        infestationOrBedBugs: body?.infestationOrBedBugs === true,
+        overThreshold: body?.overThreshold === true,
+        confined: body?.confined === true,
+      });
+      if (scope.inScope && typeof body?.confined !== "boolean") {
+        return json({ ok: false, error: "Confirm whether this is confined to one small area." }, 400);
+      }
+
+      if (!scope.inScope) {
+        try {
+          await supabase.functions.invoke("qc-issues", {
+            body: {
+              action: "field_report",
+              token,
+              issueType: "quality_flag",
+              severity: "critical",
+              description: stopFieldReportText({
+                findingType: body.findingType,
+                location,
+                stopReason: scope.stopReason,
+                beforePhotoUrl: beforeUrls[0],
+              }),
+            },
+          });
+        } catch (_) { /* still return the stop so the cleaner doesn't proceed */ }
+        await supabase.from("events").insert({
+          event_type: "job.site_finding.stop_and_report",
+          job_id: jobId,
+          booking_id: booking.id,
+          cleaner_id: cleaner?.id || null,
+          source: "cleaner-job-checklist",
+          summary: `${bookingRef} — ${cleanerName} flagged ${body.findingType} in ${location} past the minor threshold. Routed to stop-and-report.`,
+          data: { finding_type: body.findingType, location, stop_reason: scope.stopReason },
+        }).then(() => undefined, () => undefined);
+        return json({
+          ok: true,
+          routed: "stop_and_report",
+          stopReason: scope.stopReason,
+          message: scope.stopDescription,
+        });
+      }
+
+      const { data: fullBooking } = await supabase
+        .from("bookings")
+        .select("id, job_id, booking_number, first_name, last_name, email, phone, address, city, state, zip_code, customer_id, service_type, service_date, home_size_id, focused_areas, condition_level, add_ons, membership_plan, total_estimate_cents, final_charge_cents, team_notes, before_photos, after_photos, booking_type, partner_details")
+        .eq("id", booking.id)
+        .maybeSingle();
+      if (!fullBooking) return json({ ok: false, error: "Booking not found." }, 404);
+      if (!fullBooking.zip_code && job.zip) fullBooking.zip_code = job.zip;
+
+      const areaId = body?.areaId ? String(body.areaId) : null;
+      const preview = await previewSiteFindingPrice(supabase, fullBooking, {
+        confined: scope.confined,
+        areaId,
+      });
+      const recurrence = await lookupRecurrence(supabase, fullBooking, body.findingType, location);
+      const finding = await createSiteFindingQc(supabase, {
+        booking: fullBooking,
+        cleanerId: cleaner?.id || null,
+        cleanerName,
+        findingType: body.findingType,
+        location,
+        areaId,
+        confined: scope.confined,
+        sizeConfirmation: {
+          in_scope: true,
+          confined: scope.confined,
+          infestation_or_bed_bugs: body?.infestationOrBedBugs === true,
+          over_threshold: body?.overThreshold === true,
+        },
+        beforePhotoUrl: beforeUrls[0],
+        preview,
+        recurrence,
+      });
+      await supabase.from("events").insert({
+        event_type: "job.site_finding.reported",
+        job_id: jobId,
+        booking_id: booking.id,
+        cleaner_id: cleaner?.id || null,
+        source: "cleaner-job-checklist",
+        summary:
+          `${bookingRef} — ${cleanerName} confirmed ${finding.details.finding_type} in ${location} ` +
+          `(${preview.ruleLabel}). After photo required before pricing.`,
+        data: { issue_id: finding.id, preview },
+      }).then(() => undefined, () => undefined);
+    }
+
+    if (action === "complete_site_finding") {
+      if (!booking?.id) return json({ ok: false, error: "No booking on this job." }, 400);
+      const findingId = String(body?.findingId || "");
+      const afterUrls = httpUrls(
+        body?.afterPhotoUrl ? [body.afterPhotoUrl] : (Array.isArray(body?.afterPhotoUrls) ? body.afterPhotoUrls : []),
+        4,
+      );
+      if (!findingId) return json({ ok: false, error: "findingId required." }, 400);
+      if (afterUrls.length === 0) {
+        return json({ ok: false, error: "An after photo is required before this finding can be priced." }, 400);
+      }
+      const { data: fullBooking } = await supabase
+        .from("bookings")
+        .select("id, job_id, booking_number, first_name, last_name, email, phone, address, city, state, zip_code, customer_id, service_type, service_date, home_size_id, focused_areas, condition_level, add_ons, membership_plan, total_estimate_cents, final_charge_cents, team_notes, before_photos, after_photos, booking_type, partner_details")
+        .eq("id", booking.id)
+        .maybeSingle();
+      if (!fullBooking) return json({ ok: false, error: "Booking not found." }, 404);
+      if (!fullBooking.zip_code && job.zip) fullBooking.zip_code = job.zip;
+      await completeSiteFinding(supabase, {
+        booking: fullBooking,
+        issueId: findingId,
+        afterPhotoUrl: afterUrls[0],
+        cleanerId: cleaner?.id || null,
+        cleanerName,
+      });
+    }
+
     if (action === "complete") {
       const items: Record<string, unknown> = { ...(checklistRow.items || {}) };
       const { completed, unresolvedKeys, skips } = countResolved(items, totalItems, spec.sections);
@@ -437,6 +591,16 @@ serve(async (req) => {
             ok: false,
             error: `Before and after photos are required for every area. Missing: ${names}.`,
             missingSections: photoGate.missing,
+          }, 400);
+        }
+      }
+      if (booking?.id) {
+        const openFinding = pendingAfterFinding(await listSiteFindings(supabase, booking.id));
+        if (openFinding) {
+          return json({
+            ok: false,
+            error: `An after photo is required for the ${openFinding.details.finding_type === "pest_light" ? "light pest" : "minor mold"} finding in ${openFinding.details.location} before this job can be priced and finished.`,
+            pendingFindingId: openFinding.id,
           }, 400);
         }
       }
@@ -638,6 +802,11 @@ serve(async (req) => {
         catalog,
         requests: requests || [],
       },
+      findings: booking?.id ? await listSiteFindings(supabase, booking.id) : [],
+      finding_areas: focusedSettings.areas.map((a) => ({
+        id: a.id,
+        label: a.label,
+      })),
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

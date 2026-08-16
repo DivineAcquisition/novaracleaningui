@@ -41,7 +41,7 @@ const F = {
 } as const;
 
 const SELECT_OPTIONS: Record<string, string[]> = {
-  [F.type]: ["complaint", "reclean", "damage", "no_show", "late", "quality_flag", "payment", "other"],
+  [F.type]: ["complaint", "reclean", "damage", "no_show", "late", "quality_flag", "payment", "other", "site_finding"],
   [F.severity]: ["low", "medium", "high", "critical"],
   [F.status]: ["open", "investigating", "awaiting_customer", "resolved", "escalated"],
   [F.reportedVia]: ["va", "admin", "cleaner_field", "system"],
@@ -129,7 +129,9 @@ export async function syncQcIssueById(issueId: string): Promise<string | null> {
       [F.client]: issue.client_name || undefined,
       [F.clientEmail]: issue.client_email || undefined,
       [F.cleaner]: issue.cleaner_name || undefined,
-      [F.type]: issue.issue_type,
+      [F.type]: (SELECT_OPTIONS[F.type].filter((t) => t !== "site_finding") as string[]).includes(String(issue.issue_type))
+        ? issue.issue_type
+        : "other",
       [F.severity]: issue.severity,
       [F.status]: issue.status,
       [F.title]: issue.title,

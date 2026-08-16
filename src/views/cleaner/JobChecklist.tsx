@@ -73,6 +73,29 @@ interface AddonRequest {
   cleaner_name: string | null;
   charge_status: string | null;
 }
+interface SiteFindingDetails {
+  finding_type: "pest_light" | "mold_minor";
+  location: string;
+  area_id?: string | null;
+  confined: boolean;
+  pricing_path: string;
+  pricing_rule_label: string;
+  preview_delta_cents: number;
+  price_delta_cents: number | null;
+  original_total_cents: number;
+  new_total_cents: number | null;
+  before_photo_urls: string[];
+  after_photo_urls: string[];
+  recurrence: boolean;
+  status: "pending_after" | "priced" | "notified";
+}
+interface SiteFindingRow {
+  id: string;
+  issue_number: number | null;
+  title: string;
+  details: SiteFindingDetails;
+  created_at: string;
+}
 interface ChecklistState {
   ok: boolean;
   canWrite: boolean;
@@ -128,6 +151,8 @@ interface ChecklistState {
     catalog: AddonCatalogEntry[];
     requests: AddonRequest[];
   };
+  findings?: SiteFindingRow[];
+  finding_areas?: Array<{ id: string; label: string }>;
 }
 
 const PHOTO_BUCKET = "cleaner-job-photos";
@@ -172,6 +197,15 @@ export default function CleanerJobChecklistPage() {
   const [conditionsFor, setConditionsFor] = useState<number | null>(null);
   const [conditionsNote, setConditionsNote] = useState("");
   const [photoBusy, setPhotoBusy] = useState<string | null>(null);
+  const [findingOpen, setFindingOpen] = useState(false);
+  const [findingType, setFindingType] = useState<"pest_light" | "mold_minor" | null>(null);
+  const [findingLocation, setFindingLocation] = useState("");
+  const [findingAreaId, setFindingAreaId] = useState("other");
+  const [findingBefore, setFindingBefore] = useState<string[]>([]);
+  const [stopAnswer, setStopAnswer] = useState<boolean | null>(null);
+  const [confinedAnswer, setConfinedAnswer] = useState<boolean | null>(null);
+  const [findingBusy, setFindingBusy] = useState(false);
+  const [afterBusyId, setAfterBusyId] = useState<string | null>(null);
 
   const call = useCallback(
     async (body: Record<string, unknown>) => {
@@ -345,12 +379,92 @@ export default function CleanerJobChecklistPage() {
     }
   };
 
+  const uploadFindingPhoto = async (kind: "before" | "after", files: FileList | null, findingId?: string) => {
+    if (!files?.length || !state) return;
+    const file = files[0];
+    const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+    const path = `findings/${state.job.id}/${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+    if (kind === "before") setPhotoBusy("finding:before");
+    else setAfterBusyId(findingId || "new");
+    try {
+      const { error: upErr } = await supabase.storage.from(PHOTO_BUCKET).upload(path, file, {
+        contentType: file.type || "image/jpeg",
+        upsert: false,
+      });
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path);
+      const url = pub?.publicUrl;
+      if (!url) throw new Error("Couldn't get photo URL");
+      if (kind === "before") {
+        setFindingBefore((prev) => [...prev, url]);
+        toast.success("Before photo saved");
+      } else if (findingId) {
+        setState(await call({ action: "complete_site_finding", findingId, afterPhotoUrl: url }));
+        toast.success("After photo saved — pricing applied from the engine and the customer was notified.");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Photo upload failed");
+    } finally {
+      setPhotoBusy(null);
+      setAfterBusyId(null);
+    }
+  };
+
+  const submitSiteFinding = async () => {
+    if (!findingType || !findingLocation.trim() || findingBefore.length === 0 || stopAnswer == null) return;
+    if (stopAnswer === false && confinedAnswer == null) return;
+    setFindingBusy(true);
+    try {
+      const { data, error: invokeError } = await supabase.functions.invoke("cleaner-job-checklist", {
+        body: {
+          token,
+          action: "report_site_finding",
+          findingType,
+          location: findingLocation.trim(),
+          areaId: findingAreaId || undefined,
+          beforePhotoUrl: findingBefore[0],
+          infestationOrBedBugs: findingType === "pest_light" ? stopAnswer : false,
+          overThreshold: findingType === "mold_minor" ? stopAnswer : false,
+          confined: stopAnswer === false ? confinedAnswer === true : false,
+        },
+      });
+      if (invokeError) throw invokeError;
+      if ((data as { ok?: boolean; error?: string })?.ok === false) {
+        throw new Error((data as { error?: string })?.error || "Couldn't log finding");
+      }
+      if ((data as { routed?: string })?.routed === "stop_and_report") {
+        toast.error((data as { message?: string }).message || "Stop — do not proceed. Dispatch has been alerted.");
+        setFindingOpen(false);
+        setFindingType(null);
+        setFindingLocation("");
+        setFindingBefore([]);
+        setStopAnswer(null);
+        setConfinedAnswer(null);
+        await load();
+        return;
+      }
+      setState(data as ChecklistState);
+      toast.success("Finding logged. Take an after photo of this area when you're done — that's when it's priced.");
+      setFindingOpen(false);
+      setFindingType(null);
+      setFindingLocation("");
+      setFindingBefore([]);
+      setStopAnswer(null);
+      setConfinedAnswer(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't log finding");
+    } finally {
+      setFindingBusy(false);
+    }
+  };
+
   const progress = state?.checklist.progress_pct ?? 0;
   const isFocused = Boolean(state?.focused?.enabled);
   const allDone = state
     ? state.checklist.completed_items >= state.checklist.total_items
       && state.checklist.total_items > 0
       && (!isFocused || Boolean(state.focused?.photos_complete))
+      && !(state.findings || []).some((f) => f.details.status === "pending_after")
     : false;
 
   const requestedIds = useMemo(
@@ -649,7 +763,7 @@ export default function CleanerJobChecklistPage() {
                         value={conditionsNote}
                         onChange={(e) => setConditionsNote(e.target.value)}
                         rows={2}
-                        placeholder="Heavy buildup, mold, damage, out of scope — describe it. Stop and report biohazard/mold — do not attempt that work."
+                        placeholder="Heavy buildup, damage, out of scope — describe it. Active infestation, bed bugs, or mold beyond a small non-porous area: use Problem on site below — do not attempt that work. Light pest / minor surface mold has its own card."
                         className="w-full rounded-lg border border-rose-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-300"
                       />
                       <div className="flex gap-2">
@@ -803,6 +917,178 @@ export default function CleanerJobChecklistPage() {
         </div>
       </div>
 
+      {/* ─── Pest / minor mold finding ──────────────────────────────── */}
+      {state.canWrite && (
+        <div className="rounded-2xl border border-amber-200 bg-white shadow-sm overflow-hidden">
+          <div className="px-5 py-4 space-y-3">
+            <h2 className="font-bold text-slate-900 flex items-center gap-2">
+              <RiAlertLine className="w-4 h-4 text-amber-600" /> Pest or minor mold?
+            </h2>
+            <p className="text-xs text-slate-500">
+              Light pest presence (dead bugs, webs, minor trails) or a small non-porous mold area
+              (~under 10 sq ft) is in-scope and billed automatically. Active infestation, any bed bugs,
+              or mold past that threshold is a stop — report it below, don&apos;t price it here.
+            </p>
+
+            {(state.findings || []).map((f) => (
+              <div key={f.id} className="rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3 space-y-2">
+                <p className="text-sm font-semibold text-slate-900">{f.title}</p>
+                <p className="text-xs text-slate-600">
+                  {f.details.pricing_rule_label}
+                  {f.details.recurrence ? " · recurrence flagged at this property" : ""}
+                </p>
+                {f.details.status === "pending_after" ? (
+                  <div className="space-y-2">
+                    <p className="text-xs text-amber-900 font-semibold">
+                      After photo required before this can be priced ({money(f.details.preview_delta_cents)} previewed).
+                    </p>
+                    <label className="rounded-xl border border-dashed border-amber-300 bg-white px-3 py-3 text-center text-xs cursor-pointer hover:border-amber-500 block">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        className="hidden"
+                        disabled={afterBusyId === f.id}
+                        onChange={(e) => void uploadFindingPhoto("after", e.target.files, f.id)}
+                      />
+                      {afterBusyId === f.id
+                        ? <RiLoader4Line className="w-4 h-4 animate-spin mx-auto mb-1" />
+                        : <RiCameraLine className="w-4 h-4 mx-auto mb-1 text-amber-700" />}
+                      After photo ({f.details.after_photo_urls.length})
+                    </label>
+                  </div>
+                ) : (
+                  <p className="text-xs text-emerald-800 font-semibold">
+                    {f.details.price_delta_cents
+                      ? `Priced ${money(f.details.price_delta_cents)} · customer notified · total ${money(f.details.new_total_cents || 0)}`
+                      : "Logged — no price change. Informational notice sent."}
+                  </p>
+                )}
+              </div>
+            ))}
+
+            {!findingOpen ? (
+              <Button variant="outline" className="w-full border-amber-300 text-amber-950" onClick={() => setFindingOpen(true)}>
+                Flag pest or minor mold
+              </Button>
+            ) : (
+              <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/40 p-4">
+                <p className="text-sm font-semibold text-slate-900">What did you find?</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    className={cn(
+                      "rounded-xl border px-3 py-2 text-xs font-semibold",
+                      findingType === "pest_light" ? "border-amber-500 bg-white text-amber-950" : "border-slate-200 bg-white text-slate-600",
+                    )}
+                    onClick={() => { setFindingType("pest_light"); setStopAnswer(null); setConfinedAnswer(null); }}
+                  >
+                    Pest — Light
+                  </button>
+                  <button
+                    type="button"
+                    className={cn(
+                      "rounded-xl border px-3 py-2 text-xs font-semibold",
+                      findingType === "mold_minor" ? "border-amber-500 bg-white text-amber-950" : "border-slate-200 bg-white text-slate-600",
+                    )}
+                    onClick={() => { setFindingType("mold_minor"); setStopAnswer(null); setConfinedAnswer(null); }}
+                  >
+                    Mold — Minor
+                  </button>
+                </div>
+                <input
+                  value={findingLocation}
+                  onChange={(e) => setFindingLocation(e.target.value)}
+                  placeholder="Where? e.g. hall bath, under kitchen sink"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-300"
+                />
+                {(state.finding_areas || []).length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {(state.finding_areas || []).map((a) => (
+                      <button
+                        key={a.id}
+                        type="button"
+                        className={cn(
+                          "rounded-full px-2.5 py-1 text-[11px] font-semibold border",
+                          findingAreaId === a.id ? "bg-amber-600 text-white border-amber-600" : "bg-white text-slate-600 border-slate-200",
+                        )}
+                        onClick={() => setFindingAreaId(a.id)}
+                      >
+                        {a.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <label className="rounded-xl border border-dashed border-amber-300 bg-white px-3 py-3 text-center text-xs cursor-pointer hover:border-amber-500 block">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    disabled={photoBusy === "finding:before"}
+                    onChange={(e) => void uploadFindingPhoto("before", e.target.files)}
+                  />
+                  {photoBusy === "finding:before"
+                    ? <RiLoader4Line className="w-4 h-4 animate-spin mx-auto mb-1" />
+                    : <RiCameraLine className="w-4 h-4 mx-auto mb-1 text-amber-700" />}
+                  Before photo required ({findingBefore.length})
+                </label>
+                {findingType === "pest_light" && (
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-semibold text-slate-800">Does this look like an active infestation or any bed bugs?</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button variant={stopAnswer === true ? "default" : "outline"} className={stopAnswer === true ? "bg-rose-600 hover:bg-rose-700" : ""} onClick={() => setStopAnswer(true)}>Yes — stop</Button>
+                      <Button variant={stopAnswer === false ? "default" : "outline"} onClick={() => setStopAnswer(false)}>No — light / minor</Button>
+                    </div>
+                  </div>
+                )}
+                {findingType === "mold_minor" && (
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-semibold text-slate-800">Larger than ~10 sq ft, on a porous surface, or a musty odor that suggests a hidden source?</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button variant={stopAnswer === true ? "default" : "outline"} className={stopAnswer === true ? "bg-rose-600 hover:bg-rose-700" : ""} onClick={() => setStopAnswer(true)}>Yes — stop</Button>
+                      <Button variant={stopAnswer === false ? "default" : "outline"} onClick={() => setStopAnswer(false)}>No — minor surface</Button>
+                    </div>
+                  </div>
+                )}
+                {findingType && stopAnswer === false && (
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-semibold text-slate-800">Confined to one small area?</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button variant={confinedAnswer === true ? "default" : "outline"} onClick={() => setConfinedAnswer(true)}>Yes — one area</Button>
+                      <Button variant={confinedAnswer === false ? "default" : "outline"} onClick={() => setConfinedAnswer(false)}>Spread, still minor</Button>
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      One area is priced as a Focused Clean add-on at that area&apos;s rate. Spread applies the Heavy condition multiplier. The engine computes the amount — don&apos;t guess.
+                    </p>
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <Button
+                    className="flex-1"
+                    disabled={
+                      findingBusy
+                      || !findingType
+                      || findingLocation.trim().length < 2
+                      || findingBefore.length === 0
+                      || stopAnswer == null
+                      || (stopAnswer === false && confinedAnswer == null)
+                    }
+                    onClick={() => void submitSiteFinding()}
+                  >
+                    {findingBusy ? <RiLoader4Line className="w-4 h-4 animate-spin mr-1.5" /> : null}
+                    {stopAnswer === true ? "Send stop-and-report" : "Log finding"}
+                  </Button>
+                  <Button variant="ghost" onClick={() => { setFindingOpen(false); setFindingType(null); setFindingLocation(""); setFindingBefore([]); setStopAnswer(null); setConfinedAnswer(null); }}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ─── Field issue report (stop-and-flag SOP) ─────────────────── */}
       {state.canWrite && (
         <div className="rounded-2xl border border-rose-200 bg-white shadow-sm overflow-hidden">
@@ -860,7 +1146,9 @@ export default function CleanerJobChecklistPage() {
             : <RiCheckboxCircleFill className="w-5 h-5 mr-2" />}
           {allDone
             ? "Finish checklist — notify the office"
-            : isFocused
+            : (state.findings || []).some((f) => f.details.status === "pending_after")
+              ? "After photo still needed on the pest/mold finding"
+              : isFocused
               ? "Finish every task (or skip with reason) + area photos"
               : `Complete all ${checklist.total_items} tasks to finish`}
         </Button>

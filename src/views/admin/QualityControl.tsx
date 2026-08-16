@@ -82,6 +82,7 @@ interface IssueRow {
   resolved_by_name: string | null;
   created_at: string;
   updated_at: string;
+  details?: Record<string, unknown> | null;
 }
 
 interface IssueEvent {
@@ -173,6 +174,7 @@ const ISSUE_TYPES = [
   { id: "late", label: "Late arrival" },
   { id: "quality_flag", label: "Quality flag" },
   { id: "payment", label: "Payment" },
+  { id: "site_finding", label: "Site finding" },
   { id: "other", label: "Other" },
 ];
 const STATUSES = ["open", "investigating", "awaiting_customer", "resolved", "escalated"];
@@ -312,6 +314,7 @@ export default function QualityControl() {
           <Button variant="outline" onClick={() => void load()} disabled={loading}>
             <RiRefreshLine className={cn("w-4 h-4 mr-1.5", loading && "animate-spin")} /> Refresh
           </Button>
+          <SiteFindingTemplatesButton />
         </div>
       </div>
 
@@ -685,6 +688,10 @@ function IssueSheet({ issue, doc, onClose, reload }: {
 
           {issue.description && (
             <p className="text-sm text-slate-700 whitespace-pre-wrap bg-slate-50 rounded-lg p-3">{issue.description}</p>
+          )}
+
+          {issue.issue_type === "site_finding" && issue.details && (
+            <SiteFindingEvidence details={issue.details} />
           )}
 
           {/* ─── Evidence: the linked job's documentation ─────────────── */}
@@ -1680,5 +1687,150 @@ function ScopeAdjustmentsTab() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function moneyCents(cents: unknown): string {
+  const n = Number(cents);
+  if (!Number.isFinite(n)) return "—";
+  return `$${(n / 100).toFixed(2)}`;
+}
+
+function SiteFindingEvidence({ details }: { details: Record<string, unknown> }) {
+  const before = Array.isArray(details.before_photo_urls) ? details.before_photo_urls.map(String) : [];
+  const after = Array.isArray(details.after_photo_urls) ? details.after_photo_urls.map(String) : [];
+  return (
+    <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 space-y-3">
+      <p className="text-sm font-bold text-amber-950">Site finding — dispute evidence (auto-assembled)</p>
+      <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs text-slate-700">
+        <dt className="text-slate-500">Finding</dt>
+        <dd className="font-semibold">{String(details.finding_type || "").replace(/_/g, " ")}</dd>
+        <dt className="text-slate-500">Location</dt>
+        <dd>{String(details.location || "—")}</dd>
+        <dt className="text-slate-500">Size/severity</dt>
+        <dd>{details.confined ? "Confined to one small area (in-scope)" : "Spread, still surface-level/minor"}</dd>
+        <dt className="text-slate-500">Pricing rule</dt>
+        <dd>{String(details.pricing_rule_label || details.pricing_path || "—")}</dd>
+        <dt className="text-slate-500">Price impact</dt>
+        <dd>
+          {moneyCents(details.price_delta_cents ?? details.preview_delta_cents)}
+          {details.new_total_cents != null && (
+            <> · {moneyCents(details.original_total_cents)} → {moneyCents(details.new_total_cents)}</>
+          )}
+        </dd>
+        <dt className="text-slate-500">Recurrence</dt>
+        <dd>
+          {details.recurrence
+            ? `Yes${details.recurrence_same_spot ? " — same spot (moisture signal)" : " — same property"}`
+            : "No prior record"}
+        </dd>
+        <dt className="text-slate-500">Status</dt>
+        <dd>{String(details.status || "—").replace(/_/g, " ")}</dd>
+      </dl>
+      {(before.length > 0 || after.length > 0) && (
+        <div className="grid grid-cols-4 gap-1.5">
+          {[
+            ...before.slice(0, 4).map((u) => ({ u, l: "Before" })),
+            ...after.slice(0, 4).map((u) => ({ u, l: "After" })),
+          ].map(({ u, l }, i) => (
+            <a key={`${l}-${i}`} href={u} target="_blank" rel="noreferrer" className="relative group">
+              <img src={u} alt={l} className="w-full h-16 object-cover rounded-md border border-slate-200" />
+              <span className="absolute bottom-0.5 left-0.5 text-[9px] font-bold bg-black/60 text-white px-1 rounded">{l}</span>
+            </a>
+          ))}
+        </div>
+      )}
+      <p className="text-[11px] text-slate-500">
+        This QC record is the chargeback packet for this finding — no separate admin assembly.
+      </p>
+    </div>
+  );
+}
+
+function SiteFindingTemplatesButton() {
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [draft, setDraft] = useState({
+    email_subject: "",
+    email_body_priced: "",
+    email_body_info: "",
+    sms_priced: "",
+    sms_info: "",
+    mold_recurrence_sentence: "",
+  });
+
+  const loadTemplates = async () => {
+    const { data } = await (supabase.from as any)("app_settings").select("value").eq("key", "site_finding_notice_templates").maybeSingle();
+    const v = (data?.value || {}) as Record<string, string>;
+    setDraft({
+      email_subject: v.email_subject || "A quick update on today's clean",
+      email_body_priced: v.email_body_priced || "",
+      email_body_info: v.email_body_info || "",
+      sms_priced: v.sms_priced || "",
+      sms_info: v.sms_info || "",
+      mold_recurrence_sentence: v.mold_recurrence_sentence || "",
+    });
+  };
+
+  return (
+    <>
+      <Button variant="outline" onClick={() => { setOpen(true); void loadTemplates(); }}>
+        Finding notices
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Pest / mold customer notices</DialogTitle>
+            <DialogDescription>
+              Auto-filled from the QC record. Placeholders: {"{name} {finding} {finding_sms} {location} {adjustment} {delta} {new_total} {recurrence}"}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            {(
+              [
+                ["email_subject", "Email subject"],
+                ["email_body_priced", "Email — price changed"],
+                ["email_body_info", "Email — no price change"],
+                ["sms_priced", "SMS — price changed"],
+                ["sms_info", "SMS — no price change"],
+                ["mold_recurrence_sentence", "Mold recurrence sentence"],
+              ] as const
+            ).map(([key, label]) => (
+              <div key={key}>
+                <p className="text-xs font-semibold text-slate-600 mb-1">{label}</p>
+                {key === "email_subject" ? (
+                  <Input value={draft[key]} onChange={(e) => setDraft({ ...draft, [key]: e.target.value })} />
+                ) : (
+                  <Textarea rows={key.includes("email") ? 4 : 3} value={draft[key]} onChange={(e) => setDraft({ ...draft, [key]: e.target.value })} />
+                )}
+              </div>
+            ))}
+            <Button
+              disabled={saving}
+              onClick={async () => {
+                setSaving(true);
+                try {
+                  const { error } = await (supabase.from as any)("app_settings").upsert({
+                    key: "site_finding_notice_templates",
+                    value: draft,
+                    description: "Customer email/SMS copy for pest (light) and mold (minor) site findings.",
+                    updated_at: new Date().toISOString(),
+                  }, { onConflict: "key" });
+                  if (error) throw error;
+                  toast.success("Notice templates saved");
+                  setOpen(false);
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : "Couldn't save templates");
+                } finally {
+                  setSaving(false);
+                }
+              }}
+            >
+              Save templates
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

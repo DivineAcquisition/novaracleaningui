@@ -50,6 +50,7 @@ const POLICY_HIGHLIGHTS: string[] = [
   "Out-of-scope tasks (fridge/oven/add-ons never booked) are not refundable (Refund §5.7).",
   "24h cancellation notice; same-day cancel/no-show/access failure forfeits 100% (Cancellation §1.1, §2.2–2.3, §10 · ToS §6.1).",
   "72h written dispute resolution is REQUIRED before any chargeback; unauthorized chargebacks = fraud + $150 fee + full liability (ToS §10.1–10.4 · Refund §8.2–8.5).",
+  "Documented light pest / minor surface mold is billable in-scope work priced by the engine (Focused Clean area rate or Heavy condition) with before/after photos as dispute evidence. Active infestation, bed bugs, and mold past the size/porosity threshold remain stop-and-report (ToS §1.2, §6.3 · Refund §5.7).",
   "Client consented to photo/GPS/checklist evidence retention (4 years) usable in disputes (ToS §13.1–13.4 · Disclaimer §8.4).",
   "Liability capped at the amount paid; damage claims within 24h (ToS §11.2–11.3).",
   "Memberships: 14 days' written notice to cancel (ToS §6.2 · Refund §10.1).",

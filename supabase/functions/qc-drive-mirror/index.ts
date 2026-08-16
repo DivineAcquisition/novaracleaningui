@@ -110,6 +110,10 @@ const POLICY_REFS: PolicyRef[] = [
     cite: "Terms of Service §13.1–13.4 · Refund Policy §3.3, §9.2 · Disclaimer §8.4",
   },
   {
+    claim: "Documented on-site findings such as light pest presence or minor surface mold are billable in-scope work. The amount is computed by the published pricing engine (Focused Clean area rate or Heavy condition multiplier); before/after photos and the QC record are retained as chargeback evidence. Active infestation, bed bugs, and mold beyond the size/porosity threshold remain excluded and are stop-and-report, not billed as a minor finding.",
+    cite: "Terms of Service §1.2, §6.3 · Refund Policy §5.7 · Disclaimer §8.4",
+  },
+  {
     claim: "Liability is capped at the amount actually paid for the service; damage claims must be reported within 24 hours.",
     cite: "Terms of Service §11.2–11.3",
   },
@@ -130,6 +134,7 @@ interface IssueForPacket {
   status: string;
   title: string;
   description: string | null;
+  details?: Record<string, unknown> | null;
   reported_via: string;
   reported_by_name: string | null;
   resolution_note: string | null;
@@ -145,7 +150,7 @@ async function loadIssuesForPacket(supabase: SB, bookingId: string | null): Prom
   try {
     const { data } = await supabase
       .from("qc_issues")
-      .select("issue_number, issue_type, severity, status, title, description, reported_via, reported_by_name, resolution_note, resolved_by_name, resolved_at, created_at")
+      .select("issue_number, issue_type, severity, status, title, description, details, reported_via, reported_by_name, resolution_note, resolved_by_name, resolved_at, created_at")
       .eq("booking_id", bookingId)
       .order("created_at", { ascending: true })
       .limit(20);
@@ -723,7 +728,19 @@ async function buildSummaryPdf(doc: DocRow, extras: {
       line(`Issue #${iss.issue_number} — ${iss.issue_type.replace(/_/g, " ")} · severity: ${iss.severity} · status: ${iss.status.replace(/_/g, " ")}`, { size: 10, font: bold, color: dark, gap: 3 });
       line(`   Reported ${new Date(iss.created_at).toUTCString()} via ${iss.reported_via.replace(/_/g, " ")}${iss.reported_by_name ? ` by ${iss.reported_by_name}` : ""}`, { size: 8.5, color: gray, gap: 3 });
       const titleChunks = `${iss.title}${iss.description ? ` — ${iss.description}` : ""}`.match(/.{1,98}(\s|$)/g) || [];
-      for (const c of titleChunks.slice(0, 6)) line(`   ${c.trim()}`, { size: 9, color: gray, gap: 2.5 });
+      for (const c of titleChunks.slice(0, 8)) line(`   ${c.trim()}`, { size: 9, color: gray, gap: 2.5 });
+      const det = iss.details && typeof iss.details === "object" ? iss.details as Record<string, unknown> : null;
+      if (iss.issue_type === "site_finding" && det) {
+        const path = String(det.pricing_path || "");
+        const delta = det.price_delta_cents != null ? Number(det.price_delta_cents) : Number(det.preview_delta_cents || 0);
+        const orig = Number(det.original_total_cents || 0);
+        const neu = det.new_total_cents != null ? Number(det.new_total_cents) : orig + delta;
+        line(`   Evidence packet (auto-assembled from QC record — no separate admin step):`, { size: 8.5, font: bold, color: dark, gap: 2.5 });
+        line(`   Finding confirmed in-scope · ${det.confined ? "confined to one area" : "spread, still minor"} · ${String(det.pricing_rule_label || path)}`, { size: 8.5, color: gray, gap: 2.5 });
+        line(`   Price: $${(delta / 100).toFixed(2)} impact · original $${(orig / 100).toFixed(2)} → $${(neu / 100).toFixed(2)}`, { size: 8.5, color: gray, gap: 2.5 });
+        line(`   Photos: ${Array.isArray(det.before_photo_urls) ? det.before_photo_urls.length : 0} before · ${Array.isArray(det.after_photo_urls) ? det.after_photo_urls.length : 0} after`, { size: 8.5, color: gray, gap: 2.5 });
+        if (det.recurrence) line(`   Recurrence flagged at this property${det.recurrence_same_spot ? " (same spot)" : ""}.`, { size: 8.5, color: gray, gap: 2.5 });
+      }
       if (iss.resolution_note) {
         line(`   RESOLVED${iss.resolved_at ? ` ${new Date(iss.resolved_at).toUTCString()}` : ""}${iss.resolved_by_name ? ` by ${iss.resolved_by_name}` : ""}:`, { size: 8.5, font: bold, color: dark, gap: 2.5 });
         for (const c of (iss.resolution_note.match(/.{1,98}(\s|$)/g) || []).slice(0, 4)) {
