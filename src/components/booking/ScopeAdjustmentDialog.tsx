@@ -51,6 +51,8 @@ import {
 import { HOME_SIZE_RANGES, SERVICE_TIER_PRICING, ADD_ONS, FIRST_CLEAN_DEEP_ID, MOLD_MINOR_ID, PEST_LIGHT_ID, SCOPE_REASON_ADD_ONS } from "@/lib/pricing";
 import {
   draftJustificationMessage,
+  formatScopeReasonPrice,
+  scopeReasonPricePreview,
   suggestScopeAdjustment,
   type ScopeReason,
 } from "@/lib/scope-adjustment";
@@ -218,8 +220,10 @@ export function ScopeAdjustmentDialog({
         selectedCodes: selectedReasons,
         adjustedServiceType,
         adjustedPriceCents: Number.isFinite(amountCents) ? amountCents : 0,
+        originalPriceCents: ctx.booking.originalPriceCents,
         serviceDate: ctx.booking.serviceDate,
         hasPhotoEvidence: !evidenceMissing,
+        chargeAt: ctx.booking.status === "completed" ? "now" : "completion",
       }),
     );
   }, [ctx, selectedReasons, adjustedServiceType, amountCents, evidenceMissing, messageTouched]);
@@ -297,9 +301,27 @@ export function ScopeAdjustmentDialog({
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Could not apply the adjustment");
       const sent = (data.channels || []) as string[];
+      const extra = Number.isFinite(amountCents)
+        ? amountCents - ctx.booking.originalPriceCents
+        : 0;
+      const chargeStatus = String(data.chargeStatus || "");
+      const billedNow = chargeStatus === "charged";
       toast.success(
-        `Scope adjusted to ${fmtMoney(data.adjustedPriceCents)}${sent.length ? ` · customer notified by ${sent.join(" + ")}` : " · no message sent"}`,
+        `Scope adjusted to ${fmtMoney(data.adjustedPriceCents)}` +
+          (extra > 0
+            ? billedNow
+              ? ` · ${fmtMoney(extra)} charged to the card on file`
+              : ` · ${fmtMoney(extra)} billed when the job is marked complete`
+            : "") +
+          (sent.length ? ` · customer notified by ${sent.join(" + ")}` : " · no message sent"),
       );
+      if (chargeStatus === "failed" || chargeStatus === "missing_card") {
+        toast.warning(
+          chargeStatus === "missing_card"
+            ? "No card on file — extra was recorded and will need a balance charge."
+            : "Could not charge the extra now. It is recorded; retry from Charge balance if needed.",
+        );
+      }
       if (data.payout?.supplementCents > 0) {
         toast.warning(
           `Payout already went out at the old value — ${fmtMoney(data.payout.supplementCents)} per cleaner is owed and flagged for payroll.`,
@@ -324,7 +346,8 @@ export function ScopeAdjustmentDialog({
           </DialogTitle>
           <DialogDescription>
             For a job that turned out materially different from what was booked. Every adjustment needs a
-            defined reason and the job&apos;s condition photos, and the customer gets a written justification.
+            defined reason and the job&apos;s condition photos. The extra is billed to the card on file when
+            the job is marked complete — the customer is notified now.
           </DialogDescription>
         </DialogHeader>
 
@@ -353,13 +376,20 @@ export function ScopeAdjustmentDialog({
                   {Number.isFinite(amountCents) && amountCents > 0 ? fmtMoney(amountCents) : "—"}
                   {Number.isFinite(amountCents) && amountCents > ctx.booking.originalPriceCents && (
                     <span className="ml-2 text-xs font-normal text-emerald-700">
-                      +{fmtMoney(amountCents - ctx.booking.originalPriceCents)}
+                      +{fmtMoney(amountCents - ctx.booking.originalPriceCents)} extra
                     </span>
                   )}
                 </p>
                 <p className="text-xs text-slate-600">
                   {SERVICE_TIER_PRICING[adjustedServiceType as keyof typeof SERVICE_TIER_PRICING]?.label || adjustedServiceType}
                 </p>
+                {Number.isFinite(amountCents) && amountCents > ctx.booking.originalPriceCents && (
+                  <p className="text-[11px] text-violet-800 mt-1">
+                    {ctx.booking.status === "completed"
+                      ? "This job is already complete — the extra is charged to the card on file when you apply."
+                      : "Customer is notified now. The extra is charged to the card on file when this job is marked complete."}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -382,9 +412,23 @@ export function ScopeAdjustmentDialog({
               <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Justification — required
               </Label>
+              <p className="text-[11px] text-slate-500">
+                Price next to each reason is the catalog add-on or the engine extra for that reclassification.
+                Combined total is suggested below. The customer is charged once the service is completed.
+              </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {ctx.reasons.map((r) => {
                   const on = selectedReasons.includes(r.code);
+                  const priceLabel = formatScopeReasonPrice(
+                    scopeReasonPricePreview(r, {
+                      homeSizeId: ctx.booking.homeSizeId,
+                      addOns: ctx.booking.addOns,
+                      membershipPlan: ctx.booking.membershipPlan,
+                      usesCredit: ctx.booking.usesCredit,
+                      originalServiceType: ctx.booking.serviceType,
+                      originalPriceCents: ctx.booking.originalPriceCents,
+                    }),
+                  );
                   return (
                     <button
                       key={r.code}
@@ -404,8 +448,16 @@ export function ScopeAdjustmentDialog({
                         >
                           {on && <RiCheckLine className="w-3 h-3 text-white" />}
                         </span>
-                        <span className="min-w-0">
-                          <span className="block text-sm font-medium text-slate-900">{r.label}</span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-start justify-between gap-2">
+                            <span className="block text-sm font-medium text-slate-900">{r.label}</span>
+                            <span className={cn(
+                              "shrink-0 text-xs tabular-nums font-semibold",
+                              on ? "text-violet-800" : "text-slate-700",
+                            )}>
+                              {priceLabel}
+                            </span>
+                          </span>
                           {!r.customer_facing && (
                             <Badge variant="outline" className="mt-1 text-[10px] border-amber-300 text-amber-800">
                               Internal only — kept out of customer copy
@@ -730,8 +782,10 @@ export function ScopeAdjustmentDialog({
           >
             {saving ? (
               <><RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> Applying…</>
+            ) : ctx?.booking.status === "completed" ? (
+              <><RiImageLine className="w-4 h-4 mr-2" /> Apply &amp; charge extra</>
             ) : (
-              <><RiImageLine className="w-4 h-4 mr-2" /> Apply &amp; notify customer</>
+              <><RiImageLine className="w-4 h-4 mr-2" /> Apply &amp; notify — bill at completion</>
             )}
           </Button>
         </DialogFooter>

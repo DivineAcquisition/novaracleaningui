@@ -1,8 +1,14 @@
 // ─── Booking balance helpers ────────────────────────────────────────────────
 //
-// Used by confirmation SMS/email copy. The old logic treated anything that
-// wasn't payment_option === "deposit" as "paid in full", which wrongly told
-// preauth (deposit + card-on-file) customers they owed nothing.
+// Two different "what's left" questions:
+//
+//   remainingDueAfterUpfrontCents — confirmation copy at booking time.
+//   remainingDueAtCompletionCents — what to charge the card when the job is
+//   marked complete. Scope adjustments write final_charge_cents and leave
+//   total_estimate_cents alone, so extras surface here and are billed then
+//   (not when the adjustment is recorded), unless the job is already complete.
+//
+// Keep in lock-step with supabase/functions/_shared/booking-balance.ts.
 
 export type BookingBalanceFields = {
   total_estimate_cents?: unknown;
@@ -40,8 +46,6 @@ export function billedTotalCents(b: BookingBalanceFields): number {
  * Money already applied to the original quote (deposit, full pay, or a
  * membership credit covering the visit). Scope extras live in final_charge
  * above this figure.
- *
- * Keep in lock-step with src/lib/booking-balance.ts.
  */
 export function collectedTowardJobCents(b: BookingBalanceFields): number {
   const total = cents(b.total_estimate_cents);
@@ -55,10 +59,33 @@ export function collectedTowardJobCents(b: BookingBalanceFields): number {
 }
 
 /**
+ * Remaining customer balance after upfront collection.
+ * Only returns 0 when we can tell they truly have nothing left to pay.
+ * Booking-time confirmation copy — do not use this to charge at completion.
+ */
+export function remainingDueAfterUpfrontCents(b: BookingBalanceFields): number {
+  const total = Math.max(0, Number(b.total_estimate_cents || 0));
+  const credit = Math.max(0, Number(b.applied_credit_cents || 0));
+  const net = Math.max(0, total - credit);
+  if (net <= 0) return 0;
+
+  const finalCharge = Math.max(0, Number(b.final_charge_cents || 0));
+  if (finalCharge >= net) return 0;
+
+  const option = String(b.payment_option || "").toLowerCase();
+  const deposit = Math.max(0, Number(b.deposit_cents || 0));
+
+  if (option === "full") {
+    if (!b.payment_received_at) return net;
+    return 0;
+  }
+
+  return Math.max(0, net - deposit);
+}
+
+/**
  * Completion-time captures already on the booking (hold + off-session
  * remaining), not including the original deposit or separately charged add-ons.
- *
- * Keep in lock-step with src/lib/booking-balance.ts.
  */
 export function completionCapturedCents(b: BookingBalanceFields): number {
   const balance = cents(b.balance_amount_cents);
@@ -70,9 +97,13 @@ export function completionCapturedCents(b: BookingBalanceFields): number {
 }
 
 /**
- * Amount to collect off-session when the job is marked complete.
+ * Amount still owed when the job is marked complete (or charged afterwards).
  *
- * billed − deposit/full-pay/credit − completion captures − immediately billed add-ons.
+ * billed = final_charge_cents ?? total_estimate_cents
+ * minus deposit / paid-in-full quote / credit coverage
+ * minus completion captures already on the row
+ * minus add-ons already charged off-session (deposit jobs only — on full-pay
+ * those add-ons already sit inside total_estimate_cents)
  */
 export function remainingDueAtCompletionCents(
   b: BookingBalanceFields,
@@ -96,29 +127,20 @@ export function capturedTowardJobCents(
 }
 
 /**
- * Remaining customer balance after upfront collection.
- * Only returns 0 when we can tell they truly have nothing left to pay.
+ * If a scope adjustment lands after complete-booking already ran, charge this
+ * now (the completion path will not run again). In-progress jobs return 0 —
+ * extras wait for complete-booking.
  */
-export function remainingDueAfterUpfrontCents(b: BookingBalanceFields): number {
-  const total = Math.max(0, Number(b.total_estimate_cents || 0));
-  const credit = Math.max(0, Number(b.applied_credit_cents || 0));
-  const net = Math.max(0, total - credit);
-  if (net <= 0) return 0;
-
-  const finalCharge = Math.max(0, Number(b.final_charge_cents || 0));
-  if (finalCharge >= net) return 0;
-
-  const option = String(b.payment_option || "").toLowerCase();
-  const deposit = Math.max(0, Number(b.deposit_cents || 0));
-
-  // Full pay at booking — only after payment actually cleared.
-  if (option === "full") {
-    if (!b.payment_received_at) return net;
-    return 0;
-  }
-
-  // deposit / preauth / unknown: remaining = net − upfront deposit collected
-  return Math.max(0, net - deposit);
+export function scopeAdjustmentChargeNowCents(
+  booking: BookingBalanceFields,
+  newFinalCents: number,
+  paidAddonCents = 0,
+): number {
+  if (String(booking.status || "") !== "completed") return 0;
+  return remainingDueAtCompletionCents(
+    { ...booking, final_charge_cents: newFinalCents },
+    paidAddonCents,
+  );
 }
 
 /** True only when remainingDueAfterUpfrontCents is 0. */

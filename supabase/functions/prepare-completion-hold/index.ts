@@ -35,6 +35,7 @@ import { sendSms, formatServiceDate } from "../_shared/sms.ts";
 import { resolveSecret } from "../_shared/app-secrets.ts";
 import { mirrorToLeadConnector } from "../_shared/leadconnector-mirror.ts";
 import { upsertContact } from "../_shared/ghl-client.ts";
+import { remainingDueAtCompletionCents } from "../_shared/booking-balance.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -382,9 +383,14 @@ async function processBooking(
     await supabase.from("bookings").update({ completion_hold_status: "skipped" }).eq("id", bookingId);
     return { bookingId, outcome: "skipped", reason: "uses_credit" };
   }
-  const totalCents = booking.total_estimate_cents ?? 0;
-  const depositCents = booking.deposit_cents ?? 0;
-  const balanceCents = Math.max(0, totalCents - depositCents);
+  const { data: addonChargeRows } = await supabase
+    .from("booking_addon_charges")
+    .select("amount_cents, status")
+    .eq("booking_id", bookingId);
+  const paidAddonCents = (addonChargeRows || [])
+    .filter((r: { status: string | null }) => r.status === "paid" || r.status === "charged")
+    .reduce((s: number, r: { amount_cents: number | null }) => s + (Number(r.amount_cents) || 0), 0);
+  const balanceCents = remainingDueAtCompletionCents(booking, paidAddonCents);
   if (balanceCents <= 0) {
     await supabase.from("bookings").update({ completion_hold_status: "skipped" }).eq("id", bookingId);
     return { bookingId, outcome: "skipped", reason: "no_balance" };

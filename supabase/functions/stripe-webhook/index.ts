@@ -115,7 +115,31 @@ serve(async (req) => {
         }
 
         if (!booking) {
-          logStep("Booking not found for payment intent");
+          const meta = (paymentIntent.metadata || {}) as Record<string, string>;
+          const purpose = String(meta.purpose || "");
+          const bookingId = String(meta.booking_id || meta.bookingId || "");
+          // Customer pay-balance page does not persist capture on success.
+          // Record it here so remaining matches Stripe. Other remaining
+          // charges persist themselves and must not be added again.
+          if (purpose === "final_balance" && bookingId) {
+            const { data: row } = await supabase
+              .from("bookings")
+              .select("id, balance_amount_cents, team_notes")
+              .eq("id", bookingId)
+              .maybeSingle();
+            const piId = paymentIntent.id;
+            const received = Number(paymentIntent.amount_received || paymentIntent.amount || 0);
+            const notes = String(row?.team_notes || "");
+            if (row && received > 0 && !notes.includes(piId)) {
+              await supabase.from("bookings").update({
+                balance_amount_cents: (Number(row.balance_amount_cents) || 0) + received,
+                team_notes: [notes, `Remaining $${(received / 100).toFixed(2)} paid via balance page ${piId}.`].filter(Boolean).join("\n"),
+              }).eq("id", bookingId);
+              logStep("Recorded pay-balance capture", { bookingId, piId, received });
+            }
+          } else {
+            logStep("Booking not found for payment intent");
+          }
           break;
         }
 

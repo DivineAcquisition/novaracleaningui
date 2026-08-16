@@ -23,6 +23,11 @@
 import { NextResponse } from "next/server";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import { ADD_ONS, type AddOnId } from "@/lib/pricing";
+import {
+  capturedTowardJobCents,
+  completionCapturedCents,
+  remainingDueAtCompletionCents,
+} from "@/lib/booking-balance";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,8 +35,9 @@ export const dynamic = "force-dynamic";
 const BOOKING_COLS =
   "id, booking_number, status, first_name, last_name, email, phone, address, city, state, zip_code, " +
   "service_type, home_size_id, service_date, time_slot, add_ons, " +
-  "total_estimate_cents, final_charge_cents, deposit_cents, payment_received_at, " +
+  "total_estimate_cents, final_charge_cents, deposit_cents, payment_received_at, payment_option, uses_credit, " +
   "balance_payment_intent_id, balance_amount_cents, customer_id, job_id, " +
+  "completion_hold_status, completion_hold_amount_cents, completion_hold_captured_amount, completion_hold_captured_at, " +
   "before_photos, after_photos, completed_at";
 
 interface BookingRow {
@@ -52,10 +58,16 @@ interface BookingRow {
   final_charge_cents: number | null;
   deposit_cents: number | null;
   payment_received_at: string | null;
+  payment_option: string | null;
+  uses_credit: boolean | null;
   balance_payment_intent_id: string | null;
   balance_amount_cents: number | null;
   customer_id: string | null;
   job_id: string | null;
+  completion_hold_status: string | null;
+  completion_hold_amount_cents: number | null;
+  completion_hold_captured_amount: number | null;
+  completion_hold_captured_at: string | null;
   before_photos: string[] | null;
   after_photos: string[] | null;
   completed_at: string | null;
@@ -127,6 +139,17 @@ interface LineItem {
   amountCents: number | null;
   note?: string;
   kind: "service" | "addon" | "adjustment" | "credit";
+}
+
+async function paidAddonCentsFor(bookingId: string): Promise<number> {
+  const supabase = getAdminSupabase();
+  const { data } = await supabase
+    .from("booking_addon_charges")
+    .select("amount_cents, status")
+    .eq("booking_id", bookingId);
+  return (data || [])
+    .filter((r: { status: string | null }) => r.status === "paid" || r.status === "charged")
+    .reduce((s: number, r: { amount_cents: number | null }) => s + (Number(r.amount_cents) || 0), 0);
 }
 
 /**
@@ -233,6 +256,14 @@ async function buildBreakdown(booking: BookingRow) {
     ? Number(booking.deposit_cents || 0)
     : 0;
 
+  const paidAddonCents = await paidAddonCentsFor(booking.id);
+  const option = String(booking.payment_option || "").toLowerCase();
+  const usesCredit = booking.uses_credit === true || option === "credit";
+  const addonCapturedCents = usesCredit || option === "full" ? 0 : paidAddonCents;
+  const completionCents = completionCapturedCents(booking);
+  const balanceDueCents = remainingDueAtCompletionCents(booking, paidAddonCents);
+  const alreadyPaidCents = capturedTowardJobCents(booking, paidAddonCents);
+
   const cl = checklist as
     | { completed_items: number; total_items: number; progress_pct: number }
     | null;
@@ -241,7 +272,10 @@ async function buildBreakdown(booking: BookingRow) {
     items,
     finalTotalCents: finalTotal,
     depositPaidCents,
-    balanceDueCents: Math.max(0, finalTotal - depositPaidCents),
+    addonCapturedCents,
+    completionCapturedCents: completionCents,
+    alreadyPaidCents,
+    balanceDueCents,
     checklist: cl
       ? {
         completedItems: cl.completed_items,
@@ -267,40 +301,6 @@ function serviceLabel(serviceType: string | null): string {
     default:
       return (serviceType || "Cleaning").replaceAll("_", " ");
   }
-}
-
-/**
- * Has the balance already been settled?
- *
- * Asked of Stripe directly rather than trusting a flag on our own row. The
- * webhook that would normally stamp payment is a separate moving part; a
- * customer reloading this page must never be shown a "pay now" button for
- * money they have already sent.
- */
-async function balanceSettled(
-  booking: BookingRow,
-  key: string,
-): Promise<{ paid: boolean; paidAmountCents: number | null }> {
-  if (!booking.balance_payment_intent_id || !key) {
-    return { paid: false, paidAmountCents: null };
-  }
-  try {
-    const pi = await stripeCall(
-      `payment_intents/${booking.balance_payment_intent_id}`,
-      key,
-    );
-    const status = String(pi.status || "");
-    if (status === "succeeded") {
-      return { paid: true, paidAmountCents: Number(pi.amount_received) || null };
-    }
-  } catch {
-    // A Stripe hiccup must not present as "unpaid" nor block the page; fall
-    // through to the stored amount, which is only set once a charge landed.
-    if (booking.balance_amount_cents) {
-      return { paid: true, paidAmountCents: booking.balance_amount_cents };
-    }
-  }
-  return { paid: false, paidAmountCents: null };
 }
 
 export async function GET(
@@ -330,11 +330,8 @@ export async function GET(
     return NextResponse.json({ error: "This booking was cancelled." }, { status: 410 });
   }
 
-  const key = await stripeSecret();
-  const [breakdown, settled] = await Promise.all([
-    buildBreakdown(booking),
-    balanceSettled(booking, key),
-  ]);
+  const breakdown = await buildBreakdown(booking);
+  const paid = breakdown.balanceDueCents <= 0;
 
   return NextResponse.json({
     ok: true,
@@ -356,8 +353,8 @@ export async function GET(
       status: booking.status,
     },
     ...breakdown,
-    paid: settled.paid,
-    paidAmountCents: settled.paidAmountCents,
+    paid,
+    paidAmountCents: paid ? breakdown.alreadyPaidCents : null,
   });
 }
 
@@ -387,11 +384,6 @@ export async function POST(
   const key = await stripeSecret();
   if (!key) {
     return NextResponse.json({ error: "Payments are not configured." }, { status: 500 });
-  }
-
-  const settled = await balanceSettled(booking, key);
-  if (settled.paid) {
-    return NextResponse.json({ ok: true, paid: true });
   }
 
   const breakdown = await buildBreakdown(booking);

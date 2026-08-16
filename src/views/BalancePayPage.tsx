@@ -53,6 +53,9 @@ interface Summary {
   items: LineItem[];
   finalTotalCents: number;
   depositPaidCents: number;
+  addonCapturedCents?: number;
+  completionCapturedCents?: number;
+  alreadyPaidCents?: number;
   balanceDueCents: number;
   checklist: { completedItems: number; totalItems: number; progressPct: number } | null;
   beforePhotos: number;
@@ -204,7 +207,9 @@ export default function BalancePayPage() {
           </div>
           <div>
             <p className="text-[10px] uppercase tracking-wide text-violet-100">Already paid</p>
-            <p className="text-sm font-bold">{money(summary.depositPaidCents)}</p>
+            <p className="text-sm font-bold">
+              {money(summary.alreadyPaidCents ?? summary.depositPaidCents)}
+            </p>
           </div>
           <div>
             <p className="text-[10px] uppercase tracking-wide text-violet-100">
@@ -291,6 +296,22 @@ export default function BalancePayPage() {
               −{money(summary.depositPaidCents)}
             </span>
           </div>
+          {(summary.addonCapturedCents ?? 0) > 0 ? (
+            <div className="flex justify-between">
+              <span className="text-slate-600">Add-ons already paid</span>
+              <span className="tabular-nums text-emerald-700">
+                −{money(summary.addonCapturedCents)}
+              </span>
+            </div>
+          ) : null}
+          {(summary.completionCapturedCents ?? 0) > 0 ? (
+            <div className="flex justify-between">
+              <span className="text-slate-600">Completion already captured</span>
+              <span className="tabular-nums text-emerald-700">
+                −{money(summary.completionCapturedCents)}
+              </span>
+            </div>
+          ) : null}
           <div className="flex justify-between border-t border-slate-200 pt-1.5 text-base">
             <span className="font-semibold text-slate-900">Balance due</span>
             <span className="font-bold tabular-nums text-slate-900">

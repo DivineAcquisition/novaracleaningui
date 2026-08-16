@@ -72,6 +72,12 @@ import {
   SERVICE_TIER_PRICING,
   HOME_SIZE_RANGES,
 } from "@/lib/pricing";
+import {
+  billedTotalCents,
+  capturedTowardJobCents,
+  completionCapturedCents,
+  remainingDueAtCompletionCents,
+} from "@/lib/booking-balance";
 import { cn } from "@/lib/utils";
 import { edgeResult } from "@/lib/edge-invoke";
 
@@ -107,6 +113,13 @@ interface BookingRow {
   total_estimate_cents: number | null;
   deposit_cents: number | null;
   final_charge_cents: number | null;
+  payment_option?: string | null;
+  payment_received_at?: string | null;
+  balance_amount_cents?: number | null;
+  completion_hold_status?: string | null;
+  completion_hold_amount_cents?: number | null;
+  completion_hold_captured_amount?: number | null;
+  completion_hold_captured_at?: string | null;
   payment_intent_id: string | null;
   cleaner_id: string | null;
   job_id: string | null;
@@ -470,7 +483,7 @@ export default function AdminBookings() {
                       ) : null}
                     </div>
                     <div className="col-span-6 md:col-span-2 text-sm tabular-nums text-slate-900 font-medium">
-                      {fmtMoney(b.total_estimate_cents)}
+                      {fmtMoney(b.final_charge_cents ?? b.total_estimate_cents)}
                     </div>
                     <div className="col-span-12 md:col-span-1 flex md:justify-end">
                       <Badge
@@ -1661,6 +1674,8 @@ function BookingSheet({
   const [creditReason, setCreditReason] = useState("");
   const [creditNotify, setCreditNotify] = useState(true);
   const [walletCents, setWalletCents] = useState<number | null>(null);
+  const [paidAddonCents, setPaidAddonCents] = useState(0);
+  const [moneyPatch, setMoneyPatch] = useState<Partial<BookingRow>>({});
   // Adjust-job-cost state (revenue + optional refund).
   const [jobCost, setJobCost] = useState("");
   const [jobCostRefund, setJobCostRefund] = useState("");
@@ -1714,11 +1729,15 @@ function BookingSheet({
     setAddOnPrices({});
     setTotalOverride("");
     setFirstCleanChoice({ deepCleanedBefore: "", includeDeepClean: true });
-    // add_ons + suppress_review_request — refresh from the row so the sheet
-    // stays correct even if the list payload is stale / missing a column.
+    setPaidAddonCents(0);
+    setMoneyPatch({});
+    // add_ons + money columns — refresh from the row so the sheet shows
+    // captured vs remaining even if the list payload is stale.
     void (async () => {
       const { data } = await (supabase.from as any)("bookings")
-        .select("add_ons, suppress_review_request")
+        .select(
+          "add_ons, suppress_review_request, payment_option, payment_received_at, uses_credit, total_estimate_cents, final_charge_cents, deposit_cents, balance_amount_cents, completion_hold_status, completion_hold_amount_cents, completion_hold_captured_amount, completion_hold_captured_at",
+        )
         .eq("id", booking.id)
         .maybeSingle();
       const current = Array.isArray(data?.add_ons) ? (data.add_ons as string[]) : [];
@@ -1726,6 +1745,7 @@ function BookingSheet({
       if (data && typeof data.suppress_review_request === "boolean") {
         setSuppressReview(data.suppress_review_request);
       }
+      if (data) setMoneyPatch(data as Partial<BookingRow>);
       const seeded: Record<string, string> = {};
       for (const id of current) {
         const def = (ADD_ONS as Record<string, { price: number }>)[id]?.price;
@@ -1734,16 +1754,23 @@ function BookingSheet({
       setAddOnPrices(seeded);
     })();
     void (async () => {
-      const { data } = await (supabase.from as any)("booking_addon_charges")
+      const { data: addonRows } = await (supabase.from as any)("booking_addon_charges")
         .select("id, added_addons, amount_cents, status")
-        .eq("booking_id", booking.id)
-        .eq("status", "no_charge")
-        .eq("amount_cents", 0)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (data?.id && Array.isArray(data.added_addons) && data.added_addons.length) {
-        setUnpaidAddonCharge({ id: data.id, added_addons: data.added_addons as string[] });
+        .eq("booking_id", booking.id);
+      const rows = (addonRows || []) as Array<{
+        id: string;
+        added_addons: string[] | null;
+        amount_cents: number | null;
+        status: string | null;
+      }>;
+      setPaidAddonCents(
+        rows
+          .filter((r) => r.status === "paid" || r.status === "charged")
+          .reduce((s, r) => s + (Number(r.amount_cents) || 0), 0),
+      );
+      const unpaid = rows.find((r) => r.status === "no_charge" && Number(r.amount_cents) === 0 && Array.isArray(r.added_addons) && r.added_addons.length);
+      if (unpaid?.id) {
+        setUnpaidAddonCharge({ id: unpaid.id, added_addons: unpaid.added_addons as string[] });
       } else {
         setUnpaidAddonCharge(null);
       }
@@ -1897,6 +1924,56 @@ function BookingSheet({
     }
   };
 
+  const MONEY_COLS =
+    "payment_option, payment_received_at, uses_credit, total_estimate_cents, final_charge_cents, deposit_cents, balance_amount_cents, completion_hold_status, completion_hold_amount_cents, completion_hold_captured_amount, completion_hold_captured_at";
+
+  const refreshMoney = async (bookingId: string) => {
+    const [{ data }, { data: addonRows }] = await Promise.all([
+      (supabase.from as any)("bookings").select(MONEY_COLS).eq("id", bookingId).maybeSingle(),
+      (supabase.from as any)("booking_addon_charges")
+        .select("amount_cents, status")
+        .eq("booking_id", bookingId),
+    ]);
+    if (data) setMoneyPatch(data as Partial<BookingRow>);
+    const rows = (addonRows || []) as Array<{ amount_cents: number | null; status: string | null }>;
+    setPaidAddonCents(
+      rows
+        .filter((r) => r.status === "paid" || r.status === "charged")
+        .reduce((s, r) => s + (Number(r.amount_cents) || 0), 0),
+    );
+  };
+
+  const chargeRemainingBalance = async () => {
+    if (!booking) return;
+    const moneyRow = { ...booking, ...moneyPatch };
+    const due = remainingDueAtCompletionCents(moneyRow, paidAddonCents);
+    if (due <= 0) {
+      toast.success("Nothing remaining to charge.");
+      return;
+    }
+    if (!confirm(`Charge the remaining ${fmtMoney(due)} on this booking to the card on file?`)) return;
+    setWorking("charge-remaining");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Not signed in");
+      const res = await fetch("/api/admin/charge-booking-remaining", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ bookingId: booking.id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || "Charge failed");
+      if (data.skipped) toast.success("Nothing remaining to charge.");
+      else toast.success(`Charged ${fmtMoney(data.chargedCents ?? due)} remaining.`);
+      onMutated();
+      await refreshMoney(booking.id);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Charge failed");
+    } finally {
+      setWorking(null);
+    }
+  };
+
   const requestPhotos = async (phase: "before" | "after" | "both" = "both") => {
     if (!booking.cleaner_id) {
       toast.error("Assign a cleaner first.");
@@ -1923,10 +2000,16 @@ function BookingSheet({
     }
   };
 
-  const totalCents = booking.total_estimate_cents ?? 0;
-  const depositCents = booking.deposit_cents ?? 0;
-  const paidCents = booking.final_charge_cents || depositCents;
-  const remainingCents = Math.max(0, totalCents - depositCents);
+  if (!booking) return null;
+
+  const moneyRow = { ...booking, ...moneyPatch };
+  const billedCents = billedTotalCents(moneyRow);
+  const asBookedCents = moneyRow.total_estimate_cents ?? booking.total_estimate_cents ?? 0;
+  const depositCents = moneyRow.deposit_cents ?? booking.deposit_cents ?? 0;
+  const capturedCents = capturedTowardJobCents(moneyRow, paidAddonCents);
+  const remainingDueCents = remainingDueAtCompletionCents(moneyRow, paidAddonCents);
+  const completionCents = completionCapturedCents(moneyRow);
+  const totalCents = billedCents;
 
   const adminCancelWithRefund = async (refundType: "auto" | "full" | "none") => {
     if (!cancelReason.trim()) {
@@ -2304,14 +2387,57 @@ function BookingSheet({
                 ) : null}
 
                 <Separator className="col-span-2 my-1" />
-                <span className="text-slate-500">Total</span>
+                <span className="text-slate-500">Job total</span>
                 <span className="text-right tabular-nums font-semibold">
-                  {fmtMoney(totalCents)}
+                  {fmtMoney(billedCents)}
                 </span>
-                <span className="text-slate-500">Deposit paid</span>
+                {asBookedCents > 0 && asBookedCents !== billedCents ? (
+                  <>
+                    <span className="text-slate-500">As booked</span>
+                    <span className="text-right tabular-nums">{fmtMoney(asBookedCents)}</span>
+                  </>
+                ) : null}
+                <span className="text-slate-500">Deposit captured</span>
                 <span className="text-right tabular-nums">{fmtMoney(depositCents)}</span>
+                {paidAddonCents > 0 ? (
+                  <>
+                    <span className="text-slate-500">Add-ons captured</span>
+                    <span className="text-right tabular-nums">{fmtMoney(paidAddonCents)}</span>
+                  </>
+                ) : null}
+                {completionCents > 0 ? (
+                  <>
+                    <span className="text-slate-500">Completion captured</span>
+                    <span className="text-right tabular-nums">{fmtMoney(completionCents)}</span>
+                  </>
+                ) : null}
+                <span className="text-slate-500">Captured</span>
+                <span className="text-right tabular-nums font-medium">{fmtMoney(capturedCents)}</span>
                 <span className="text-slate-500">Remaining</span>
-                <span className="text-right tabular-nums">{fmtMoney(remainingCents)}</span>
+                <span className="text-right tabular-nums font-semibold">
+                  {fmtMoney(remainingDueCents)}
+                </span>
+                {remainingDueCents > 0 ? (
+                  <p className="col-span-2 text-xs text-slate-500">
+                    Remaining is what still needs to be captured so Stripe matches the job total.
+                  </p>
+                ) : (
+                  <p className="col-span-2 text-xs text-emerald-700">Captured matches the job total.</p>
+                )}
+                {remainingDueCents > 0 ? (
+                  <Button
+                    size="sm"
+                    className="col-span-2 bg-violet-600 hover:bg-violet-700 text-white"
+                    disabled={working === "charge-remaining"}
+                    onClick={() => void chargeRemainingBalance()}
+                  >
+                    {working === "charge-remaining" ? (
+                      <><RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> Charging…</>
+                    ) : (
+                      <>Charge remaining {fmtMoney(remainingDueCents)}</>
+                    )}
+                  </Button>
+                ) : null}
                 <span className="text-slate-500">Status</span>
                 <span className="text-right capitalize">
                   {STATUS_LABELS[booking.status || ""] ?? (booking.status || "—").replaceAll("_", " ")}
@@ -2567,8 +2693,9 @@ function BookingSheet({
                   </CardTitle>
                   <CardDescription>
                     For a job that turned out materially different from what was booked. Requires a defined reason
-                    and the job&apos;s condition photos, prices off the pricing engine, sends the customer a written
-                    justification, and pays the crew off the adjusted value.
+                    and the job&apos;s condition photos, prices off the pricing engine, notifies the customer now,
+                    and charges the extra to the card on file when the job is marked complete (or immediately if
+                    it already is). Crew pay follows the adjusted value.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
@@ -3142,8 +3269,11 @@ function BookingSheet({
                   </CardTitle>
                   <CardDescription>
                     {booking.status === "pending_review"
-                      ? "The cleaner marked this job done and uploaded (or was asked to upload) photos. Finalizing triggers the final charge + cleaner payout + customer comms."
-                      : "Triggers final charge + cleaner payout. Use when the cleaner forgot to mark it."}
+                      ? "The cleaner marked this job done and uploaded (or was asked to upload) photos. Finalizing captures the remaining balance, then cleaner payout + customer comms."
+                      : "Captures the remaining balance and triggers cleaner payout. Use when the cleaner forgot to mark it."}
+                    {remainingDueCents > 0
+                      ? ` ${fmtMoney(remainingDueCents)} remaining of ${fmtMoney(billedCents)} will be captured.`
+                      : ""}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>

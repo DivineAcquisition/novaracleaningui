@@ -16,8 +16,11 @@
 // route (which recomputes both server-side rather than trusting the client).
 
 import {
+  ADD_ONS,
   calculatePrice,
+  SCOPE_REASON_ADD_ONS,
   SERVICE_TIER_PRICING,
+  type AddOnId,
   type ServiceType,
   type ZoneId,
 } from "@/lib/pricing";
@@ -178,15 +181,63 @@ function capitalize(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+export type ScopeReasonPriceKind = "addon" | "tier" | "open";
+
+export interface ScopeReasonPricePreview {
+  kind: ScopeReasonPriceKind;
+  /** Extra the customer is billed for this reason, in cents. Null = set on the form. */
+  cents: number | null;
+}
+
+/**
+ * Dollar amount shown next to a justification reason. Catalog add-ons use the
+ * add-on price; reasons that reclassify the service use the engine's delta
+ * for that tier. Unpriced reasons (size band, occupancy) are set below.
+ */
+export function scopeReasonPricePreview(
+  reason: ScopeReason,
+  input: ScopeSuggestionInput,
+): ScopeReasonPricePreview {
+  const addonId = SCOPE_REASON_ADD_ONS[reason.code];
+  if (addonId) {
+    const price = ADD_ONS[addonId as AddOnId]?.price;
+    return {
+      kind: "addon",
+      cents: typeof price === "number" ? Math.round(price * 100) : null,
+    };
+  }
+  if (reason.suggests_service_type) {
+    const suggestion = suggestScopeAdjustment({
+      ...input,
+      adjustedServiceType: reason.suggests_service_type,
+      adjustedHomeSizeId: input.homeSizeId,
+      adjustedAddOns: input.addOns,
+    });
+    return { kind: "tier", cents: suggestion.suggestedDeltaCents };
+  }
+  return { kind: "open", cents: null };
+}
+
+export function formatScopeReasonPrice(preview: ScopeReasonPricePreview): string {
+  if (preview.cents == null) return "set below";
+  if (preview.cents <= 0) return preview.kind === "tier" ? "no extra" : "$0";
+  const dollars = `$${(preview.cents / 100).toFixed(preview.cents % 100 === 0 ? 0 : 2)}`;
+  return preview.kind === "addon" ? dollars : `+${dollars}`;
+}
+
 export interface DraftMessageInput {
   firstName?: string | null;
   reasons: ScopeReason[];
   selectedCodes: string[];
   adjustedServiceType: string | null;
   adjustedPriceCents: number;
+  /** Booked / current total, so we can name the extra in the billing sentence. */
+  originalPriceCents?: number;
   /** Service date, used to say "today's clean" vs naming the date. */
   serviceDate?: string | null;
   hasPhotoEvidence: boolean;
+  /** Already-completed jobs are charged when the adjustment is applied. */
+  chargeAt?: "completion" | "now";
 }
 
 /**
@@ -212,6 +263,16 @@ export function draftJustificationMessage(input: DraftMessageInput): string {
 
   const serviceLabel = serviceLabelFor(input.adjustedServiceType, selected);
   const price = `$${(input.adjustedPriceCents / 100).toFixed(2)}`;
+  const extraCents =
+    input.originalPriceCents != null
+      ? Math.max(0, input.adjustedPriceCents - input.originalPriceCents)
+      : 0;
+  const extra = extraCents > 0 ? `$${(extraCents / 100).toFixed(2)}` : "";
+  const billing = extra
+    ? input.chargeAt === "now"
+      ? ` The additional ${extra} is charged to the card on file now that this clean is complete.`
+      : ` The additional ${extra} will be charged to the card on file when this clean is completed.`
+    : "";
 
   const evidence = input.hasPhotoEvidence
     ? " Our team did a thorough job and the before/after photos are on file."
@@ -221,6 +282,7 @@ export function draftJustificationMessage(input: DraftMessageInput): string {
     `${greeting}${occasion} ${lead}. ` +
     `Per our service agreement, which covers additional work beyond the original booking scope, ` +
     `work at this level is classified as a ${serviceLabel}, so the rate adjusts to ${price}.` +
+    `${billing}` +
     `${evidence} Thank you for understanding.`
   );
 }
