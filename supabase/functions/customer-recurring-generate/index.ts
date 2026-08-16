@@ -1,6 +1,8 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.80.0";
 import { notifyCleanerOfAssignment } from "../_shared/notify-cleaner-assignment.ts";
+import { checkScheduleBuffer } from "../_shared/schedule-buffer.ts";
+import { jobServiceTypeForBooking } from "../_shared/contractor-checklists.ts";
 
 // customer-recurring-generate
 //
@@ -76,7 +78,11 @@ function buildBookingForNotify(sched: any, serviceDate: string): Record<string, 
     city: sched.city,
     state: sched.state,
     zip_code: sched.zip_code,
-    service_type: sched.service_type || "standard",
+    service_type: jobServiceTypeForBooking({
+      service_type: sched.service_type || "standard",
+      is_recurring: true,
+      booking_channel: "recurring",
+    }),
     service_date: serviceDate,
     time_slot: sched.preferred_time_slot,
     total_estimate_cents: sched.price_cents ?? 0,
@@ -144,7 +150,11 @@ async function generateOne(admin: any, sched: any, opts: { force?: boolean }): P
       state: sched.state,
       zip_code: sched.zip_code,
       home_size_id: sched.home_size_id,
-      service_type: sched.service_type || "standard",
+      service_type: jobServiceTypeForBooking({
+        service_type: sched.service_type || "standard",
+        is_recurring: true,
+        booking_channel: "recurring",
+      }),
       add_ons: sched.add_ons || [],
       membership_plan: sched.membership_plan,
       uses_credit: sched.uses_credit || false,
@@ -159,6 +169,7 @@ async function generateOne(admin: any, sched: any, opts: { force?: boolean }): P
       customer_id: sched.customer_id,
       recurring_schedule_id: sched.id,
       booking_channel: "recurring",
+      is_recurring: true,
       status: "confirmed",
       dispatch_notes: cleanerId
         ? `RECURRING (${sched.cadence}) — assigned previous/preferred cleaner ${cleanerId}`

@@ -10,7 +10,12 @@
 // attribution) and the job's shared checklist row (→ shared progress the
 // whole team and the admin Dispatch console see live).
 
-import { countChecklistItems, getContractorChecklist, normalizeServiceType } from "./contractor-checklists.ts";
+import {
+  contractorChecklistKeyForBooking,
+  countChecklistItems,
+  getContractorChecklist,
+  jobServiceTypeForBooking,
+} from "./contractor-checklists.ts";
 import {
   FOCUSED_SAME_DAY_DEFAULTS,
   FOCUSED_SAME_DAY_SETTINGS_KEY,
@@ -29,9 +34,37 @@ function randomToken(): string {
   return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+async function loadBookingForChecklist(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  args: { jobId: string; bookingId?: string | null },
+) {
+  if (args.bookingId) {
+    const { data } = await supabase
+      .from("bookings")
+      .select("id, service_type, is_recurring, membership_plan, booking_channel, focused_areas")
+      .eq("id", args.bookingId)
+      .maybeSingle();
+    if (data) return data;
+  }
+  const { data } = await supabase
+    .from("bookings")
+    .select("id, service_type, is_recurring, membership_plan, booking_channel, focused_areas")
+    .eq("job_id", args.jobId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data || null;
+}
+
 /**
  * Get-or-create the job's shared checklist row. Idempotent — safe to call
  * from every dispatch/assign/accept path.
+ *
+ * Existing rows are synced from the booking: a membership/recurring visit
+ * that was cloned off a Deep first-clean must not keep serving the Deep
+ * list. Completed checklists are left as historical (what the crew actually
+ * worked).
  */
 export async function ensureJobChecklist(
   // deno-lint-ignore no-explicit-any
@@ -41,40 +74,62 @@ export async function ensureJobChecklist(
   const { jobId } = args;
   if (!jobId) return null;
 
+  const booking = await loadBookingForChecklist(supabase, args);
+  let focusedAreas: Array<{ areaId: string; quantity: number }> | null = null;
+  if (Array.isArray(booking?.focused_areas)) focusedAreas = booking.focused_areas;
+
+  const checklistKey = contractorChecklistKeyForBooking(
+    booking,
+    args.serviceType || booking?.service_type || null,
+  );
+  const jobType = jobServiceTypeForBooking(
+    booking,
+    args.serviceType || booking?.service_type || null,
+  );
+
+  try {
+    await supabase.from("jobs").update({ service_type: jobType }).eq("id", jobId);
+  } catch (_) { /* job row may not exist yet during insert */ }
+
   const { data: existing } = await supabase
     .from("job_checklists")
-    .select("id, token")
+    .select("id, token, service_type, completed_at, started_at, completed_items")
     .eq("job_id", jobId)
     .maybeSingle();
-  if (existing?.id) return { id: existing.id, token: existing.token };
 
-  let bookingId = args.bookingId ?? null;
-  let serviceType = args.serviceType ?? null;
-  let focusedAreas: Array<{ areaId: string; quantity: number }> | null = null;
-  {
-    const { data: booking } = await supabase
-      .from("bookings")
-      .select("id, service_type, focused_areas")
-      .eq("job_id", jobId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    bookingId = bookingId || booking?.id || null;
-    serviceType = serviceType || booking?.service_type || null;
-    if (Array.isArray(booking?.focused_areas)) focusedAreas = booking.focused_areas;
-  }
-  if (!serviceType) {
-    const { data: job } = await supabase
-      .from("jobs")
-      .select("service_type")
-      .eq("id", jobId)
-      .maybeSingle();
-    serviceType = job?.service_type || "standard";
+  if (existing?.id) {
+    const stale = String(existing.service_type || "") !== checklistKey;
+    if (stale && !existing.completed_at) {
+      let focusedSettings = FOCUSED_SAME_DAY_DEFAULTS;
+      if (checklistKey === "focused") {
+        try {
+          const { data: settingsRow } = await supabase
+            .from("app_settings")
+            .select("value")
+            .eq("key", FOCUSED_SAME_DAY_SETTINGS_KEY)
+            .maybeSingle();
+          if (settingsRow?.value) focusedSettings = mergeFocusedSameDaySettings(settingsRow.value);
+        } catch (_) { /* defaults */ }
+      }
+      const totalItems = countChecklistItems(
+        getContractorChecklist(checklistKey, focusedAreas, focusedSettings),
+      );
+      await supabase.from("job_checklists").update({
+        service_type: checklistKey,
+        booking_id: booking?.id || args.bookingId || null,
+        total_items: totalItems,
+        items: {},
+        completed_items: 0,
+        progress_pct: 0,
+        started_at: null,
+        section_meta: {},
+      }).eq("id", existing.id);
+    }
+    return { id: existing.id, token: existing.token };
   }
 
-  const normalized = normalizeServiceType(serviceType);
   let focusedSettings = FOCUSED_SAME_DAY_DEFAULTS;
-  if (normalized === "focused") {
+  if (checklistKey === "focused") {
     try {
       const { data: settingsRow } = await supabase
         .from("app_settings")
@@ -84,14 +139,16 @@ export async function ensureJobChecklist(
       if (settingsRow?.value) focusedSettings = mergeFocusedSameDaySettings(settingsRow.value);
     } catch (_) { /* defaults */ }
   }
-  const totalItems = countChecklistItems(getContractorChecklist(normalized, focusedAreas, focusedSettings));
+  const totalItems = countChecklistItems(
+    getContractorChecklist(checklistKey, focusedAreas, focusedSettings),
+  );
 
   const { data: created, error } = await supabase
     .from("job_checklists")
     .insert({
       job_id: jobId,
-      booking_id: bookingId,
-      service_type: normalized,
+      booking_id: booking?.id || args.bookingId || null,
+      service_type: checklistKey,
       token: randomToken(),
       total_items: totalItems,
       section_meta: {},

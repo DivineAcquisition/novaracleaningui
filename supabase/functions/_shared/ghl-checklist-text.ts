@@ -213,7 +213,7 @@ const TEMPLATES: Record<string, ChecklistTemplate> = {
 };
 
 TEMPLATES.recurring = {
-  name: "Recurring Clean",
+  name: "Maintenance Clean",
   tagline: "Weekly • Biweekly • Monthly — consistent care for your home",
   meta: {
     estimatedTime: "1.5–2.5 hours per visit (after initial Deep Clean)",

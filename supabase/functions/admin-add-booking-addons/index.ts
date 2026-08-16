@@ -14,6 +14,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { resolveSecret } from "../_shared/app-secrets.ts";
 import { resolveOffSessionPaymentMethod } from "../_shared/resolve-off-session-payment-method.ts";
+import { documentBookingAddonsInQcSafe } from "../_shared/addon-qc.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -251,6 +252,14 @@ serve(async (req) => {
         summary: `Add-ons saved ($${(Math.max(0, deltaCents) / 100).toFixed(2)}) — customer notified`,
         data: { added, removed, by: callerId, charge: false },
       }).then(() => undefined, () => undefined);
+      await documentBookingAddonsInQcSafe(admin, {
+        booking: { ...booking, add_ons: retryMode ? booking.add_ons : newAddOns },
+        source: "admin",
+        addedIds: added,
+        amountCentsById: Object.fromEntries(pricedAdded.map((p) => [p.id, Math.round(p.price * 100)])),
+        chargeStatus: "no_charge",
+        chargeId: auditId || null,
+      });
       return json({
         ok: true,
         charged: false,
@@ -309,6 +318,14 @@ serve(async (req) => {
           // .catch() on it throws a TypeError AFTER the charge succeeds.
           // Use .then(onOk, onErr) for fire-and-forget error swallowing.
           await admin.from("events").insert({ event_type: "booking.addon_charged", booking_id: bookingId, source: "admin", summary: `Add-ons charged $${(deltaCents / 100).toFixed(2)}`, data: { added, removed, pi: pi.id, by: callerId } }).then(() => undefined, () => undefined);
+          await documentBookingAddonsInQcSafe(admin, {
+            booking: { ...booking, add_ons: retryMode ? booking.add_ons : newAddOns },
+            source: "admin",
+            addedIds: added,
+            amountCentsById: Object.fromEntries(pricedAdded.map((p) => [p.id, Math.round(p.price * 100)])),
+            chargeStatus: "paid",
+            chargeId: auditId || null,
+          });
           return json({ ok: true, charged: true, status: "paid", deltaCents, newTotalCents, addedAddOns: added, removedAddOns: removed, paymentIntentId: pi.id });
         }
       } catch (e) {
@@ -328,6 +345,14 @@ serve(async (req) => {
         `Novara Cleaning: We added ${addOnListForSms} to your cleaning${booking.service_date ? ` on ${booking.service_date}` : ""}. Your updated total is $${(newTotalCents / 100).toFixed(2)} — no action needed. Questions? Call (844) 735-2070.`,
     });
     await admin.from("events").insert({ event_type: "booking.addon_charge_failed", booking_id: bookingId, source: "admin", summary: `Add-ons added ($${(deltaCents / 100).toFixed(2)}) but auto-charge failed — will collect with booking balance.`, data: { added, removed, by: callerId } }).then(() => undefined, () => undefined);
+    await documentBookingAddonsInQcSafe(admin, {
+      booking: { ...booking, add_ons: retryMode ? booking.add_ons : newAddOns },
+      source: "admin",
+      addedIds: added,
+      amountCentsById: Object.fromEntries(pricedAdded.map((p) => [p.id, Math.round(p.price * 100)])),
+      chargeStatus: "charge_failed",
+      chargeId: auditId || null,
+    });
 
     return json({ ok: true, charged: false, status: "charge_failed", deltaCents, newTotalCents, addedAddOns: added, removedAddOns: removed });
   } catch (e) {

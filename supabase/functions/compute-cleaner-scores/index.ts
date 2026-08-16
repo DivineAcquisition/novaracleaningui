@@ -155,12 +155,14 @@ serve(async (req) => {
     const since = new Date(Date.now() - 90 * 86400_000).toISOString();
     const { data: issues } = await supabase
       .from("qc_issues")
-      .select("cleaner_id, severity")
+      .select("cleaner_id, severity, issue_type")
       .not("cleaner_id", "is", null)
       .gte("created_at", since)
       .limit(5000);
     const qcWeight = new Map<string, number>();
     for (const i of issues || []) {
+      // Documentation rows (add-ons, site findings) are not quality failures.
+      if (i.issue_type === "addon" || i.issue_type === "site_finding") continue;
       const wgt = QC_SEVERITY_WEIGHT[String(i.severity)] ?? 1;
       qcWeight.set(i.cleaner_id, (qcWeight.get(i.cleaner_id) || 0) + wgt);
     }

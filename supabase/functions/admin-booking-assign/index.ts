@@ -22,6 +22,7 @@ import { createContactTask } from "../_shared/ghl-tasks.ts";
 import { buildGhlTaskChecklistBody } from "../_shared/ghl-checklist-text.ts";
 import { notifyCleanerOfAssignment } from "../_shared/notify-cleaner-assignment.ts";
 import { ensureAssignmentChecklistAccess } from "../_shared/job-checklist.ts";
+import { jobServiceTypeForBooking, contractorChecklistKeyForBooking } from "../_shared/contractor-checklists.ts";
 import { parseTimeSlotToClock } from "../_shared/sms.ts";
 import {
   bufferConflictBody,
@@ -367,7 +368,7 @@ serve(async (req) => {
           city: booking.city,
           state: booking.state,
           zip: booking.zip_code,
-          service_type: booking.service_type,
+          service_type: jobServiceTypeForBooking(booking),
           start_datetime: startDatetime,
           duration_est_hours: duration,
           sq_ft: Math.round(Number(booking.sqft) || 2000),
@@ -524,7 +525,10 @@ serve(async (req) => {
     // already updated on assignment rows above. Do NOT SMS about the
     // recalculation — ops/cleaners see the new estimate in the portal.
 
-    await admin.from("jobs").update({ status: "Assigned" }).eq("id", jobId);
+    await admin.from("jobs").update({
+      status: "Assigned",
+      service_type: jobServiceTypeForBooking(booking),
+    }).eq("id", jobId);
 
     await admin.from("events").insert({
       event_type: "booking.manually_assigned",
@@ -562,14 +566,15 @@ serve(async (req) => {
         let ghlTaskId: string | null = null;
 
         if (ghlContactId) {
-          const taskBody = buildGhlTaskChecklistBody(booking.service_type, {
+          const checklistKey = contractorChecklistKeyForBooking(booking, booking.service_type as string | null);
+          const taskBody = buildGhlTaskChecklistBody(checklistKey, {
             bookingLine:
               `${customerName} · ${booking.service_date || "TBD"} ${booking.time_slot || ""}\n` +
               `${booking.address || ""}, ${booking.city || ""} ${booking.state || ""}\n` +
               `Booking #${booking.booking_number || bookingId.slice(0, 8)}`,
             roleLine: `Assigned (${role}): ${c.first_name} ${c.last_name}`,
           });
-          const serviceTitle = String(booking.service_type || "standard")
+          const serviceTitle = (checklistKey === "recurring" ? "Maintenance" : String(booking.service_type || "standard"))
             .replace(/_/g, " ")
             .replace(/\b\w/g, (ch: string) => ch.toUpperCase());
           const taskRes = await createContactTask(ghlContactId, {

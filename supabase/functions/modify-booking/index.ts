@@ -3,6 +3,8 @@ import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { mirrorToLeadConnector } from "../_shared/leadconnector-mirror.ts";
 import { resolveSecret } from "../_shared/app-secrets.ts";
+import { ensureJobChecklist } from "../_shared/job-checklist.ts";
+import { documentBookingAddonsInQcSafe } from "../_shared/addon-qc.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -183,6 +185,23 @@ serve(async (req) => {
     if (updateError) throw updateError;
 
     logStep("Booking updated successfully");
+
+    if (booking.job_id) {
+      try {
+        await ensureJobChecklist(supabaseAdmin, {
+          jobId: String(booking.job_id),
+          bookingId,
+          serviceType,
+        });
+      } catch (e) {
+        logStep("checklist sync failed (non-blocking)", { error: String(e) });
+      }
+    }
+    await documentBookingAddonsInQcSafe(supabaseAdmin, {
+      booking: { ...booking, service_type: serviceType, add_ons: addOns },
+      source: "booked",
+      addedIds: (addOns as string[]).filter((a) => !(booking.add_ons || []).includes(a)),
+    });
 
     // Send modification confirmation email (only if no payment required)
     if (!requiresPayment) {

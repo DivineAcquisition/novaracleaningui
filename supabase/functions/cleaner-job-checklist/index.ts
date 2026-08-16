@@ -26,10 +26,12 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import {
   CONTRACTOR_ADDON_CATALOG,
+  contractorChecklistKeyForBooking,
   countChecklistItems,
   getContractorChecklist,
 } from "../_shared/contractor-checklists.ts";
 import { ensureJobChecklist } from "../_shared/job-checklist.ts";
+import { documentBookingAddonsInQcSafe } from "../_shared/addon-qc.ts";
 import {
   FOCUSED_SAME_DAY_DEFAULTS,
   FOCUSED_SAME_DAY_SETTINGS_KEY,
@@ -222,7 +224,7 @@ serve(async (req) => {
 
     const { data: booking } = await supabase
       .from("bookings")
-      .select("id, booking_number, first_name, service_date, time_slot, arrival_window, add_ons, access_notes, service_type, status, focused_areas")
+      .select("id, booking_number, first_name, service_date, time_slot, arrival_window, add_ons, access_notes, service_type, status, focused_areas, is_recurring, membership_plan, booking_channel")
       .eq("job_id", jobId)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -251,7 +253,12 @@ serve(async (req) => {
       || String(checklistRow.service_type).toLowerCase() === "focused";
 
     const focusedSettings = await loadFocusedSettings(supabase);
-    const spec = getContractorChecklist(checklistRow.service_type, focusedAreas, focusedSettings);
+    // Completed checklists keep the list the crew actually worked. Live
+    // checklists follow the booking (membership visits → maintenance, not Deep).
+    const checklistKey = checklistRow.completed_at
+      ? String(checklistRow.service_type || serviceTypeRaw)
+      : contractorChecklistKeyForBooking(booking, serviceTypeRaw);
+    const spec = getContractorChecklist(checklistKey, focusedAreas, focusedSettings);
     const totalItems = countChecklistItems(spec);
     const nowIso = new Date().toISOString();
     const cleanerName = cleaner
@@ -605,6 +612,9 @@ serve(async (req) => {
         }
       }
       await persistProgress(items, { completed_at: nowIso });
+      if (booking?.id) {
+        await documentBookingAddonsInQcSafe(supabase, { booking, source: "booked" });
+      }
       await supabase.from("events").insert({
         event_type: "job.checklist.completed",
         job_id: jobId,
@@ -749,7 +759,7 @@ serve(async (req) => {
       canWrite,
       job: {
         id: job.id,
-        service_type: serviceTypeRaw,
+        service_type: checklistKey,
         address: job.address,
         city: job.city,
         state: job.state,

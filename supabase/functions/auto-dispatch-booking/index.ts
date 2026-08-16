@@ -5,6 +5,7 @@ import { autoOffersEnabled, requestDispatchApproval } from "../_shared/dispatch-
 import { ensureJobChecklist } from "../_shared/job-checklist.ts";
 import { getServiceDurationHours } from "../_shared/payout-utils.ts";
 import { parseTimeSlotToClock } from "../_shared/sms.ts";
+import { jobServiceTypeForBooking } from "../_shared/contractor-checklists.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -160,7 +161,7 @@ serve(async (req) => {
         city: booking.city,
         state: booking.state,
         zip: booking.zip_code,
-        service_type: booking.service_type,
+        service_type: jobServiceTypeForBooking(booking),
         sq_ft: booking.sqft,
         bedrooms: booking.bedrooms,
         bathrooms: booking.bathrooms,

@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.80.0";
+import { ensureJobChecklist } from "../_shared/job-checklist.ts";
+import { documentBookingAddonsInQcSafe } from "../_shared/addon-qc.ts";
 
 // admin-modify-booking
 //
@@ -341,6 +343,23 @@ serve(async (req) => {
 
     const { error: upErr } = await admin.from("bookings").update(update).eq("id", bookingId);
     if (upErr) throw new Error(`Booking update failed: ${errMessage(upErr)}`);
+
+    if (booking.job_id) {
+      try {
+        await ensureJobChecklist(admin, {
+          jobId: String(booking.job_id),
+          bookingId,
+          serviceType: String(newServiceType),
+        });
+      } catch (e) {
+        console.warn("[admin-modify-booking] checklist sync failed (non-blocking)", e);
+      }
+    }
+    await documentBookingAddonsInQcSafe(admin, {
+      booking: { ...booking, ...update },
+      source: "admin",
+      addedIds: (newAddOns as string[]).filter((a) => !(booking.add_ons || []).includes(a)),
+    });
 
     console.log("[admin-modify-booking] updated", { bookingId, actorId, newServiceType, newHomeSize, newTotalCents });
 

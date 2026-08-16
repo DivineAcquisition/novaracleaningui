@@ -284,7 +284,7 @@ const CHECKLISTS: Record<string, ContractorChecklist> = {
   deep: { key: "deep", name: "Deep Clean", sections: DEEP_SECTIONS },
   combo: { key: "combo", name: "Deep + Standard Combo", sections: DEEP_SECTIONS },
   move_in_out: { key: "move_in_out", name: "Move In / Move Out Clean", sections: MOVE_IN_OUT_SECTIONS },
-  recurring: { key: "recurring", name: "Recurring Clean", sections: STANDARD_SECTIONS },
+  recurring: { key: "recurring", name: "Maintenance Clean", sections: STANDARD_SECTIONS },
   turnover: { key: "turnover", name: "STR Turnover — Guest-Ready", sections: TURNOVER_SECTIONS },
   commercial: { key: "commercial", name: "Commercial Site Service", sections: COMMERCIAL_SECTIONS },
   office: { key: "office", name: "Office Clean (After-Hours)", sections: OFFICE_SECTIONS },
@@ -308,7 +308,7 @@ const CHECKLISTS: Record<string, ContractorChecklist> = {
 export function normalizeServiceType(serviceType: string | null | undefined): string {
   const raw = String(serviceType || "standard").toLowerCase().replace(/[\s-]/g, "_");
   if (raw === "moveinout" || raw === "move_in_out" || raw === "movein" || raw === "moveout") return "move_in_out";
-  if (raw === "membership" || raw === "recurring") return "recurring";
+  if (raw === "membership" || raw === "recurring" || raw === "maintenance") return "recurring";
   if (raw === "deep") return "deep";
   if (raw === "combo" || raw === "deep_standard" || raw === "deep_+_standard") return "combo";
   if (raw === "turnover" || raw === "str_turnover" || raw === "str") return "turnover";
@@ -316,6 +316,52 @@ export function normalizeServiceType(serviceType: string | null | undefined): st
   if (raw === "office") return "office";
   if (raw === "focused" || raw === "single_area" || raw === "singlearea") return "focused";
   return CHECKLISTS[raw] ? raw : "standard";
+}
+
+const SPECIALTY_CHECKLIST_KEYS = new Set([
+  "focused",
+  "move_in_out",
+  "turnover",
+  "commercial",
+  "office",
+]);
+
+export type BookingForChecklist = {
+  service_type?: string | null;
+  is_recurring?: boolean | null;
+  booking_channel?: string | null;
+};
+
+/**
+ * Recurring / membership visits run the Standard (maintenance) list — never
+ * Deep — even if the booking was cloned from a first-visit Deep or the job
+ * row was left stale. Specialty visits (focused, move-out, STR, commercial)
+ * keep their own lists.
+ */
+export function isMembershipMaintenanceVisit(booking: BookingForChecklist | null | undefined): boolean {
+  if (!booking) return false;
+  const key = normalizeServiceType(booking.service_type);
+  if (SPECIALTY_CHECKLIST_KEYS.has(key)) return false;
+  if (booking.is_recurring === true) return true;
+  return String(booking.booking_channel || "").toLowerCase() === "recurring";
+}
+
+/** Contractor checklist key the crew should actually work. */
+export function contractorChecklistKeyForBooking(
+  booking: BookingForChecklist | null | undefined,
+  fallbackServiceType?: string | null,
+): string {
+  if (isMembershipMaintenanceVisit(booking)) return "recurring";
+  return normalizeServiceType(booking?.service_type || fallbackServiceType);
+}
+
+/** Value stored on jobs.service_type — booking vocabulary, not checklist keys. */
+export function jobServiceTypeForBooking(
+  booking: BookingForChecklist | null | undefined,
+  fallbackServiceType?: string | null,
+): string {
+  if (isMembershipMaintenanceVisit(booking)) return "standard";
+  return String(booking?.service_type || fallbackServiceType || "standard");
 }
 
 export function getContractorChecklist(

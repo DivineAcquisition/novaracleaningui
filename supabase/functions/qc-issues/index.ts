@@ -43,7 +43,7 @@ const log = (s: string, d?: unknown) =>
 // deno-lint-ignore no-explicit-any
 type SB = any;
 
-const ISSUE_TYPES = ["complaint", "reclean", "damage", "no_show", "late", "quality_flag", "payment", "other", "site_finding"];
+const ISSUE_TYPES = ["complaint", "reclean", "damage", "no_show", "late", "quality_flag", "payment", "other", "site_finding", "addon"];
 const SEVERITIES = ["low", "medium", "high", "critical"];
 const STATUSES = ["open", "investigating", "awaiting_customer", "resolved", "escalated"];
 

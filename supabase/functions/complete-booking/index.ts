@@ -5,6 +5,7 @@ import { sendSms, formatServiceDate } from "../_shared/sms.ts";
 import { mirrorToLeadConnector } from "../_shared/leadconnector-mirror.ts";
 import { resolveSecret } from "../_shared/app-secrets.ts";
 import { computeCrewPay, shareFor } from "../_shared/crew-pay.ts";
+import { documentBookingAddonsInQcSafe } from "../_shared/addon-qc.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -192,6 +193,8 @@ serve(async (req) => {
       .eq("id", bookingId);
 
     if (updateError) throw updateError;
+
+    await documentBookingAddonsInQcSafe(supabase, { booking, source: "booked" });
 
     // Keep dispatch rows in sync with bookings.status. Historically only the
     // booking flipped to completed, so job_assignments stayed Confirmed /

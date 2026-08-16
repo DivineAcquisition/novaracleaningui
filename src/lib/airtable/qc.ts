@@ -129,7 +129,7 @@ export async function syncQcIssueById(issueId: string): Promise<string | null> {
       [F.client]: issue.client_name || undefined,
       [F.clientEmail]: issue.client_email || undefined,
       [F.cleaner]: issue.cleaner_name || undefined,
-      [F.type]: (SELECT_OPTIONS[F.type].filter((t) => t !== "site_finding") as string[]).includes(String(issue.issue_type))
+      [F.type]: ["complaint", "reclean", "damage", "no_show", "late", "quality_flag", "payment", "other"].includes(String(issue.issue_type))
         ? issue.issue_type
         : "other",
       [F.severity]: issue.severity,

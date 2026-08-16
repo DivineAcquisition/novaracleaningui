@@ -393,7 +393,7 @@ async function loadPaymentRecord(supabase: SB, bookingId: string): Promise<Payme
   try {
     const { data: b } = await supabase
       .from("bookings")
-      .select("total_estimate_cents, final_charge_cents, deposit_cents, payment_option, payment_method, payment_received_at, payment_intent_id, hosted_invoice_url, applied_credit_cents, tip_cents")
+      .select("total_estimate_cents, final_charge_cents, deposit_cents, payment_option, payment_method, payment_received_at, payment_intent_id, hosted_invoice_url, applied_credit_cents, tip_cents, add_ons")
       .eq("id", bookingId)
       .maybeSingle();
     if (b) {
@@ -407,6 +407,8 @@ async function loadPaymentRecord(supabase: SB, bookingId: string): Promise<Payme
       if (b.payment_received_at) rows.push(["Payment received", new Date(b.payment_received_at).toUTCString()]);
       if (b.payment_intent_id) rows.push(["Stripe payment intent", String(b.payment_intent_id)]);
       if (b.hosted_invoice_url) rows.push(["Invoice / pay link", String(b.hosted_invoice_url)]);
+      const booked = Array.isArray(b.add_ons) ? b.add_ons.map(String).filter(Boolean) : [];
+      if (booked.length) rows.push(["Add-ons on booking", booked.join(", ")]);
     }
     const { data: addons } = await supabase
       .from("booking_addon_charges")
@@ -740,6 +742,15 @@ async function buildSummaryPdf(doc: DocRow, extras: {
         line(`   Price: $${(delta / 100).toFixed(2)} impact · original $${(orig / 100).toFixed(2)} → $${(neu / 100).toFixed(2)}`, { size: 8.5, color: gray, gap: 2.5 });
         line(`   Photos: ${Array.isArray(det.before_photo_urls) ? det.before_photo_urls.length : 0} before · ${Array.isArray(det.after_photo_urls) ? det.after_photo_urls.length : 0} after`, { size: 8.5, color: gray, gap: 2.5 });
         if (det.recurrence) line(`   Recurrence flagged at this property${det.recurrence_same_spot ? " (same spot)" : ""}.`, { size: 8.5, color: gray, gap: 2.5 });
+      }
+      if (iss.issue_type === "addon" && det) {
+        const addons = Array.isArray(det.addons) ? det.addons as Array<Record<string, unknown>> : [];
+        line(`   Add-on documentation (auto-assembled from QC record — not a quality complaint):`, { size: 8.5, font: bold, color: dark, gap: 2.5 });
+        for (const a of addons.slice(0, 12)) {
+          const amt = a.amount_cents != null ? `$${(Number(a.amount_cents) / 100).toFixed(2)}` : "included";
+          const st = a.charge_status ? ` · ${String(a.charge_status).replace(/_/g, " ")}` : "";
+          line(`   • ${String(a.label || a.id || "add-on")} (${String(a.source || "booked").replace(/_/g, " ")}) — ${amt}${st}`, { size: 8.5, color: gray, gap: 2.5 });
+        }
       }
       if (iss.resolution_note) {
         line(`   RESOLVED${iss.resolved_at ? ` ${new Date(iss.resolved_at).toUTCString()}` : ""}${iss.resolved_by_name ? ` by ${iss.resolved_by_name}` : ""}:`, { size: 8.5, font: bold, color: dark, gap: 2.5 });

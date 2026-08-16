@@ -175,6 +175,7 @@ const ISSUE_TYPES = [
   { id: "quality_flag", label: "Quality flag" },
   { id: "payment", label: "Payment" },
   { id: "site_finding", label: "Site finding" },
+  { id: "addon", label: "Add-on" },
   { id: "other", label: "Other" },
 ];
 const STATUSES = ["open", "investigating", "awaiting_customer", "resolved", "escalated"];
@@ -692,6 +693,9 @@ function IssueSheet({ issue, doc, onClose, reload }: {
 
           {issue.issue_type === "site_finding" && issue.details && (
             <SiteFindingEvidence details={issue.details} />
+          )}
+          {issue.issue_type === "addon" && issue.details && (
+            <AddonEvidence details={issue.details} />
           )}
 
           {/* ─── Evidence: the linked job's documentation ─────────────── */}
@@ -1324,6 +1328,20 @@ export function CaseFileSheet({ bookingId, caseRef, onClose }: { bookingId: stri
                 {Number(cf.payments.totals.tip_cents) > 0 && <span>Tip: {cents(cf.payments.totals.tip_cents)}</span>}
                 {cf.payments.totals.payment_received_at && <span>Received: {fmtDT(cf.payments.totals.payment_received_at)}</span>}
               </div>
+              {(Array.isArray(cf.booking.add_ons) && cf.booking.add_ons.length > 0) || (cf.payments.addon_charges || []).length > 0 ? (
+                <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 space-y-1.5">
+                  <p className="text-xs font-bold text-amber-950">Add-ons on this job</p>
+                  {Array.isArray(cf.booking.add_ons) && cf.booking.add_ons.length > 0 && (
+                    <p className="text-xs text-slate-700">Booked: {cf.booking.add_ons.map(String).join(", ")}</p>
+                  )}
+                  {(cf.payments.addon_charges || []).map((a, i) => (
+                    <p key={i} className="text-xs text-slate-700">
+                      Charge {String(a.status || "")}: {(Array.isArray(a.added_addons) ? a.added_addons : []).join(", ") || "add-ons"}
+                      {" — "}{cents(a.amount_cents)}
+                    </p>
+                  ))}
+                </div>
+              ) : null}
               {cf.payments.stripe.map((p, i) => (
                 <div key={i} className="flex items-center justify-between text-sm bg-slate-50 rounded-lg px-3 py-2">
                   <span className="text-slate-700">
@@ -1694,6 +1712,44 @@ function moneyCents(cents: unknown): string {
   const n = Number(cents);
   if (!Number.isFinite(n)) return "—";
   return `$${(n / 100).toFixed(2)}`;
+}
+
+function AddonEvidence({ details }: { details: Record<string, unknown> }) {
+  const lines = Array.isArray(details.addons) ? details.addons as Array<Record<string, unknown>> : [];
+  const before = Array.isArray(details.before_photo_urls) ? details.before_photo_urls.map(String) : [];
+  const after = Array.isArray(details.after_photo_urls) ? details.after_photo_urls.map(String) : [];
+  return (
+    <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 space-y-3">
+      <p className="text-sm font-bold text-amber-950">Add-ons — dispute evidence (auto-assembled)</p>
+      <ul className="text-xs text-slate-700 space-y-1">
+        {lines.map((l, i) => (
+          <li key={`${String(l.id || i)}-${i}`}>
+            <span className="font-semibold">{String(l.label || l.id || "Add-on")}</span>
+            {" · "}
+            {String(l.source || "booked").replace(/_/g, " ")}
+            {l.amount_cents != null && <> · {moneyCents(l.amount_cents)}</>}
+            {l.charge_status ? <> · {String(l.charge_status).replace(/_/g, " ")}</> : null}
+          </li>
+        ))}
+      </ul>
+      {(before.length > 0 || after.length > 0) && (
+        <div className="grid grid-cols-4 gap-1.5">
+          {[
+            ...before.slice(0, 4).map((u) => ({ u, l: "Before" })),
+            ...after.slice(0, 4).map((u) => ({ u, l: "After" })),
+          ].map(({ u, l }, i) => (
+            <a key={`${l}-${i}`} href={u} target="_blank" rel="noreferrer" className="relative group">
+              <img src={u} alt={l} className="w-full h-16 object-cover rounded-md border border-slate-200" />
+              <span className="absolute bottom-0.5 left-0.5 text-[9px] font-bold bg-black/60 text-white px-1 rounded">{l}</span>
+            </a>
+          ))}
+        </div>
+      )}
+      <p className="text-[11px] text-slate-500">
+        Documentation record for extra services — not a quality complaint. Lives on the same QC packet as the rest of the job.
+      </p>
+    </div>
+  );
 }
 
 function SiteFindingEvidence({ details }: { details: Record<string, unknown> }) {
