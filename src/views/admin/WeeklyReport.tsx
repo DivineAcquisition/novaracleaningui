@@ -167,6 +167,42 @@ export default function WeeklyReport() {
     }
   };
 
+  const syncPlSheet = async () => {
+    setBusy(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const res = await fetch("/api/admin/pl-sheet-sync", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${sessionData.session?.access_token || ""}`,
+        },
+        body: JSON.stringify({}),
+      });
+      const json = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        jobs?: number;
+        expenses?: number;
+        ad_spend?: number;
+        eod?: number;
+        skipped?: string;
+      };
+      if (!res.ok || json.ok === false) throw new Error(json.error || "P&L sync failed");
+      if (json.skipped) {
+        toast.message(`P&L sync skipped — ${json.skipped}`);
+      } else {
+        toast.success(
+          `P&L sheet synced — ${json.jobs ?? 0} jobs · ${json.expenses ?? 0} expenses · ${json.ad_spend ?? 0} ad spend · ${json.eod ?? 0} EOD`,
+        );
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "P&L sync failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="max-w-5xl mx-auto space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -257,6 +293,20 @@ export default function WeeklyReport() {
           </Button>
         </Card>
       )}
+
+      <Card className="p-4 border-slate-200 space-y-3">
+        <p className="text-sm font-semibold text-slate-900">P&amp;L Google Sheet</p>
+        <p className="text-sm text-slate-500">
+          One-way mirror of completed jobs, expenses, ad spend, and EOD into the branded workbook.
+          Cron refreshes daily at 09:30 UTC; use this after logging spend or expenses.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" disabled={busy} onClick={() => void syncPlSheet()}>
+            <RiRefreshLine className="w-4 h-4 mr-1.5" />
+            Sync P&amp;L sheet now
+          </Button>
+        </div>
+      </Card>
 
       <Card className="p-4 border-slate-200 space-y-3">
         <p className="text-sm font-semibold text-slate-900">Monthly ad spend log</p>
