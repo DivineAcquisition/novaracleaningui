@@ -22,6 +22,9 @@
 //                          A:date B:va C..H:counts I:revenue J:notes
 //                          (K formula)
 //     (legacy pl_eod_reports is retired — the live VA EOD system is the source)
+//   pl_overhead → "Overhead"          A:date B:category C:vendor D:description
+//                          E:amount F:cadence G:notes
+//                          (also appended onto Expenses & Reimb as Paid)
 //
 // Idempotency: full clean rewrite of each tab's DATA RANGE (A2:<lastCol>),
 // sorted by date then id — re-running never duplicates; edits update in
@@ -32,7 +35,7 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-import { clearRange, getSheetsToken, listTabs, readRange, writeRange } from "../_shared/google-sheets.ts";
+import { clearRange, ensureTab, getSheetsToken, listTabs, readRange, writeRange } from "../_shared/google-sheets.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -55,6 +58,7 @@ const TABS = {
   expenses: "Expenses & Reimb",
   adSpend: "Ad Spend",
   eod: "EOD",
+  overhead: "Overhead",
 } as const;
 
 // Per-tab data geometry. The branded template keeps its title in row 1 and
@@ -68,6 +72,7 @@ const TAB_GEOMETRY = {
   expenses: { lastCol: "G", headers: ["Date", "Type", "Who (Cleaner / VA / Vendor)", "Description", "Amount", "Status", "Paid Date"] },
   adSpend: { lastCol: "F", headers: ["Date", "Platform", "Spend", "Leads / Calls", "Booked Jobs", "Campaign / Notes"] },
   eod: { lastCol: "J", headers: ["Date", "VA Name", "Inbound Leads Handled", "Bookings Closed", "Outbound Calls", "Applications Reviewed", "Phone Screens", "Complaints / Issues", "Revenue Booked", "Blockers / Notes"] },
+  overhead: { lastCol: "G", headers: ["Date", "Category", "Vendor", "Description", "Amount", "Cadence", "Notes"] },
 } as const;
 const DEFAULT_HEADER_ROW = 4;
 
@@ -259,7 +264,120 @@ async function buildJobRows(supabase: SB, sinceYmd: string): Promise<(string | n
   return rows.map((r) => r.row);
 }
 
-async function buildExpenseRows(supabase: SB, sinceYmd: string): Promise<(string | number)[][]> {
+function addDaysYmd(ymdStr: string, days: number): string {
+  const [y, m, d] = ymdStr.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, (m || 1) - 1, d || 1));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  return dt.toISOString().slice(0, 10);
+}
+
+function monthStartsInclusive(fromYmd: string, toYmd: string): string[] {
+  const out: string[] = [];
+  let cursor = `${fromYmd.slice(0, 7)}-01`;
+  const endMonth = `${toYmd.slice(0, 7)}-01`;
+  while (cursor <= endMonth) {
+    out.push(cursor);
+    const [y, m] = cursor.split("-").map(Number);
+    const next = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
+    cursor = next;
+  }
+  return out;
+}
+
+function todayYmdUtc(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+type OverheadItem = {
+  id: string;
+  category: string;
+  vendor: string;
+  description: string;
+  amount_cents: number;
+  cadence: string;
+  start_date: string;
+  end_date: string | null;
+  notes: string | null;
+  source: string | null;
+};
+
+function expandOverheadOccurrences(items: OverheadItem[], sinceYmd: string, untilYmd: string) {
+  const rows: Array<{
+    key: string;
+    date: string;
+    category: string;
+    vendor: string;
+    description: string;
+    amountCents: number;
+    cadence: string;
+    notes: string;
+  }> = [];
+  for (const item of items) {
+    const start = ymd(item.start_date) || sinceYmd;
+    const end = item.end_date ? ymd(item.end_date) : untilYmd;
+    const windowStart = start > sinceYmd ? start : sinceYmd;
+    const windowEnd = end < untilYmd ? end : untilYmd;
+    if (windowStart > windowEnd) continue;
+    const dates: string[] = [];
+    if (item.cadence === "biweekly") {
+      let cursor = start;
+      while (cursor <= windowEnd) {
+        if (cursor >= windowStart) dates.push(cursor);
+        cursor = addDaysYmd(cursor, 14);
+      }
+    } else {
+      for (const month of monthStartsInclusive(windowStart, windowEnd)) {
+        const chargeDate = start > month ? start : month;
+        if (chargeDate >= windowStart && chargeDate <= windowEnd) dates.push(chargeDate);
+      }
+    }
+    for (const date of dates) {
+      rows.push({
+        key: `${date}|${item.category}|${item.vendor}`,
+        date,
+        category: item.category,
+        vendor: item.vendor,
+        description: item.description,
+        amountCents: Number(item.amount_cents) || 0,
+        cadence: item.cadence,
+        notes: [item.notes || "", item.source === "integration_estimate" ? "list-price estimate" : ""]
+          .filter(Boolean)
+          .join(" · "),
+      });
+    }
+  }
+  rows.sort((a, b) => a.key.localeCompare(b.key));
+  return rows;
+}
+
+async function loadOverheadItems(supabase: SB): Promise<OverheadItem[]> {
+  const { data, error } = await supabase
+    .from("pl_overhead")
+    .select("id, category, vendor, description, amount_cents, cadence, start_date, end_date, notes, source")
+    .eq("is_active", true)
+    .order("category")
+    .order("vendor");
+  if (error) throw new Error(`pl_overhead: ${error.message}`);
+  return (data || []) as OverheadItem[];
+}
+
+async function buildOverheadRows(items: OverheadItem[], sinceYmd: string): Promise<(string | number)[][]> {
+  return expandOverheadOccurrences(items, sinceYmd, todayYmdUtc()).map((r) => [
+    r.date,
+    r.category,
+    r.vendor,
+    r.description,
+    dollars(r.amountCents),
+    r.cadence,
+    r.notes,
+  ]);
+}
+
+async function buildExpenseRows(
+  supabase: SB,
+  sinceYmd: string,
+  overheadItems: OverheadItem[],
+): Promise<(string | number)[][]> {
   const { data } = await supabase
     .from("pl_expenses")
     .select("id, date, type, who, description, amount_cents, status, paid_date")
@@ -267,7 +385,7 @@ async function buildExpenseRows(supabase: SB, sinceYmd: string): Promise<(string
     .order("date", { ascending: true })
     .order("created_at", { ascending: true })
     .limit(5000);
-  return (data || []).map((e: Record<string, unknown>) => [
+  const logged = (data || []).map((e: Record<string, unknown>) => [
     ymd(e.date as string),
     String(e.type),
     String(e.who || ""),
@@ -276,6 +394,17 @@ async function buildExpenseRows(supabase: SB, sinceYmd: string): Promise<(string
     String(e.status),
     e.status === "Paid" && e.paid_date ? ymd(e.paid_date as string) : "",
   ]);
+  // Recurring overhead also lands here so True Net includes insurance / VA / software.
+  const overhead = expandOverheadOccurrences(overheadItems, sinceYmd, todayYmdUtc()).map((r) => [
+    r.date,
+    "One-off Expense",
+    r.vendor,
+    `${r.category}: ${r.description}`,
+    dollars(r.amountCents),
+    "Paid",
+    r.date,
+  ]);
+  return [...logged, ...overhead].sort((a, b) => String(a[0]).localeCompare(String(b[0])));
 }
 
 async function buildAdSpendRows(supabase: SB, sinceYmd: string): Promise<(string | number)[][]> {
@@ -423,6 +552,9 @@ serve(async (req) => {
       return json({ ok: true, preview: out });
     }
 
+    // Overhead is created if the branded workbook never had that tab.
+    await ensureTab(token, sheetId, TABS.overhead);
+
     // Fail fast with a clear message if the workbook is missing a tab.
     const tabs = await listTabs(token, sheetId);
     const missing = Object.values(TABS).filter((t) => !tabs.includes(t));
@@ -433,11 +565,13 @@ serve(async (req) => {
 
     // Build ALL payloads before touching the sheet — a failure here leaves
     // the workbook in its last good state.
-    const [jobRows, expenseRows, adRows, eodRows] = await Promise.all([
+    const overheadItems = await loadOverheadItems(supabase);
+    const [jobRows, expenseRows, adRows, eodRows, overheadRows] = await Promise.all([
       buildJobRows(supabase, since),
-      buildExpenseRows(supabase, since),
+      buildExpenseRows(supabase, since, overheadItems),
       buildAdSpendRows(supabase, since),
       buildEodRows(supabase, since),
+      buildOverheadRows(overheadItems, since),
     ]);
 
     // Clean rewrite per tab: locate the header row, ensure the header text
@@ -449,6 +583,7 @@ serve(async (req) => {
       ["expenses", expenseRows],
       ["adSpend", adRows],
       ["eod", eodRows],
+      ["overhead", overheadRows],
     ];
     for (const [key, values] of writes) {
       const tab = TABS[key];
@@ -479,13 +614,14 @@ serve(async (req) => {
       expenses: expenseRows.length,
       ad_spend: adRows.length,
       eod: eodRows.length,
+      overhead: overheadRows.length,
       since,
     };
     log("synced", summary);
     await supabase.from("events").insert({
       event_type: "pl.sheet_synced",
       source: "pl-sheet-sync",
-      summary: `P&L sheet mirrored: ${jobRows.length} jobs · ${expenseRows.length} expenses · ${adRows.length} ad spend · ${eodRows.length} EOD (since ${since}).`,
+      summary: `P&L sheet mirrored: ${jobRows.length} jobs · ${expenseRows.length} expenses · ${adRows.length} ad spend · ${eodRows.length} EOD · ${overheadRows.length} overhead (since ${since}).`,
       data: summary,
     }).then(() => undefined, () => undefined);
 

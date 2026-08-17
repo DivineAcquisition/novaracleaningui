@@ -124,3 +124,21 @@ export async function listTabs(token: string, spreadsheetId: string): Promise<st
   const data = await res.json();
   return (data.sheets || []).map((s: { properties?: { title?: string } }) => String(s.properties?.title || ""));
 }
+
+/** Create a tab if it does not already exist (used for new Overhead sheet). */
+export async function ensureTab(token: string, spreadsheetId: string, title: string): Promise<boolean> {
+  const existing = await listTabs(token, spreadsheetId);
+  if (existing.includes(title)) return false;
+  const res = await fetch(
+    `${API}/${encodeURIComponent(spreadsheetId)}:batchUpdate`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requests: [{ addSheet: { properties: { title } } }],
+      }),
+    },
+  );
+  if (!res.ok) throw new Error(`sheets addTab failed (${title}): ${res.status} ${(await res.text()).slice(0, 200)}`);
+  return true;
+}
