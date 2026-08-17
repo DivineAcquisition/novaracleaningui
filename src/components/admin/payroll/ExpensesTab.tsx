@@ -117,6 +117,8 @@ export default function ExpensesTab() {
       toast.success("Logged.");
       setF({ date: todayYmd(), type: "Promised", who: "", description: "", amount: "", status: "Promised" });
       await load();
+      // Best-effort: refresh the P&L Google Sheet so Expenses & Reimb stays current.
+      void supabase.functions.invoke("pl-sheet-sync", { body: { source: "expenses-tab" } });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Save failed");
     } finally {
@@ -136,6 +138,7 @@ export default function ExpensesTab() {
       if (error) throw error;
       toast.success(status === "Paid" ? "Marked Paid — now hits True Net." : `Status → ${status}`);
       await load();
+      void supabase.functions.invoke("pl-sheet-sync", { body: { source: "expenses-tab" } });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Update failed");
     } finally {
