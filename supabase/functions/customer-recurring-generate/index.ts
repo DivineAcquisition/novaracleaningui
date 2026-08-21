@@ -124,18 +124,28 @@ async function generateOne(admin: any, sched: any, opts: { force?: boolean }): P
   let cleanerId = resolvedCleanerId;
   let bufferBlockedNote: string | null = null;
   if (cleanerId) {
-    const bufferCheck = await checkScheduleBuffer(admin, {
-      // No booking row exists yet — evaluate the slot itself, projected from
-      // the schedule's own service type and size band.
-      cleanerIds: [cleanerId],
-      serviceDate,
-      timeSlot: sched.preferred_time_slot,
-      serviceType: sched.service_type || "standard",
-      homeSizeId: sched.home_size_id,
-    });
-    if (!bufferCheck.ok) {
-      bufferBlockedNote = bufferCheck.message || "no buffer around their other job that day";
-      cleanerId = null;
+    try {
+      const bufferCheck = await checkScheduleBuffer(admin, {
+        // No booking row exists yet — evaluate the slot itself, projected from
+        // the schedule's own service type and size band.
+        cleanerIds: [cleanerId],
+        serviceDate,
+        timeSlot: sched.preferred_time_slot,
+        serviceType: sched.service_type || "standard",
+        homeSizeId: sched.home_size_id,
+      });
+      if (!bufferCheck.ok) {
+        bufferBlockedNote = bufferCheck.message || "no buffer around their other job that day";
+        cleanerId = null;
+      }
+    } catch (bufferErr) {
+      // Buffer check is advisory here: never skip creating the visit because
+      // the helper failed (missing import, RPC error, etc.). Assign the usual
+      // cleaner and let the DB write-guard catch a real conflict.
+      console.error(
+        "[customer-recurring-generate] buffer check failed; assigning preferred cleaner anyway",
+        bufferErr instanceof Error ? bufferErr.message : String(bufferErr),
+      );
     }
   }
 
