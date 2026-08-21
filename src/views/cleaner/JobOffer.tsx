@@ -37,6 +37,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { payExplanation, normalizePayTier, PAY_BASIS_NOTE } from "@/lib/crew-pay";
+import {
+  RecleanBadge,
+  RecleanContractorNote,
+  notesLookLikeReclean,
+  isRecleanBooking,
+} from "@/components/reclean/RecleanCallout";
 
 interface OfferDetail {
   assignment: {
@@ -51,6 +57,7 @@ interface OfferDetail {
     expires_at: string | null;
     accepted_at: string | null;
     declined_at: string | null;
+    reliability_neutral?: boolean | null;
   };
   job: {
     id: string;
@@ -70,6 +77,9 @@ interface OfferDetail {
     service_date: string | null;
     time_slot: string | null;
     arrival_window: string | null;
+    is_reclean?: boolean | null;
+    reclean_scope?: string | null;
+    reclean_assessed_value_cents?: number | null;
   } | null;
   customer: {
     first_name: string | null;
@@ -306,6 +316,22 @@ export default function CleanerJobOfferPage() {
                 <CardTitle className="text-slate-900">
                   {prettyServiceType(offer.job.service_type)}
                 </CardTitle>
+                {(isRecleanBooking(offer.booking) || notesLookLikeReclean(offer.job.notes)) && (
+                  <div className="mt-2 space-y-2">
+                    <RecleanBadge />
+                    <RecleanContractorNote
+                      scope={offer.booking?.reclean_scope}
+                      payCents={
+                        offer.booking?.reclean_assessed_value_cents
+                        ?? offer.assignment.estimated_pay_cents
+                      }
+                      reliabilityNeutral={
+                        offer.assignment.reliability_neutral === true
+                        || isRecleanBooking(offer.booking)
+                      }
+                    />
+                  </div>
+                )}
                 <CardDescription>
                   {offer.job.sq_ft ? `${offer.job.sq_ft.toLocaleString()} sq ft · ` : ""}
                   {offer.job.bedrooms ? `${offer.job.bedrooms} bd · ` : ""}

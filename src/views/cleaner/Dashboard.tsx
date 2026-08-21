@@ -37,6 +37,12 @@ import {
 } from "@/components/cleaner/portal-enrichment";
 import { parseServiceDate } from "@/lib/service-date";
 import { payExplanation, normalizePayTier } from "@/lib/crew-pay";
+import {
+  RecleanBadge,
+  RecleanContractorNote,
+  RecleanOfferBanner,
+  notesLookLikeReclean,
+} from "@/components/reclean/RecleanCallout";
 
 interface CleanerProfile {
   id: string;
@@ -86,6 +92,10 @@ interface UpcomingJob {
   status?: string;
   crew_size_snapshot?: number | null;
   pay_percentage_snapshot?: number | null;
+  notes?: string | null;
+  is_reclean?: boolean;
+  reclean_scope?: string | null;
+  reclean_assessed_value_cents?: number | null;
 }
 
 interface CompletedJob {
@@ -106,6 +116,7 @@ interface CompletedJob {
   cleaner_payout_cents?: number | null;
   crew_size_snapshot?: number | null;
   pay_percentage_snapshot?: number | null;
+  is_reclean?: boolean;
 }
 
 function formatCurrency(cents: number) {
@@ -197,6 +208,11 @@ export default function CleanerDashboard() {
           "Accepted",
           "Confirmed",
           "In Progress",
+          // Offered recleans must appear here — desktop dashboard has no
+          // separate offers tab, and bookings.cleaner_id is still null until accept.
+          "Offered",
+          "offered",
+          "Broadcast",
         ];
         // Booking is the live source of truth. Assignment/job status often
         // lagged behind complete-booking / reassignment, which left finished
@@ -228,7 +244,8 @@ export default function CleanerDashboard() {
               start_datetime,
               duration_est_hours,
               check_in_time,
-              status
+              status,
+              notes
             )
           `
           )
@@ -243,17 +260,28 @@ export default function CleanerDashboard() {
               return job?.id as string | undefined;
             })
             .filter(Boolean) as string[];
-          const bookingByJob: Record<string, { status: string; id: string }> = {};
+          const bookingByJob: Record<string, {
+            status: string;
+            id: string;
+            is_reclean?: boolean;
+            reclean_scope?: string | null;
+            reclean_assessed_value_cents?: number | null;
+            team_notes?: string | null;
+          }> = {};
           if (jobIds.length > 0) {
             const { data: bookingRows } = await supabase
               .from("bookings")
-              .select("id, job_id, status")
+              .select("id, job_id, status, is_reclean, reclean_scope, reclean_assessed_value_cents, team_notes")
               .in("job_id", jobIds);
             for (const b of bookingRows || []) {
               if (b.job_id) {
                 bookingByJob[b.job_id] = {
                   id: b.id,
                   status: String(b.status || ""),
+                  is_reclean: Boolean((b as { is_reclean?: boolean }).is_reclean),
+                  reclean_scope: (b as { reclean_scope?: string | null }).reclean_scope ?? null,
+                  reclean_assessed_value_cents: (b as { reclean_assessed_value_cents?: number | null }).reclean_assessed_value_cents ?? null,
+                  team_notes: (b as { team_notes?: string | null }).team_notes ?? null,
                 };
               }
             }
@@ -267,14 +295,23 @@ export default function CleanerDashboard() {
               if (bStatus && notUpcomingBooking.has(bStatus)) return false;
               const jStatus = String(job.status || "").toLowerCase();
               if (["completed", "cancelled", "canceled"].includes(jStatus)) return false;
+              const offered = /^(offered|broadcast)$/i.test(String(a.status || ""));
+              if (offered) {
+                const bk = bookingByJob[job.id];
+                return Boolean(bk?.is_reclean)
+                  || notesLookLikeReclean(job.notes)
+                  || notesLookLikeReclean(bk?.team_notes);
+              }
               return true;
             })
             .map((a: any) => {
               const job = Array.isArray(a.jobs) ? a.jobs[0] : a.jobs;
+              const bk = job?.id ? bookingByJob[job.id] : undefined;
               return {
                 id: a.id,
                 assignmentId: a.id,
                 jobId: job?.id,
+                bookingId: bk?.id,
                 checklistToken: a.response_token || null,
                 source: "assignments" as JobSource,
                 service_type: job?.service_type || "Cleaning",
@@ -289,6 +326,10 @@ export default function CleanerDashboard() {
                 pay_percentage_snapshot: a.pay_percentage_snapshot,
                 check_in_time: job?.check_in_time,
                 status: a.status,
+                notes: job?.notes || null,
+                is_reclean: Boolean(bk?.is_reclean) || notesLookLikeReclean(job?.notes),
+                reclean_scope: bk?.reclean_scope || null,
+                reclean_assessed_value_cents: bk?.reclean_assessed_value_cents ?? null,
               };
             });
           setUpcomingJobs(formatted);
@@ -730,6 +771,7 @@ export default function CleanerDashboard() {
         {/* Someone dropped a job and you're near the top of the list. Above
             the stats because the accept window is measured in minutes. */}
         <CoverageOfferBanner offers={portal?.coverageOffers || []} />
+        <RecleanOfferBanner offers={portal?.offers || []} />
 
         {/* Stats Row */}
         <div className="grid grid-cols-2 gap-3">
@@ -868,6 +910,21 @@ export default function CleanerDashboard() {
                           <h3 className="font-semibold text-base">
                             {enriched?.customerName || job.service_type}
                           </h3>
+                          {(enriched?.isReclean || job.is_reclean || notesLookLikeReclean(job.notes)) && (
+                            <div className="mt-1 space-y-1.5">
+                              <RecleanBadge className="text-[10px]" />
+                              <RecleanContractorNote
+                                compact
+                                scope={enriched?.recleanScope || job.reclean_scope}
+                                payCents={
+                                  enriched?.recleanAssessedValueCents
+                                  ?? job.reclean_assessed_value_cents
+                                  ?? job.estimated_pay_cents
+                                }
+                                reliabilityNeutral={/offered/i.test(String(job.status || ""))}
+                              />
+                            </div>
+                          )}
                           <p className="text-xs text-muted-foreground capitalize">
                             {String(job.service_type || "cleaning").replaceAll("_", " ")}
                           </p>
@@ -1010,6 +1067,9 @@ export default function CleanerDashboard() {
                       <div className="flex items-center justify-between gap-2">
                         <div>
                           <p className="font-medium text-sm">{enriched?.customerName || job.service_type}</p>
+                          {(enriched?.isReclean || job.is_reclean) && (
+                            <RecleanBadge className="mt-0.5 text-[10px]" />
+                          )}
                           <p className="text-xs text-muted-foreground">
                             {[job.city, job.state].filter(Boolean).join(", ")} · {dateStr}
                           </p>

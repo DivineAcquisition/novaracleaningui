@@ -51,6 +51,16 @@ function attributeCents(payout: Row, cleanerId: string): number | null {
   return null;
 }
 
+const BOOKING_SELECT =
+  "id, booking_number, status, service_type, home_size_id, service_date, time_slot, arrival_window, " +
+  "first_name, last_name, address, city, state, zip_code, " +
+  "bedrooms, bathrooms, sqft, dwelling_type, flooring_type, pets, add_ons, frequency, access_notes, " +
+  "dispatch_notes, team_notes, issues_flag, issues_notes, " +
+  "total_estimate_cents, cleaner_payout_cents, payout_status, job_id, check_in_time, " +
+  "photo_upload_token, photo_view_token, before_photos, after_photos, cancelled_at, cleaner_id, " +
+  "rescheduled_at, rescheduled_from_date, rescheduled_from_time_slot, " +
+  "is_reclean, reclean_of_booking_id, reclean_scope, reclean_assessed_value_cents, reclean_qc_issue_id, booking_channel";
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json({ ok: false, error: "POST required" }, 405);
@@ -112,21 +122,43 @@ serve(async (req) => {
       .from("bookings")
       // NB: customer phone/email are intentionally NOT selected — contractors
       // must never see customer contact info.
-      .select(
-        "id, booking_number, status, service_type, home_size_id, service_date, time_slot, arrival_window, " +
-        "first_name, last_name, address, city, state, zip_code, " +
-        "bedrooms, bathrooms, sqft, dwelling_type, flooring_type, pets, add_ons, frequency, access_notes, " +
-        "dispatch_notes, team_notes, issues_flag, issues_notes, " +
-        "total_estimate_cents, cleaner_payout_cents, payout_status, job_id, check_in_time, " +
-        "photo_upload_token, photo_view_token, before_photos, after_photos, cancelled_at, cleaner_id, " +
-        "rescheduled_at, rescheduled_from_date, rescheduled_from_time_slot",
-      )
+      .select(BOOKING_SELECT)
       .eq("cleaner_id", cleanerId)
       .order("service_date", { ascending: false })
       .limit(60);
 
     const bookingRows: Row[] = bookings || [];
     const primaryIds = new Set(bookingRows.map((b) => b.id));
+
+    // Re-cleans are offered to the original cleaner before bookings.cleaner_id
+    // is set (that happens on accept). Merge them so the dashboard shows the
+    // paid Spotless Guarantee follow-up as soon as admin approves.
+    try {
+      const { data: recleanAssigns } = await admin
+        .from("job_assignments")
+        .select("job_id, status, estimated_pay_cents, pay_percentage_snapshot, crew_size_snapshot, response_token")
+        .eq("cleaner_id", cleanerId)
+        .in("status", [
+          "Offered", "Broadcast", "Confirmed", "Accepted", "accepted",
+          "Assigned", "In Progress", "in_progress",
+        ]);
+      const recleanJobIds = [...new Set(
+        (recleanAssigns || []).map((a: Row) => a.job_id).filter(Boolean),
+      )] as string[];
+      if (recleanJobIds.length > 0) {
+        const { data: recleanBookings } = await admin
+          .from("bookings")
+          .select(BOOKING_SELECT)
+          .in("job_id", recleanJobIds)
+          .eq("is_reclean", true);
+        for (const rb of recleanBookings || []) {
+          if (!primaryIds.has(String(rb.id))) {
+            bookingRows.push(rb);
+            primaryIds.add(String(rb.id));
+          }
+        }
+      }
+    } catch { /* reclean merge is additive */ }
 
     // ── Tips: 100% pass-through gifts, shown separately from job pay (they
     //    never touch scores, tiers, or the pay math). The full list feeds
@@ -243,15 +275,7 @@ serve(async (req) => {
     if (crewIds.length > 0) {
       const { data: crewBookings } = await admin
         .from("bookings")
-        .select(
-          "id, booking_number, status, service_type, home_size_id, service_date, time_slot, arrival_window, " +
-          "first_name, last_name, address, city, state, zip_code, " +
-          "bedrooms, bathrooms, sqft, dwelling_type, flooring_type, pets, add_ons, frequency, access_notes, " +
-          "dispatch_notes, team_notes, issues_flag, issues_notes, " +
-          "total_estimate_cents, cleaner_payout_cents, payout_status, job_id, check_in_time, " +
-          "photo_upload_token, photo_view_token, before_photos, after_photos, cancelled_at, cleaner_id, " +
-          "rescheduled_at, rescheduled_from_date, rescheduled_from_time_slot",
-        )
+        .select(BOOKING_SELECT)
         .in("id", crewIds);
       for (const cb of crewBookings || []) bookingRows.push(cb);
       bookingRows.sort((a, b) => String(b.service_date || "").localeCompare(String(a.service_date || "")));
@@ -265,10 +289,14 @@ serve(async (req) => {
     const activeAssignStatuses = new Set([
       "confirmed", "accepted", "assigned", "in progress", "in_progress", "completed",
     ]);
+    const recleanAssignStatuses = new Set([
+      ...activeAssignStatuses, "offered", "broadcast",
+    ]);
     const openJobIds = bookingRows
       .filter((b) => openStatuses.has(String(b.status || "").toLowerCase()) && b.job_id)
       .map((b) => String(b.job_id));
     const activeJobIds = new Set<string>();
+    const recleanActiveJobIds = new Set<string>();
     if (openJobIds.length > 0) {
       const { data: liveAssigns } = await admin
         .from("job_assignments")
@@ -276,8 +304,12 @@ serve(async (req) => {
         .eq("cleaner_id", cleanerId)
         .in("job_id", openJobIds);
       for (const a of liveAssigns || []) {
-        if (activeAssignStatuses.has(String(a.status || "").toLowerCase())) {
+        const st = String(a.status || "").toLowerCase();
+        if (activeAssignStatuses.has(st)) {
           activeJobIds.add(String(a.job_id));
+        }
+        if (recleanAssignStatuses.has(st)) {
+          recleanActiveJobIds.add(String(a.job_id));
         }
       }
     }
@@ -285,6 +317,7 @@ serve(async (req) => {
       if (!openStatuses.has(String(b.status || "").toLowerCase())) return true;
       if (String(b.cleaner_id || "") === cleanerId) return true;
       if (!b.job_id) return true; // no dispatch row — keep lead-less edge cases
+      if (b.is_reclean) return recleanActiveJobIds.has(String(b.job_id));
       return activeJobIds.has(String(b.job_id));
     });
 
@@ -315,11 +348,16 @@ serve(async (req) => {
         const payout = payoutByBooking.get(b.id) || null;
         const baseCents = payout ? attributeCents(payout, cleanerId) : null;
         const snap = b.job_id ? paySnapByJob.get(String(b.job_id)) : null;
+        const reclean = b.is_reclean === true;
+        const recleanAssessed = reclean ? Number(b.reclean_assessed_value_cents) || 0 : 0;
         // Prefer the assignment's crew-size share over the booking lead's
         // cleaner_payout_cents (which is only the lead's cut) and over the
         // legacy flat payPct × estimate (which ignored crew brackets).
+        // Re-cleans bill the customer $0 — pay is assessed_value × tier.
         const estimateCents = snap?.estimatedPayCents != null
           ? snap.estimatedPayCents
+          : reclean && recleanAssessed > 0
+            ? Math.floor(recleanAssessed * payPct / 100)
           : b.cleaner_payout_cents != null && String(b.cleaner_id || "") === cleanerId
             ? Number(b.cleaner_payout_cents)
             : b.total_estimate_cents != null
@@ -376,6 +414,9 @@ serve(async (req) => {
           timeSlot: b.time_slot || b.arrival_window || null,
           serviceType: b.service_type || "Cleaning",
           homeSizeId: b.home_size_id || null,
+          isReclean: reclean,
+          recleanScope: reclean ? (b.reclean_scope || null) : null,
+          recleanAssessedValueCents: reclean && recleanAssessed > 0 ? recleanAssessed : null,
           customerName,
           address: cancelled ? "" : (b.address || ""),
           city: cancelled ? "" : (b.city || ""),
@@ -421,7 +462,9 @@ serve(async (req) => {
             accessNotes,
           },
           internalDetails: cancelled ? null : {
-            jobValueCents: b.total_estimate_cents ?? null,
+            jobValueCents: reclean && recleanAssessed > 0
+              ? recleanAssessed
+              : b.total_estimate_cents ?? null,
             estimateCents,
             baseCents,
             extrasCents,
@@ -446,7 +489,7 @@ serve(async (req) => {
     try {
       const { data: openAssigns } = await admin
         .from("job_assignments")
-        .select("id, job_id, status, response_token, expires_at, estimated_pay_cents, role, assigned_at")
+        .select("id, job_id, status, response_token, expires_at, estimated_pay_cents, role, assigned_at, reliability_neutral")
         .eq("cleaner_id", cleanerId)
         .in("status", ["Offered", "Broadcast"])
         .order("assigned_at", { ascending: false })
@@ -457,7 +500,7 @@ serve(async (req) => {
         const offerJobIds = open.map((a: Row) => a.job_id).filter(Boolean);
         const { data: offerBookings } = await admin
           .from("bookings")
-          .select("job_id, service_type, service_date, time_slot, arrival_window, city, state, total_estimate_cents, home_size_id, status")
+          .select("job_id, service_type, service_date, time_slot, arrival_window, city, state, total_estimate_cents, reclean_assessed_value_cents, is_reclean, reclean_scope, home_size_id, status")
           .in("job_id", offerJobIds);
         const byJob = new Map<string, Row>();
         for (const ob of offerBookings || []) {
@@ -469,10 +512,14 @@ serve(async (req) => {
         for (const a of open) {
           const ob = byJob.get(String(a.job_id));
           if (!ob) continue;
+          const isReclean = ob.is_reclean === true;
+          const payBasis = isReclean
+            ? Number(ob.reclean_assessed_value_cents) || 0
+            : Number(ob.total_estimate_cents) || 0;
           const estPay = a.estimated_pay_cents != null
             ? Number(a.estimated_pay_cents)
-            : ob.total_estimate_cents != null
-              ? Math.floor(Number(ob.total_estimate_cents) * payPct / 100)
+            : payBasis > 0
+              ? Math.floor(payBasis * payPct / 100)
               : null;
           offers.push({
             assignmentId: a.id,
@@ -486,6 +533,9 @@ serve(async (req) => {
             city: ob.city || null,
             state: ob.state || null,
             estimatedPayCents: estPay,
+            isReclean,
+            recleanScope: isReclean ? (ob.reclean_scope || null) : null,
+            reliabilityNeutral: a.reliability_neutral === true || isReclean,
           });
         }
       }

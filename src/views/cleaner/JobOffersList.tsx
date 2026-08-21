@@ -37,6 +37,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { RecleanBadge, RecleanContractorNote, notesLookLikeReclean } from "@/components/reclean/RecleanCallout";
 
 interface OfferRow {
   id: string;
@@ -57,6 +58,7 @@ interface OfferRow {
     start_datetime: string;
     duration_est_hours: number;
     sq_ft: number | null;
+    notes?: string | null;
   } | null;
 }
 
@@ -86,7 +88,7 @@ export default function JobOffersList() {
       const { data } = await supabase
         .from("job_assignments")
         .select(
-          "id, role, status, distance_miles, estimated_pay_cents, pay_percentage_snapshot, crew_size_snapshot, response_token, assigned_at, jobs (id, service_type, address, city, state, start_datetime, duration_est_hours, sq_ft)",
+          "id, role, status, distance_miles, estimated_pay_cents, pay_percentage_snapshot, crew_size_snapshot, response_token, assigned_at, jobs (id, service_type, address, city, state, start_datetime, duration_est_hours, sq_ft, notes)",
         )
         .eq("cleaner_id", auth.cleaner.id)
         .ilike("status", "offered")
@@ -186,6 +188,9 @@ export default function JobOffersList() {
                             Lead
                           </Badge>
                         )}
+                        {notesLookLikeReclean(o.jobs?.notes) && (
+                          <RecleanBadge className="text-[10px]" />
+                        )}
                       </CardTitle>
                       <CardDescription className="text-xs">
                         Offered{" "}
@@ -200,6 +205,9 @@ export default function JobOffersList() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm">
+                  {notesLookLikeReclean(o.jobs?.notes) && (
+                    <RecleanContractorNote compact reliabilityNeutral />
+                  )}
                   <div className="grid grid-cols-2 gap-y-1.5 gap-x-3">
                     <span className="text-slate-500 inline-flex items-center gap-1.5">
                       <RiCalendarLine className="w-3.5 h-3.5" /> Date

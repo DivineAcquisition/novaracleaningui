@@ -34,7 +34,7 @@ serve(async (req) => {
     const { data: assignment, error: aErr } = await supabase
       .from("job_assignments")
       .select(
-        "id, job_id, cleaner_id, status, role, distance_miles, pay_rate_hr, pay_percentage_snapshot, estimated_pay_cents, crew_size_snapshot, expires_at, accepted_at, declined_at, response_token",
+        "id, job_id, cleaner_id, status, role, distance_miles, pay_rate_hr, pay_percentage_snapshot, estimated_pay_cents, crew_size_snapshot, expires_at, accepted_at, declined_at, response_token, reliability_neutral",
       )
       .eq("response_token", token)
       .maybeSingle();
@@ -81,11 +81,14 @@ serve(async (req) => {
       service_date: string | null;
       time_slot: string | null;
       arrival_window: string | null;
+      is_reclean?: boolean | null;
+      reclean_scope?: string | null;
+      reclean_assessed_value_cents?: number | null;
     } | null = null;
     if (assignment.job_id) {
       const { data: b } = await supabase
         .from("bookings")
-        .select("service_date, time_slot, arrival_window")
+        .select("service_date, time_slot, arrival_window, is_reclean, reclean_scope, reclean_assessed_value_cents, reclean_of_booking_id")
         .eq("job_id", assignment.job_id)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -95,6 +98,11 @@ serve(async (req) => {
           service_date: b.service_date ?? null,
           time_slot: b.time_slot ?? null,
           arrival_window: b.arrival_window ?? null,
+          is_reclean: b.is_reclean === true,
+          reclean_scope: b.reclean_scope ?? null,
+          reclean_assessed_value_cents: b.reclean_assessed_value_cents != null
+            ? Number(b.reclean_assessed_value_cents)
+            : null,
         };
       }
     }

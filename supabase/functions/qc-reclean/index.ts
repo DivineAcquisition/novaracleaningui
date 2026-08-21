@@ -108,13 +108,28 @@ async function logEvent(
   data: Record<string, unknown>,
   note?: string | null,
 ) {
-  await admin.from("qc_issue_events").insert({
+  const { error } = await admin.from("qc_issue_events").insert({
     issue_id: issueId,
     action,
     note: note || null,
     actor_id: actor?.id || null,
     actor_name: actor?.name || null,
     data,
+  });
+  if (error) log("event insert failed", { action, message: error.message });
+}
+
+function issueInWindow(
+  issue: Record<string, unknown>,
+  original: Record<string, unknown>,
+  settings: RecleanSettings,
+): boolean {
+  if (issue.reclean_inside_window === true) return true;
+  if (issue.reclean_inside_window === false) return false;
+  return isInsideGuaranteeWindow({
+    completedAt: original.completed_at as string | null,
+    serviceDate: original.service_date as string | null,
+    windowHours: settings.guarantee_window_hours,
   });
 }
 
@@ -303,12 +318,110 @@ async function sendCustomerEmail(admin: SB, to: string, subject: string, html: s
   if (error) log("email failed", error.message || String(error));
 }
 
-function nextServiceDate(preferred: string | null | undefined, original: Record<string, unknown>) {
+function nextServiceDate(preferred: string | null | undefined, _original?: Record<string, unknown>) {
   if (preferred && /^\d{4}-\d{2}-\d{2}$/.test(preferred)) return preferred;
-  const orig = String(original.service_date || "").slice(0, 10);
-  const d = orig ? new Date(`${orig}T12:00:00Z`) : new Date();
-  d.setUTCDate(d.getUTCDate() + 1);
-  return d.toISOString().slice(0, 10);
+  // Always schedule from today, not the original service date — a complaint
+  // filed days later would otherwise land as a past-dated booking and vanish
+  // from "upcoming" views.
+  const d = new Date();
+  d.setHours(12, 0, 0, 0);
+  d.setDate(d.getDate() + 1);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+async function dispatchApprovedReclean(
+  admin: SB,
+  issue: Record<string, unknown>,
+  actor: { id: string; name: string; isAdmin: boolean } | null,
+  opts: { customerPrefersOther?: boolean },
+): Promise<Record<string, unknown>> {
+  if (!issue.reclean_booking_id) throw new Error("Approve the re-clean before dispatching.");
+  const { data: recleanBooking } = await admin.from("bookings").select("*").eq("id", issue.reclean_booking_id).maybeSingle();
+  if (!recleanBooking) throw new Error("Re-clean booking missing.");
+  const payCents = jobValueForPay(recleanBooking);
+  const { data: original } = await admin.from("bookings").select("*").eq("id", issue.booking_id).maybeSingle();
+  const recleanJobId = recleanBooking.job_id as string | null;
+  if (!recleanJobId) throw new Error("Re-clean job is missing.");
+  const issueId = String(issue.id);
+
+  const originalCleanerId = original?.cleaner_id ? String(original.cleaner_id) : null;
+  const customerPrefersOther = Boolean(issue.reclean_customer_prefers_other) || opts.customerPrefersOther === true;
+
+  if (customerPrefersOther || !originalCleanerId) {
+    const { data: dispatched, error } = await admin.functions.invoke("dispatch-job", {
+      body: { jobId: recleanJobId, approved: true },
+    });
+    if (error) throw new Error(error.message || "dispatch-job failed");
+    await admin.from("qc_issues").update({
+      reclean_status: "dispatched",
+      reclean_original_offer_status: "skipped_customer_pref",
+    }).eq("id", issueId);
+    await logEvent(admin, issueId, "reclean_dispatched", actor, {
+      via: "ranked",
+      reason: customerPrefersOther ? "customer_requested_different_team" : "no_original_cleaner",
+      note: customerPrefersOther ? originalCleanerDeclineCopy() : null,
+    });
+    return { via: "ranked", dispatched, payCents };
+  }
+
+  const shares = await computeCrewPay(admin, payCents, [originalCleanerId]);
+  const share = shareFor(shares, originalCleanerId);
+  if (!share || share.shareCents <= 0) {
+    throw new Error("Cannot dispatch an unpaid re-clean.");
+  }
+  const { data: cleaner } = await admin.from("cleaners")
+    .select("id, phone, email, first_name, last_name")
+    .eq("id", originalCleanerId).maybeSingle();
+  const expires = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+  const tokenBytes = new Uint8Array(16);
+  crypto.getRandomValues(tokenBytes);
+  const token = Array.from(tokenBytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+  await admin.from("job_assignments").upsert({
+    job_id: recleanJobId,
+    cleaner_id: originalCleanerId,
+    status: "Offered",
+    role: "Lead",
+    offered_at: new Date().toISOString(),
+    expires_at: expires,
+    response_token: token,
+    estimated_pay_cents: share.shareCents,
+    pay_percentage_snapshot: share.ratePercent,
+    crew_size_snapshot: 1,
+    reliability_neutral: true,
+  }, { onConflict: "job_id,cleaner_id" });
+
+  const offerUrl = `https://contractor.novaracleaning.com/cleaner/job-offer/${token}`;
+  if (cleaner?.phone) {
+    await sendSms(admin, {
+      toPhone: cleaner.phone,
+      message:
+        `Novara re-clean (paid, Spotless Guarantee) at ${original?.address || "the property"} on ${recleanBooking.service_date}. ` +
+        `Your pay $${(share.shareCents / 100).toFixed(2)}. This is not a penalty — declining is OK. ${offerUrl}`,
+      type: "job_offer",
+    });
+  }
+  await admin.from("qc_issues").update({
+    reclean_status: "offered",
+    reclean_offered_to_cleaner_id: originalCleanerId,
+    reclean_original_offer_status: "offered",
+    reclean_offered_at: new Date().toISOString(),
+  }).eq("id", issueId);
+  await admin.from("jobs").update({ status: "Offered" }).eq("id", recleanJobId);
+  await logEvent(admin, issueId, "reclean_offered", actor, {
+    cleanerId: originalCleanerId,
+    payCents: share.shareCents,
+    reliabilityPenalty: false,
+  });
+  return {
+    via: "original_cleaner",
+    cleanerId: originalCleanerId,
+    payCents: share.shareCents,
+    offerUrl,
+    note: "Declining this offer is not a reliability penalty.",
+  };
 }
 
 serve(async (req) => {
@@ -442,11 +555,7 @@ serve(async (req) => {
           total_estimate_cents: original.total_estimate_cents,
           cleaner_payout_cents: original.cleaner_payout_cents,
         },
-        inWindow: issue.reclean_inside_window ?? isInsideGuaranteeWindow({
-          completedAt: original.completed_at,
-          serviceDate: original.service_date,
-          windowHours: settings.guarantee_window_hours,
-        }),
+        inWindow: issueInWindow(issue, original, settings),
         settings,
         assessedValueCents: valueForScope(issue, original, focused),
         customerChargeCents: 0,
@@ -520,24 +629,27 @@ serve(async (req) => {
       }
       const scope = asScope(body.scope || issue.reclean_scope);
       const goodwill = body.goodwill === true;
-      const honorOutsideWindow = body.honorOutsideWindow === true;
-      const inWindow = Boolean(issue.reclean_inside_window);
-      if (!inWindow && !honorOutsideWindow) {
-        return json({ ok: false, error: "Request is outside the guarantee window. Set honorOutsideWindow to approve." }, 400);
-      }
+      const inWindow = issueInWindow(issue, original, settings);
+      // Clicking Approve is the honor decision. Record it when the original
+      // visit is outside the guarantee window so the UI checkbox cannot block
+      // an admin who already chose to make it right.
+      const honorOutsideWindow = !inWindow || body.honorOutsideWindow === true;
       if (classification === "not_supported" && !goodwill) {
-        return json({ ok: false, error: "Not-supported requests are not dispatched by default. Set goodwill to approve as a courtesy." }, 400);
+        return json({ ok: false, error: "Not-supported requests are not dispatched by default. Check “approve as goodwill” to send a paid courtesy re-clean." }, 400);
       }
       if (scope === "full" && body.fullApproved !== true) {
-        return json({ ok: false, error: "Full re-service requires admin approval (fullApproved)." }, 400);
+        return json({ ok: false, error: "Full re-service requires checking the admin-approve box (reserved for jobs that substantially failed)." }, 400);
       }
-      const areas = Array.isArray(body.areas)
-        ? (body.areas as unknown[]).map(String)
+      const areas = (Array.isArray(body.areas) ? (body.areas as unknown[]).map(String) : [])
+        .map((a) => String(a).toLowerCase().trim())
+        .filter(Boolean);
+      const resolvedAreas = areas.length
+        ? areas
         : areasFromIssue(issue, String(issue.description || ""));
-      if (scope === "targeted" && areas.length === 0 && !Number(body.assessedValueCents)) {
-        return json({ ok: false, error: "Pick the areas to re-clean (targeted by default) so the pricing engine can assess pay." }, 400);
+      if (scope === "targeted" && resolvedAreas.length === 0 && !Number(body.assessedValueCents)) {
+        return json({ ok: false, error: "Pick the areas to re-clean (kitchen, bathroom, …) so the pricing engine can assess pay." }, 400);
       }
-      let assessed = valueForScope(issue, original, focused, { scope, areas });
+      let assessed = valueForScope(issue, original, focused, { scope, areas: resolvedAreas });
       if (Number(body.assessedValueCents) > 0) assessed = Math.round(Number(body.assessedValueCents));
       if (assessed <= 0) {
         return json({ ok: false, error: "Re-clean assessed value must be greater than $0 — unpaid re-cleans are prohibited." }, 400);
@@ -552,16 +664,19 @@ serve(async (req) => {
         serviceDate,
         timeSlot,
         scope,
-        scopeSummary: areas.length ? areas.join(", ") : null,
+        scopeSummary: resolvedAreas.length ? resolvedAreas.join(", ") : null,
       });
       const message = String(body.customerMessage || "").trim() || draft.body;
 
       const focusedAreas = scope === "targeted"
-        ? areas.map((areaId) => ({ areaId, quantity: 1 }))
+        ? resolvedAreas.map((areaId) => ({ areaId, quantity: 1 }))
         : original.focused_areas;
+      const originalRef = original.booking_number
+        ? `NVC-${String(original.booking_number).padStart(4, "0")}`
+        : String(original.id).slice(0, 8);
       const special = [
         String(original.team_notes || "").trim(),
-        `RE-CLEAN of ${original.booking_number ? `NVC-${String(original.booking_number).padStart(4, "0")}` : String(original.id).slice(0, 8)} — ${scope === "full" ? "full re-service" : `targeted: ${areas.join(", ") || "see QC case"}`}. Spotless Guarantee — customer not charged. Performer is paid on assessed value $${(assessed / 100).toFixed(2)}.`,
+        `RE-CLEAN of ${originalRef} — ${scope === "full" ? "full re-service" : `targeted: ${resolvedAreas.join(", ") || "see QC case"}`}. Spotless Guarantee — customer not charged. Performer is paid on assessed value $${(assessed / 100).toFixed(2)}.`,
       ].filter(Boolean).join("\n");
 
       const insert: Record<string, unknown> = {
@@ -574,6 +689,10 @@ serve(async (req) => {
         city: original.city,
         state: original.state,
         zip_code: original.zip_code,
+        home_size_id: original.home_size_id,
+        estimated_duration_hours: scope === "full"
+          ? (Number(original.estimated_duration_hours) || 3)
+          : Math.max(1, resolvedAreas.length * 0.75),
         service_type: scope === "full" ? original.service_type : "focused",
         service_date: serviceDate,
         time_slot: timeSlot,
@@ -601,19 +720,19 @@ serve(async (req) => {
         suppress_review_request: true,
       };
       const { data: recleanBooking, error: bErr } = await admin.from("bookings").insert(insert).select("*").single();
-      if (bErr) throw bErr;
+      if (bErr) throw new Error(`Could not create re-clean booking: ${bErr.message}`);
 
       const startTime = parseTimeSlotToClock(timeSlot).start || "09:00:00";
       const startDatetime = `${serviceDate}T${startTime}`;
       const { data: job, error: jErr } = await admin.from("jobs").insert({
         customer_id: original.customer_id || null,
         address: original.address || "Address on file",
-        city: original.city || "",
+        city: original.city || "Unknown",
         state: original.state || "MD",
-        zip: original.zip_code || "",
+        zip: original.zip_code || "00000",
         service_type: jobServiceTypeForBooking({ ...recleanBooking, service_type: insert.service_type }),
         start_datetime: startDatetime,
-        duration_est_hours: scope === "full" ? (Number(original.estimated_duration_hours) || 3) : Math.max(1, areas.length * 0.75),
+        duration_est_hours: scope === "full" ? (Number(original.estimated_duration_hours) || 3) : Math.max(1, resolvedAreas.length * 0.75),
         sq_ft: Math.round(Number(original.sqft) || 2000),
         bedrooms: Math.round(Number(original.bedrooms) || 0),
         bathrooms: Number(original.bathrooms) || 0,
@@ -621,21 +740,25 @@ serve(async (req) => {
         status: "New",
         notes: special,
       }).select("id").single();
-      if (jErr || !job) throw jErr || new Error("job create failed");
+      if (jErr || !job) throw new Error(`Could not create re-clean job: ${jErr?.message || "unknown"}`);
       await admin.from("bookings").update({ job_id: job.id }).eq("id", recleanBooking.id);
+      recleanBooking.job_id = job.id;
       await ensureJobChecklist(admin, { jobId: job.id, bookingId: recleanBooking.id });
 
       await admin.from("qc_issues").update({
         reclean_classification: classification,
         reclean_status: "approved",
         reclean_scope: scope,
-        reclean_areas_named: areas,
-        reclean_scope_items: Array.isArray(body.items) ? body.items : areas.map((areaId) => ({ areaId, quantity: 1 })),
+        reclean_areas_named: resolvedAreas,
+        reclean_scope_items: Array.isArray(body.items) ? body.items : resolvedAreas.map((areaId) => ({ areaId, quantity: 1 })),
         reclean_booking_id: recleanBooking.id,
         reclean_assessed_value_cents: assessed,
         reclean_customer_prefers_other: customerPrefersOther,
         reclean_message_draft: message,
-        reclean_honored_outside_window: honorOutsideWindow,
+        reclean_honored_outside_window: honorOutsideWindow && !inWindow,
+        reclean_inside_window: inWindow,
+        reclean_guarantee_window_hours: settings.guarantee_window_hours,
+        reclean_requested_at: issue.reclean_requested_at || new Date().toISOString(),
         reclean_goodwill: goodwill || classification === "scope_confusion",
         reclean_verified_at: issue.reclean_verified_at || new Date().toISOString(),
         reclean_verified_by: issue.reclean_verified_by || actor!.id,
@@ -648,14 +771,30 @@ serve(async (req) => {
         scope,
         assessed,
         recleanBookingId: recleanBooking.id,
+        bookingNumber: recleanBooking.booking_number,
         customerPrefersOther,
         goodwill,
+        inWindow,
+        honorOutsideWindow: honorOutsideWindow && !inWindow,
         qualityHitApplies: qualityHitApplies(classification),
       });
+
+      let dispatchResult: Record<string, unknown> | null = null;
+      let dispatchError: string | null = null;
+      try {
+        const { data: freshIssue } = await admin.from("qc_issues").select("*").eq("id", issue.id).maybeSingle();
+        dispatchResult = await dispatchApprovedReclean(admin, freshIssue || { ...issue, reclean_booking_id: recleanBooking.id }, actor, {
+          customerPrefersOther,
+        });
+      } catch (e) {
+        dispatchError = e instanceof Error ? e.message : String(e);
+        log("auto-dispatch after approve failed", dispatchError);
+      }
 
       return json({
         ok: true,
         recleanBookingId: recleanBooking.id,
+        recleanBookingNumber: recleanBooking.booking_number ?? null,
         jobId: job.id,
         assessedValueCents: assessed,
         customerChargeCents: 0,
@@ -663,6 +802,8 @@ serve(async (req) => {
         draftMessage: message,
         draftSubject: draft.subject,
         draftSms: draft.sms,
+        dispatched: dispatchResult,
+        dispatchError,
       });
     }
 
@@ -700,90 +841,16 @@ serve(async (req) => {
       const issueId = String(body.issueId || "");
       const { data: issue } = await admin.from("qc_issues").select("*").eq("id", issueId).maybeSingle();
       if (!issue) return json({ ok: false, error: "QC case not found." }, 404);
-      if (!issue.reclean_booking_id) return json({ ok: false, error: "Approve the re-clean before dispatching." }, 400);
-      const { data: recleanBooking } = await admin.from("bookings").select("*").eq("id", issue.reclean_booking_id).maybeSingle();
-      if (!recleanBooking) return json({ ok: false, error: "Re-clean booking missing." }, 404);
-      const payCents = jobValueForPay(recleanBooking);
-      const { data: original } = await admin.from("bookings").select("*").eq("id", issue.booking_id).maybeSingle();
-      const recleanJobId = recleanBooking.job_id as string | null;
-      if (!recleanJobId) return json({ ok: false, error: "Re-clean job is missing." }, 400);
-
-      const originalCleanerId = original?.cleaner_id ? String(original.cleaner_id) : null;
-      const customerPrefersOther = Boolean(issue.reclean_customer_prefers_other) || body.customerPrefersOther === true;
-
-      if (customerPrefersOther || !originalCleanerId) {
-        const { data: dispatched, error } = await admin.functions.invoke("dispatch-job", {
-          body: { jobId: recleanJobId, approved: true },
+      try {
+        const dispatched = await dispatchApprovedReclean(admin, issue, actor, {
+          customerPrefersOther: body.customerPrefersOther === true,
         });
-        if (error) throw new Error(error.message || "dispatch-job failed");
-        await admin.from("qc_issues").update({
-          reclean_status: "dispatched",
-          reclean_original_offer_status: "skipped_customer_pref",
-        }).eq("id", issueId);
-        await logEvent(admin, issueId, "reclean_dispatched", actor, {
-          via: "ranked",
-          reason: customerPrefersOther ? "customer_requested_different_team" : "no_original_cleaner",
-          note: customerPrefersOther ? originalCleanerDeclineCopy() : null,
-        });
-        return json({ ok: true, via: "ranked", dispatched, payCents });
+        return json({ ok: true, ...dispatched });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        const status = /missing|approve|unpaid/i.test(msg) ? 400 : 500;
+        return json({ ok: false, error: msg }, status);
       }
-
-      const shares = await computeCrewPay(admin, payCents, [originalCleanerId]);
-      const share = shareFor(shares, originalCleanerId);
-      if (!share || share.shareCents <= 0) {
-        return json({ ok: false, error: "Cannot dispatch an unpaid re-clean." }, 400);
-      }
-      const { data: cleaner } = await admin.from("cleaners")
-        .select("id, phone, email, first_name, last_name")
-        .eq("id", originalCleanerId).maybeSingle();
-      const expires = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
-      const tokenBytes = new Uint8Array(16);
-      crypto.getRandomValues(tokenBytes);
-      const token = Array.from(tokenBytes).map((b) => b.toString(16).padStart(2, "0")).join("");
-      await admin.from("job_assignments").upsert({
-        job_id: recleanJobId,
-        cleaner_id: originalCleanerId,
-        status: "Offered",
-        role: "Lead",
-        offered_at: new Date().toISOString(),
-        expires_at: expires,
-        response_token: token,
-        estimated_pay_cents: share.shareCents,
-        pay_percentage_snapshot: share.ratePercent,
-        crew_size_snapshot: 1,
-        reliability_neutral: true,
-      }, { onConflict: "job_id,cleaner_id" });
-
-      const offerUrl = `https://contractor.novaracleaning.com/cleaner/job-offer/${token}`;
-      if (cleaner?.phone) {
-        await sendSms(admin, {
-          toPhone: cleaner.phone,
-          message:
-            `Novara re-clean (paid, Spotless Guarantee) at ${original?.address || "the property"} on ${recleanBooking.service_date}. ` +
-            `Your pay $${(share.shareCents / 100).toFixed(2)}. This is not a penalty — declining is OK. ${offerUrl}`,
-          type: "job_offer",
-        });
-      }
-      await admin.from("qc_issues").update({
-        reclean_status: "offered",
-        reclean_offered_to_cleaner_id: originalCleanerId,
-        reclean_original_offer_status: "offered",
-        reclean_offered_at: new Date().toISOString(),
-      }).eq("id", issueId);
-      await admin.from("jobs").update({ status: "Offered" }).eq("id", recleanJobId);
-      await logEvent(admin, issueId, "reclean_offered", actor, {
-        cleanerId: originalCleanerId,
-        payCents: share.shareCents,
-        reliabilityPenalty: false,
-      });
-      return json({
-        ok: true,
-        via: "original_cleaner",
-        cleanerId: originalCleanerId,
-        payCents: share.shareCents,
-        offerUrl,
-        note: "Declining this offer is not a reliability penalty.",
-      });
     }
 
     if (action === "fallback_dispatch") {

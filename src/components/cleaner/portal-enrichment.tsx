@@ -9,6 +9,7 @@
 import { useState } from "react";
 import { RiInformationLine, RiArrowDownSLine, RiUser3Line, RiToolsLine } from "@remixicon/react";
 import { supabase } from "@/integrations/supabase/client";
+import { RecleanBadge, RecleanContractorNote } from "@/components/reclean/RecleanCallout";
 import { cn } from "@/lib/utils";
 
 export interface EnrichedPay {
@@ -57,6 +58,9 @@ export interface PortalJob {
   customerName: string;
   serviceType: string;
   homeSizeId: string | null;
+  isReclean?: boolean;
+  recleanScope?: string | null;
+  recleanAssessedValueCents?: number | null;
   pay: EnrichedPay;
   customerDetails: EnrichedCustomerDetails | null;
   internalDetails: EnrichedInternalDetails | null;
@@ -80,10 +84,23 @@ export interface CoverageOfferSummary {
   estimatedPayCents: number | null;
 }
 
+export interface PortalJobOffer {
+  token: string;
+  serviceType?: string | null;
+  serviceDate?: string | null;
+  timeSlot?: string | null;
+  city?: string | null;
+  state?: string | null;
+  estimatedPayCents?: number | null;
+  isReclean?: boolean;
+  recleanScope?: string | null;
+}
+
 export interface CleanerPortalData {
   jobs: PortalJob[];
   summary: { lifetimePaidCents: number; pendingCents: number; paidJobs: number } | null;
   coverageOffers: CoverageOfferSummary[];
+  offers: PortalJobOffer[];
   byJobId: Map<string, PortalJob>;
   byBooking: Map<string, PortalJob>;
 }
@@ -96,6 +113,7 @@ export async function fetchCleanerPortal(cleanerId?: string): Promise<CleanerPor
     jobs: [],
     summary: null,
     coverageOffers: [],
+    offers: [],
     byJobId: new Map(),
     byBooking: new Map(),
   };
@@ -109,6 +127,7 @@ export async function fetchCleanerPortal(cleanerId?: string): Promise<CleanerPor
       jobs?: PortalJob[];
       summary?: CleanerPortalData["summary"];
       coverageOffers?: CoverageOfferSummary[];
+      offers?: PortalJobOffer[];
     };
     if (!res?.ok || !Array.isArray(res.jobs)) return empty;
     const byJobId = new Map<string, PortalJob>();
@@ -121,6 +140,7 @@ export async function fetchCleanerPortal(cleanerId?: string): Promise<CleanerPor
       jobs: res.jobs,
       summary: res.summary || null,
       coverageOffers: Array.isArray(res.coverageOffers) ? res.coverageOffers : [],
+      offers: Array.isArray(res.offers) ? res.offers : [],
       byJobId,
       byBooking,
     };
@@ -280,11 +300,20 @@ export function JobDetails({ job }: { job: PortalJob }) {
       >
         <span className="flex items-center gap-1.5">
           <RiInformationLine className="w-3.5 h-3.5 text-primary" /> View job details
+          {job.isReclean ? <RecleanBadge className="text-[10px] px-1.5 py-0" /> : null}
         </span>
         <RiArrowDownSLine className={cn("w-4 h-4 transition-transform", open && "rotate-180")} />
       </button>
       {open && (
         <div className="px-3 pb-3 space-y-3">
+          {job.isReclean && (
+            <RecleanContractorNote
+              compact
+              scope={job.recleanScope}
+              payCents={job.recleanAssessedValueCents ?? job.pay.displayCents}
+              reliabilityNeutral
+            />
+          )}
           {cd && (
             <div className="rounded-lg bg-background border border-border/50 p-2.5">
               <p className="text-[11px] font-semibold text-slate-900 flex items-center gap-1 mb-1">
