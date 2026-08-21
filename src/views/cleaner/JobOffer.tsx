@@ -161,7 +161,19 @@ export default function CleanerJobOfferPage() {
       const { data, error: invokeError } = await supabase.functions.invoke("get-job-offer", {
         body: { token },
       });
-      if (invokeError) throw invokeError;
+      if (invokeError) {
+        let detail = invokeError.message || "Couldn't load this job offer";
+        try {
+          const body = await (invokeError as { context?: Response }).context?.clone?.().json?.();
+          if (body?.error) detail = String(body.error);
+        } catch {
+          /* keep the invoke message */
+        }
+        if (/non-2xx/i.test(detail) || /edge function/i.test(detail)) {
+          detail = "This offer link is invalid or expired. Open the job from your dashboard if it is still waiting on you.";
+        }
+        throw new Error(detail);
+      }
       if ((data as any)?.error) throw new Error((data as any).error);
       setOffer(data as OfferDetail);
       const status = (data as OfferDetail).assignment.status.toLowerCase();

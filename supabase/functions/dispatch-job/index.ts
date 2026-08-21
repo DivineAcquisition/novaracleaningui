@@ -174,6 +174,37 @@ async function broadcastJob(
 }
 
 /**
+ * Crew mates of the job's initial lead (everyone sharing that cleaner’s
+ * crew_id except the lead). Used so a declined extra-cleaner slot is
+ * refilled from outside that crew.
+ */
+async function crewMateIdsOfInitialLead(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  jobId: string,
+  existingOnJob: Array<{ cleaner_id: string; role?: string | null; status?: string | null; created_at?: string | null }>,
+): Promise<Set<string>> {
+  const ordered = [...existingOnJob].sort((a, b) =>
+    String(a.created_at || "").localeCompare(String(b.created_at || "")),
+  );
+  const lead = ordered.find((a) => String(a.role || "").toLowerCase() === "lead") || ordered[0];
+  if (!lead?.cleaner_id) return new Set();
+  const { data: cleaner } = await supabase
+    .from("cleaners")
+    .select("crew_id")
+    .eq("id", lead.cleaner_id)
+    .maybeSingle();
+  if (!cleaner?.crew_id) return new Set();
+  const { data: mates } = await supabase
+    .from("cleaners")
+    .select("id")
+    .eq("crew_id", cleaner.crew_id);
+  const ids = new Set<string>((mates || []).map((m: { id: string }) => m.id));
+  ids.delete(lead.cleaner_id);
+  return ids;
+}
+
+/**
  * Check for scheduling conflicts
  */
 async function hasSchedulingConflict(
@@ -325,7 +356,7 @@ serve(async (req) => {
 
     const { data: existingOnJob } = await supabase
       .from("job_assignments")
-      .select("cleaner_id, status")
+      .select("cleaner_id, status, role, created_at")
       .eq("job_id", jobId);
 
     const blockedCleanerIds = new Set(
@@ -339,6 +370,21 @@ serve(async (req) => {
         })
         .map((a: { cleaner_id: string }) => a.cleaner_id),
     );
+
+    // Additional-slot refill: never offer another member of the original
+    // lead's crew. First dispatch can still pair crew mates; if that extra
+    // cleaner declines/expires, the next offer goes to the closest person
+    // outside that crew.
+    const excludeLeadCrew = body?.excludeLeadCrew === true ||
+      (backfill && (alreadyConfirmed ?? 0) > 0);
+    const leadCrewMateIds = excludeLeadCrew
+      ? await crewMateIdsOfInitialLead(supabase, jobId, existingOnJob || [])
+      : new Set<string>();
+    if (leadCrewMateIds.size > 0) {
+      logStep("Excluding initial lead's crew from additional offers", {
+        mates: leadCrewMateIds.size,
+      });
+    }
 
     let slotsToFill = Math.max(0, (job.min_cleaners_required || 1) - (alreadyConfirmed ?? 0));
     if (backfill && slotsToFill === 0) {
@@ -441,6 +487,10 @@ serve(async (req) => {
 
     for (const cleaner of cleaners) {
       if (blockedCleanerIds.has(cleaner.id)) continue;
+      if (leadCrewMateIds.has(cleaner.id)) {
+        logStep(`Cleaner ${cleaner.first_name} skipped — same crew as the initial lead`);
+        continue;
+      }
 
       const upcomingCount = upcomingJobsMap.get(cleaner.id) || 0;
       const result = scoreCleanerForJob(
