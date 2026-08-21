@@ -1451,6 +1451,51 @@ serve(async (req) => {
         break;
       }
 
+      case "payout.paid":
+      case "payout.failed":
+      case "payout.canceled": {
+        // Connect overpay recovery: if this payout belongs to a watched
+        // bank-debit reversal, tick the recoverer immediately instead of
+        // waiting for the 5-minute cron.
+        try {
+          // deno-lint-ignore no-explicit-any
+          const payout = event.data.object as any;
+          const payoutId = String(payout?.id || "");
+          if (payoutId) {
+            const { data: watched } = await supabase
+              .from("connect_overpay_recovery")
+              .select("id")
+              .in("status", ["watching", "ready", "recovering"])
+              .or(`payout_reversal_id.eq.${payoutId},original_payout_id.eq.${payoutId}`)
+              .limit(1);
+            if (watched && watched.length > 0) {
+              const cronSecret = await resolveSecret(supabase, "CRON_SECRET");
+              const tick = await fetch(
+                `${Deno.env.get("SUPABASE_URL")}/functions/v1/recover-connect-overpay`,
+                {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "x-cron-secret": cronSecret,
+                  },
+                  body: JSON.stringify({ source: "stripe_webhook", payoutId }),
+                },
+              );
+              logStep("Connect overpay recovery tick", {
+                payoutId,
+                event: event.type,
+                status: tick.status,
+              });
+            }
+          }
+        } catch (err) {
+          logStep("Connect overpay recovery hook failed (non-blocking)", {
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+        break;
+      }
+
       default:
         logStep("Unhandled event type", { type: event.type });
     }
