@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 import { RiLoader4Line, RiShieldCheckLine, RiCameraLine } from "@remixicon/react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { edgeResult } from "@/lib/edge-invoke";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -17,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
+import { RecleanBadge } from "@/components/reclean/RecleanCallout";
 
 const AREAS = [
   { id: "kitchen", label: "Kitchen" },
@@ -76,9 +78,9 @@ export default function RecleanWorkflow({
       const { data, error } = await supabase.functions.invoke("qc-reclean", {
         body: { action: "packet", issueId },
       });
-      if (error) throw error;
+      const outcome = await edgeResult(error, data);
+      if (!outcome.ok) throw new Error(outcome.error || "Failed to load re-clean packet");
       const d = data as Record<string, unknown>;
-      if (d?.ok === false) throw new Error(String(d.error || "Failed to load re-clean packet"));
       setPacket(d);
       const issue = (d.issue || {}) as Record<string, unknown>;
       setClassification(String(issue.reclean_classification || "") === "pending" ? "" : String(issue.reclean_classification || ""));
@@ -87,11 +89,21 @@ export default function RecleanWorkflow({
       const pktAreas = ((d.packet as { namedAreas?: string[] } | undefined)?.namedAreas) || [];
       setAreas(named.length ? named : pktAreas);
       setCustomerPrefersOther(Boolean(issue.reclean_customer_prefers_other));
-      setHonorOutsideWindow(Boolean(issue.reclean_honored_outside_window));
+      const outside = !(d.inWindow ?? issue.reclean_inside_window);
+      setHonorOutsideWindow(Boolean(issue.reclean_honored_outside_window) || outside);
       setGoodwill(Boolean(issue.reclean_goodwill));
       setMessage(String(d.draftMessage || issue.reclean_message_draft || ""));
       const orig = d.originalBooking as { time_slot?: string } | undefined;
       setTimeSlot(String(orig?.time_slot || "morning"));
+      setServiceDate((prev) => {
+        if (prev) return prev;
+        const t = new Date();
+        t.setDate(t.getDate() + 1);
+        const y = t.getFullYear();
+        const m = String(t.getMonth() + 1).padStart(2, "0");
+        const day = String(t.getDate()).padStart(2, "0");
+        return `${y}-${m}-${day}`;
+      });
       setPreviewCents(typeof d.assessedValueCents === "number" ? d.assessedValueCents : null);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Couldn't load re-clean packet");
@@ -106,11 +118,26 @@ export default function RecleanWorkflow({
     setBusy(key);
     try {
       const { data, error } = await supabase.functions.invoke("qc-reclean", { body: { issueId, ...body } });
-      if (error) throw error;
-      const d = data as { ok?: boolean; error?: string; draftMessage?: string };
-      if (d?.ok === false) throw new Error(d.error || "Failed");
+      const outcome = await edgeResult(error, data);
+      if (!outcome.ok) throw new Error(outcome.error || "Failed");
+      const d = data as {
+        ok?: boolean;
+        error?: string;
+        draftMessage?: string;
+        recleanBookingNumber?: number | null;
+        recleanBookingId?: string;
+        dispatchError?: string | null;
+      };
       if (d.draftMessage) setMessage(d.draftMessage);
-      toast.success(success);
+      const bookingBit = d.recleanBookingNumber
+        ? ` Booking #${d.recleanBookingNumber} is on the Bookings tab.`
+        : d.recleanBookingId
+          ? " Re-clean booking created — it is on the Bookings tab."
+          : "";
+      const dispatchBit = d.dispatchError
+        ? ` Offer not sent yet: ${d.dispatchError}`
+        : "";
+      toast.success(success + bookingBit + dispatchBit);
       await load();
       onChanged?.();
       return d;
@@ -283,10 +310,10 @@ export default function RecleanWorkflow({
             Customer requested a different team (overrides offering the original cleaner)
           </label>
           {!inWindow && (
-            <label className="flex items-center gap-2 text-xs text-amber-800">
-              <Checkbox checked={honorOutsideWindow} onCheckedChange={(v) => setHonorOutsideWindow(v === true)} />
-              Honor this request outside the guarantee window
-            </label>
+            <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              This request is outside the {String((packet.settings as { guarantee_window_hours?: number })?.guarantee_window_hours || 48)}h guarantee window.
+              Approving honors it at company discretion (customer still not charged; performer still paid).
+            </p>
           )}
           {classification === "not_supported" && (
             <label className="flex items-center gap-2 text-xs text-slate-700">
@@ -329,7 +356,7 @@ export default function RecleanWorkflow({
                 goodwill,
                 fullApproved,
                 customerMessage: message,
-              }, "approve", "Re-clean approved — customer not charged")}
+              }, "approve", "Re-clean approved — customer not charged, performer paid")}
             >
               {busy === "approve" && <RiLoader4Line className="w-3.5 h-3.5 animate-spin mr-1" />}
               Approve re-clean
@@ -383,9 +410,22 @@ export default function RecleanWorkflow({
       </div>
 
       {issue.reclean_booking_id && (
-        <p className="text-[11px] text-slate-500">
-          Re-clean booking {String(issue.reclean_booking_id).slice(0, 8)} · assessed {dollars(Number(issue.reclean_assessed_value_cents))} · absorbed {dollars(Number(issue.reclean_absorbed_cost_cents))}
-        </p>
+        <div className="rounded-lg border border-violet-200 bg-violet-50 p-3 space-y-1">
+          <RecleanBadge />
+          <p className="text-[11px] text-violet-900">
+            Re-clean booking {String(issue.reclean_booking_id).slice(0, 8)}
+            {issue.reclean_assessed_value_cents != null
+              ? ` · assessed ${dollars(Number(issue.reclean_assessed_value_cents))}`
+              : ""}
+            {issue.reclean_absorbed_cost_cents != null
+              ? ` · absorbed ${dollars(Number(issue.reclean_absorbed_cost_cents))}`
+              : ""}
+            . It is on the Bookings tab with the Re-clean label, and the original cleaner is offered it on their dashboard.
+          </p>
+          <a className="text-xs text-violet-700 underline" href={`/admin/bookings?highlight=${String(issue.reclean_booking_id)}`}>
+            Open on Bookings tab
+          </a>
+        </div>
       )}
     </div>
   );

@@ -61,6 +61,7 @@ import { DeepCleanPrompt, type DeepCleanChoice } from "@/components/booking/Deep
 import { ScopeAdjustmentDialog } from "@/components/booking/ScopeAdjustmentDialog";
 import { isJobStillActive, isScopeAdjustable } from "@/lib/scope-adjustment";
 import { isGlowMembershipPlan } from "@/lib/membership-visit";
+import { RecleanBadge, isRecleanBooking } from "@/components/reclean/RecleanCallout";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import {
   ADD_ONS,
@@ -148,6 +149,13 @@ interface BookingRow {
   frequency?: string | null;
   checklist?: ChecklistSummary | null;
   check_in_time?: string | null;
+  is_reclean?: boolean | null;
+  reclean_of_booking_id?: string | null;
+  reclean_scope?: string | null;
+  reclean_assessed_value_cents?: number | null;
+  reclean_qc_issue_id?: string | null;
+  booking_channel?: string | null;
+  team_notes?: string | null;
 }
 
 interface ScopeAdjustmentRow {
@@ -460,6 +468,9 @@ export default function AdminBookings() {
                       <p className="text-sm text-slate-700 capitalize truncate">
                         {b.service_type ? b.service_type.replaceAll("_", " ") : "—"}
                       </p>
+                      {isRecleanBooking(b) ? (
+                        <RecleanBadge className="mt-0.5 text-[10px] px-1.5 py-0" />
+                      ) : null}
                       {/* Size and contents, so the list can be scanned for
                           "which of these is a big job" without opening each. */}
                       <p className="text-xs text-slate-500 truncate">
@@ -483,7 +494,18 @@ export default function AdminBookings() {
                       ) : null}
                     </div>
                     <div className="col-span-6 md:col-span-2 text-sm tabular-nums text-slate-900 font-medium">
-                      {fmtMoney(b.final_charge_cents ?? b.total_estimate_cents)}
+                      {isRecleanBooking(b) ? (
+                        <div>
+                          <p className="text-violet-800">No charge</p>
+                          {b.reclean_assessed_value_cents ? (
+                            <p className="text-[11px] font-normal text-slate-500">
+                              Pay basis {fmtMoney(b.reclean_assessed_value_cents)}
+                            </p>
+                          ) : null}
+                        </div>
+                      ) : (
+                        fmtMoney(b.final_charge_cents ?? b.total_estimate_cents)
+                      )}
                     </div>
                     <div className="col-span-12 md:col-span-1 flex md:justify-end">
                       <Badge
@@ -1736,7 +1758,7 @@ function BookingSheet({
     void (async () => {
       const { data } = await (supabase.from as any)("bookings")
         .select(
-          "add_ons, suppress_review_request, payment_option, payment_received_at, uses_credit, total_estimate_cents, final_charge_cents, deposit_cents, balance_amount_cents, completion_hold_status, completion_hold_amount_cents, completion_hold_captured_amount, completion_hold_captured_at",
+          "add_ons, suppress_review_request, payment_option, payment_received_at, uses_credit, total_estimate_cents, final_charge_cents, deposit_cents, balance_amount_cents, completion_hold_status, completion_hold_amount_cents, completion_hold_captured_amount, completion_hold_captured_at, is_reclean, reclean_of_booking_id, reclean_scope, reclean_assessed_value_cents, reclean_qc_issue_id, booking_channel, team_notes",
         )
         .eq("id", booking.id)
         .maybeSingle();
@@ -1925,7 +1947,7 @@ function BookingSheet({
   };
 
   const MONEY_COLS =
-    "payment_option, payment_received_at, uses_credit, total_estimate_cents, final_charge_cents, deposit_cents, balance_amount_cents, completion_hold_status, completion_hold_amount_cents, completion_hold_captured_amount, completion_hold_captured_at";
+    "payment_option, payment_received_at, uses_credit, total_estimate_cents, final_charge_cents, deposit_cents, balance_amount_cents, completion_hold_status, completion_hold_amount_cents, completion_hold_captured_amount, completion_hold_captured_at, is_reclean, reclean_of_booking_id, reclean_scope, reclean_assessed_value_cents, reclean_qc_issue_id, booking_channel, team_notes";
 
   const refreshMoney = async (bookingId: string) => {
     const [{ data }, { data: addonRows }] = await Promise.all([
@@ -2003,6 +2025,7 @@ function BookingSheet({
   if (!booking) return null;
 
   const moneyRow = { ...booking, ...moneyPatch };
+  const reclean = isRecleanBooking(moneyRow);
   const billedCents = billedTotalCents(moneyRow);
   const asBookedCents = moneyRow.total_estimate_cents ?? booking.total_estimate_cents ?? 0;
   const depositCents = moneyRow.deposit_cents ?? booking.deposit_cents ?? 0;
@@ -2311,8 +2334,9 @@ function BookingSheet({
       <Sheet open={Boolean(booking)} onOpenChange={(o) => !o && onClose()}>
         <SheetContent className="w-full sm:max-w-xl overflow-y-auto">
           <SheetHeader>
-            <SheetTitle className="font-jakarta tracking-tight">
+            <SheetTitle className="font-jakarta tracking-tight flex items-center gap-2 flex-wrap">
               Booking #{booking.booking_number || booking.id.slice(0, 6)}
+              {reclean ? <RecleanBadge className="text-[10px]" /> : null}
             </SheetTitle>
             <SheetDescription>
               {booking.first_name || ""} {booking.last_name || ""} · {booking.email || ""}
@@ -2321,6 +2345,32 @@ function BookingSheet({
           </SheetHeader>
 
           <div className="mt-5 space-y-5">
+            {reclean ? (
+              <div className="rounded-lg border border-violet-200 bg-violet-50 p-3 space-y-1.5">
+                <p className="text-sm font-semibold text-violet-950">
+                  Spotless Guarantee re-clean
+                </p>
+                <p className="text-xs text-violet-800">
+                  Customer is not charged. The performer is paid on the assessed
+                  scope
+                  {moneyRow.reclean_assessed_value_cents
+                    ? ` (${fmtMoney(moneyRow.reclean_assessed_value_cents)})`
+                    : ""}
+                  . Original job pay is never reduced.
+                  {moneyRow.reclean_scope
+                    ? ` Scope: ${moneyRow.reclean_scope === "full" ? "full re-service" : "targeted follow-up"}.`
+                    : ""}
+                </p>
+                {moneyRow.reclean_of_booking_id ? (
+                  <a
+                    className="text-xs text-violet-700 underline"
+                    href={`/admin/bookings?highlight=${moneyRow.reclean_of_booking_id}`}
+                  >
+                    Open original booking
+                  </a>
+                ) : null}
+              </div>
+            ) : null}
             {/* Summary */}
             <Card className="border-slate-200">
               <CardContent className="py-4 grid grid-cols-2 gap-y-2 text-sm">
@@ -2389,8 +2439,16 @@ function BookingSheet({
                 <Separator className="col-span-2 my-1" />
                 <span className="text-slate-500">Job total</span>
                 <span className="text-right tabular-nums font-semibold">
-                  {fmtMoney(billedCents)}
+                  {reclean ? "No charge" : fmtMoney(billedCents)}
                 </span>
+                {reclean && moneyRow.reclean_assessed_value_cents ? (
+                  <>
+                    <span className="text-slate-500">Performer pay basis</span>
+                    <span className="text-right tabular-nums text-violet-800">
+                      {fmtMoney(moneyRow.reclean_assessed_value_cents)}
+                    </span>
+                  </>
+                ) : null}
                 {asBookedCents > 0 && asBookedCents !== billedCents ? (
                   <>
                     <span className="text-slate-500">As booked</span>
@@ -2417,14 +2475,18 @@ function BookingSheet({
                 <span className="text-right tabular-nums font-semibold">
                   {fmtMoney(remainingDueCents)}
                 </span>
-                {remainingDueCents > 0 ? (
+                {reclean ? (
+                  <p className="col-span-2 text-xs text-violet-800">
+                    No customer charge — absorbed under the Spotless Guarantee.
+                  </p>
+                ) : remainingDueCents > 0 ? (
                   <p className="col-span-2 text-xs text-slate-500">
                     Remaining is what still needs to be captured so Stripe matches the job total.
                   </p>
                 ) : (
                   <p className="col-span-2 text-xs text-emerald-700">Captured matches the job total.</p>
                 )}
-                {remainingDueCents > 0 ? (
+                {remainingDueCents > 0 && !reclean ? (
                   <Button
                     size="sm"
                     className="col-span-2 bg-violet-600 hover:bg-violet-700 text-white"

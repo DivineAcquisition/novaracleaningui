@@ -28,6 +28,12 @@ import {
   type CleanerPortalData,
   type PortalJob,
 } from "@/components/cleaner/portal-enrichment";
+import {
+  RecleanBadge,
+  RecleanContractorNote,
+  RecleanOfferBanner,
+  notesLookLikeReclean,
+} from "@/components/reclean/RecleanCallout";
 import { toast } from "sonner";
 
 export default function MobileDashboard() {
@@ -106,7 +112,8 @@ export default function MobileDashboard() {
               zip,
               duration_est_hours,
               check_in_time,
-              status
+              status,
+              notes
             )
           `)
           .eq("cleaner_id", cleanerData.id)
@@ -114,7 +121,7 @@ export default function MobileDashboard() {
           //   • accept-job-offer (token portal) sets "Confirmed"
           //   • legacy respond-to-offer flow sometimes wrote "accepted"
           //   • admin assign uses "Confirmed" / "Accepted"
-          .in("status", ["Confirmed", "Accepted", "accepted", "In Progress"])
+          .in("status", ["Confirmed", "Accepted", "accepted", "In Progress", "Offered", "offered", "Broadcast"])
           .order("assigned_at", { ascending: true });
 
         // Resolve booking ids so "Mark done" can call complete-booking.
@@ -133,12 +140,21 @@ export default function MobileDashboard() {
         const jobIds = (jobsData || []).map((a: any) => a.jobs?.id).filter(Boolean);
         const bookingByJob: Record<
           string,
-          { id: string; service_date: string | null; time_slot: string | null; status: string }
+          {
+            id: string;
+            service_date: string | null;
+            time_slot: string | null;
+            status: string;
+            is_reclean?: boolean;
+            reclean_scope?: string | null;
+            reclean_assessed_value_cents?: number | null;
+            team_notes?: string | null;
+          }
         > = {};
         if (jobIds.length > 0) {
           const { data: bookingRows } = await supabase
             .from("bookings")
-            .select("id, job_id, service_date, time_slot, arrival_window, status")
+            .select("id, job_id, service_date, time_slot, arrival_window, status, is_reclean, reclean_scope, reclean_assessed_value_cents, team_notes")
             .in("job_id", jobIds);
           (bookingRows || []).forEach((b: any) => {
             if (b.job_id) {
@@ -147,6 +163,10 @@ export default function MobileDashboard() {
                 service_date: b.service_date ?? null,
                 time_slot: b.time_slot ?? b.arrival_window ?? null,
                 status: String(b.status || ""),
+                is_reclean: Boolean(b.is_reclean),
+                reclean_scope: b.reclean_scope ?? null,
+                reclean_assessed_value_cents: b.reclean_assessed_value_cents ?? null,
+                team_notes: b.team_notes ?? null,
               };
             }
           });
@@ -157,10 +177,17 @@ export default function MobileDashboard() {
             .filter((assignment: any) => {
               const job = assignment.jobs;
               if (!job?.id) return false;
-              const bStatus = (bookingByJob[job.id]?.status || "").toLowerCase();
+              const bk = bookingByJob[job.id];
+              const bStatus = (bk?.status || "").toLowerCase();
               if (bStatus && notUpcomingBooking.has(bStatus)) return false;
               const jStatus = String(job.status || "").toLowerCase();
               if (["completed", "cancelled", "canceled"].includes(jStatus)) return false;
+              const offered = /^(offered|broadcast)$/i.test(String(assignment.status || ""));
+              if (offered) {
+                return Boolean(bk?.is_reclean)
+                  || notesLookLikeReclean(job.notes)
+                  || notesLookLikeReclean(bk?.team_notes);
+              }
               return true;
             })
             .map((assignment: any) => {
@@ -176,6 +203,9 @@ export default function MobileDashboard() {
                 booking_service_date: bk?.service_date ?? null,
                 booking_time_slot: bk?.time_slot ?? null,
                 ...assignment.jobs,
+                is_reclean: Boolean(bk?.is_reclean) || notesLookLikeReclean(assignment.jobs?.notes),
+                reclean_scope: bk?.reclean_scope || null,
+                reclean_assessed_value_cents: bk?.reclean_assessed_value_cents ?? null,
               };
             });
           setUpcomingJobs(formattedJobs);
@@ -185,7 +215,7 @@ export default function MobileDashboard() {
         const { data: offerData } = await supabase
           .from("job_assignments")
           .select(
-            "id, role, status, estimated_pay_cents, pay_percentage_snapshot, response_token, assigned_at, jobs (service_type, city, state, start_datetime, duration_est_hours)",
+            "id, role, status, estimated_pay_cents, pay_percentage_snapshot, response_token, assigned_at, jobs (service_type, city, state, start_datetime, duration_est_hours, notes)",
           )
           .eq("cleaner_id", cleanerData.id)
           .ilike("status", "offered")
@@ -368,6 +398,7 @@ export default function MobileDashboard() {
           {/* Someone dropped a job and you're near the top of the list. Above
               the stats because the accept window is measured in minutes. */}
           <CoverageOfferBanner offers={portal?.coverageOffers || []} />
+          <RecleanOfferBanner offers={portal?.offers || []} />
 
           {cleaner && !cleaner.stripe_account_id && (
             <OnboardingChecklist cleaner={cleaner} onRefresh={fetchData} />
@@ -423,6 +454,12 @@ export default function MobileDashboard() {
                           <h3 className="font-semibold text-base capitalize">
                             {String(o.jobs?.service_type || "cleaning").replaceAll("_", " ")}
                           </h3>
+                          {notesLookLikeReclean(o.jobs?.notes) && (
+                            <div className="mt-1 space-y-1.5">
+                              <RecleanBadge className="text-[10px]" />
+                              <RecleanContractorNote compact reliabilityNeutral />
+                            </div>
+                          )}
                           <p className="text-xs text-muted-foreground">
                             {o.jobs?.start_datetime
                               ? format(new Date(o.jobs.start_datetime), "EEE, MMM d · h:mm a")

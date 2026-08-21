@@ -11,6 +11,11 @@ import {
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PayChip, JobDetails, type PortalJob } from "@/components/cleaner/portal-enrichment";
+import {
+  RecleanBadge,
+  RecleanContractorNote,
+  notesLookLikeReclean,
+} from "@/components/reclean/RecleanCallout";
 
 import { format } from "date-fns";
 
@@ -75,6 +80,21 @@ export function UpcomingJobs({ jobs, onCheckIn, onComplete, actionLoading, getEn
                 <h3 className="font-semibold text-base capitalize">
                   {enriched?.customerName || String(job.service_type || "cleaning").replaceAll("_", " ")}
                 </h3>
+                {(enriched?.isReclean || job.is_reclean || notesLookLikeReclean(job.notes)) && (
+                  <div className="mt-1 space-y-1.5">
+                    <RecleanBadge className="text-[10px]" />
+                    <RecleanContractorNote
+                      compact
+                      scope={enriched?.recleanScope || job.reclean_scope}
+                      payCents={
+                        enriched?.recleanAssessedValueCents
+                        ?? job.reclean_assessed_value_cents
+                        ?? job.estimated_pay_cents
+                      }
+                      reliabilityNeutral={/offered/i.test(String(job.status || ""))}
+                    />
+                  </div>
+                )}
                 <p className="text-xs text-muted-foreground capitalize">
                   {enriched ? String(job.service_type || "cleaning").replaceAll("_", " ") : job.role}
                 </p>

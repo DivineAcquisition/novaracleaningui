@@ -117,6 +117,13 @@ const OPTIONAL_COLS = [
   "flooring_type",
   "access_notes",
   "frequency",
+  "is_reclean",
+  "reclean_of_booking_id",
+  "reclean_scope",
+  "reclean_assessed_value_cents",
+  "reclean_qc_issue_id",
+  "booking_channel",
+  "team_notes",
 ];
 
 function matchesSearch(row: Record<string, unknown>, term: string): boolean {
