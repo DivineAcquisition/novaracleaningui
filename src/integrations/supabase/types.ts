@@ -253,6 +253,7 @@ export type Database = {
           home_size_id: string
           hosted_invoice_url: string | null
           id: string
+          is_reclean: boolean
           issues_flag: boolean | null
           issues_notes: string | null
           job_id: string | null
@@ -269,6 +270,10 @@ export type Database = {
           rated_at: string | null
           rating: number | null
           rating_submitted: boolean | null
+          reclean_assessed_value_cents: number | null
+          reclean_of_booking_id: string | null
+          reclean_qc_issue_id: string | null
+          reclean_scope: string | null
           review_text: string | null
           sdr_rep_name: string | null
           service_date: string
@@ -329,6 +334,7 @@ export type Database = {
           id?: string
           issues_flag?: boolean | null
           issues_notes?: string | null
+          is_reclean?: boolean
           job_id?: string | null
           last_name: string
           membership_plan?: string | null
@@ -343,6 +349,10 @@ export type Database = {
           rated_at?: string | null
           rating?: number | null
           rating_submitted?: boolean | null
+          reclean_assessed_value_cents?: number | null
+          reclean_of_booking_id?: string | null
+          reclean_qc_issue_id?: string | null
+          reclean_scope?: string | null
           review_text?: string | null
           sdr_rep_name?: string | null
           service_date: string
@@ -403,6 +413,7 @@ export type Database = {
           id?: string
           issues_flag?: boolean | null
           issues_notes?: string | null
+          is_reclean?: boolean
           job_id?: string | null
           last_name?: string
           membership_plan?: string | null
@@ -418,6 +429,10 @@ export type Database = {
           rating?: number | null
           rating_reminder_sent_at?: string | null
           rating_submitted?: boolean | null
+          reclean_assessed_value_cents?: number | null
+          reclean_of_booking_id?: string | null
+          reclean_qc_issue_id?: string | null
+          reclean_scope?: string | null
           review_text?: string | null
           sdr_rep_name?: string | null
           service_date?: string
@@ -448,6 +463,13 @@ export type Database = {
             columns: ["job_id"]
             isOneToOne: false
             referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookings_reclean_of_booking_id_fkey"
+            columns: ["reclean_of_booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
             referencedColumns: ["id"]
           },
         ]
@@ -1037,6 +1059,7 @@ export type Database = {
           reminder_count: number | null
           reminder_sent_at: string | null
           responded_at: string | null
+          reliability_neutral: boolean
           role: string
           status: string
         }
@@ -1057,6 +1080,7 @@ export type Database = {
           reminder_count?: number | null
           reminder_sent_at?: string | null
           responded_at?: string | null
+          reliability_neutral?: boolean
           role?: string
           status?: string
         }
@@ -1077,6 +1101,7 @@ export type Database = {
           reminder_count?: number | null
           reminder_sent_at?: string | null
           responded_at?: string | null
+          reliability_neutral?: boolean
           role?: string
           status?: string
         }

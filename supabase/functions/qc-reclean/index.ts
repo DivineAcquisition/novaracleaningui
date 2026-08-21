@@ -138,6 +138,13 @@ async function loadFocusedSettings(admin: SB) {
   return mergeFocusedSameDaySettings((data as { value?: unknown } | null)?.value as never);
 }
 
+function uuidOrNull(value: unknown): string | null {
+  const s = String(value || "").trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s)
+    ? s
+    : null;
+}
+
 function areasFromIssue(issue: Record<string, unknown>, fallbackText?: string): string[] {
   const named = Array.isArray(issue.reclean_areas_named)
     ? (issue.reclean_areas_named as unknown[]).map((a) => String(a).toLowerCase()).filter(Boolean)
@@ -682,7 +689,7 @@ serve(async (req) => {
       const insert: Record<string, unknown> = {
         customer_id: original.customer_id,
         first_name: original.first_name,
-        last_name: original.last_name,
+        last_name: original.last_name || "",
         email: original.email,
         phone: original.phone,
         address: original.address,
@@ -706,12 +713,15 @@ serve(async (req) => {
         team_notes: special,
         issues_notes: original.issues_notes,
         dispatch_notes: original.dispatch_notes,
+        // Customer charge is always $0. base_price_cents is NOT NULL with no
+        // default — omitting it is what made Approve 400 on real bookings.
+        base_price_cents: 0,
         total_estimate_cents: 0,
         deposit_cents: 0,
         final_charge_cents: 0,
         payment_option: original.payment_option || "full",
         booking_channel: "reclean",
-        booking_type: original.booking_type,
+        booking_type: original.booking_type || "residential",
         is_reclean: true,
         reclean_of_booking_id: original.id,
         reclean_qc_issue_id: issue.id,
@@ -725,7 +735,9 @@ serve(async (req) => {
       const startTime = parseTimeSlotToClock(timeSlot).start || "09:00:00";
       const startDatetime = `${serviceDate}T${startTime}`;
       const { data: job, error: jErr } = await admin.from("jobs").insert({
-        customer_id: original.customer_id || null,
+        // bookings.customer_id is text (often a Stripe cus_ id). jobs.customer_id
+        // is uuid — passing the Stripe id 400s the whole approve.
+        customer_id: uuidOrNull(original.customer_id),
         address: original.address || "Address on file",
         city: original.city || "Unknown",
         state: original.state || "MD",

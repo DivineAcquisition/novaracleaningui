@@ -153,6 +153,18 @@ assert(mergeRecleanSettings({}).guarantee_window_hours === 48, "default window i
 assert(namedAreasFromText("the kitchen and bathroom were missed").includes("kitchen"), "named areas from complaint text");
 assert(namedAreasFromText("the kitchen and bathroom were missed").includes("bathroom"), "bathroom extracted");
 
+const jessie = namedAreasFromText(
+  "Kitchen work did not include fan blades\nAreas of kitchen floor not mopped or cleaned\nLiving room floor not cleaned",
+);
+assert(jessie.includes("kitchen") && jessie.includes("living"),
+  `NVC-0065 complaint names kitchen+living for targeted pay (got ${jessie.join(",")})`);
+assert(assessedRecleanValueCents({
+  scope: "targeted",
+  areas: jessie,
+  originalChargeCents: 52300,
+  focusedSettings: FOCUSED_SAME_DAY_DEFAULTS,
+}) === 13000, "NVC-0065 kitchen+living assesses at $130");
+
 if (failed > 0) {
   console.error(`\n${failed} assertion(s) failed`);
   // deno-lint-ignore no-explicit-any
