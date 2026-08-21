@@ -2,12 +2,11 @@
 
 // ─── /admin/payroll ────────────────────────────────────────────────────
 //
-// Tabs:
+// Four tabs only:
 //   Custom Payout — confirm the job amount, notify the cleaner, mark paid
 //   Extra Pay     — supplies / mileage / surge / OT / job-value (paid via Connect)
 //   Pay Rates     — crew-size revenue-share configuration
 //   Run Payroll   — Stripe Connect batch of Extra Pay (Custom Payout Stripe paused)
-//   Tax Forms     — calendar-year 1099-NEC prep + Stripe Tax Reporting links
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -16,7 +15,6 @@ import SimplePayoutTab from "@/components/admin/payroll/SimplePayoutTab";
 import RunPayrollTab from "@/components/admin/payroll/RunPayrollTab";
 import ExtraPayTab from "@/components/admin/payroll/ExtraPayTab";
 import CrewPayRatesCard from "@/components/admin/payroll/CrewPayRatesCard";
-import Tax1099Tab from "@/components/admin/payroll/Tax1099Tab";
 import { loadActiveCleaners, type PayrollCleaner } from "@/components/admin/payroll/shared";
 
 export default function AdminPayroll() {
@@ -44,13 +42,11 @@ export default function AdminPayroll() {
           <TabsTrigger value="cleaner">Extra Pay</TabsTrigger>
           <TabsTrigger value="rates">Pay Rates</TabsTrigger>
           <TabsTrigger value="run">Run Payroll</TabsTrigger>
-          <TabsTrigger value="tax1099">Tax Forms (1099)</TabsTrigger>
         </TabsList>
         <TabsContent value="payout"><SimplePayoutTab /></TabsContent>
         <TabsContent value="cleaner"><ExtraPayTab cleaners={cleaners} /></TabsContent>
         <TabsContent value="rates"><CrewPayRatesCard /></TabsContent>
         <TabsContent value="run"><RunPayrollTab cleaners={cleaners} /></TabsContent>
-        <TabsContent value="tax1099"><Tax1099Tab /></TabsContent>
       </Tabs>
     </div>
   );

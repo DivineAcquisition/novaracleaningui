@@ -17,7 +17,6 @@
     "airtable:verify": "tsx scripts/verify-airtable-mapping.ts",
     "va:verify": "tsx scripts/verify-va-performance.ts",
     "screening:verify": "tsx scripts/verify-phone-screening.ts",
-    "tax1099:verify": "tsx scripts/verify-1099.ts",
     "edge:bundle": "node scripts/build-edge-bundle.mjs",
     "pricing:verify": "tsx scripts/verify-dynamic-pricing.ts",
     "pricing:verify:server": "deno run --allow-read scripts/verify-dynamic-quote.deno.ts",
