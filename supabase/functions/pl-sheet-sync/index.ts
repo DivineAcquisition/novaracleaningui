@@ -124,7 +124,7 @@ async function buildJobRows(supabase: SB, sinceYmd: string): Promise<(string | n
   // Completed bookings — the primary job log.
   const { data: bookings } = await supabase
     .from("bookings")
-    .select("id, booking_number, booking_type, partner_details, service_type, service_date, business_name, first_name, last_name, final_charge_cents, total_estimate_cents, cleaner_payout_cents, team_notes")
+    .select("id, booking_number, booking_type, partner_details, service_type, service_date, business_name, first_name, last_name, final_charge_cents, total_estimate_cents, cleaner_payout_cents, team_notes, is_reclean, reclean_of_booking_id")
     .eq("status", "completed")
     .gte("service_date", sinceYmd)
     .order("service_date", { ascending: true })
@@ -156,6 +156,9 @@ async function buildJobRows(supabase: SB, sinceYmd: string): Promise<(string | n
     const client = String(b.business_name || `${b.first_name || ""} ${b.last_name || ""}`.trim() || "Client");
     const basePay = payByBooking.has(b.id) ? payByBooking.get(b.id)! : (Number(b.cleaner_payout_cents) || 0);
     const extras = extrasByBooking.get(b.id) || 0;
+    const recleanNote = b.is_reclean
+      ? `RE-CLEAN (Spotless Guarantee)${b.reclean_of_booking_id ? ` of ${String(b.reclean_of_booking_id).slice(0, 8)}` : ""}`
+      : "";
     rows.push({
       key: `${ymd(b.service_date)}|${b.id}`,
       row: [
@@ -163,11 +166,11 @@ async function buildJobRows(supabase: SB, sinceYmd: string): Promise<(string | n
         clientType,
         serviceTypeLabel(b.service_type, clientType),
         client,
-        dollars(b.final_charge_cents ?? b.total_estimate_cents),
+        b.is_reclean ? 0 : dollars(b.final_charge_cents ?? b.total_estimate_cents),
         dollars(basePay),
         0, // supplies/materials tracked via Expenses & Reimb, not per job
         dollars(extras), // extra pay (surge/OT/etc.) = other job cost
-        ref,
+        [ref, recleanNote].filter(Boolean).join(" · "),
       ],
     });
   }

@@ -27,6 +27,12 @@ import {
   feedbackPositiveMinRating,
   feedbackUrl,
 } from "../_shared/job-feedback-offer.ts";
+import {
+  loadRecleanSettings,
+  namedAreasFromText,
+  recleanRequestColumns,
+  recleanSourceForIntake,
+} from "../_shared/reclean.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -63,7 +69,7 @@ async function loadBooking(admin: SB, bookingId: string) {
   const { data } = await admin
     .from("bookings")
     .select(
-      "id, job_id, booking_number, first_name, last_name, email, phone, status, cleaner_id, service_date, service_type, city, state, booking_type, partner_details, rating_submitted",
+      "id, job_id, booking_number, first_name, last_name, email, phone, status, cleaner_id, service_date, service_type, city, state, booking_type, partner_details, rating_submitted, completed_at, is_reclean",
     )
     .eq("id", bookingId)
     .maybeSingle();
@@ -345,6 +351,20 @@ serve(async (req) => {
         `— Feedback scores —\n` +
         `Overall: ${feedback.overall_rating}/5 · Cleaner: ${feedback.cleaner_rating}/5 · Quality: ${feedback.quality_rating}/5`;
 
+      const recleanStamp: Record<string, unknown> = {};
+      if (!booking.is_reclean) {
+        const settings = await loadRecleanSettings(admin);
+        Object.assign(recleanStamp, recleanRequestColumns({
+          completedAt: booking.completed_at,
+          serviceDate: booking.service_date,
+          windowHours: settings.guarantee_window_hours,
+        }), {
+          reclean_source: recleanSourceForIntake({ issueType, reportedVia: "customer" }),
+          reclean_scope: "targeted",
+          reclean_areas_named: namedAreasFromText(description),
+        });
+      }
+
       const { data: issue, error: issueErr } = await admin
         .from("qc_issues")
         .insert({
@@ -367,6 +387,7 @@ serve(async (req) => {
           reported_via: "customer",
           reported_by: null,
           reported_by_name: clientName,
+          ...recleanStamp,
         })
         .select("id")
         .single();
@@ -389,6 +410,22 @@ serve(async (req) => {
           quality_rating: feedback.quality_rating,
         },
       });
+
+      if (recleanStamp.reclean_status) {
+        await admin.from("qc_issue_events").insert({
+          issue_id: issue.id,
+          action: "reclean_requested",
+          note: recleanStamp.reclean_inside_window
+            ? "Re-clean request from 1–3★ feedback, inside the Spotless Guarantee window. Verify original photos before dispatch."
+            : "Re-clean request from 1–3★ feedback, outside the guarantee window — honor at admin discretion.",
+          actor_name: clientName,
+          data: {
+            source: recleanStamp.reclean_source,
+            inside_window: recleanStamp.reclean_inside_window,
+            via: "review_gating",
+          },
+        });
+      }
 
       // Same severity rules as qc-issues: High/Critical alert admin
       // immediately through the existing Discord event routing.

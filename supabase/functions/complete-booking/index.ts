@@ -5,6 +5,7 @@ import { sendSms, formatServiceDate } from "../_shared/sms.ts";
 import { mirrorToLeadConnector } from "../_shared/leadconnector-mirror.ts";
 import { resolveSecret } from "../_shared/app-secrets.ts";
 import { computeCrewPay, shareFor } from "../_shared/crew-pay.ts";
+import { jobValueForPay } from "../_shared/reclean.ts";
 import { documentBookingAddonsInQcSafe } from "../_shared/addon-qc.ts";
 import { remainingDueAtCompletionCents, billedTotalCents } from "../_shared/booking-balance.ts";
 
@@ -130,9 +131,10 @@ serve(async (req) => {
         // Pay follows the FINAL approved job value, so add-ons and approved
         // scope adjustments are already reflected here. Discounts, credits and
         // referral rewards are margin-funded and never reduce this figure.
-        const revenue = booking.final_charge_cents
-          || booking.total_estimate_cents
-          || 0;
+        // Pay follows the FINAL approved job value. Re-cleans are charged $0
+        // to the customer, so pay is computed from reclean_assessed_value_cents
+        // — unpaid corrective work is prohibited.
+        const revenue = jobValueForPay(booking);
 
         // One authoritative calculation. Each cleaner earns their OWN tier's
         // rate for this crew size, divided by the crew size — so a mixed crew is
@@ -179,6 +181,7 @@ serve(async (req) => {
         });
       }
     } catch (recalcErr) {
+      if (booking.is_reclean) throw recalcErr;
       logStep("Pay recompute failed (non-blocking)", { error: String(recalcErr) });
     }
 
@@ -292,7 +295,9 @@ serve(async (req) => {
       .filter((r: { status: string | null }) => r.status === "paid" || r.status === "charged")
       .reduce((s: number, r: { amount_cents: number | null }) => s + (Number(r.amount_cents) || 0), 0);
 
-    let remainingCents = remainingDueAtCompletionCents(booking, paidAddonCents);
+    let remainingCents = booking.is_reclean
+      ? 0
+      : remainingDueAtCompletionCents(booking, paidAddonCents);
     const dueAtCompletionCents = remainingCents;
     try {
       if (remainingCents <= 0) {
@@ -498,9 +503,7 @@ serve(async (req) => {
           .single();
 
         if (cleaner?.email) {
-          const revenue = booking.final_charge_cents
-            || booking.total_estimate_cents
-            || 0;
+          const revenue = jobValueForPay(booking);
           const pct = Number(cleaner.pay_percentage) || 35;
           const estimatedEarnings = booking.cleaner_payout_cents
             || Math.floor((revenue * pct) / 100);
@@ -639,7 +642,11 @@ serve(async (req) => {
 
     // Post-clean testimonial video offer (50% off the 2nd clean once a
     // video + answers are submitted). Non-blocking — dynamic import keeps
-    // this isolated from the completion path.
+    // this isolated from the completion path. Skip on re-cleans: the
+    // customer was not charged and this is corrective work.
+    if (booking.is_reclean === true) {
+      logStep("Testimonial offer skipped — re-clean");
+    } else {
     try {
       const { sendTestimonialOffer } = await import("../_shared/testimonial-offer.ts");
       const { submitUrl } = await sendTestimonialOffer(supabase, {
@@ -653,14 +660,15 @@ serve(async (req) => {
         error: testimonialErr instanceof Error ? testimonialErr.message : String(testimonialErr),
       });
     }
+    }
 
     // Mint the tokenized feedback link now so every completed job has one
     // immediately (single-purpose, job-specific, expiring). The SMS itself
     // goes out via the send-rating-reminders sweep ~2h after completion so
     // it doesn't stack on top of the completion texts above. Non-blocking.
     // Skip entirely when admin disabled review requests on this booking.
-    if (booking.suppress_review_request === true) {
-      logStep("Feedback link skipped — suppress_review_request");
+    if (booking.suppress_review_request === true || booking.is_reclean === true) {
+      logStep(booking.is_reclean ? "Feedback link skipped — re-clean" : "Feedback link skipped — suppress_review_request");
     } else {
       try {
         const { ensureJobFeedback, feedbackUrl } = await import("../_shared/job-feedback-offer.ts");
@@ -669,6 +677,19 @@ serve(async (req) => {
       } catch (feedbackErr) {
         logStep("Feedback link mint failed (non-blocking)", {
           error: feedbackErr instanceof Error ? feedbackErr.message : String(feedbackErr),
+        });
+      }
+    }
+
+    if (booking.is_reclean === true) {
+      try {
+        await supabase.functions.invoke("qc-reclean", {
+          body: { action: "on_reclean_completed", bookingId },
+        });
+        logStep("Re-clean completion recorded (performer paid, customer not charged)");
+      } catch (recleanErr) {
+        logStep("qc-reclean on_reclean_completed failed (non-blocking)", {
+          error: recleanErr instanceof Error ? recleanErr.message : String(recleanErr),
         });
       }
     }

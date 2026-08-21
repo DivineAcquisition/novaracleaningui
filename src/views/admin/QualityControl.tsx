@@ -45,8 +45,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import AccountabilityActionDialog from "@/components/admin/AccountabilityActionDialog";
+import RecleanWorkflow from "@/components/admin/RecleanWorkflow";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -83,6 +85,9 @@ interface IssueRow {
   created_at: string;
   updated_at: string;
   details?: Record<string, unknown> | null;
+  reclean_status?: string | null;
+  reclean_classification?: string | null;
+  reclean_inside_window?: boolean | null;
 }
 
 interface IssueEvent {
@@ -189,7 +194,7 @@ const fmtD = (iso?: string | null) => (iso ? format(new Date(`${iso}`.slice(0, 1
 
 export default function QualityControl() {
   const searchParams = useSearchParams();
-  const [tab, setTab] = useState<"issues" | "docs" | "cleaners" | "scope">("issues");
+  const [tab, setTab] = useState<"issues" | "docs" | "cleaners" | "scope" | "recleans">("issues");
   const [loading, setLoading] = useState(true);
   const [allIssues, setAllIssues] = useState<IssueRow[]>([]);
   const [allDocs, setAllDocs] = useState<DocRow[]>([]);
@@ -376,7 +381,7 @@ export default function QualityControl() {
 
       {/* ─── Tabs ──────────────────────────────────────────────────────── */}
       <div className="flex gap-1 border-b border-slate-200">
-        {([["issues", "Issues"], ["docs", "Documentation"], ["cleaners", "By Cleaner"], ["scope", "Scope Adjustments"]] as const).map(([id, t]) => (
+        {([["issues", "Issues"], ["docs", "Documentation"], ["cleaners", "By Cleaner"], ["recleans", "Re-cleans"], ["scope", "Scope Adjustments"]] as const).map(([id, t]) => (
           <button
             key={id}
             onClick={() => setTab(id)}
@@ -398,6 +403,8 @@ export default function QualityControl() {
         <DocsTab docs={docs} reload={load} />
       ) : tab === "cleaners" ? (
         <CleanersTab byCleaner={byCleaner} />
+      ) : tab === "recleans" ? (
+        <RecleansTab />
       ) : (
         <ScopeAdjustmentsTab />
       )}
@@ -502,6 +509,9 @@ function IssuesTab({
                 <Badge className={cn("border-0", SEVERITY_STYLE[i.severity])}>{label(i.severity)}</Badge>
                 <Badge className={cn("border-0", STATUS_STYLE[i.status])}>{label(i.status)}</Badge>
                 <Badge variant="outline">{ISSUE_TYPES.find((t) => t.id === i.issue_type)?.label || i.issue_type}</Badge>
+            {i.reclean_status && i.reclean_status !== "none" && (
+              <Badge className="border-0 bg-violet-100 text-violet-800">Re-clean: {i.reclean_status.replace(/_/g, " ")}</Badge>
+            )}
                 <span className="text-xs text-slate-400 ml-auto">{fmtDT(i.created_at)}</span>
               </div>
               <p className="font-semibold text-slate-900 mt-1.5">{i.title}</p>
@@ -680,6 +690,9 @@ function IssueSheet({ issue, doc, onClose, reload }: {
             <Badge className={cn("border-0", SEVERITY_STYLE[issue.severity])}>{label(issue.severity)}</Badge>
             <Badge className={cn("border-0", STATUS_STYLE[issue.status])}>{label(issue.status)}</Badge>
             <Badge variant="outline">{ISSUE_TYPES.find((t) => t.id === issue.issue_type)?.label || issue.issue_type}</Badge>
+            {issue.reclean_status && issue.reclean_status !== "none" && (
+              <Badge className="border-0 bg-violet-100 text-violet-800">Re-clean: {issue.reclean_status.replace(/_/g, " ")}</Badge>
+            )}
             {attached.length > 0 && (
               <Badge variant="outline">
                 Cleaner{attached.length > 1 ? "s" : ""}: {attached.map((c) => c.name).filter(Boolean).join(", ")}
@@ -696,6 +709,10 @@ function IssueSheet({ issue, doc, onClose, reload }: {
           )}
           {issue.issue_type === "addon" && issue.details && (
             <AddonEvidence details={issue.details} />
+          )}
+
+          {((issue.reclean_status && issue.reclean_status !== "none") || ["reclean", "complaint", "quality_flag"].includes(issue.issue_type)) && (
+            <RecleanWorkflow issueId={issue.id} onChanged={reload} />
           )}
 
           {/* ─── Evidence: the linked job's documentation ─────────────── */}
@@ -954,6 +971,7 @@ function CreateIssueDialog({ onClose, reload }: { onClose: () => void; reload: (
   const [severity, setSeverity] = useState("medium");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [requestReclean, setRequestReclean] = useState(true);
   const [saving, setSaving] = useState(false);
 
   const searchBookings = useCallback(async () => {
@@ -983,7 +1001,15 @@ function CreateIssueDialog({ onClose, reload }: { onClose: () => void; reload: (
     setSaving(true);
     try {
       const { data, error } = await supabase.functions.invoke("qc-issues", {
-        body: { action: "create", bookingId: booking.id, issueType, severity, title: title.trim(), description: description.trim() || undefined },
+        body: {
+          action: "create",
+          bookingId: booking.id,
+          issueType,
+          severity,
+          title: title.trim(),
+          description: description.trim() || undefined,
+          requestReclean: ["complaint", "reclean", "quality_flag"].includes(issueType) ? requestReclean : false,
+        },
       });
       if (error) throw error;
       if ((data as { ok?: boolean; error?: string })?.ok === false) throw new Error((data as { error?: string }).error || "Failed");
@@ -1051,6 +1077,12 @@ function CreateIssueDialog({ onClose, reload }: { onClose: () => void; reload: (
               </div>
               <Input placeholder="Short title (what happened)" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} />
               <Textarea placeholder="Details — what the customer said, what was found…" value={description} onChange={(e) => setDescription(e.target.value)} rows={4} />
+              {["complaint", "reclean", "quality_flag"].includes(issueType) && (
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <Checkbox checked={requestReclean} onCheckedChange={(v) => setRequestReclean(v === true)} />
+                  Request a re-clean (verify original photos before dispatch)
+                </label>
+              )}
               {(severity === "high" || severity === "critical") && (
                 <p className="text-xs text-orange-600 font-medium flex items-center gap-1">
                   <RiAlertLine className="w-3.5 h-3.5" /> {label(severity)} issues alert admin on Discord immediately.
@@ -1216,6 +1248,8 @@ interface CaseFile {
     completion_hold: Record<string, any> | null;
   };
   photos: { before: string[]; after: string[]; purged: boolean; submitted_at: string | null };
+  four_stage_sequence?: Array<{ stage: string; url: string }>;
+  reclean_photos?: Array<{ before: string[]; after: string[] }>;
   checklist: Record<string, any> | null;
   documentation: Record<string, any> | null;
   issues: IssueRow[];
@@ -1387,6 +1421,21 @@ export function CaseFileSheet({ bookingId, caseRef, onClose }: { bookingId: stri
                   ))}
                 </div>
               )}
+              {(cf.four_stage_sequence?.length || 0) > 0 && (
+                <div className="pt-2 space-y-1">
+                  <p className="text-[11px] font-semibold text-violet-800">Four-stage sequence (original → re-clean)</p>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {cf.four_stage_sequence!.slice(0, 16).map((p, i) => (
+                      <a key={i} href={p.url} target="_blank" rel="noreferrer" className="relative">
+                        <img src={p.url} alt={p.stage} className="w-full h-14 object-cover rounded border border-violet-200" />
+                        <span className="absolute bottom-0.5 left-0.5 text-[8px] font-bold bg-violet-800/80 text-white px-1 rounded">
+                          {p.stage.replace(/_/g, " ")}
+                        </span>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
               {cf.documentation && (
                 <div className="flex flex-wrap items-center gap-2 pt-1">
                   <Badge className={cn("border-0", MIRROR_STYLE[cf.documentation.mirror_status] || "bg-slate-100")}>
@@ -1478,6 +1527,117 @@ export function CaseFileSheet({ bookingId, caseRef, onClose }: { bookingId: stri
         )}
       </SheetContent>
     </Sheet>
+  );
+}
+
+// ─── Re-cleans cost-center tab ──────────────────────────────────────────
+
+function RecleansTab() {
+  const [loading, setLoading] = useState(true);
+  const [report, setReport] = useState<Record<string, unknown> | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      setLoading(true);
+      try {
+        const { data, error } = await supabase.functions.invoke("qc-reclean", { body: { action: "report" } });
+        if (error) throw error;
+        setReport((data || {}) as Record<string, unknown>);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Couldn't load re-clean report");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  if (loading) return <div className="space-y-2">{[...Array(4)].map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}</div>;
+  if (!report?.ok) {
+    return <Card><CardContent className="p-8 text-sm text-slate-500">No re-clean data yet.</CardContent></Card>;
+  }
+
+  const byClass = (report.byClassification || {}) as Record<string, number>;
+  const byService = (report.byServiceType || {}) as Record<string, number>;
+  const bySize = (report.bySizeBand || {}) as Record<string, number>;
+  const byCleaner = (report.byCleaner || []) as Array<{ name: string; total: number; qualityMiss: number; absorbed: number }>;
+  const serial = (report.serialRequesters || []) as Array<{ name: string; count: number }>;
+  const repeat = (report.repeatQualityMissCleaners || []) as Array<{ name: string; qualityMiss: number; total: number }>;
+  const rate = Number(report.recleanRate || 0);
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-slate-500">{String(report.note || "")}</p>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Card><CardContent className="p-4">
+          <p className="text-xs text-slate-500">Re-clean requests</p>
+          <p className="text-2xl font-bold text-slate-900 mt-1">{Number(report.recleanRequests || 0)}</p>
+          <p className="text-[11px] text-slate-500 mt-1">{(rate * 100).toFixed(1)}% of {Number(report.completedJobs || 0)} completed jobs</p>
+        </CardContent></Card>
+        <Card><CardContent className="p-4">
+          <p className="text-xs text-slate-500">Absorbed cost</p>
+          <p className="text-2xl font-bold text-slate-900 mt-1">${(Number(report.absorbedCostCents || 0) / 100).toFixed(0)}</p>
+          <p className="text-[11px] text-slate-500 mt-1">Company margin — customer not charged</p>
+        </CardContent></Card>
+        <Card><CardContent className="p-4">
+          <p className="text-xs text-slate-500">Quality misses</p>
+          <p className="text-2xl font-bold text-rose-700 mt-1">{byClass.quality_miss || 0}</p>
+          <p className="text-[11px] text-slate-500 mt-1">Scope confusion: {byClass.scope_confusion || 0} · not supported: {byClass.not_supported || 0}</p>
+        </CardContent></Card>
+        <Card><CardContent className="p-4">
+          <p className="text-xs text-slate-500">Serial requesters</p>
+          <p className="text-2xl font-bold text-amber-700 mt-1">{serial.length}</p>
+          <p className="text-[11px] text-slate-500 mt-1">Pattern flag, not an accusation</p>
+        </CardContent></Card>
+      </div>
+      <div className="grid md:grid-cols-2 gap-4">
+        <Card><CardContent className="p-4 space-y-2">
+          <p className="text-sm font-bold text-slate-800">By classification</p>
+          {Object.entries(byClass).map(([k, n]) => (
+            <div key={k} className="flex justify-between text-sm"><span className="capitalize text-slate-600">{k.replace(/_/g, " ")}</span><span className="font-semibold">{n}</span></div>
+          ))}
+          <p className="text-[11px] text-slate-500 pt-2">A high scope-confusion rate is a booking/intake problem, not a cleaning problem.</p>
+        </CardContent></Card>
+        <Card><CardContent className="p-4 space-y-2">
+          <p className="text-sm font-bold text-slate-800">By service type</p>
+          {Object.entries(byService).length === 0 && <p className="text-xs text-slate-400">None in this window.</p>}
+          {Object.entries(byService).map(([k, n]) => (
+            <div key={k} className="flex justify-between text-sm"><span className="text-slate-600">{k}</span><span className="font-semibold">{n}</span></div>
+          ))}
+          <p className="text-sm font-bold text-slate-800 pt-2">By size band</p>
+          {Object.entries(bySize).map(([k, n]) => (
+            <div key={k} className="flex justify-between text-sm"><span className="text-slate-600">{k.replace(/_/g, " ")}</span><span className="font-semibold">{n}</span></div>
+          ))}
+        </CardContent></Card>
+      </div>
+      <Card><CardContent className="p-4 space-y-2">
+        <p className="text-sm font-bold text-slate-800">By original cleaner (coaching signal)</p>
+        {byCleaner.length === 0 && <p className="text-xs text-slate-400">None.</p>}
+        {byCleaner.map((c) => (
+          <div key={c.name} className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-semibold text-slate-800">{c.name}</span>
+            <Badge variant="outline">{c.total} requests</Badge>
+            {c.qualityMiss > 0 && <Badge className="border-0 bg-rose-100 text-rose-800">{c.qualityMiss} quality miss</Badge>}
+            <span className="text-xs text-slate-500 ml-auto">absorbed ${(c.absorbed / 100).toFixed(0)}</span>
+          </div>
+        ))}
+      </CardContent></Card>
+      {repeat.length > 0 && (
+        <Card className="border-amber-200"><CardContent className="p-4 space-y-2">
+          <p className="text-sm font-bold text-amber-800">Repeat quality-miss re-cleans — human review (no auto-penalty)</p>
+          {repeat.map((c) => (
+            <p key={c.name} className="text-sm text-slate-800">{c.name} — {c.qualityMiss} quality-miss re-cleans</p>
+          ))}
+        </CardContent></Card>
+      )}
+      {serial.length > 0 && (
+        <Card><CardContent className="p-4 space-y-2">
+          <p className="text-sm font-bold text-slate-800">Customers with repeated re-clean requests</p>
+          {serial.map((c) => (
+            <p key={c.name} className="text-sm text-slate-700">{c.name} — {c.count} requests</p>
+          ))}
+        </CardContent></Card>
+      )}
+    </div>
   );
 }
 

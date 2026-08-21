@@ -36,6 +36,7 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { countsTowardQualityScore, countsTowardReliability } from "../_shared/reclean.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -105,10 +106,11 @@ serve(async (req) => {
     {
       const { data: assigns } = await supabase
         .from("job_assignments")
-        .select("cleaner_id, status")
+        .select("cleaner_id, status, reliability_neutral")
         .not("cleaner_id", "is", null)
         .limit(20000);
       for (const a of assigns || []) {
+        if (!countsTowardReliability(a)) continue;
         const s = String(a.status || "").toLowerCase();
         const e = offerStats.get(a.cleaner_id) || { accepted: 0, negative: 0 };
         if (ACCEPTED_STATUSES.has(s)) e.accepted++;
@@ -155,14 +157,13 @@ serve(async (req) => {
     const since = new Date(Date.now() - 90 * 86400_000).toISOString();
     const { data: issues } = await supabase
       .from("qc_issues")
-      .select("cleaner_id, severity, issue_type")
+      .select("cleaner_id, severity, issue_type, reclean_status, reclean_classification")
       .not("cleaner_id", "is", null)
       .gte("created_at", since)
       .limit(5000);
     const qcWeight = new Map<string, number>();
     for (const i of issues || []) {
-      // Documentation rows (add-ons, site findings) are not quality failures.
-      if (i.issue_type === "addon" || i.issue_type === "site_finding") continue;
+      if (!countsTowardQualityScore(i)) continue;
       const wgt = QC_SEVERITY_WEIGHT[String(i.severity)] ?? 1;
       qcWeight.set(i.cleaner_id, (qcWeight.get(i.cleaner_id) || 0) + wgt);
     }

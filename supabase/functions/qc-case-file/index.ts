@@ -177,7 +177,8 @@ serve(async (req) => {
         "payment_option, payment_method, payment_received_at, payment_intent_id, hosted_invoice_url, stripe_invoice_id, checkout_session_id, " +
         "completion_hold_pi_id, completion_hold_status, completion_hold_captured_amount, completion_hold_captured_at, " +
         "add_ons, membership_plan, is_recurring, team_notes, issues_notes, access_notes, check_in_time, check_out_time, " +
-        "before_photos, after_photos, photo_upload_submitted_at, num_cleaners_assigned",
+        "before_photos, after_photos, photo_upload_submitted_at, num_cleaners_assigned, " +
+        "is_reclean, reclean_of_booking_id, reclean_qc_issue_id, reclean_scope, reclean_assessed_value_cents",
       )
       .eq("id", bookingId)
       .maybeSingle();
@@ -190,7 +191,7 @@ serve(async (req) => {
     // ── Parallel live pulls ───────────────────────────────────────────────
     const [
       customerRes, docRes, checklistRes, agreementsRes, docusealRes,
-      addonChargesRes, issuesRes, eventsRes, assignsRes,
+      addonChargesRes, issuesRes, eventsRes, assignsRes, recleanChildRes,
     ] = await Promise.all([
       booking.customer_id
         ? admin.from("customers").select("id, email, first_name, last_name, phone, address, city, state, zip, membership_status, membership_plan, stripe_customer_id, created_at").eq("id", booking.customer_id).maybeSingle()
@@ -211,6 +212,9 @@ serve(async (req) => {
       booking.job_id
         ? admin.from("job_assignments").select("status, cleaner_id, cleaners(first_name, last_name, phone)").eq("job_id", booking.job_id)
         : Promise.resolve({ data: [] }),
+      booking.is_reclean
+        ? Promise.resolve({ data: [] })
+        : admin.from("bookings").select("id, service_date, status, before_photos, after_photos, reclean_scope, reclean_assessed_value_cents, job_id").eq("reclean_of_booking_id", bookingId).order("created_at", { ascending: true }),
     ]);
 
     // ── DocuSeal: resolve executed-document URLs live (API fallback) ─────
@@ -285,6 +289,51 @@ serve(async (req) => {
       submitted_at: booking.photo_upload_submitted_at,
     };
 
+    const recleanChildren = recleanChildRes.data || [];
+    const recleanPhotoSets = recleanChildren.map((r: {
+      id: string; service_date?: string; status?: string; before_photos?: string[]; after_photos?: string[]; reclean_scope?: string;
+    }) => ({
+      id: r.id,
+      service_date: r.service_date,
+      status: r.status,
+      scope: r.reclean_scope,
+      before: (r.before_photos || []).filter((u: string) => String(u).startsWith("http")),
+      after: (r.after_photos || []).filter((u: string) => String(u).startsWith("http")),
+    }));
+
+    let originalPhotos: { before: string[]; after: string[] } | null = null;
+    if (booking.is_reclean && booking.reclean_of_booking_id) {
+      const { data: orig } = await admin
+        .from("bookings")
+        .select("before_photos, after_photos")
+        .eq("id", booking.reclean_of_booking_id)
+        .maybeSingle();
+      if (orig) {
+        originalPhotos = {
+          before: (orig.before_photos || []).filter((u: string) => String(u).startsWith("http")),
+          after: (orig.after_photos || []).filter((u: string) => String(u).startsWith("http")),
+        };
+      }
+    }
+
+    const fourStageSequence = [
+      ...(originalPhotos
+        ? [
+          ...originalPhotos.before.map((url: string) => ({ stage: "original_before", url })),
+          ...originalPhotos.after.map((url: string) => ({ stage: "original_after", url })),
+          ...livePhotos.before.map((url: string) => ({ stage: "reclean_before", url })),
+          ...livePhotos.after.map((url: string) => ({ stage: "reclean_after", url })),
+        ]
+        : [
+          ...livePhotos.before.map((url: string) => ({ stage: "original_before", url })),
+          ...livePhotos.after.map((url: string) => ({ stage: "original_after", url })),
+          ...recleanPhotoSets.flatMap((r: { before: string[]; after: string[] }) => [
+            ...r.before.map((url) => ({ stage: "reclean_before", url, recleanBookingId: undefined as string | undefined })),
+            ...r.after.map((url) => ({ stage: "reclean_after", url })),
+          ]),
+        ]),
+    ];
+
     return json({
       ok: true,
       case: {
@@ -307,6 +356,10 @@ serve(async (req) => {
           is_recurring: booking.is_recurring,
           team_notes: booking.team_notes,
           issues_notes: booking.issues_notes,
+          is_reclean: Boolean(booking.is_reclean),
+          reclean_of_booking_id: booking.reclean_of_booking_id || null,
+          reclean_scope: booking.reclean_scope || null,
+          reclean_assessed_value_cents: booking.reclean_assessed_value_cents || null,
         },
         customer: customerRes.data
           ? { ...customerRes.data }
@@ -338,6 +391,9 @@ serve(async (req) => {
             : null,
         },
         photos: livePhotos,
+        reclean_photos: recleanPhotoSets,
+        original_photos: originalPhotos,
+        four_stage_sequence: fourStageSequence,
         checklist: checklistRes.data || null,
         documentation: doc
           ? {

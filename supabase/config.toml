@@ -432,6 +432,11 @@ verify_jwt = false
 [functions.qc-case-file]
 verify_jwt = false
 
+# Spotless Guarantee re-clean workflow — admin/VA JWT or service-role callbacks
+# (complete-booking / accept-job-offer) enforced inside.
+[functions.qc-reclean]
+verify_jwt = false
+
 # Commercial/office partner portal — logged-in partner JWT enforced inside.
 [functions.partner-commercial-portal]
 verify_jwt = false

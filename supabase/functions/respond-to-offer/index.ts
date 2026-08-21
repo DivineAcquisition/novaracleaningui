@@ -33,7 +33,7 @@ serve(async (req) => {
     // Get assignment and verify token against stored response_token
     const { data: assignment, error: fetchError } = await supabase
       .from("job_assignments")
-      .select("*, jobs(*), cleaners(*)")
+      .select("*, jobs(*), cleaners(*), reliability_neutral")
       .eq("id", assignmentId)
       .single();
 
@@ -79,6 +79,15 @@ serve(async (req) => {
       throw updateError;
     }
 
+    const { data: bookingForJob } = await supabase
+      .from("bookings")
+      .select("id, is_reclean, phone, first_name, service_date, time_slot")
+      .eq("job_id", assignment.job_id)
+      .maybeSingle();
+    const reliabilityNeutral = assignment.reliability_neutral === true || bookingForJob?.is_reclean === true;
+
+    // Re-clean offers never count toward acceptance/reliability.
+    if (!reliabilityNeutral) {
     // Update cleaner performance metrics
     const { data: cleaner } = await supabase
       .from('cleaners')
@@ -100,12 +109,36 @@ serve(async (req) => {
         acceptance_rate: Math.round(newAcceptanceRate * 10) / 10
       })
       .eq('id', assignment.cleaner_id);
+    }
 
-    // If accepted, update cleaner scores
-    if (action === "accept") {
+    if (reliabilityNeutral && action === "decline" && bookingForJob?.id) {
+      try {
+        await supabase.functions.invoke("qc-reclean", {
+          body: { action: "on_original_declined", bookingId: bookingForJob.id },
+        });
+      } catch (e) {
+        console.error("[RESPOND] reclean fallback dispatch failed", e);
+      }
+    }
+    if (reliabilityNeutral && action === "accept" && bookingForJob?.id) {
+      try {
+        await supabase.functions.invoke("qc-reclean", {
+          body: { action: "on_offer_accepted", bookingId: bookingForJob.id, cleanerId: assignment.cleaner_id },
+        });
+      } catch (e) {
+        console.error("[RESPOND] reclean accept stamp failed", e);
+      }
+    }
+
+    // If accepted, update cleaner scores (skip re-clean offers — they are
+    // reliability-neutral).
+    if (action === "accept" && !reliabilityNeutral) {
       await supabase.functions.invoke("update-cleaner-scores", {
         body: { cleanerId: assignment.cleaner_id }
       });
+    }
+
+    if (action === "accept") {
 
       // Notify the customer that their cleaner has been confirmed.
       try {

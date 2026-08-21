@@ -48,7 +48,7 @@ serve(async (req) => {
 
     const { data: assignment } = await supabase
       .from("job_assignments")
-      .select("id, job_id, cleaner_id, role, status, expires_at, estimated_pay_cents")
+      .select("id, job_id, cleaner_id, role, status, expires_at, estimated_pay_cents, reliability_neutral")
       .eq("response_token", token)
       .maybeSingle();
     if (!assignment) {
@@ -91,17 +91,34 @@ serve(async (req) => {
         })
         .eq("id", assignment.id);
 
-      try {
-        await runJobDispatchBackfill(
-          supabase,
-          assignment.job_id,
-          "Cleaner declined the job offer",
-        );
-      } catch (err) {
-        log("backfill after decline failed", err instanceof Error ? err.message : String(err));
+      const { data: recleanBooking } = await supabase
+        .from("bookings")
+        .select("id, is_reclean")
+        .eq("job_id", assignment.job_id)
+        .maybeSingle();
+      const reliabilityNeutral = assignment.reliability_neutral === true || recleanBooking?.is_reclean === true;
+
+      if (reliabilityNeutral && recleanBooking?.id) {
+        try {
+          await supabase.functions.invoke("qc-reclean", {
+            body: { action: "on_original_declined", bookingId: recleanBooking.id },
+          });
+        } catch (err) {
+          log("reclean fallback after decline failed", err instanceof Error ? err.message : String(err));
+        }
+      } else {
+        try {
+          await runJobDispatchBackfill(
+            supabase,
+            assignment.job_id,
+            "Cleaner declined the job offer",
+          );
+        } catch (err) {
+          log("backfill after decline failed", err instanceof Error ? err.message : String(err));
+        }
       }
 
-      return new Response(JSON.stringify({ ok: true, status: "Declined" }), {
+      return new Response(JSON.stringify({ ok: true, status: "Declined", reliabilityPenalty: false }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200,
       });
@@ -321,8 +338,11 @@ serve(async (req) => {
       }
     }
 
-    // Cleaner acceptance metrics.
+    // Cleaner acceptance metrics — skip re-clean offers (reliability-neutral).
     try {
+      const recleanOffer = assignment.reliability_neutral === true ||
+        (await supabase.from("bookings").select("is_reclean").eq("job_id", assignment.job_id).maybeSingle()).data?.is_reclean === true;
+      if (!recleanOffer) {
       const { data: c } = await supabase
         .from("cleaners")
         .select("total_offers_received, total_offers_accepted")
@@ -338,6 +358,11 @@ serve(async (req) => {
             acceptance_rate: received > 0 ? accepted / received : 1,
           })
           .eq("id", assignment.cleaner_id);
+      }
+      } else if (bookingRow?.id) {
+        await supabase.functions.invoke("qc-reclean", {
+          body: { action: "on_offer_accepted", bookingId: bookingRow.id, cleanerId: assignment.cleaner_id },
+        }).then(() => undefined, () => undefined);
       }
     } catch (err) {
       log("acceptance metric update failed", err instanceof Error ? err.message : String(err));

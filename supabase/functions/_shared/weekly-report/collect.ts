@@ -66,6 +66,9 @@ type BookingRow = {
   rating: number | null;
   is_recurring: boolean | null;
   frequency: string | null;
+  is_reclean?: boolean | null;
+  reclean_assessed_value_cents?: number | null;
+  cleaner_payout_cents?: number | null;
 };
 
 const VOID = new Set(["abandoned", "pending_payment"]);
@@ -76,7 +79,7 @@ async function loadBookings(sb: SB, w: Window): Promise<{ ok: true; rows: Bookin
     for (const row of rows || []) byId.set(row.id, row);
   };
   const select =
-    "id, created_at, status, city, zone_code, zip_code, email, customer_id, total_estimate_cents, final_charge_cents, payment_received_at, completed_at, service_date, utm_source, booking_channel, referral_code, gclid, fbclid, is_same_day, service_type, business_account_id, membership_plan, rating, is_recurring, frequency";
+    "id, created_at, status, city, zone_code, zip_code, email, customer_id, total_estimate_cents, final_charge_cents, payment_received_at, completed_at, service_date, utm_source, booking_channel, referral_code, gclid, fbclid, is_same_day, service_type, business_account_id, membership_plan, rating, is_recurring, frequency, is_reclean, reclean_assessed_value_cents, cleaner_payout_cents";
 
   const created = await tryQuery("bookings.created", () =>
     sb.from("bookings").select(select).gte("created_at", w.startIso).lt("created_at", w.endIso).limit(5000),
@@ -492,7 +495,9 @@ async function snapshotForWindow(sb: SB, w: Window): Promise<{
     walkthroughs_booked: walkthroughs,
     same_day_volume: bookingsRes.ok ? okMetric(sameDay.length, "bookings.is_same_day / focused") : missingMetric("bookings", bookingsRes.reason),
     commercial_bookings: bookingsRes.ok ? okMetric(commercialCreated.length, "bookings.business_account_id") : missingMetric("bookings", bookingsRes.reason),
-    jobs_completed: bookingsRes.ok ? okMetric(completed.length, "bookings.status=completed") : missingMetric("bookings", bookingsRes.reason),
+    jobs_completed: bookingsRes.ok
+      ? okMetric(completed.filter((b) => !b.is_reclean).length, "bookings.status=completed (excl. re-cleans)")
+      : missingMetric("bookings", bookingsRes.reason),
     active_members: activeMembers,
     new_enrollments: newEnroll,
     churn_pct: churn,
@@ -522,6 +527,16 @@ async function snapshotForWindow(sb: SB, w: Window): Promise<{
     va_eod_ontime_pct: eodOnTime,
     accountability_actions: acct,
     novara_score_avg: novara,
+    recleans_completed: bookingsRes.ok
+      ? okMetric(completed.filter((b) => b.is_reclean).length, "bookings.is_reclean")
+      : missingMetric("bookings", bookingsRes.reason),
+    reclean_absorbed_cents: bookingsRes.ok
+      ? okMetric(
+        completed.filter((b) => b.is_reclean).reduce((s, b) => s + (Number(b.cleaner_payout_cents) || 0), 0),
+        "bookings.cleaner_payout_cents on re-cleans (company-absorbed)",
+        "cents",
+      )
+      : missingMetric("bookings", bookingsRes.reason, "cents"),
   };
 
   return { metrics, cities, ad_spend, sources };
@@ -570,6 +585,8 @@ const METRIC_META: Array<{ key: string; label: string; section: ComparedMetric["
   { key: "va_eod_ontime_pct", label: "EOD on-time %", section: "ops", unit: "pct" },
   { key: "accountability_actions", label: "Accountability actions", section: "ops", unit: "count" },
   { key: "novara_score_avg", label: "Novara Score (active avg)", section: "ops", unit: "score" },
+  { key: "recleans_completed", label: "Re-cleans completed", section: "ops", unit: "count" },
+  { key: "reclean_absorbed_cents", label: "Re-clean absorbed cost", section: "ops", unit: "cents" },
 ];
 
 export async function collectWeeklySnapshot(

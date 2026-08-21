@@ -26,6 +26,13 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import {
+  intakeCreatesRecleanRequest,
+  loadRecleanSettings,
+  namedAreasFromText,
+  recleanRequestColumns,
+  recleanSourceForIntake,
+} from "../_shared/reclean.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -74,12 +81,15 @@ interface BookingLite {
   cleaner_id: string | null;
   booking_type?: string | null;
   partner_details?: Record<string, unknown> | null;
+  completed_at?: string | null;
+  service_date?: string | null;
+  is_reclean?: boolean | null;
 }
 
 async function loadBooking(admin: SB, bookingId: string): Promise<BookingLite | null> {
   const { data } = await admin
     .from("bookings")
-    .select("id, job_id, booking_number, first_name, last_name, email, cleaner_id, booking_type, partner_details")
+    .select("id, job_id, booking_number, first_name, last_name, email, cleaner_id, booking_type, partner_details, completed_at, service_date, is_reclean")
     .eq("id", bookingId)
     .maybeSingle();
   return data || null;
@@ -152,6 +162,7 @@ async function createIssue(admin: SB, opts: {
   cleanerId?: string | null;
   cleanerName?: string | null;
   details?: Record<string, unknown> | null;
+  requestReclean?: boolean;
 }) {
   const ref = bookingRef(opts.booking);
   // ALL cleaners on the job get attached; the reporter (field reports) or
@@ -169,6 +180,25 @@ async function createIssue(admin: SB, opts: {
     .select("id")
     .eq("booking_id", opts.booking.id)
     .maybeSingle();
+
+  const recleanStamp: Record<string, unknown> = {};
+  const wantsReclean = !opts.booking.is_reclean && intakeCreatesRecleanRequest({
+    issueType: opts.issueType,
+    reportedVia: opts.reportedVia,
+    requestReclean: opts.requestReclean,
+  });
+  if (wantsReclean) {
+    const settings = await loadRecleanSettings(admin);
+    Object.assign(recleanStamp, recleanRequestColumns({
+      completedAt: opts.booking.completed_at,
+      serviceDate: opts.booking.service_date,
+      windowHours: settings.guarantee_window_hours,
+    }), {
+      reclean_source: recleanSourceForIntake({ issueType: opts.issueType, reportedVia: opts.reportedVia }),
+      reclean_scope: "targeted",
+      reclean_areas_named: namedAreasFromText(opts.description),
+    });
+  }
 
   const { data: issue, error } = await admin
     .from("qc_issues")
@@ -192,6 +222,7 @@ async function createIssue(admin: SB, opts: {
       reported_via: opts.reportedVia,
       reported_by: opts.reporterId,
       reported_by_name: opts.reporterName,
+      ...recleanStamp,
     })
     .select("*")
     .single();
@@ -206,6 +237,22 @@ async function createIssue(admin: SB, opts: {
     actor_name: opts.reporterName,
     data: { issue_type: opts.issueType, severity: opts.severity, via: opts.reportedVia },
   });
+
+  if (wantsReclean) {
+    await admin.from("qc_issue_events").insert({
+      issue_id: issue.id,
+      action: "reclean_requested",
+      note: recleanStamp.reclean_inside_window
+        ? "Re-clean request opened inside the Spotless Guarantee window. Verify original photos before dispatch."
+        : "Re-clean request opened outside the guarantee window — honor at admin discretion.",
+      actor_id: opts.reporterId,
+      actor_name: opts.reporterName,
+      data: {
+        source: recleanStamp.reclean_source,
+        inside_window: recleanStamp.reclean_inside_window,
+      },
+    });
+  }
 
   // Severity drives urgency: High/Critical alert admin immediately through
   // the existing Discord event routing. Low/medium sit in the triage queue.
@@ -255,7 +302,7 @@ serve(async (req) => {
 
       const { data: booking } = await admin
         .from("bookings")
-        .select("id, job_id, booking_number, first_name, last_name, email, cleaner_id, booking_type, partner_details")
+        .select("id, job_id, booking_number, first_name, last_name, email, cleaner_id, booking_type, partner_details, completed_at, service_date, is_reclean")
         .eq("job_id", assignment.job_id)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -280,6 +327,7 @@ serve(async (req) => {
         reporterName: cleanerName,
         cleanerId: assignment.cleaner_id || null,
         cleanerName,
+        requestReclean: issueType === "reclean",
       });
       return json({ ok: true, issueId: issue.id, issueNumber: issue.issue_number });
     }
@@ -309,6 +357,11 @@ serve(async (req) => {
         reportedVia: "va",
         reporterId: actor.id,
         reporterName: actor.name,
+        requestReclean: body?.requestReclean === true
+          ? true
+          : body?.requestReclean === false
+            ? false
+            : undefined,
       });
       return json({ ok: true, issue });
     }

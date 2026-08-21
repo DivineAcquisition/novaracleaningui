@@ -36,6 +36,13 @@ interface RepeatEntry {
   strikesInWindow: number;
   windowDays: number;
 }
+interface RepeatRecleanEntry {
+  cleanerId: string;
+  name: string;
+  status: string;
+  qualityMissRecleans: number;
+  windowDays: number;
+}
 
 const fmtDT = (iso?: string | null) =>
   iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—";
@@ -49,6 +56,7 @@ export default function AccountabilityWatchlist({
   const [suspended, setSuspended] = useState<SuspendedEntry[]>([]);
   const [activeStrikes, setActiveStrikes] = useState<StrikeEntry[]>([]);
   const [repeatOffenders, setRepeatOffenders] = useState<RepeatEntry[]>([]);
+  const [repeatRecleans, setRepeatRecleans] = useState<RepeatRecleanEntry[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -62,11 +70,13 @@ export default function AccountabilityWatchlist({
         suspended?: SuspendedEntry[];
         activeStrikes?: StrikeEntry[];
         repeatOffenders?: RepeatEntry[];
+        repeatQualityMissRecleans?: RepeatRecleanEntry[];
       };
       if (d?.ok === false) return;
       setSuspended(d.suspended || []);
       setActiveStrikes(d.activeStrikes || []);
       setRepeatOffenders(d.repeatOffenders || []);
+      setRepeatRecleans(d.repeatQualityMissRecleans || []);
     } catch {
       // Watchlist is advisory — never block the directory on it.
     } finally {
@@ -86,7 +96,7 @@ export default function AccountabilityWatchlist({
     );
   }
 
-  const empty = suspended.length === 0 && activeStrikes.length === 0 && repeatOffenders.length === 0;
+  const empty = suspended.length === 0 && activeStrikes.length === 0 && repeatOffenders.length === 0 && repeatRecleans.length === 0;
   if (empty) return null; // nothing to review — keep the directory clean
 
   const Row = ({ id, children }: { id: string; children: React.ReactNode }) => (
@@ -108,7 +118,7 @@ export default function AccountabilityWatchlist({
         <p className="text-sm font-bold text-slate-800 flex items-center gap-1.5 mb-3">
           <RiAlarmWarningLine className="w-4 h-4 text-amber-600" /> Accountability watchlist
         </p>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="space-y-1.5">
             <p className="text-[11px] uppercase tracking-wide font-semibold text-orange-700 flex items-center gap-1">
               <RiPauseCircleLine className="w-3.5 h-3.5" /> Suspended ({suspended.length})
@@ -154,9 +164,24 @@ export default function AccountabilityWatchlist({
               </Row>
             ))}
           </div>
+          <div className="space-y-1.5">
+            <p className="text-[11px] uppercase tracking-wide font-semibold text-violet-700 flex items-center gap-1">
+              <RiRepeatLine className="w-3.5 h-3.5" /> Quality-miss re-cleans ({repeatRecleans.length})
+            </p>
+            {repeatRecleans.length === 0 && <p className="text-xs text-slate-400">None.</p>}
+            {repeatRecleans.map((s) => (
+              <Row key={s.cleanerId} id={s.cleanerId}>
+                <span className="font-semibold text-slate-800">{s.name}</span>
+                <Badge className="bg-violet-100 text-violet-800 border-0 text-[10px] ml-auto">
+                  {s.qualityMissRecleans} in {s.windowDays}d
+                </Badge>
+              </Row>
+            ))}
+          </div>
         </div>
         <p className="text-[10px] text-slate-400 mt-3">
           Repeat offenders count all strikes in the window, including expired ones — patterns matter.
+          Repeat quality-miss re-cleans are a coaching signal; nothing auto-penalizes.
           Click a cleaner to open their record.
         </p>
       </CardContent>

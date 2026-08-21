@@ -30,6 +30,7 @@ import {
   recordBufferOverride,
 } from "../_shared/schedule-buffer.ts";
 import { computeCrewPay, shareFor } from "../_shared/crew-pay.ts";
+import { jobValueForPay } from "../_shared/reclean.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -443,9 +444,7 @@ serve(async (req) => {
         ]);
     }
 
-    const jobValueCents = Number(
-      booking.final_charge_cents || booking.total_estimate_cents || 0,
-    );
+    const jobValueCents = jobValueForPay(booking);
     const shares = await computeCrewPay(admin, jobValueCents, cleanerIds);
     const shareByCleaner = new Map(shares.map((s) => [s.cleanerId, s]));
 
@@ -465,6 +464,7 @@ serve(async (req) => {
           estimated_pay_cents: share?.shareCents ?? null,
           pay_percentage_snapshot: share?.ratePercent ?? null,
           crew_size_snapshot: share?.crewSize ?? cleanerIds.length,
+          reliability_neutral: Boolean(booking.is_reclean),
         },
         { onConflict: "job_id,cleaner_id" },
       );

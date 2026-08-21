@@ -9,6 +9,7 @@
 import { formatServiceDate, formatTimeSlot } from "./sms.ts";
 import { ensureAssignmentChecklistAccess } from "./job-checklist.ts";
 import { computeCrewPay, shareFor } from "./crew-pay.ts";
+import { jobValueForPay } from "./reclean.ts";
 
 const CHECKLIST_BY_SERVICE: Record<string, string> = {
   standard: "https://try.novaracleaning.com/checklist/standard-clean",
@@ -42,7 +43,7 @@ export async function notifyCleanerOfAssignment(
 ): Promise<{ email?: boolean; sms?: boolean }> {
   const out: { email?: boolean; sms?: boolean } = {};
   const customerName = `${booking.first_name || ""} ${booking.last_name || ""}`.trim() || "Customer";
-  const revenue = Number(booking.final_charge_cents || booking.total_estimate_cents || 0);
+  const revenue = jobValueForPay(booking);
 
   let estimatedEarnings = opts?.estimatedPayCents;
   if (estimatedEarnings == null && revenue > 0) {

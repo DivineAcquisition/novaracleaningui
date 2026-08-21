@@ -10,6 +10,7 @@ import { autoOffersEnabled, requestDispatchApproval } from "../_shared/dispatch-
 import { formatServiceDate, formatTimeSlot } from "../_shared/sms.ts";
 import { checkScheduleBuffer } from "../_shared/schedule-buffer.ts";
 import { computeCrewPay, shareFor } from "../_shared/crew-pay.ts";
+import { jobValueForPay } from "../_shared/reclean.ts";
 
 // Pull the human-readable date + arrival window for a job from its linked
 // booking. We display the booking's stored time_slot (e.g. "8-12" →
@@ -566,14 +567,12 @@ serve(async (req) => {
     // pool share split.
     const { data: linkedBooking } = await supabase
       .from("bookings")
-      .select("id, total_estimate_cents, final_charge_cents")
+      .select("id, total_estimate_cents, final_charge_cents, is_reclean, reclean_assessed_value_cents")
       .eq("job_id", jobId)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
-    const revenueCents = Number(
-      linkedBooking?.final_charge_cents || linkedBooking?.total_estimate_cents || 0,
-    );
+    const revenueCents = jobValueForPay(linkedBooking || {});
     // Offer-time estimate at the crew size being dispatched. Each cleaner sees
     // their OWN tier's rate for that crew size, so the number in the offer is the
     // number they'd actually be paid — rather than a team average they then have
@@ -605,6 +604,7 @@ serve(async (req) => {
         crew_size_snapshot: share?.crewSize ?? selectedCleaners.length,
         expires_at: expiresAtIso,
         response_token: responseToken,
+        reliability_neutral: Boolean(linkedBooking?.is_reclean),
       };
     });
 

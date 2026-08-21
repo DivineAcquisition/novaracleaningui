@@ -24,6 +24,7 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { countsTowardQualityScore } from "../_shared/reclean.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -561,17 +562,20 @@ serve(async (req) => {
       }
       const { data: qcRows } = await admin
         .from("qc_issues")
-        .select("severity")
+        .select("severity, issue_type, reclean_status, reclean_classification")
         .eq("cleaner_id", cleanerId)
         .gte("created_at", new Date(Date.now() - 90 * 86400_000).toISOString())
         .limit(200);
-      if (qcRows && qcRows.length > 0) {
+      const counted = (qcRows || []).filter((r: {
+        issue_type?: string; reclean_status?: string; reclean_classification?: string;
+      }) => countsTowardQualityScore(r));
+      if (counted.length > 0) {
         const bySeverity: Record<string, number> = {};
-        for (const r of qcRows) {
+        for (const r of counted) {
           const s = String(r.severity || "medium");
           bySeverity[s] = (bySeverity[s] || 0) + 1;
         }
-        qcSummary = { last90Days: qcRows.length, bySeverity };
+        qcSummary = { last90Days: counted.length, bySeverity };
       }
     } catch { /* columns may not exist yet */ }
 

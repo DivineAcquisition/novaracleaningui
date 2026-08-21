@@ -478,6 +478,44 @@ serve(async (req) => {
         }))
         .sort((a, b) => b.strikesInWindow - a.strikesInWindow);
 
+      // Repeat valid quality-miss re-cleans — coaching signal only. Nothing
+      // auto-penalizes; a human decides the next ladder step.
+      const since90 = new Date(Date.now() - 90 * 86400_000).toISOString();
+      const { data: recleanHits } = await admin
+        .from("qc_issues")
+        .select("cleaner_id")
+        .eq("reclean_classification", "quality_miss")
+        .neq("reclean_status", "none")
+        .not("cleaner_id", "is", null)
+        .gte("created_at", since90)
+        .limit(2000);
+      const recleanByCleaner = new Map<string, number>();
+      for (const r of recleanHits || []) {
+        recleanByCleaner.set(r.cleaner_id, (recleanByCleaner.get(r.cleaner_id) || 0) + 1);
+      }
+      const recleanIds = [...recleanByCleaner.entries()].filter(([, n]) => n >= 2).map(([id]) => id);
+      if (recleanIds.length) {
+        const missing = recleanIds.filter((id) => !names.has(id));
+        if (missing.length) {
+          const { data: extra } = await admin.from("cleaners").select("id, first_name, last_name, status").in("id", missing);
+          for (const r of extra || []) {
+            names.set(r.id, {
+              name: `${r.first_name || ""} ${r.last_name || ""}`.trim() || "Cleaner",
+              status: String(r.status || ""),
+            });
+          }
+        }
+      }
+      const repeatQualityMissRecleans = recleanIds
+        .map((cleanerId) => ({
+          cleanerId,
+          name: names.get(cleanerId)?.name || "Cleaner",
+          status: names.get(cleanerId)?.status || "",
+          qualityMissRecleans: recleanByCleaner.get(cleanerId) || 0,
+          windowDays: 90,
+        }))
+        .sort((a, b) => b.qualityMissRecleans - a.qualityMissRecleans);
+
       return json({
         ok: true,
         suspended: (suspendedCleaners || []).map((c: Record<string, unknown>) => ({
@@ -489,6 +527,8 @@ serve(async (req) => {
         })),
         activeStrikes,
         repeatOffenders,
+        repeatQualityMissRecleans,
+        note: "Repeat quality-miss re-cleans are a coaching signal. No automatic penalty is applied.",
       });
     }
 

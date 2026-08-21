@@ -24,6 +24,7 @@ import {
 } from "../_shared/payout-utils.ts";
 import { resolveSecret } from "../_shared/app-secrets.ts";
 import { syncPayoutToAirtable } from "../_shared/airtable.ts";
+import { jobValueForPay, customerChargeCents } from "../_shared/reclean.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -143,8 +144,10 @@ serve(async (req) => {
     // completion using the actual assigned cleaner's tier). Fallback
     // computes it fresh from the cleaner's current pay_percentage so a
     // missing column never blocks payout.
-    const revenueCents =
-      booking.final_charge_cents || booking.total_estimate_cents || 0;
+    // Re-cleans charge the customer $0; pay is computed from assessed scope
+    // value. Never use the $0 customer charge as the payout basis.
+    const payBasisCents = jobValueForPay(booking);
+    const revenueCents = customerChargeCents(booking);
     const payPercentage = Number(cleaner.pay_percentage) || DEFAULT_PAY_PERCENTAGE;
 
     // For solo-cleaner bookings we treat cleaner_count = 1. Multi-
@@ -153,7 +156,7 @@ serve(async (req) => {
     // ledger of the lead cleaner.
     const cleanerPayoutCents =
       booking.cleaner_payout_cents ||
-      calculateCleanerPayoutCents(revenueCents, payPercentage, 1);
+      calculateCleanerPayoutCents(payBasisCents, payPercentage, 1);
     const platformFeeCents = Math.max(0, revenueCents - cleanerPayoutCents);
 
     logStep("Computed payout (revenue share)", {
@@ -168,8 +171,7 @@ serve(async (req) => {
       .insert({
         booking_id: bookingId,
         cleaner_id: cleaner.id,
-        total_booking_amount_cents:
-          booking.final_charge_cents || booking.total_estimate_cents || 0,
+        total_booking_amount_cents: payBasisCents,
         platform_fee_cents: platformFeeCents,
         cleaner_payout_cents: cleanerPayoutCents,
         stripe_account_id: cleaner.stripe_account_id,
