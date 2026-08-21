@@ -621,7 +621,8 @@ serve(async (req) => {
             smsBody += ` $${(chargedNow / 100).toFixed(2)} was charged to the card on file. $${(remainingCents / 100).toFixed(2)} is still due.`;
           } else if (dueAtCompletionCents > 0) {
             smsBody += ` Your remaining balance of $${(dueAtCompletionCents / 100).toFixed(2)} has been charged to the card on file.`;
-          } else if (balanceChargeStatus === "skipped_full_payment") {
+          }
+        } else if (balanceChargeStatus === "skipped_full_payment") {
           smsBody += ` Paid in full at booking — nothing more to do.`;
         } else if (balanceChargeStatus === "failed") {
           smsBody += ` We had trouble charging the balance on your card — our team will reach out shortly.`;
