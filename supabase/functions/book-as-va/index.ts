@@ -96,6 +96,37 @@ import {
   type DynamicServiceType,
   type QuoteBreakdown,
 } from "../_shared/dynamic-quote.ts";
+import {
+  calculateFocusedPrice,
+  type FocusedAreaSelection,
+  type FocusedCondition,
+} from "../_shared/focused-same-day.ts";
+
+function normalizeFocusedSelections(
+  raw: { selections?: Array<{ areaId?: string; area_id?: string; quantity?: number }> } | Array<{ areaId?: string; area_id?: string; quantity?: number }> | null | undefined,
+): FocusedAreaSelection[] {
+  const list = Array.isArray(raw)
+    ? raw
+    : Array.isArray(raw?.selections)
+      ? raw.selections
+      : [];
+  return list
+    .map((a) => ({
+      areaId: String(a.areaId || a.area_id || "").trim(),
+      quantity: Math.max(1, Math.floor(Number(a.quantity) || 1)),
+    }))
+    .filter((a) => a.areaId);
+}
+
+/** VA form uses light|standard|heavy; bookings.condition_level uses light|normal|heavy|severe. */
+function toBookingConditionLevel(raw: string | undefined | null): FocusedCondition | null {
+  const v = String(raw || "").toLowerCase();
+  if (v === "light") return "light";
+  if (v === "heavy") return "heavy";
+  if (v === "severe") return "severe";
+  if (v === "standard" || v === "normal") return "normal";
+  return null;
+}
 
 function computePrice(opts: {
   homeSizeId: string;
@@ -605,6 +636,22 @@ serve(async (req) => {
       );
     }
 
+    const isFocused = String(body.serviceType).toLowerCase() === "focused";
+    const focusedAreas = isFocused ? normalizeFocusedSelections(body.focused) : [];
+    if (isFocused && focusedAreas.length === 0) {
+      return new Response(
+        JSON.stringify({
+          error: "Select at least one area for a focused clean.",
+          code: "FOCUSED_AREAS_REQUIRED",
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 400,
+        },
+      );
+    }
+    const conditionLevel = toBookingConditionLevel(body.condition);
+
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
@@ -901,6 +948,8 @@ serve(async (req) => {
         service_type: body.serviceType,
         offer_type: body.serviceType,
         add_ons: body.addOns || [],
+        focused_areas: focusedAreas,
+        condition_level: conditionLevel,
         frequency: body.frequency || "one-time",
         service_date: body.serviceDate,
         time_slot: body.timeSlot,
@@ -927,7 +976,9 @@ serve(async (req) => {
         cleaner_payout_cents: cleanerPayoutCents,
         payout_status: "pending",
         payment_option: paymentOption,
-        estimated_duration_hours: getEstimatedHours(body.homeSizeId),
+        estimated_duration_hours: isFocused
+          ? calculateFocusedPrice(focusedAreas, conditionLevel || "normal").hours
+          : getEstimatedHours(body.homeSizeId),
         status: bookingStatus,
         // confirmed_at is stamped only when deposit/full payment clears.
         confirmed_at: null,
