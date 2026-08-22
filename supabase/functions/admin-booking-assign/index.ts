@@ -11,6 +11,9 @@
 // Body (suggest):
 //   { action: "suggest_cleaners", bookingId, limit?: number }
 //
+// Body (directory — all non-terminated cleaners, service role):
+//   { action: "list_directory" }
+//
 // Assigning a crew that already has a job that day must leave the required
 // buffer after that job's PROJECTED end. Blocked by default with the projected
 // -end explanation; bufferOverrideReason forces it and logs why.
@@ -256,6 +259,19 @@ serve(async (req) => {
     const action = String(body?.action || "assign").toLowerCase();
     const bookingId = String(body?.bookingId || "").trim();
 
+    if (action === "list_directory") {
+      const { data: directory, error: dirErr } = await admin
+        .from("cleaners")
+        .select(
+          "id, first_name, last_name, phone, status, approved, available_for_bookings, pay_tier, pay_percentage, home_city, home_zip, state",
+        )
+        .neq("status", "terminated")
+        .order("last_name", { ascending: true })
+        .order("first_name", { ascending: true });
+      if (dirErr) return json({ error: dirErr.message }, 500);
+      return json({ success: true, cleaners: directory || [] });
+    }
+
     if (!bookingId) return json({ error: "bookingId required" }, 400);
 
     const { data: booking, error: bErr } = await admin
@@ -293,11 +309,11 @@ serve(async (req) => {
     const cleanerIds = (Array.isArray(body?.cleanerIds) ? body.cleanerIds : [])
       .map((id: unknown) => String(id).trim())
       .filter(Boolean)
-      .slice(0, 3);
+      .slice(0, 8);
     const mode = String(body?.mode || "replace").toLowerCase();
     const shouldNotify = body?.notify !== false;
 
-    if (cleanerIds.length === 0) return json({ error: "cleanerIds required (1–3)" }, 400);
+    if (cleanerIds.length === 0) return json({ error: "cleanerIds required (1–8)" }, 400);
 
     // Deposit gate: don't dispatch a cleaner to a job the customer hasn't
     // paid for yet (common on internal/VA bookings whose deposit invoice is
@@ -323,8 +339,8 @@ serve(async (req) => {
       if (c.status === "terminated") {
         return json({ error: `Cannot assign terminated cleaner: ${c.first_name} ${c.last_name}` }, 400);
       }
-      if (!c.approved || c.status !== "active") {
-        return json({ error: `Cleaner not active/approved: ${c.first_name} ${c.last_name}` }, 400);
+      if (c.status && c.status !== "active") {
+        return json({ error: `Cleaner is not active: ${c.first_name} ${c.last_name}` }, 400);
       }
     }
 

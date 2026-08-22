@@ -540,8 +540,29 @@ interface CleanerOption {
   last_name: string | null;
   phone: string | null;
   status: string | null;
+  approved?: boolean | null;
+  available_for_bookings?: boolean | null;
+  city?: string | null;
+  home_city?: string | null;
+  home_zip?: string | null;
+  state?: string | null;
   pay_tier?: string | null;
   pay_percentage?: number | null;
+}
+
+const MAX_CREW_SELECTION = 8;
+
+function cleanerDirectoryBadge(c: CleanerOption): { label: string; className: string } {
+  if (c.status && c.status !== "active") {
+    return { label: "Inactive", className: "bg-slate-100 text-slate-600" };
+  }
+  if (c.approved === false) {
+    return { label: "Pending approval", className: "bg-amber-50 text-amber-800" };
+  }
+  if (c.available_for_bookings === false) {
+    return { label: "Not taking jobs", className: "bg-orange-50 text-orange-800" };
+  }
+  return { label: "Available", className: "bg-emerald-50 text-emerald-800" };
 }
 
 const PAY_TIER_LADDER = [
@@ -646,6 +667,7 @@ function BookingAssignBlock({
   const [bufferBlock, setBufferBlock] = useState<string | null>(null);
   const [bufferReason, setBufferReason] = useState("");
   const [checkedIn, setCheckedIn] = useState(Boolean(booking.check_in_time));
+  const [cleanerSearch, setCleanerSearch] = useState("");
   const [mileageOpen, setMileageOpen] = useState(false);
   const [mileageRows, setMileageRows] = useState<MileageDraftRow[]>([]);
   const [mileageLoading, setMileageLoading] = useState(false);
@@ -659,12 +681,9 @@ function BookingAssignBlock({
       setLoadingCleaners(true);
       setLoadingSuggest(true);
       const [dir, sug, rsk] = await Promise.all([
-        supabase
-          .from("cleaners")
-          .select("id, first_name, last_name, phone, status, pay_tier, pay_percentage")
-          .eq("status", "active")
-          .eq("approved", true)
-          .order("last_name"),
+        supabase.functions.invoke("admin-booking-assign", {
+          body: { action: "list_directory" },
+        }),
         supabase.functions.invoke("admin-booking-assign", {
           body: { action: "suggest_cleaners", bookingId: booking.id, limit: 8 },
         }),
@@ -672,7 +691,17 @@ function BookingAssignBlock({
           body: { action: "risk_flags", bookingId: booking.id },
         }),
       ]);
-      setCleaners((dir.data || []) as CleanerOption[]);
+      const listed = (dir.data as { cleaners?: CleanerOption[] } | null)?.cleaners;
+      if (!dir.error && Array.isArray(listed) && listed.length > 0) {
+        setCleaners(listed);
+      } else {
+        const fallback = await supabase
+          .from("cleaners")
+          .select("id, first_name, last_name, phone, status, approved, available_for_bookings, pay_tier, pay_percentage, home_zip, state")
+          .neq("status", "terminated")
+          .order("last_name");
+        setCleaners((fallback.data || []) as CleanerOption[]);
+      }
       setLoadingCleaners(false);
       if (!sug.error && (sug.data as { suggestions?: SuggestedCleaner[] })?.suggestions) {
         setSuggestions((sug.data as { suggestions: SuggestedCleaner[] }).suggestions);
@@ -750,7 +779,7 @@ function BookingAssignBlock({
       setAssignees(await enrichAssignees(rows));
       // Pre-seed the replace form with the current crew so adding one person
       // doesn't accidentally wipe the rest on Save.
-      const ids = rows.map((a) => a.cleaner_id).slice(0, 3);
+      const ids = rows.map((a) => a.cleaner_id).slice(0, MAX_CREW_SELECTION);
       setSelectedIds(ids.length ? ids : booking.cleaner_id ? [booking.cleaner_id] : []);
       setLoadingAssignees(false);
     })();
@@ -759,13 +788,38 @@ function BookingAssignBlock({
   const toggle = (id: string) => {
     setSelectedIds((prev) => {
       if (prev.includes(id)) return prev.filter((x) => x !== id);
-      if (prev.length >= 3) {
-        toast.error("Select up to 3 cleaners.");
+      if (prev.length >= MAX_CREW_SELECTION) {
+        toast.error(`Select up to ${MAX_CREW_SELECTION} cleaners.`);
         return prev;
       }
       return [...prev, id];
     });
   };
+
+  const filteredDirectory = useMemo(() => {
+    const q = cleanerSearch.trim().toLowerCase();
+    const rows = !q
+      ? cleaners
+      : cleaners.filter((c) => {
+          const hay = `${c.first_name || ""} ${c.last_name || ""} ${c.phone || ""} ${c.home_city || c.city || ""} ${c.home_zip || ""} ${c.state || ""}`.toLowerCase();
+          return hay.includes(q);
+        });
+    return [...rows].sort((a, b) => {
+      const aSel = selectedIds.includes(a.id) ? 0 : 1;
+      const bSel = selectedIds.includes(b.id) ? 0 : 1;
+      if (aSel !== bSel) return aSel - bSel;
+      return `${a.last_name || ""} ${a.first_name || ""}`.localeCompare(
+        `${b.last_name || ""} ${b.first_name || ""}`,
+      );
+    });
+  }, [cleaners, cleanerSearch, selectedIds]);
+
+  const selectedNames = selectedIds
+    .map((id) => {
+      const c = cleaners.find((x) => x.id === id);
+      return c ? `${c.first_name || ""} ${c.last_name || ""}`.trim() || "Cleaner" : "Cleaner";
+    })
+    .filter(Boolean);
 
   const buildMileageRows = (distanceById: Map<string, number | null>): MileageDraftRow[] =>
     selectedIds.map((id) => {
@@ -983,20 +1037,19 @@ function BookingAssignBlock({
     await assign(opts.allowUnpaid, opts.bufferOverrideReason, withExtras ? mileageRows : []);
   };
 
-  // Admin-approved offer blast: scores nearby cleaners and texts them the
-  // tokenized offer (the ONLY way offers go out besides the Dispatch page).
-  const sendOffers = async () => {
-    if (!confirm("Send SMS job offers to the best-matched nearby cleaners now? First to accept wins their slot.")) return;
-    setWorking("send_offers");
+  const invokeOfferDispatch = async (
+    workingKey: string,
+    body: Record<string, unknown>,
+    emptyMessage: string,
+  ) => {
+    setWorking(workingKey);
     try {
-      const { data, error } = await supabase.functions.invoke("auto-dispatch-booking", {
-        body: { bookingId: booking.id, sendOffers: true },
-      });
+      const { data, error } = await supabase.functions.invoke("auto-dispatch-booking", { body });
       if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).error);
+      if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
       const payload = data as { offersSent?: number; noCleanersAvailable?: boolean };
       if (payload?.noCleanersAvailable) {
-        toast.warning("No eligible cleaners found right now — assign manually above or retry later.");
+        toast.warning(emptyMessage);
       } else {
         toast.success(`Offers sent to ${payload?.offersSent ?? 0} cleaner(s).`);
       }
@@ -1006,6 +1059,42 @@ function BookingAssignBlock({
     } finally {
       setWorking(null);
     }
+  };
+
+  // Texts the people currently checked — not the nearby ranked pool.
+  const sendSelectedOffers = async () => {
+    if (selectedIds.length === 0) {
+      toast.error("Check the cleaners you want to text, then send offers to the selection.");
+      return;
+    }
+    if (
+      !confirm(
+        `Send SMS job offers to these ${selectedIds.length} selected cleaner(s)?\n\n${selectedNames.join(", ")}\n\nThis texts the people you checked. It does not rank nearby cleaners.`,
+      )
+    ) {
+      return;
+    }
+    await invokeOfferDispatch(
+      "send_selected_offers",
+      { bookingId: booking.id, sendOffers: true, cleanerIds: selectedIds },
+      "None of the selected cleaners could receive an offer (already on this job, or missing from the directory).",
+    );
+  };
+
+  // Nearby rank — ignores checkboxes on purpose.
+  const sendNearbyOffers = async () => {
+    if (
+      !confirm(
+        "Send SMS job offers to the best-matched nearby cleaners?\n\nThis ignores your checkboxes and ranks by distance / score. First to accept wins their slot.",
+      )
+    ) {
+      return;
+    }
+    await invokeOfferDispatch(
+      "send_nearby_offers",
+      { bookingId: booking.id, sendOffers: true },
+      "No eligible nearby cleaners found right now — pick people in the directory and send offers to the selection, or retry later.",
+    );
   };
 
   const authHeaders = async () => {
@@ -1345,9 +1434,9 @@ function BookingAssignBlock({
             Assign / replace crew
           </CardTitle>
           <CardDescription>
-            Nearby / available cleaners are ranked first. Saving replaces the crew with your
-            selection, emails + texts them, and creates a GHL task when the customer is linked.
-            Use Current crew above to drop someone without replacing the rest.
+            Check people in the full directory, then choose an action. Assign locks them in.
+            Offer-to-selection texts those checkboxes. Nearby rank ignores checkboxes and
+            scores by distance. Use Current crew above to drop someone without replacing the rest.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -1415,30 +1504,62 @@ function BookingAssignBlock({
           {loadingCleaners ? (
             <Skeleton className="h-24 w-full" />
           ) : (
-            <div className="max-h-40 overflow-y-auto space-y-1 border border-slate-200 rounded-md bg-white p-2">
-              {cleaners.map((c) => {
-                const checked = selectedIds.includes(c.id);
-                return (
-                  <label
-                    key={c.id}
-                    className={cn(
-                      "flex items-center gap-2 text-sm px-2 py-1.5 rounded cursor-pointer",
-                      checked ? "bg-indigo-50" : "hover:bg-slate-50",
-                    )}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggle(c.id)}
-                      className="rounded border-slate-300"
-                    />
-                    <span className="font-medium text-slate-900">
-                      {c.first_name} {c.last_name}
-                    </span>
-                    <span className="text-xs text-slate-500 ml-auto">{c.phone || ""}</span>
-                  </label>
-                );
-              })}
+            <div className="space-y-2">
+              <div className="relative">
+                <RiSearch2Line className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Input
+                  value={cleanerSearch}
+                  onChange={(e) => setCleanerSearch(e.target.value)}
+                  placeholder={`Search ${cleaners.length} cleaners by name, phone, or city`}
+                  className="pl-8 bg-white h-9 text-sm"
+                />
+              </div>
+              <p className="text-[11px] text-slate-500">
+                {selectedIds.length} selected
+                {selectedNames.length > 0 ? ` · ${selectedNames.join(", ")}` : ""}
+                {" · "}
+                showing {filteredDirectory.length} of {cleaners.length}
+              </p>
+              <div className="max-h-72 overflow-y-auto space-y-1 border border-slate-200 rounded-md bg-white p-2">
+                {filteredDirectory.length === 0 ? (
+                  <p className="text-xs text-slate-500 px-2 py-3">No cleaners match that search.</p>
+                ) : (
+                  filteredDirectory.map((c) => {
+                    const checked = selectedIds.includes(c.id);
+                    const badge = cleanerDirectoryBadge(c);
+                    return (
+                      <label
+                        key={c.id}
+                        className={cn(
+                          "flex items-center gap-2 text-sm px-2 py-1.5 rounded cursor-pointer",
+                          checked ? "bg-indigo-50" : "hover:bg-slate-50",
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggle(c.id)}
+                          className="rounded border-slate-300"
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="font-medium text-slate-900">
+                            {c.first_name} {c.last_name}
+                          </span>
+                          {c.home_city || c.city || c.home_zip ? (
+                            <span className="text-xs text-slate-500 ml-1.5">
+                              {c.home_city || c.city || c.home_zip}
+                            </span>
+                          ) : null}
+                        </span>
+                        <Badge className={cn("text-[10px] font-medium shrink-0", badge.className)}>
+                          {badge.label}
+                        </Badge>
+                        <span className="text-xs text-slate-500 shrink-0">{c.phone || ""}</span>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
             </div>
           )}
           {depositBlocked && (
@@ -1482,39 +1603,64 @@ function BookingAssignBlock({
               </Button>
             </div>
           )}
-          <Button
-            onClick={() => openMileageThenAssign(false)}
-            disabled={working === "assign"}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white"
-          >
-            {working === "assign" ? (
-              <>
-                <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />
-                Saving &amp; syncing GHL…
-              </>
-            ) : (
-              "Save, notify cleaners & sync GHL"
-            )}
-          </Button>
-          <Button
-            onClick={sendOffers}
-            disabled={working === "send_offers"}
-            variant="outline"
-            className="w-full border-indigo-300 text-indigo-800 hover:bg-indigo-50"
-          >
-            {working === "send_offers" ? (
-              <>
-                <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />
-                Sending offers…
-              </>
-            ) : (
-              "Send SMS offers to best-matched cleaners"
-            )}
-          </Button>
-          <p className="text-[11px] text-slate-500 -mt-1">
-            Offers only ever go out from this button or the Dispatch page — nothing is texted to
-            contractors automatically.
-          </p>
+          <div className="space-y-2">
+            <Button
+              onClick={() => openMileageThenAssign(false)}
+              disabled={working === "assign" || selectedIds.length === 0}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white"
+            >
+              {working === "assign" ? (
+                <>
+                  <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />
+                  Saving &amp; syncing GHL…
+                </>
+              ) : (
+                selectedIds.length === 0
+                  ? "Assign selected cleaners (lock in)"
+                  : `Assign these ${selectedIds.length} cleaner${selectedIds.length === 1 ? "" : "s"} (lock in)`
+              )}
+            </Button>
+            <p className="text-[11px] text-slate-500 -mt-1">
+              Locks in the checked people as Confirmed, texts the assignment, and syncs GHL.
+            </p>
+            <Button
+              onClick={sendSelectedOffers}
+              disabled={working === "send_selected_offers" || selectedIds.length === 0}
+              variant="outline"
+              className="w-full border-indigo-400 text-indigo-900 hover:bg-indigo-50"
+            >
+              {working === "send_selected_offers" ? (
+                <>
+                  <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />
+                  Sending selected offers…
+                </>
+              ) : (
+                `Send offer SMS to ${selectedIds.length || 0} selected`
+              )}
+            </Button>
+            <p className="text-[11px] text-slate-500 -mt-1">
+              Texts only the people you checked. Does not rank nearby cleaners.
+            </p>
+            <Button
+              onClick={sendNearbyOffers}
+              disabled={working === "send_nearby_offers"}
+              variant="outline"
+              className="w-full border-slate-300 text-slate-800 hover:bg-slate-50"
+            >
+              {working === "send_nearby_offers" ? (
+                <>
+                  <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" />
+                  Sending nearby offers…
+                </>
+              ) : (
+                "Offer nearest ranked cleaners"
+              )}
+            </Button>
+            <p className="text-[11px] text-slate-500 -mt-1">
+              Ignores checkboxes. Scores nearby approved cleaners and texts the top matches.
+              Offers only go out from these buttons or the Dispatch page.
+            </p>
+          </div>
         </CardContent>
       </Card>
 
