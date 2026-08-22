@@ -42,6 +42,7 @@ import {
   RecleanContractorNote,
   notesLookLikeReclean,
   isRecleanBooking,
+  sanitizeContractorJobNotes,
 } from "@/components/reclean/RecleanCallout";
 
 interface OfferDetail {
@@ -79,7 +80,6 @@ interface OfferDetail {
     arrival_window: string | null;
     is_reclean?: boolean | null;
     reclean_scope?: string | null;
-    reclean_assessed_value_cents?: number | null;
   } | null;
   customer: {
     first_name: string | null;
@@ -333,10 +333,7 @@ export default function CleanerJobOfferPage() {
                     <RecleanBadge />
                     <RecleanContractorNote
                       scope={offer.booking?.reclean_scope}
-                      payCents={
-                        offer.booking?.reclean_assessed_value_cents
-                        ?? offer.assignment.estimated_pay_cents
-                      }
+                      hideFinancials
                       reliabilityNeutral={
                         offer.assignment.reliability_neutral === true
                         || isRecleanBooking(offer.booking)
@@ -406,17 +403,24 @@ export default function CleanerJobOfferPage() {
                   : PAY_BASIS_NOTE
               }
             />
-            {offer.job.notes ? (
-              <>
-                <Separator />
-                <div>
-                  <p className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">
-                    Customer notes
-                  </p>
-                  <p className="text-sm text-slate-700 whitespace-pre-wrap">{offer.job.notes}</p>
-                </div>
-              </>
-            ) : null}
+            {(() => {
+              const reclean = isRecleanBooking(offer.booking) || notesLookLikeReclean(offer.job.notes);
+              const visibleNotes = reclean
+                ? sanitizeContractorJobNotes(offer.job.notes)
+                : (offer.job.notes || null);
+              if (!visibleNotes) return null;
+              return (
+                <>
+                  <Separator />
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">
+                      Job notes
+                    </p>
+                    <p className="text-sm text-slate-700 whitespace-pre-wrap">{visibleNotes}</p>
+                  </div>
+                </>
+              );
+            })()}
 
             {expiresAt && !outcome ? (
               <p className="text-[11px] text-slate-500 mt-1">

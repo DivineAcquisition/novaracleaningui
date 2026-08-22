@@ -221,6 +221,57 @@ const AREA_KEYWORDS: Array<{ areaId: string; pattern: RegExp }> = [
   { areaId: "living", pattern: /\bliving|family room|den|common area|lounge\b/i },
 ];
 
+/**
+ * What a contractor is allowed to see on the offer / job card.
+ * No job totals, payment-intent ids, assessed QC value, or "customer
+ * not charged" — those stay on admin team notes.
+ */
+export function contractorFacingRecleanNotes(opts: {
+  scope?: string | null;
+  areas?: string[] | null;
+}): string {
+  const areas = (opts.areas || []).map((a) => String(a).trim()).filter(Boolean);
+  if (opts.scope === "full") {
+    return "Re-clean — full follow-up of the original visit. Stay on the booked work.";
+  }
+  if (areas.length) {
+    return `Re-clean — ${areas.join(", ")}. Stay in the named areas.`;
+  }
+  return "Re-clean — complete the areas listed for this visit.";
+}
+
+const CONTRACTOR_NOTE_REDACT =
+  /assessed value|customer not charged|performer is paid|see qc case|re-clean of nvc-|add-ons updated by admin|hold captured|overage|scope extras still due|charged off-session|spotless guarantee\s*—|pi_[a-z0-9]+|delta \$/i;
+
+export function sanitizeContractorJobNotes(notes?: string | null): string | null {
+  const raw = String(notes || "");
+  if (!raw.trim()) return null;
+  const kept = raw
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter((line) => {
+      if (!line) return false;
+      if (CONTRACTOR_NOTE_REDACT.test(line)) return false;
+      if (/\$[\d,]/.test(line)) return false;
+      return true;
+    });
+  const text = kept.join("\n").trim();
+  return text || null;
+}
+
+export function adminFacingRecleanNotes(opts: {
+  originalRef: string;
+  scope: string;
+  areas?: string[] | null;
+  assessedCents: number;
+}): string {
+  const areas = (opts.areas || []).filter(Boolean).join(", ");
+  const scopeLabel = opts.scope === "full"
+    ? "full re-service"
+    : `targeted: ${areas || "see QC case"}`;
+  return `RE-CLEAN of ${opts.originalRef} — ${scopeLabel}. Spotless Guarantee — customer not charged. Performer is paid on assessed value $${(opts.assessedCents / 100).toFixed(2)}.`;
+}
+
 export function namedAreasFromText(text: string | null | undefined): string[] {
   const raw = String(text || "");
   const found: string[] = [];

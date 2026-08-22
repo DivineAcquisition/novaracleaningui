@@ -28,7 +28,9 @@ import {
   RecleanClassification,
   RecleanScope,
   RecleanStatus,
+  adminFacingRecleanNotes,
   assessedRecleanValueCents,
+  contractorFacingRecleanNotes,
   customerChargeCents,
   draftCompletionMessage,
   draftCustomerMessage,
@@ -686,9 +688,18 @@ serve(async (req) => {
       const originalRef = original.booking_number
         ? `NVC-${String(original.booking_number).padStart(4, "0")}`
         : String(original.id).slice(0, 8);
-      const special = [
+      // Contractors see jobs.notes on the offer page. Never copy original
+      // team_notes (payment holds, add-on totals, PI ids) or the QC
+      // assessed-value line onto that field.
+      const contractorNotes = contractorFacingRecleanNotes({ scope, areas: resolvedAreas });
+      const adminNotes = [
         String(original.team_notes || "").trim(),
-        `RE-CLEAN of ${originalRef} — ${scope === "full" ? "full re-service" : `targeted: ${resolvedAreas.join(", ") || "see QC case"}`}. Spotless Guarantee — customer not charged. Performer is paid on assessed value $${(assessed / 100).toFixed(2)}.`,
+        adminFacingRecleanNotes({
+          originalRef,
+          scope,
+          areas: resolvedAreas,
+          assessedCents: assessed,
+        }),
       ].filter(Boolean).join("\n");
 
       const insert: Record<string, unknown> = {
@@ -715,7 +726,7 @@ serve(async (req) => {
         add_ons: scope === "full" ? original.add_ons : [],
         focused_areas: focusedAreas,
         access_notes: original.access_notes,
-        team_notes: special,
+        team_notes: adminNotes,
         issues_notes: original.issues_notes,
         dispatch_notes: original.dispatch_notes,
         // Customer charge is always $0. base_price_cents is NOT NULL with no
@@ -755,7 +766,7 @@ serve(async (req) => {
         bathrooms: Number(original.bathrooms) || 0,
         min_cleaners_required: 1,
         status: "New",
-        notes: special,
+        notes: contractorNotes,
       }).select("id").single();
       if (jErr || !job) throw new Error(`Could not create re-clean job: ${jErr?.message || "unknown"}`);
       // set_min_cleaners_on_job fires BEFORE INSERT and forces 2–3 cleaners
