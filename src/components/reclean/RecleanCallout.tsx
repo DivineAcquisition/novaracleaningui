@@ -27,15 +27,18 @@ export function RecleanContractorNote({
   payCents,
   reliabilityNeutral,
   compact,
+  hideFinancials,
 }: {
   scope?: string | null;
   areas?: string[] | null;
   payCents?: number | null;
   reliabilityNeutral?: boolean;
   compact?: boolean;
+  /** Offer landing: no job totals, QC assessed value, or customer-charge language. */
+  hideFinancials?: boolean;
 }) {
   const pay =
-    payCents != null && payCents > 0
+    !hideFinancials && payCents != null && payCents > 0
       ? `$${(payCents / 100).toFixed(2)}`
       : null;
   const areaLabel = (areas || []).filter(Boolean).join(", ");
@@ -51,8 +54,9 @@ export function RecleanContractorNote({
         Paid re-clean — Spotless Guarantee
       </p>
       <p className={cn("mt-1 text-violet-800", compact ? "text-[11px]" : "text-xs")}>
-        The customer is not charged. You are paid at your normal tier rate
-        {pay ? ` (${pay} on this scope)` : " on the assessed scope"}.
+        {hideFinancials
+          ? "Paid follow-up of the named areas. Your pay for this visit is the amount on this offer."
+          : `The customer is not charged. You are paid at your normal tier rate${pay ? ` (${pay} on this scope)` : " on the assessed scope"}.`}
         {reliabilityNeutral
           ? " Declining this offer does not affect your Novara Score."
           : ""}
@@ -75,7 +79,20 @@ export function RecleanContractorNote({
 }
 
 export function notesLookLikeReclean(notes?: string | null): boolean {
-  return /RE-CLEAN|Spotless Guarantee/i.test(String(notes || ""));
+  return /RE-CLEAN|Spotless Guarantee|^Re-clean —/i.test(String(notes || ""));
+}
+
+/** Drop QC / job-total lines so contractors never see assessed value or charges. */
+export function sanitizeContractorJobNotes(notes?: string | null): string | null {
+  const raw = String(notes || "");
+  if (!raw.trim()) return null;
+  const redact =
+    /assessed value|customer not charged|performer is paid|see qc case|re-clean of nvc-|add-ons updated by admin|hold captured|overage|scope extras still due|charged off-session|spotless guarantee\s*—|pi_[a-z0-9]+|delta \$/i;
+  const kept = raw
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter((line) => line && !redact.test(line) && !/\$[\d,]/.test(line));
+  return kept.join("\n").trim() || null;
 }
 
 export function isRecleanBooking(row?: {

@@ -276,6 +276,41 @@ export async function runJobDispatchBackfill(
   }
 
   const eligible = await hasEligibleCleanersRemaining(supabase, team.blockedCleanerIds);
+
+  // A confirmed lead with an open extra slot: auto-offer the next closest
+  // cleaner who is not in that lead's crew. Parking this for admin left
+  // 2-person jobs half-staffed when the crew mate declined.
+  const { data: staffed } = await supabase
+    .from("job_assignments")
+    .select("id, role, status")
+    .eq("job_id", jobId)
+    .or("status.ilike.confirmed,status.ilike.accepted");
+  const hasConfirmedLead = (staffed || []).some((a: { role?: string | null }) =>
+    String(a.role || "").toLowerCase() === "lead",
+  ) || (staffed || []).length > 0;
+
+  if (hasConfirmedLead && team.openSlots > 0 && eligible) {
+    try {
+      const { error } = await supabase.functions.invoke("dispatch-job", {
+        body: { jobId, backfill: true, approved: true, excludeLeadCrew: true },
+      });
+      if (error) {
+        log("additional-slot auto-offer failed", { jobId, error: error.message || String(error) });
+      } else {
+        log("additional-slot auto-offered outside lead crew", { jobId, openSlots: team.openSlots });
+        return {
+          ok: true,
+          openSlots: team.openSlots,
+          offersSent: team.openSlots,
+          noCleanersAvailable: false,
+          staffNotified: false,
+        };
+      }
+    } catch (err) {
+      log("additional-slot auto-offer threw", err instanceof Error ? err.message : String(err));
+    }
+  }
+
   if (!eligible) {
     const { sent } = await notifyStaffNoCleanersAvailable(supabase, jobId, { reason });
     await requestDispatchApproval(supabase, jobId, `${reason} — eligible pool exhausted`);

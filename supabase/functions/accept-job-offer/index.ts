@@ -98,6 +98,9 @@ serve(async (req) => {
         .maybeSingle();
       const reliabilityNeutral = assignment.reliability_neutral === true || recleanBooking?.is_reclean === true;
 
+      const role = String(assignment.role || "").toLowerCase();
+      const additionalSlot = role === "support" || role === "helper";
+
       if (reliabilityNeutral && recleanBooking?.id) {
         try {
           await supabase.functions.invoke("qc-reclean", {
@@ -105,6 +108,19 @@ serve(async (req) => {
           });
         } catch (err) {
           log("reclean fallback after decline failed", err instanceof Error ? err.message : String(err));
+        }
+      } else if (additionalSlot) {
+        try {
+          await supabase.functions.invoke("dispatch-job", {
+            body: {
+              jobId: assignment.job_id,
+              backfill: true,
+              approved: true,
+              excludeLeadCrew: true,
+            },
+          });
+        } catch (err) {
+          log("additional-slot refill after decline failed", err instanceof Error ? err.message : String(err));
         }
       } else {
         try {

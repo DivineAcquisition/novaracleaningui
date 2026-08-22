@@ -119,6 +119,14 @@ serve(async (req) => {
       } catch (e) {
         console.error("[RESPOND] reclean fallback dispatch failed", e);
       }
+    } else if (action === "decline" && String(assignment.role || "").toLowerCase() === "support") {
+      try {
+        await supabase.functions.invoke("dispatch-job", {
+          body: { jobId: assignment.job_id, backfill: true, approved: true, excludeLeadCrew: true },
+        });
+      } catch (e) {
+        console.error("[RESPOND] additional-slot refill failed", e);
+      }
     }
     if (reliabilityNeutral && action === "accept" && bookingForJob?.id) {
       try {

@@ -8,10 +8,12 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { contractorFacingRecleanNotes, sanitizeContractorJobNotes } from "../_shared/reclean.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
 serve(async (req) => {
@@ -83,12 +85,12 @@ serve(async (req) => {
       arrival_window: string | null;
       is_reclean?: boolean | null;
       reclean_scope?: string | null;
-      reclean_assessed_value_cents?: number | null;
     } | null = null;
+    let jobPublic: Record<string, unknown> | null = job ? { ...job } : null;
     if (assignment.job_id) {
       const { data: b } = await supabase
         .from("bookings")
-        .select("service_date, time_slot, arrival_window, is_reclean, reclean_scope, reclean_assessed_value_cents, reclean_of_booking_id")
+        .select("service_date, time_slot, arrival_window, is_reclean, reclean_scope")
         .eq("job_id", assignment.job_id)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -100,10 +102,13 @@ serve(async (req) => {
           arrival_window: b.arrival_window ?? null,
           is_reclean: b.is_reclean === true,
           reclean_scope: b.reclean_scope ?? null,
-          reclean_assessed_value_cents: b.reclean_assessed_value_cents != null
-            ? Number(b.reclean_assessed_value_cents)
-            : null,
         };
+      }
+      if (jobPublic) {
+        const cleaned = sanitizeContractorJobNotes(String(jobPublic.notes || ""));
+        jobPublic.notes = b?.is_reclean === true
+          ? (cleaned || contractorFacingRecleanNotes({ scope: b.reclean_scope }))
+          : cleaned;
       }
     }
 
@@ -113,7 +118,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         assignment: assignmentPublic,
-        job: job || null,
+        job: jobPublic,
         booking,
         customer,
         cleaner: {

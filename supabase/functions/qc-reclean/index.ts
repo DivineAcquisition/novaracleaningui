@@ -28,7 +28,9 @@ import {
   RecleanClassification,
   RecleanScope,
   RecleanStatus,
+  adminFacingRecleanNotes,
   assessedRecleanValueCents,
+  contractorFacingRecleanNotes,
   customerChargeCents,
   draftCompletionMessage,
   draftCustomerMessage,
@@ -386,21 +388,26 @@ async function dispatchApprovedReclean(
   const tokenBytes = new Uint8Array(16);
   crypto.getRandomValues(tokenBytes);
   const token = Array.from(tokenBytes).map((b) => b.toString(16).padStart(2, "0")).join("");
-  await admin.from("job_assignments").upsert({
+  // job_assignments has assigned_at, not offered_at. Writing offered_at
+  // 400s the upsert, the SMS still goes out, and the cleaner taps a
+  // token that was never stored — get-job-offer 404s.
+  const { data: offerRow, error: offerErr } = await admin.from("job_assignments").upsert({
     job_id: recleanJobId,
     cleaner_id: originalCleanerId,
     status: "Offered",
     role: "Lead",
-    offered_at: new Date().toISOString(),
+    assigned_at: new Date().toISOString(),
     expires_at: expires,
     response_token: token,
     estimated_pay_cents: share.shareCents,
     pay_percentage_snapshot: share.ratePercent,
     crew_size_snapshot: 1,
     reliability_neutral: true,
-  }, { onConflict: "job_id,cleaner_id" });
+  }, { onConflict: "job_id,cleaner_id" }).select("id, response_token").maybeSingle();
+  if (offerErr) throw new Error(`Could not create re-clean offer: ${offerErr.message}`);
+  const offerToken = String(offerRow?.response_token || token);
 
-  const offerUrl = `https://contractor.novaracleaning.com/cleaner/job-offer/${token}`;
+  const offerUrl = `https://contractor.novaracleaning.com/cleaner/job-offer/${offerToken}`;
   if (cleaner?.phone) {
     await sendSms(admin, {
       toPhone: cleaner.phone,
@@ -681,9 +688,18 @@ serve(async (req) => {
       const originalRef = original.booking_number
         ? `NVC-${String(original.booking_number).padStart(4, "0")}`
         : String(original.id).slice(0, 8);
-      const special = [
+      // Contractors see jobs.notes on the offer page. Never copy original
+      // team_notes (payment holds, add-on totals, PI ids) or the QC
+      // assessed-value line onto that field.
+      const contractorNotes = contractorFacingRecleanNotes({ scope, areas: resolvedAreas });
+      const adminNotes = [
         String(original.team_notes || "").trim(),
-        `RE-CLEAN of ${originalRef} — ${scope === "full" ? "full re-service" : `targeted: ${resolvedAreas.join(", ") || "see QC case"}`}. Spotless Guarantee — customer not charged. Performer is paid on assessed value $${(assessed / 100).toFixed(2)}.`,
+        adminFacingRecleanNotes({
+          originalRef,
+          scope,
+          areas: resolvedAreas,
+          assessedCents: assessed,
+        }),
       ].filter(Boolean).join("\n");
 
       const insert: Record<string, unknown> = {
@@ -710,7 +726,7 @@ serve(async (req) => {
         add_ons: scope === "full" ? original.add_ons : [],
         focused_areas: focusedAreas,
         access_notes: original.access_notes,
-        team_notes: special,
+        team_notes: adminNotes,
         issues_notes: original.issues_notes,
         dispatch_notes: original.dispatch_notes,
         // Customer charge is always $0. base_price_cents is NOT NULL with no
@@ -750,9 +766,14 @@ serve(async (req) => {
         bathrooms: Number(original.bathrooms) || 0,
         min_cleaners_required: 1,
         status: "New",
-        notes: special,
+        notes: contractorNotes,
       }).select("id").single();
       if (jErr || !job) throw new Error(`Could not create re-clean job: ${jErr?.message || "unknown"}`);
+      // set_min_cleaners_on_job fires BEFORE INSERT and forces 2–3 cleaners
+      // from sq_ft. Targeted re-cleans are one-person jobs; UPDATE of
+      // min_cleaners_required (without touching sq_ft) does not re-fire it.
+      const recleanCrew = scope === "full" ? (Number(original.num_cleaners_assigned) || 2) : 1;
+      await admin.from("jobs").update({ min_cleaners_required: recleanCrew }).eq("id", job.id);
       await admin.from("bookings").update({ job_id: job.id }).eq("id", recleanBooking.id);
       recleanBooking.job_id = job.id;
       await ensureJobChecklist(admin, { jobId: job.id, bookingId: recleanBooking.id });

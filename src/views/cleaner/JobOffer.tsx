@@ -42,6 +42,7 @@ import {
   RecleanContractorNote,
   notesLookLikeReclean,
   isRecleanBooking,
+  sanitizeContractorJobNotes,
 } from "@/components/reclean/RecleanCallout";
 
 interface OfferDetail {
@@ -79,7 +80,6 @@ interface OfferDetail {
     arrival_window: string | null;
     is_reclean?: boolean | null;
     reclean_scope?: string | null;
-    reclean_assessed_value_cents?: number | null;
   } | null;
   customer: {
     first_name: string | null;
@@ -161,7 +161,19 @@ export default function CleanerJobOfferPage() {
       const { data, error: invokeError } = await supabase.functions.invoke("get-job-offer", {
         body: { token },
       });
-      if (invokeError) throw invokeError;
+      if (invokeError) {
+        let detail = invokeError.message || "Couldn't load this job offer";
+        try {
+          const body = await (invokeError as { context?: Response }).context?.clone?.().json?.();
+          if (body?.error) detail = String(body.error);
+        } catch {
+          /* keep the invoke message */
+        }
+        if (/non-2xx/i.test(detail) || /edge function/i.test(detail)) {
+          detail = "This offer link is invalid or expired. Open the job from your dashboard if it is still waiting on you.";
+        }
+        throw new Error(detail);
+      }
       if ((data as any)?.error) throw new Error((data as any).error);
       setOffer(data as OfferDetail);
       const status = (data as OfferDetail).assignment.status.toLowerCase();
@@ -321,10 +333,7 @@ export default function CleanerJobOfferPage() {
                     <RecleanBadge />
                     <RecleanContractorNote
                       scope={offer.booking?.reclean_scope}
-                      payCents={
-                        offer.booking?.reclean_assessed_value_cents
-                        ?? offer.assignment.estimated_pay_cents
-                      }
+                      hideFinancials
                       reliabilityNeutral={
                         offer.assignment.reliability_neutral === true
                         || isRecleanBooking(offer.booking)
@@ -394,17 +403,24 @@ export default function CleanerJobOfferPage() {
                   : PAY_BASIS_NOTE
               }
             />
-            {offer.job.notes ? (
-              <>
-                <Separator />
-                <div>
-                  <p className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">
-                    Customer notes
-                  </p>
-                  <p className="text-sm text-slate-700 whitespace-pre-wrap">{offer.job.notes}</p>
-                </div>
-              </>
-            ) : null}
+            {(() => {
+              const reclean = isRecleanBooking(offer.booking) || notesLookLikeReclean(offer.job.notes);
+              const visibleNotes = reclean
+                ? sanitizeContractorJobNotes(offer.job.notes)
+                : (offer.job.notes || null);
+              if (!visibleNotes) return null;
+              return (
+                <>
+                  <Separator />
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">
+                      Job notes
+                    </p>
+                    <p className="text-sm text-slate-700 whitespace-pre-wrap">{visibleNotes}</p>
+                  </div>
+                </>
+              );
+            })()}
 
             {expiresAt && !outcome ? (
               <p className="text-[11px] text-slate-500 mt-1">
