@@ -263,7 +263,7 @@ serve(async (req) => {
       const { data: directory, error: dirErr } = await admin
         .from("cleaners")
         .select(
-          "id, first_name, last_name, phone, status, approved, available_for_bookings, pay_tier, pay_percentage, city, home_zip",
+          "id, first_name, last_name, phone, status, approved, available_for_bookings, pay_tier, pay_percentage, home_city, home_zip, state",
         )
         .neq("status", "terminated")
         .order("last_name", { ascending: true })

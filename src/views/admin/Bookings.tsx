@@ -543,7 +543,9 @@ interface CleanerOption {
   approved?: boolean | null;
   available_for_bookings?: boolean | null;
   city?: string | null;
+  home_city?: string | null;
   home_zip?: string | null;
+  state?: string | null;
   pay_tier?: string | null;
   pay_percentage?: number | null;
 }
@@ -695,7 +697,7 @@ function BookingAssignBlock({
       } else {
         const fallback = await supabase
           .from("cleaners")
-          .select("id, first_name, last_name, phone, status, approved, available_for_bookings, pay_tier, pay_percentage, city, home_zip")
+          .select("id, first_name, last_name, phone, status, approved, available_for_bookings, pay_tier, pay_percentage, home_zip, state")
           .neq("status", "terminated")
           .order("last_name");
         setCleaners((fallback.data || []) as CleanerOption[]);
@@ -799,7 +801,7 @@ function BookingAssignBlock({
     const rows = !q
       ? cleaners
       : cleaners.filter((c) => {
-          const hay = `${c.first_name || ""} ${c.last_name || ""} ${c.phone || ""} ${c.city || ""} ${c.home_zip || ""}`.toLowerCase();
+          const hay = `${c.first_name || ""} ${c.last_name || ""} ${c.phone || ""} ${c.home_city || c.city || ""} ${c.home_zip || ""} ${c.state || ""}`.toLowerCase();
           return hay.includes(q);
         });
     return [...rows].sort((a, b) => {
@@ -1543,8 +1545,10 @@ function BookingAssignBlock({
                           <span className="font-medium text-slate-900">
                             {c.first_name} {c.last_name}
                           </span>
-                          {c.city ? (
-                            <span className="text-xs text-slate-500 ml-1.5">{c.city}</span>
+                          {c.home_city || c.city || c.home_zip ? (
+                            <span className="text-xs text-slate-500 ml-1.5">
+                              {c.home_city || c.city || c.home_zip}
+                            </span>
                           ) : null}
                         </span>
                         <Badge className={cn("text-[10px] font-medium shrink-0", badge.className)}>
