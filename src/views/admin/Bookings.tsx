@@ -2424,8 +2424,8 @@ function BookingSheet({
     }
     setWorking("reinstate");
     try {
-      const { data, error } = await supabase.functions.invoke("admin-modify-booking", {
-        body: { action: "reinstate_unpaid_deposit", bookingId: booking.id },
+      const { data, error } = await supabase.functions.invoke("admin-reinstate-booking", {
+        body: { bookingId: booking.id },
       });
       const outcome = await edgeResult(error, data);
       if (!outcome.ok) throw new Error(outcome.error || "Reinstate failed");
