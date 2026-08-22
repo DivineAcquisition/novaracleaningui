@@ -30,10 +30,12 @@ serve(async (req) => {
 
     logStep("Cutoff time calculated", { cutoff: seventyTwoHoursAgo.toISOString() });
 
-    // Find pending_payment bookings older than 72 hours
+    // Find abandoned public-checkout pending_payment bookings older than
+    // 72 hours. Invoice-backed pending deposits are auto-cancelled (not
+    // deleted) by pending-deposit-reminders so ops can reinstate them.
     const { data: oldBookings, error: fetchError } = await supabase
       .from("bookings")
-      .select("id, email, created_at, service_date")
+      .select("id, email, created_at, service_date, hosted_invoice_url, stripe_invoice_id")
       .eq("status", "pending_payment")
       .lt("created_at", seventyTwoHoursAgo.toISOString());
 
@@ -55,8 +57,19 @@ serve(async (req) => {
       );
     }
 
-    // Delete the old bookings
-    const bookingIds = oldBookings.map(b => b.id);
+    const bookingIds = oldBookings
+      .filter((b) => !b.hosted_invoice_url && !b.stripe_invoice_id)
+      .map((b) => b.id);
+    if (bookingIds.length === 0) {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          deleted: 0,
+          message: "No abandoned public-checkout bookings to clean up",
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
+      );
+    }
     
     const { error: deleteError } = await supabase
       .from("bookings")

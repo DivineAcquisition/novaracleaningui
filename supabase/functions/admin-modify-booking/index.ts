@@ -1,7 +1,12 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.80.0";
+import Stripe from "https://esm.sh/stripe@18.5.0";
 import { ensureJobChecklist } from "../_shared/job-checklist.ts";
 import { documentBookingAddonsInQcSafe } from "../_shared/addon-qc.ts";
+import { resolveSecret } from "../_shared/app-secrets.ts";
+import { sendSms, formatServiceDate, formatTimeSlot } from "../_shared/sms.ts";
+import { SUPPORT_PHONE_DISPLAY } from "../_shared/booking-policy.ts";
+import { invoicePaymentSettingsSaveCard } from "../_shared/stripe-invoice-save-card.ts";
 
 // admin-modify-booking
 //
@@ -21,6 +26,10 @@ import { documentBookingAddonsInQcSafe } from "../_shared/addon-qc.ts";
 //     the assigned cleaner's dashboard (job details + checklist). Not sent
 //     to the customer. Mirrors access_notes onto jobs.notes when a job row
 //     exists so dispatch/calendar stay in sync.
+//
+//   reinstate_unpaid_deposit — reopen a booking auto-cancelled for an unpaid
+//     deposit after the customer asked to keep the date. Resets the reminder
+//     window, re-issues the invoice, and texts/emails the pay link.
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -144,6 +153,96 @@ function errMessage(e: unknown): string {
     }
   }
   return String(e);
+}
+
+async function reissueDepositInvoice(
+  // deno-lint-ignore no-explicit-any
+  admin: any,
+  booking: Record<string, unknown>,
+): Promise<string | null> {
+  const existingUrl = typeof booking.hosted_invoice_url === "string" ? booking.hosted_invoice_url : null;
+  const existingId = typeof booking.stripe_invoice_id === "string" ? booking.stripe_invoice_id : null;
+  const amount = Number(booking.deposit_cents || 0);
+  if (amount <= 0) return existingUrl;
+
+  const key = await resolveSecret(admin, "STRIPE_SECRET_KEY");
+  if (!key) return existingUrl;
+
+  const stripe = new Stripe(key, { apiVersion: "2025-08-27.basil" as never });
+
+  if (existingId) {
+    try {
+      const inv = await stripe.invoices.retrieve(existingId);
+      if (inv.status === "open" && inv.hosted_invoice_url) {
+        await stripe.invoices.sendInvoice(existingId).catch(() => undefined);
+        return inv.hosted_invoice_url;
+      }
+    } catch {
+      /* create a replacement below */
+    }
+  }
+
+  const email = String(booking.email || "").trim();
+  if (!email) return existingUrl;
+
+  let customerId =
+    typeof booking.customer_id === "string" && booking.customer_id.startsWith("cus_")
+      ? booking.customer_id
+      : "";
+  if (!customerId) {
+    const found = await stripe.customers.list({ email, limit: 1 });
+    customerId = found.data[0]?.id || "";
+  }
+  if (!customerId) {
+    const created = await stripe.customers.create({
+      email,
+      name: `${booking.first_name || ""} ${booking.last_name || ""}`.trim() || undefined,
+      phone: String(booking.phone || "") || undefined,
+    });
+    customerId = created.id;
+  }
+
+  const description = `Novara deposit — booking ${booking.booking_number || booking.id}`;
+  const item = await stripe.invoiceItems.create({
+    customer: customerId,
+    amount,
+    currency: "usd",
+    description,
+  });
+  try {
+    const invoice = await stripe.invoices.create({
+      customer: customerId,
+      collection_method: "send_invoice",
+      days_until_due: 1,
+      pending_invoice_items_behavior: "include",
+      description,
+      metadata: {
+        booking_id: String(booking.id),
+        purpose: "deposit",
+        reinstated: "true",
+      },
+      auto_advance: true,
+      payment_settings: invoicePaymentSettingsSaveCard,
+    });
+    if (!invoice.id) throw new Error("Stripe did not return invoice id");
+    const finalized = await stripe.invoices.finalizeInvoice(invoice.id, { auto_advance: true });
+    await stripe.invoices.sendInvoice(invoice.id);
+    await admin
+      .from("bookings")
+      .update({
+        stripe_invoice_id: invoice.id,
+        hosted_invoice_url: finalized.hosted_invoice_url || existingUrl,
+      })
+      .eq("id", booking.id);
+    return finalized.hosted_invoice_url || existingUrl;
+  } catch (err) {
+    if (item.id) await stripe.invoiceItems.del(item.id).catch(() => undefined);
+    console.warn(
+      "[admin-modify-booking] reissue invoice failed",
+      err instanceof Error ? err.message : String(err),
+    );
+    return existingUrl;
+  }
 }
 
 serve(async (req) => {
@@ -365,6 +464,122 @@ serve(async (req) => {
           access_notes: accessNotes || null,
           team_notes: teamNotes || null,
         }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
+      );
+    }
+
+    if (action === "reinstate_unpaid_deposit") {
+      if (booking.status !== "cancelled") {
+        throw new Error("Only cancelled bookings can be reinstated.");
+      }
+      if (booking.payment_received_at) {
+        throw new Error("This booking already has a payment — reopen it as a new booking instead.");
+      }
+      const reason = String(booking.auto_cancelled_reason || booking.cancel_reason || "");
+      const looksUnpaid =
+        reason === "unpaid_deposit" ||
+        /unpaid deposit/i.test(reason) ||
+        Boolean(booking.hosted_invoice_url || booking.stripe_invoice_id);
+      if (!looksUnpaid) {
+        throw new Error("This cancelled booking is not an unpaid-deposit auto-cancel.");
+      }
+
+      const nowIso = new Date().toISOString();
+      const noteLine = `Reinstated after unpaid-deposit auto-cancel ${nowIso.slice(0, 10)} (customer requested).`;
+      const prevNotes = String(booking.team_notes || "").trim();
+      const payUrl = await reissueDepositInvoice(admin, booking);
+
+      const { error: upErr } = await admin
+        .from("bookings")
+        .update({
+          status: "pending_payment",
+          cancel_reason: null,
+          cancelled_at: null,
+          auto_cancelled_reason: null,
+          cancel_fee_cents: 0,
+          pending_deposit_started_at: nowIso,
+          hosted_invoice_url: payUrl || booking.hosted_invoice_url || null,
+          updated_at: nowIso,
+          team_notes: prevNotes ? `${prevNotes}\n${noteLine}` : noteLine,
+        })
+        .eq("id", bookingId)
+        .eq("status", "cancelled");
+      if (upErr) throw new Error(`Reinstate failed: ${errMessage(upErr)}`);
+
+      await admin
+        .from("booking_emails_sent")
+        .delete()
+        .eq("booking_id", bookingId)
+        .in("kind", [
+          "pending_deposit_reminder_30m",
+          "pending_deposit_reminder_2h",
+          "pending_deposit_reminder_next_day_2h",
+          "pending_deposit_auto_cancelled",
+        ]);
+
+      const money = `$${((Number(booking.deposit_cents) || 0) / 100).toFixed(2)}`;
+      const when = [
+        booking.service_date ? formatServiceDate(booking.service_date) : null,
+        booking.time_slot ? formatTimeSlot(booking.time_slot) : null,
+      ].filter(Boolean).join(" · ");
+      const link = payUrl || booking.hosted_invoice_url;
+      if (booking.phone) {
+        await sendSms(admin, {
+          toPhone: booking.phone,
+          message:
+            `Novara Cleaning: Your cleaning${when ? ` (${when})` : ""} is reopened and pending the ${money} deposit.` +
+            (link ? ` Pay here: ${link}` : " Check your email for the invoice.") +
+            ` Call ${SUPPORT_PHONE_DISPLAY} with questions.`,
+          type: "confirmation",
+        });
+      }
+      if (booking.email && link) {
+        try {
+          const resendKey = await resolveSecret(admin, "RESEND_API_KEY");
+          if (resendKey) {
+            await fetch("https://api.resend.com/emails", {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${resendKey}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                from: "Novara Cleaning <hello@novaracleaning.com>",
+                to: [booking.email],
+                subject: `Your Novara cleaning is reopened — deposit needed`,
+                html: `<div style="font-family:Arial,sans-serif;font-size:15px;color:#0f172a;line-height:1.55;max-width:560px">
+                  <p>Hi ${booking.first_name || "there"},</p>
+                  <p>We reopened your cleaning${when ? ` on <strong>${when}</strong>` : ""}. It stays pending until we receive the ${money} deposit.</p>
+                  <p style="margin:20px 0"><a href="${link}" style="display:inline-block;background:#5C0FFE;color:#fff;text-decoration:none;padding:12px 18px;border-radius:6px;font-weight:600">Pay deposit ${money}</a></p>
+                  <p style="font-size:12px;color:#94a3b8">Questions? Call ${SUPPORT_PHONE_DISPLAY}</p>
+                </div>`,
+              }),
+            });
+          }
+        } catch (emailErr) {
+          console.warn("[admin-modify-booking] reinstate email failed", emailErr);
+        }
+      }
+
+      try {
+        await admin.from("events").insert({
+          event_type: "booking.reinstated_unpaid_deposit",
+          source: "admin-modify-booking",
+          summary: `Reinstated unpaid-deposit booking ${booking.booking_number || bookingId}`,
+          data: { booking_id: bookingId, by: actorId, pay_url: payUrl },
+        });
+      } catch (evErr) {
+        console.warn("[admin-modify-booking] event log failed (non-blocking)", evErr);
+      }
+
+      try {
+        await admin.functions.invoke("send-zapier-webhook", { body: { bookingId } });
+      } catch (e) {
+        console.error("[admin-modify-booking] GHL sync failed (non-critical):", e);
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, bookingId, status: "pending_payment", payUrl }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
       );
     }

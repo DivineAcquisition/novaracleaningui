@@ -130,6 +130,10 @@ interface BookingRow {
   created_at: string;
   uses_credit: boolean | null;
   cancel_reason: string | null;
+  cancelled_at?: string | null;
+  auto_cancelled_reason?: string | null;
+  stripe_invoice_id?: string | null;
+  pending_deposit_started_at?: string | null;
   service_duration?: number | null;
   add_ons?: string[] | null;
   membership_plan?: string | null;
@@ -207,6 +211,22 @@ const STATUS_OPTIONS = [
 
 const fmtMoney = (cents: number | null | undefined) =>
   cents == null ? "—" : `$${(cents / 100).toFixed(2)}`;
+
+function isAwaitingDeposit(booking: BookingRow): boolean {
+  return (
+    booking.status === "pending_payment" &&
+    !booking.payment_received_at &&
+    booking.uses_credit !== true &&
+    Boolean(booking.hosted_invoice_url || booking.stripe_invoice_id) &&
+    (booking.deposit_cents || 0) > 0
+  );
+}
+
+function isUnpaidDepositCancel(booking: BookingRow): boolean {
+  if (booking.status !== "cancelled" || booking.payment_received_at) return false;
+  const reason = `${booking.auto_cancelled_reason || ""} ${booking.cancel_reason || ""}`;
+  return /unpaid.?deposit/i.test(reason) || Boolean(booking.hosted_invoice_url || booking.stripe_invoice_id);
+}
 
 // ─── Property details ──────────────────────────────────────────────────────
 //
@@ -509,12 +529,20 @@ export default function AdminBookings() {
                       )}
                     </div>
                     <div className="col-span-12 md:col-span-1 flex md:justify-end">
-                      <Badge
-                        variant="outline"
-                        className={cn("text-[10px] capitalize border", STATUS_COLORS[statusKey] ?? "")}
-                      >
-                        {STATUS_LABELS[b.status || ""] ?? (b.status || "—").replaceAll("_", " ")}
-                      </Badge>
+                      <div className="flex flex-col items-end gap-0.5">
+                        <Badge
+                          variant="outline"
+                          className={cn("text-[10px] capitalize border", STATUS_COLORS[statusKey] ?? "")}
+                        >
+                          {STATUS_LABELS[b.status || ""] ?? (b.status || "—").replaceAll("_", " ")}
+                        </Badge>
+                        {isAwaitingDeposit(b) ? (
+                          <span className="text-[10px] text-amber-800">Deposit due</span>
+                        ) : null}
+                        {isUnpaidDepositCancel(b) ? (
+                          <span className="text-[10px] text-violet-800">Can reinstate</span>
+                        ) : null}
+                      </div>
                     </div>
                   </button>
                 );
@@ -2385,6 +2413,31 @@ function BookingSheet({
     }
   };
 
+  const reinstateUnpaidDeposit = async () => {
+    if (!booking) return;
+    if (
+      !confirm(
+        "Reopen this booking as pending deposit? The customer will be emailed and texted a new pay link. Use this when they asked to keep the date.",
+      )
+    ) {
+      return;
+    }
+    setWorking("reinstate");
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-modify-booking", {
+        body: { action: "reinstate_unpaid_deposit", bookingId: booking.id },
+      });
+      const outcome = await edgeResult(error, data);
+      if (!outcome.ok) throw new Error(outcome.error || "Reinstate failed");
+      toast.success("Booking reopened — deposit reminders start again.");
+      onMutated();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setWorking(null);
+    }
+  };
+
   const deleteBooking = async () => {
     if (
       !confirm(
@@ -2572,6 +2625,60 @@ function BookingSheet({
                 ) : null}
               </div>
             ) : null}
+
+            {isAwaitingDeposit(booking) ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-1">
+                <p className="text-sm font-semibold text-amber-950">Awaiting deposit</p>
+                <p className="text-xs text-amber-900">
+                  Reminders go out at 30 minutes, 2 hours, and 2 hours the next day.
+                  If it is still unpaid after that window, the booking auto-cancels.
+                  You can reinstate it here if the customer asks to keep the date.
+                </p>
+                {booking.hosted_invoice_url ? (
+                  <a
+                    href={booking.hosted_invoice_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs text-violet-700 underline"
+                  >
+                    Open deposit invoice
+                  </a>
+                ) : null}
+              </div>
+            ) : null}
+
+            {isUnpaidDepositCancel(booking) ? (
+              <Card className="border-violet-200 bg-violet-50/40">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-1.5">
+                    <RiArrowGoBackLine className="w-4 h-4 text-violet-700" />
+                    Reinstate booking
+                  </CardTitle>
+                  <CardDescription>
+                    Auto-cancelled because the deposit was not paid. Reopen it as pending
+                    if the customer requested this date back — they get a fresh pay link
+                    and the reminder window starts over.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {booking.cancel_reason ? (
+                    <p className="text-xs text-slate-600 whitespace-pre-wrap">{booking.cancel_reason}</p>
+                  ) : null}
+                  <Button
+                    className="w-full bg-violet-600 hover:bg-violet-700 text-white"
+                    onClick={() => void reinstateUnpaidDeposit()}
+                    disabled={working === "reinstate"}
+                  >
+                    {working === "reinstate" ? (
+                      <><RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> Reopening…</>
+                    ) : (
+                      <><RiArrowGoBackLine className="w-4 h-4 mr-2" /> Reinstate &amp; resend deposit link</>
+                    )}
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : null}
+
             {/* Summary */}
             <Card className="border-slate-200">
               <CardContent className="py-4 grid grid-cols-2 gap-y-2 text-sm">
@@ -2713,6 +2820,14 @@ function BookingSheet({
                 <span className="text-right capitalize">
                   {STATUS_LABELS[booking.status || ""] ?? (booking.status || "—").replaceAll("_", " ")}
                 </span>
+                {booking.status === "cancelled" && booking.cancel_reason ? (
+                  <>
+                    <span className="text-slate-500">Cancel reason</span>
+                    <span className="text-right whitespace-pre-wrap break-words text-xs">
+                      {booking.cancel_reason}
+                    </span>
+                  </>
+                ) : null}
                 <span className="text-slate-500">Add-ons</span>
                 <span className="text-right">
                   {currentAddOns.length

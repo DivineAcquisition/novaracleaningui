@@ -124,6 +124,11 @@ const OPTIONAL_COLS = [
   "reclean_qc_issue_id",
   "booking_channel",
   "team_notes",
+  "payment_received_at",
+  "stripe_invoice_id",
+  "auto_cancelled_reason",
+  "cancelled_at",
+  "pending_deposit_started_at",
 ];
 
 function matchesSearch(row: Record<string, unknown>, term: string): boolean {

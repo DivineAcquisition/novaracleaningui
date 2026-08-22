@@ -29,8 +29,10 @@ interface CancelRequest {
    *   • 'none'              → no refund (used for credit-only bookings)
    */
   refundType?: "auto" | "full" | "partial" | "none";
-  /** Origin tag — "customer_portal" | "sms_reply" | "admin" | "phone". */
+  /** Origin tag — "customer_portal" | "sms_reply" | "admin" | "phone" | "pending_deposit_auto_cancel". */
   source?: string;
+  /** Stored on bookings.auto_cancelled_reason when this is a system cancel. */
+  autoCancelledReason?: string;
 }
 
 Deno.serve(async (req) => {
@@ -49,7 +51,13 @@ Deno.serve(async (req) => {
   });
 
   try {
-    const { bookingId, cancelReason, refundType = "auto", source = "customer_portal" }: CancelRequest = await req.json();
+    const {
+      bookingId,
+      cancelReason,
+      refundType = "auto",
+      source = "customer_portal",
+      autoCancelledReason,
+    }: CancelRequest = await req.json();
     logStep("Processing cancellation", { bookingId, cancelReason, refundType, source });
 
     const { data: booking, error: bookingError } = await supabase
@@ -69,10 +77,20 @@ Deno.serve(async (req) => {
     }
 
     // ─── Fee calculation (server is the source of truth) ────────────
-    const feeDecision = decideCancelFee({
-      serviceDate: booking.service_date,
-      usesCredit: booking.uses_credit,
-    });
+    const unpaidDepositAuto =
+      source === "pending_deposit_auto_cancel" ||
+      (booking.status === "pending_payment" && !booking.payment_received_at);
+    const feeDecision = unpaidDepositAuto
+      ? {
+          feeCents: 0,
+          basis: "outside_window" as const,
+          hoursUntilService: 0,
+          copy: "",
+        }
+      : decideCancelFee({
+          serviceDate: booking.service_date,
+          usesCredit: booking.uses_credit,
+        });
     logStep("Fee decided", feeDecision);
 
     // ─── Stripe refund ──────────────────────────────────────────────
@@ -171,6 +189,9 @@ Deno.serve(async (req) => {
     };
     if (booking.completion_hold_status === "authorized") {
       updates.completion_hold_status = "voided";
+    }
+    if (autoCancelledReason || source === "pending_deposit_auto_cancel") {
+      updates.auto_cancelled_reason = autoCancelledReason || "unpaid_deposit";
     }
     const { error: updateError } = await supabase
       .from("bookings")
@@ -383,13 +404,19 @@ Deno.serve(async (req) => {
         const feeLine = feeDecision.feeCents > 0
           ? ` A $${(feeDecision.feeCents / 100).toFixed(0)} short-notice fee was applied.`
           : "";
+        const depositCancelSms =
+          `Novara Cleaning: We cancelled your cleaning` +
+          (booking.service_date ? ` on ${formatServiceDate(booking.service_date)}` : "") +
+          (booking.time_slot ? ` (${formatTimeSlot(booking.time_slot)})` : "") +
+          ` because the deposit was not received in time. If you still want this date, contact us and we can reopen it. Call ${SUPPORT_PHONE_DISPLAY}. Reply STOP to opt out.`;
+        const standardCancelSms =
+          `Novara Cleaning: Your cleaning` +
+          (booking.service_date ? ` on ${formatServiceDate(booking.service_date)}` : "") +
+          (booking.time_slot ? ` (${formatTimeSlot(booking.time_slot)})` : "") +
+          ` has been cancelled.${feeLine}${refundLine} Need to rebook? Call ${SUPPORT_PHONE_DISPLAY}. Reply STOP to opt out.`;
         await sendSms(supabase, {
           toPhone: booking.phone,
-          message:
-            `Novara Cleaning: Your cleaning` +
-            (booking.service_date ? ` on ${formatServiceDate(booking.service_date)}` : "") +
-            (booking.time_slot ? ` (${formatTimeSlot(booking.time_slot)})` : "") +
-            ` has been cancelled.${feeLine}${refundLine} Need to rebook? Call ${SUPPORT_PHONE_DISPLAY}. Reply STOP to opt out.`,
+          message: source === "pending_deposit_auto_cancel" ? depositCancelSms : standardCancelSms,
           type: "confirmation",
         });
       }
