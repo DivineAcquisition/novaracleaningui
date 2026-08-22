@@ -301,6 +301,11 @@ export function JobDetails({ job }: { job: PortalJob }) {
         <span className="flex items-center gap-1.5">
           <RiInformationLine className="w-3.5 h-3.5 text-primary" /> View job details
           {job.isReclean ? <RecleanBadge className="text-[10px] px-1.5 py-0" /> : null}
+          {(cd?.accessNotes || id?.teamNotes || id?.dispatchNotes) ? (
+            <span className="rounded-full bg-amber-100 px-1.5 py-0 text-[10px] font-semibold text-amber-800">
+              Notes
+            </span>
+          ) : null}
         </span>
         <RiArrowDownSLine className={cn("w-4 h-4 transition-transform", open && "rotate-180")} />
       </button>
@@ -326,7 +331,11 @@ export function JobDetails({ job }: { job: PortalJob }) {
               <DetailRow label="Pets" value={cd.pets ? titleCase(cd.pets) : null} />
               <DetailRow label="Frequency" value={cd.frequency ? titleCase(cd.frequency) : null} />
               <DetailRow label="Add-ons" value={cd.addOns.length ? cd.addOns.map(addonLabel).join(", ") : null} />
-              <DetailRow label="Access notes" value={cd.accessNotes} />
+              {cd.accessNotes ? (
+                <p className="mt-2 rounded-md bg-amber-50 border border-amber-200 px-2 py-1.5 text-[11px] text-amber-950 whitespace-pre-wrap">
+                  <strong>Access notes:</strong> {cd.accessNotes}
+                </p>
+              ) : null}
             </div>
           )}
           {id && (
@@ -360,8 +369,16 @@ export function JobDetails({ job }: { job: PortalJob }) {
                   <DetailRow label="— Extras (supplies/mileage/etc.)" value={money(job.pay.extrasCents)} />
                 </>
               )}
-              <DetailRow label="Dispatch notes" value={id.dispatchNotes} />
-              <DetailRow label="Office notes" value={id.teamNotes} />
+              {id.dispatchNotes ? (
+                <p className="mt-2 rounded-md bg-slate-50 border border-slate-200 px-2 py-1.5 text-[11px] text-slate-800 whitespace-pre-wrap">
+                  <strong>Dispatch notes:</strong> {id.dispatchNotes}
+                </p>
+              ) : null}
+              {id.teamNotes ? (
+                <p className="mt-2 rounded-md bg-violet-50 border border-violet-200 px-2 py-1.5 text-[11px] text-violet-950 whitespace-pre-wrap">
+                  <strong>Office notes:</strong> {id.teamNotes}
+                </p>
+              ) : null}
               {id.issuesFlag && <DetailRow label="Issue flagged" value={id.issuesNotes || "Yes"} />}
             </div>
           )}

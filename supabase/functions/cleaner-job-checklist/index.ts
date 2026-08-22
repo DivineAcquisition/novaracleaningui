@@ -224,7 +224,7 @@ serve(async (req) => {
 
     const { data: booking } = await supabase
       .from("bookings")
-      .select("id, booking_number, first_name, service_date, time_slot, arrival_window, add_ons, access_notes, service_type, status, focused_areas, is_recurring, membership_plan, booking_channel")
+      .select("id, booking_number, first_name, service_date, time_slot, arrival_window, add_ons, access_notes, team_notes, dispatch_notes, service_type, status, focused_areas, is_recurring, membership_plan, booking_channel")
       .eq("job_id", jobId)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -775,6 +775,8 @@ serve(async (req) => {
           service_date: booking.service_date,
           time_slot: booking.time_slot || booking.arrival_window,
           access_notes: booking.access_notes,
+          team_notes: booking.team_notes || null,
+          dispatch_notes: booking.dispatch_notes || null,
           add_ons: includedAddOns,
           focused_areas: focusedAreas,
         }
