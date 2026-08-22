@@ -36,6 +36,7 @@ import {
   RiSubtractLine,
   RiUserStarLine,
   RiLoginCircleLine,
+  RiStickyNoteLine,
 } from "@remixicon/react";
 import { useAdminRole } from "@/hooks/use-admin-role";
 import imageCompression from "browser-image-compression";
@@ -1835,6 +1836,10 @@ function BookingSheet({
   const [custCity, setCustCity] = useState("");
   const [custState, setCustState] = useState("");
   const [custZip, setCustZip] = useState("");
+  // Access + internal notes — shown on the assigned cleaner's dashboard
+  // (job details + checklist). Hidden from the customer.
+  const [accessNotes, setAccessNotes] = useState("");
+  const [teamNotes, setTeamNotes] = useState("");
   // Credit state (grants and removals both target the booking email's wallet).
   const [creditMode, setCreditMode] = useState<"grant" | "remove">("grant");
   const [creditAmount, setCreditAmount] = useState("");
@@ -1874,6 +1879,8 @@ function BookingSheet({
     setCustCity(booking.city || "");
     setCustState(booking.state || "");
     setCustZip(booking.zip_code || "");
+    setAccessNotes(booking.access_notes || "");
+    setTeamNotes(booking.team_notes || "");
     setSuppressReview(Boolean(booking.suppress_review_request));
     setCreditMode("grant");
     setCreditAmount("");
@@ -1904,7 +1911,7 @@ function BookingSheet({
     void (async () => {
       const { data } = await (supabase.from as any)("bookings")
         .select(
-          "add_ons, suppress_review_request, payment_option, payment_received_at, uses_credit, total_estimate_cents, final_charge_cents, deposit_cents, balance_amount_cents, completion_hold_status, completion_hold_amount_cents, completion_hold_captured_amount, completion_hold_captured_at, is_reclean, reclean_of_booking_id, reclean_scope, reclean_assessed_value_cents, reclean_qc_issue_id, booking_channel, team_notes",
+          "add_ons, suppress_review_request, payment_option, payment_received_at, uses_credit, total_estimate_cents, final_charge_cents, deposit_cents, balance_amount_cents, completion_hold_status, completion_hold_amount_cents, completion_hold_captured_amount, completion_hold_captured_at, is_reclean, reclean_of_booking_id, reclean_scope, reclean_assessed_value_cents, reclean_qc_issue_id, booking_channel, team_notes, access_notes",
         )
         .eq("id", booking.id)
         .maybeSingle();
@@ -1913,7 +1920,23 @@ function BookingSheet({
       if (data && typeof data.suppress_review_request === "boolean") {
         setSuppressReview(data.suppress_review_request);
       }
-      if (data) setMoneyPatch(data as Partial<BookingRow>);
+      if (data) {
+        setMoneyPatch(data as Partial<BookingRow>);
+        // Only overwrite the textareas when the operator hasn't started typing
+        // — otherwise a slow refresh would wipe an in-progress note.
+        const fromBookingAccess = String(booking.access_notes || "");
+        const fromBookingTeam = String(booking.team_notes || "");
+        if ("access_notes" in data) {
+          setAccessNotes((prev) =>
+            prev === fromBookingAccess ? String(data.access_notes || "") : prev,
+          );
+        }
+        if ("team_notes" in data) {
+          setTeamNotes((prev) =>
+            prev === fromBookingTeam ? String(data.team_notes || "") : prev,
+          );
+        }
+      }
       const seeded: Record<string, string> = {};
       for (const id of current) {
         const def = (ADD_ONS as Record<string, { price: number }>)[id]?.price;
@@ -2093,7 +2116,7 @@ function BookingSheet({
   };
 
   const MONEY_COLS =
-    "payment_option, payment_received_at, uses_credit, total_estimate_cents, final_charge_cents, deposit_cents, balance_amount_cents, completion_hold_status, completion_hold_amount_cents, completion_hold_captured_amount, completion_hold_captured_at, is_reclean, reclean_of_booking_id, reclean_scope, reclean_assessed_value_cents, reclean_qc_issue_id, booking_channel, team_notes";
+    "payment_option, payment_received_at, uses_credit, total_estimate_cents, final_charge_cents, deposit_cents, balance_amount_cents, completion_hold_status, completion_hold_amount_cents, completion_hold_captured_amount, completion_hold_captured_at, is_reclean, reclean_of_booking_id, reclean_scope, reclean_assessed_value_cents, reclean_qc_issue_id, booking_channel, team_notes, access_notes";
 
   const refreshMoney = async (bookingId: string) => {
     const [{ data }, { data: addonRows }] = await Promise.all([
@@ -2322,6 +2345,38 @@ function BookingSheet({
       if (!outcome.ok) throw new Error(outcome.error || "Update failed");
       toast.success("Customer info updated on this booking.");
       setCustomerOpen(false);
+      onMutated();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setWorking(null);
+    }
+  };
+
+  const saveJobNotes = async () => {
+    if (!booking) return;
+    const nextAccess = accessNotes.trim().slice(0, 2000);
+    const nextTeam = teamNotes.trim().slice(0, 2000);
+    setWorking("notes");
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-modify-booking", {
+        body: {
+          action: "update_job_notes",
+          bookingId: booking.id,
+          accessNotes: nextAccess,
+          teamNotes: nextTeam,
+        },
+      });
+      const outcome = await edgeResult(error, data);
+      if (!outcome.ok) throw new Error(outcome.error || "Update failed");
+      setAccessNotes(nextAccess);
+      setTeamNotes(nextTeam);
+      setMoneyPatch((prev) => ({
+        ...prev,
+        access_notes: nextAccess || null,
+        team_notes: nextTeam || null,
+      }));
+      toast.success("Notes saved — they show on the cleaner's job details and checklist.");
       onMutated();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
@@ -2571,13 +2626,21 @@ function BookingSheet({
                     <span className="text-right">{titleCase(booking.frequency)}</span>
                   </>
                 ) : null}
-                {booking.access_notes ? (
+                {moneyRow.access_notes ? (
                   <>
                     <span className="text-slate-500">Access</span>
                     {/* Gate codes and parking, so wrap rather than truncate —
                         a half-shown door code is useless. */}
                     <span className="text-right whitespace-pre-wrap break-words">
-                      {booking.access_notes}
+                      {moneyRow.access_notes}
+                    </span>
+                  </>
+                ) : null}
+                {moneyRow.team_notes ? (
+                  <>
+                    <span className="text-slate-500">Internal notes</span>
+                    <span className="text-right whitespace-pre-wrap break-words">
+                      {moneyRow.team_notes}
                     </span>
                   </>
                 ) : null}
@@ -2840,6 +2903,63 @@ function BookingSheet({
                     </div>
                   </>
                 )}
+              </CardContent>
+            </Card>
+
+            {/* Access + internal notes for the assigned cleaner */}
+            <Card className="border-slate-200">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-1.5">
+                  <RiStickyNoteLine className="w-4 h-4 text-violet-700" />
+                  Cleaner job notes
+                </CardTitle>
+                <CardDescription>
+                  Shown on the assigned cleaner&apos;s dashboard — job details and checklist.
+                  Not sent to the customer.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div>
+                  <Label className="text-xs">Access notes</Label>
+                  <p className="text-[11px] text-slate-500 mb-1">
+                    Gate code, lockbox, parking, pets, alarm — what the crew needs to get in.
+                  </p>
+                  <Textarea
+                    value={accessNotes}
+                    onChange={(e) => setAccessNotes(e.target.value.slice(0, 2000))}
+                    placeholder="Gate code, parking, pet info…"
+                    rows={3}
+                    className="whitespace-pre-wrap"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Internal / office notes</Label>
+                  <p className="text-[11px] text-slate-500 mb-1">
+                    Ops notes for this job. Visible to the cleaner as office notes, hidden from the customer.
+                  </p>
+                  <Textarea
+                    value={teamNotes}
+                    onChange={(e) => setTeamNotes(e.target.value.slice(0, 2000))}
+                    placeholder="Anything the crew should know before they start…"
+                    rows={3}
+                    className="whitespace-pre-wrap"
+                  />
+                </div>
+                <Button
+                  className="w-full bg-violet-600 hover:bg-violet-700 text-white"
+                  onClick={saveJobNotes}
+                  disabled={
+                    working === "notes" ||
+                    (accessNotes.trim() === (moneyRow.access_notes || "").trim() &&
+                      teamNotes.trim() === (moneyRow.team_notes || "").trim())
+                  }
+                >
+                  {working === "notes" ? (
+                    <><RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> Saving…</>
+                  ) : (
+                    <><RiCheckLine className="w-4 h-4 mr-2" /> Save notes for cleaner</>
+                  )}
+                </Button>
               </CardContent>
             </Card>
 

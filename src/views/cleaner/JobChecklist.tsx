@@ -116,6 +116,8 @@ interface ChecklistState {
     service_date: string | null;
     time_slot: string | null;
     access_notes: string | null;
+    team_notes?: string | null;
+    dispatch_notes?: string | null;
     add_ons: string[];
     focused_areas?: Array<{ areaId: string; quantity: number; label?: string }>;
   } | null;
@@ -542,8 +544,18 @@ export default function CleanerJobChecklistPage() {
             <p className="text-slate-500">Customer: {booking.first_name}</p>
           )}
           {booking?.access_notes && (
-            <p className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-amber-900 text-xs">
+            <p className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-amber-900 text-xs whitespace-pre-wrap">
               <strong>Access notes:</strong> {booking.access_notes}
+            </p>
+          )}
+          {booking?.team_notes && (
+            <p className="rounded-lg bg-violet-50 border border-violet-200 px-3 py-2 text-violet-950 text-xs whitespace-pre-wrap">
+              <strong>Office notes:</strong> {booking.team_notes}
+            </p>
+          )}
+          {booking?.dispatch_notes && (
+            <p className="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-slate-800 text-xs whitespace-pre-wrap">
+              <strong>Dispatch notes:</strong> {booking.dispatch_notes}
             </p>
           )}
           {booking && booking.add_ons.length > 0 && (

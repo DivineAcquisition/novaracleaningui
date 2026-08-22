@@ -16,6 +16,11 @@ import { documentBookingAddonsInQcSafe } from "../_shared/addon-qc.ts";
 //     Also mirrors the patch onto the linked customers + jobs rows when
 //     present so the directory / dispatch board don't go stale. No customer
 //     "service changed" blast — this is a records correction.
+//
+//   update_job_notes — access_notes + team_notes on THIS booking. Shown on
+//     the assigned cleaner's dashboard (job details + checklist). Not sent
+//     to the customer. Mirrors access_notes onto jobs.notes when a job row
+//     exists so dispatch/calendar stay in sync.
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -292,6 +297,73 @@ serve(async (req) => {
             state,
             zip_code: zipCode,
           },
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
+      );
+    }
+
+    // ── Access + internal notes for the assigned crew ─────────────────
+    // Allowed on any status — a gate-code correction on a completed job
+    // is still a records fix. No customer SMS/email. The cleaner portal
+    // and checklist read these columns on the next load.
+    if (action === "update_job_notes") {
+      const NOTE_MAX = 2000;
+      const accessNotes = String(body.accessNotes ?? body.access_notes ?? "").trim().slice(0, NOTE_MAX);
+      const teamNotes = String(body.teamNotes ?? body.team_notes ?? "").trim().slice(0, NOTE_MAX);
+
+      const bookingPatch: Record<string, unknown> = {
+        access_notes: accessNotes || null,
+        team_notes: teamNotes || null,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error: upErr } = await admin.from("bookings").update(bookingPatch).eq("id", bookingId);
+      if (upErr) throw new Error(`Booking update failed: ${errMessage(upErr)}`);
+
+      // jobs.notes is what auto-dispatch seeds from access_notes. Keep it
+      // aligned so the dispatch board / calendar don't show a stale code.
+      if (booking.job_id) {
+        const { error: jobErr } = await admin
+          .from("jobs")
+          .update({ notes: accessNotes || null })
+          .eq("id", booking.job_id);
+        if (jobErr) {
+          console.warn("[admin-modify-booking] job notes mirror failed (non-blocking)", errMessage(jobErr));
+        }
+      }
+
+      try {
+        await admin.from("events").insert({
+          event_type: "booking.job_notes_updated",
+          source: "admin-modify-booking",
+          summary: `Job notes updated on booking ${booking.booking_number || bookingId}`,
+          data: {
+            booking_id: bookingId,
+            by: actorId,
+            before: {
+              access_notes: booking.access_notes || null,
+              team_notes: booking.team_notes || null,
+            },
+            after: bookingPatch,
+          },
+        });
+      } catch (evErr) {
+        console.warn("[admin-modify-booking] event log failed (non-blocking)", evErr);
+      }
+
+      try {
+        await admin.functions.invoke("send-zapier-webhook", { body: { bookingId } });
+      } catch (e) {
+        console.error("[admin-modify-booking] GHL sync failed (non-critical):", e);
+      }
+
+      console.log("[admin-modify-booking] job notes updated", { bookingId, actorId });
+      return new Response(
+        JSON.stringify({
+          success: true,
+          bookingId,
+          access_notes: accessNotes || null,
+          team_notes: teamNotes || null,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
       );
