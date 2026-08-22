@@ -45,8 +45,28 @@ serve(async (req) => {
     // away. Every automatic caller (post-confirm fanout, Stripe webhook,
     // booking-confirm-comms) omits it, so those jobs park as
     // "Pending Approval" and ping the dispatch Discord channel instead.
-    const { bookingId, sendOffers } = await req.json();
-    logStep("Starting auto-dispatch", { bookingId, sendOffers: sendOffers === true });
+    const body = await req.json().catch(() => ({}));
+    const bookingId = body?.bookingId as string | undefined;
+    const sendOffers = body?.sendOffers === true;
+    const requestedCleanerIds = Array.isArray(body?.cleanerIds)
+      ? [...new Set(
+          (body.cleanerIds as unknown[])
+            .filter((id): id is string =>
+              typeof id === "string" &&
+              /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id),
+            ),
+        )]
+      : [];
+    const dispatchBody = (jobId: string) => ({
+      jobId,
+      approved: true,
+      ...(requestedCleanerIds.length > 0 ? { cleanerIds: requestedCleanerIds } : {}),
+    });
+    logStep("Starting auto-dispatch", {
+      bookingId,
+      sendOffers,
+      selectedCount: requestedCleanerIds.length,
+    });
 
     if (!bookingId) {
       throw new Error("Missing bookingId");
@@ -82,7 +102,7 @@ serve(async (req) => {
       // offers out now instead of returning early.
       if (sendOffers === true) {
         const { data: approvedDispatch, error: approvedErr } = await supabase.functions.invoke("dispatch-job", {
-          body: { jobId: booking.job_id, approved: true },
+          body: dispatchBody(booking.job_id),
         });
         if (approvedErr) throw new Error(`Dispatch failed: ${approvedErr.message}`);
         const approvedPayload = (approvedDispatch || {}) as Record<string, unknown>;
@@ -239,7 +259,7 @@ serve(async (req) => {
     if (autoOffers) {
       logStep("Dispatching cleaners (approved / auto-offers on)");
       const { data: dispatchResult, error: dispatchError } = await supabase.functions.invoke('dispatch-job', {
-        body: { jobId: job.id, approved: true }
+        body: dispatchBody(job.id),
       });
 
       if (dispatchError) {

@@ -54,6 +54,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const logStep = (step: string, details?: any) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
   console.log(`[DISPATCH] ${step}${detailsStr}`);
@@ -231,7 +233,20 @@ serve(async (req) => {
     // Explicit admin sign-off carried by the caller (Dispatch console /
     // Bookings "send offers", or auto-dispatch-booking after its own gate).
     const approved = body?.approved === true || body?.sendOffers === true;
-    logStep("Starting dispatch", { jobId, backfill, approved });
+    const requestedCleanerIds = Array.isArray(body?.cleanerIds)
+      ? [...new Set(
+          (body.cleanerIds as unknown[])
+            .filter((id): id is string => typeof id === "string" && UUID_RE.test(id)),
+        )]
+      : [];
+    const offerExactSelection = requestedCleanerIds.length > 0;
+    logStep("Starting dispatch", {
+      jobId,
+      backfill,
+      approved,
+      offerExactSelection,
+      requestedCount: requestedCleanerIds.length,
+    });
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
@@ -328,14 +343,20 @@ serve(async (req) => {
       .select("cleaner_id, status")
       .eq("job_id", jobId);
 
+    // Nearby ranking never re-texts someone who already answered this job.
+    // Admin-picked IDs only skip people who already have a live offer /
+    // assignment — declined or expired rows can be re-offered.
+    const liveOnJob = new Set([
+      "offered", "confirmed", "accepted", "assigned", "in progress", "broadcast",
+    ]);
+    const nearbyBlocked = new Set([
+      ...liveOnJob, "declined", "expired", "withdrawn", "broadcast_lost",
+    ]);
     const blockedCleanerIds = new Set(
       (existingOnJob || [])
         .filter((a: { status: string }) => {
           const s = String(a.status || "").toLowerCase();
-          return [
-            "offered", "confirmed", "accepted", "assigned", "in progress", "broadcast",
-            "declined", "expired", "withdrawn", "broadcast_lost",
-          ].includes(s);
+          return (offerExactSelection ? liveOnJob : nearbyBlocked).has(s);
         })
         .map((a: { cleaner_id: string }) => a.cleaner_id),
     );
@@ -355,33 +376,51 @@ serve(async (req) => {
     const dayAbbrev = jobDate.toLocaleDateString('en-US', { weekday: 'long' }).substring(0, 3);
 
     // STAGE 1: Hard Requirements Filtering
-    const { data: cleaners, error: cleanersError } = await supabase
-      .from("cleaners")
-      .select("*")
-      .eq("approved", true)
-      .eq("available_for_bookings", true)
-      .eq("status", "active")
-      .not("home_lat", "is", null)
-      .not("home_lng", "is", null);
+    // Admin-selected IDs: offer those people, not the nearby ranked pool.
+    let cleaners: any[] = [];
+    if (offerExactSelection) {
+      const { data: picked, error: pickedError } = await supabase
+        .from("cleaners")
+        .select("*")
+        .in("id", requestedCleanerIds);
+      if (pickedError) {
+        throw new Error(`Error fetching selected cleaners: ${pickedError.message}`);
+      }
+      const byId = new Map((picked ?? []).map((c: any) => [c.id, c]));
+      cleaners = requestedCleanerIds
+        .map((id) => byId.get(id))
+        .filter((c: any) => c && c.status !== "terminated");
+      slotsToFill = cleaners.length;
+      logStep(`Exact selection: ${cleaners.length} of ${requestedCleanerIds.length} usable`);
+    } else {
+      const { data: nearbyPool, error: cleanersError } = await supabase
+        .from("cleaners")
+        .select("*")
+        .eq("approved", true)
+        .eq("available_for_bookings", true)
+        .eq("status", "active")
+        .not("home_lat", "is", null)
+        .not("home_lng", "is", null);
 
-    if (cleanersError) {
-      throw new Error(`Error fetching cleaners: ${cleanersError.message}`);
+      if (cleanersError) {
+        throw new Error(`Error fetching cleaners: ${cleanersError.message}`);
+      }
+      cleaners = nearbyPool ?? [];
+      logStep(`Found ${cleaners.length} approved nearby-pool cleaners`);
     }
 
     if (!cleaners || cleaners.length === 0) {
-      logStep("No active cleaners in directory");
+      logStep("No cleaners available for this dispatch");
       return new Response(
         JSON.stringify({
           success: false,
           noCleanersAvailable: true,
           offersSent: 0,
-          reason: "no_active_cleaners",
+          reason: offerExactSelection ? "selected_cleaners_unavailable" : "no_active_cleaners",
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
-
-    logStep(`Found ${cleaners.length} approved cleaners`);
 
     // Get upcoming jobs count for each cleaner. NOTE: a PostgREST
     // `.gte("jobs.start_datetime", …)` filter on the embedded `jobs`
@@ -443,6 +482,38 @@ serve(async (req) => {
       if (blockedCleanerIds.has(cleaner.id)) continue;
 
       const upcomingCount = upcomingJobsMap.get(cleaner.id) || 0;
+
+      // Admin named these people — do not drop them for distance, capacity,
+      // preferred-day, or missing home coords. Score is informational only.
+      if (offerExactSelection) {
+        let distance: number | null = null;
+        let matchScore = 0;
+        let breakdown = {
+          location: 0,
+          rating: 0,
+          workload: 0,
+          performance: 0,
+          works_today: true,
+        };
+        if (job.lat && job.lng && cleaner.home_lat && cleaner.home_lng) {
+          const result = scoreCleanerForJob(
+            { ...cleaner, upcoming_jobs_count: upcomingCount },
+            { lat: job.lat, lng: job.lng, weekday: dayAbbrev },
+          );
+          distance = result.distance != null ? Math.round(result.distance * 10) / 10 : null;
+          matchScore = Math.round(result.score * 10) / 10;
+          breakdown = result.breakdown ?? breakdown;
+        }
+        scoredCandidates.push({
+          ...cleaner,
+          distance_miles: distance,
+          upcoming_jobs_count: upcomingCount,
+          match_score: matchScore,
+          score_breakdown: breakdown,
+        });
+        continue;
+      }
+
       const result = scoreCleanerForJob(
         { ...cleaner, upcoming_jobs_count: upcomingCount },
         { lat: job.lat, lng: job.lng, weekday: dayAbbrev },
@@ -495,17 +566,22 @@ serve(async (req) => {
           success: false,
           noCleanersAvailable: true,
           offersSent: 0,
-          reason: "no_qualified_candidates",
+          reason: offerExactSelection ? "selected_already_on_job" : "no_qualified_candidates",
           openSlots: slotsToFill,
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    logStep(`${scoredCandidates.length} qualified candidates found`);
+    logStep(`${scoredCandidates.length} qualified candidates found`, { offerExactSelection });
 
-    // STAGE 3: Sort by match score and select top N
-    scoredCandidates.sort((a, b) => b.match_score - a.match_score);
+    // STAGE 3: Nearby ranks by score. Exact selection keeps checkbox order
+    // (first checked = Lead when the job has no confirmed lead yet).
+    if (!offerExactSelection) {
+      scoredCandidates.sort((a, b) => b.match_score - a.match_score);
+    } else {
+      slotsToFill = scoredCandidates.length;
+    }
 
     const selectedCleaners = scoredCandidates.slice(0, slotsToFill);
 
@@ -610,15 +686,19 @@ serve(async (req) => {
 
     const { data: createdAssignments, error: assignError } = await supabase
       .from("job_assignments")
-      .insert(assignments)
+      .upsert(assignments, { onConflict: "job_id,cleaner_id" })
       .select("*, cleaners(*)");
 
     if (assignError) {
       throw new Error(`Error creating assignments: ${assignError.message}`);
     }
 
-    // STAGE 5: SMS proximity-selected cleaners (10 min window, dedicated from #)
-    logStep("Sending job-offer SMS to auto-selected cleaners");
+    // STAGE 5: SMS selected or proximity-ranked cleaners (dedicated from #)
+    logStep(
+      offerExactSelection
+        ? "Sending job-offer SMS to admin-selected cleaners"
+        : "Sending job-offer SMS to auto-selected cleaners",
+    );
     const teamSize = Math.max(1, selectedCleaners.length);
     // The pool is the sum of the crew's individual shares, which varies with crew
     // composition — an all-Foundation crew costs less than an all-Elite one. It is
