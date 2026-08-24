@@ -196,7 +196,21 @@ export async function POST(req: Request): Promise<NextResponse> {
     const needsReview = !expiration;
     const before = await statusOf();
 
+    // Superseding and recording are two statements, and only one certificate
+    // may be in force at a time. If the second fails after the first
+    // succeeded, the account would be left with no cover at all — blocked by a
+    // failed upload, which is a worse outcome than the upload simply not
+    // working. Remember what was displaced so it can be put back.
+    let displacedId: string | null = null;
     if (!needsReview) {
+      const { data: prior } = await supabase
+        .from("commercial_coi_documents")
+        .select("id")
+        .eq("business_account_id", accountId)
+        .eq("lifecycle", "current")
+        .maybeSingle();
+      displacedId = (prior as { id?: string } | null)?.id ?? null;
+
       // The prior certificate is superseded, never overwritten — "were we
       // covered on the day of that job" is a question asked after the fact.
       const { error: supersedeErr } = await supabase
@@ -233,7 +247,14 @@ export async function POST(req: Request): Promise<NextResponse> {
       })
       .select(DOC_COLS)
       .maybeSingle();
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) {
+      if (displacedId) {
+        await supabase.from("commercial_coi_documents")
+          .update({ lifecycle: "current", updated_at: new Date().toISOString() })
+          .eq("id", displacedId);
+      }
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     const savedDoc = (doc || null) as Record<string, any> | null;
 
     const after = await statusOf();
@@ -306,6 +327,11 @@ export async function POST(req: Request): Promise<NextResponse> {
       );
     }
     const before = await statusOf();
+    const { data: prior } = await supabase
+      .from("commercial_coi_documents")
+      .select("id").eq("business_account_id", accountId).eq("lifecycle", "current").maybeSingle();
+    const displacedId = (prior as { id?: string } | null)?.id ?? null;
+
     await supabase.from("commercial_coi_documents")
       .update({ lifecycle: "superseded", updated_at: new Date().toISOString() })
       .eq("business_account_id", accountId).eq("lifecycle", "current");
@@ -320,7 +346,16 @@ export async function POST(req: Request): Promise<NextResponse> {
       verified_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }).eq("id", documentId).eq("business_account_id", accountId);
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) {
+      // Same reasoning as upload: a failed promotion must not leave the
+      // account with nothing in force.
+      if (displacedId) {
+        await supabase.from("commercial_coi_documents")
+          .update({ lifecycle: "current", updated_at: new Date().toISOString() })
+          .eq("id", displacedId);
+      }
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
 
     const after = await statusOf();
     let released = 0;
