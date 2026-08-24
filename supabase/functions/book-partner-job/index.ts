@@ -15,8 +15,10 @@
 // different at this size:
 //   • a SITE under the account — a commercial job is never a loose address
 //   • a current COI and a signed agreement on the ACCOUNT — the same
-//     "nothing goes live without agreement + payment" rule, and an account
-//     level gap blocks every site under it
+//     "nothing goes live without agreement + payment" rule, enforced over
+//     time rather than checked once at signing. A certificate that was valid
+//     at onboarding and has since expired blocks exactly as hard as one that
+//     was never provided, and the gap blocks every site under the account.
 //   • at or above the walkthrough threshold, a completed walkthrough with a
 //     firm price — a 30,000 sqft facility has too many variables to price
 //     sight-unseen, and being wrong at that size is expensive both ways

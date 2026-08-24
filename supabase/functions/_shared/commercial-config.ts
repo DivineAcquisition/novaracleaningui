@@ -120,6 +120,25 @@ export interface AccountCompliance {
 /** Where an admin goes to fix a COI gap, named in every block message. */
 export const COI_CONSOLE_PATH = "/admin/partner?tab=compliance";
 
+// ─── Where the block is enforced ───────────────────────────────────────────
+//
+// accountCompliance() is called from every point at which a commercial job
+// moves toward a crew standing on a client's floor:
+//
+//   book-partner-job          confirming a booking (and therefore converting a
+//                             walkthrough's firm price into one)
+//   partner-jobs-generate     auto-generating a recurring visit — held, not
+//                             skipped and not created anyway
+//   admin-booking-assign      assigning or reassigning a crew
+//   dispatch-job              sending offers
+//   accept-job-offer          a cleaner accepting an offer that was sent while
+//                             the certificate was still valid
+//   reassign-booking-cleaner  a cleaner handing the job to a crewmate
+//
+// The last two matter because time passes between offer and acceptance. A
+// gate that only runs when ops clicks something is not a gate on the day the
+// certificate lapses and nobody clicks anything.
+
 /**
  * The message a blocked action shows.
  *

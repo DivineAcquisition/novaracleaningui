@@ -15,6 +15,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { notifyCleanerOfAssignment } from "../_shared/notify-cleaner-assignment.ts";
 import { sendSms, formatServiceDate, formatTimeSlot } from "../_shared/sms.ts";
+import { accountCompliance, logComplianceBlock } from "../_shared/commercial-config.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -50,13 +51,34 @@ serve(async (req) => {
     // The booking must currently belong to the caller.
     const { data: booking, error: bErr } = await admin
       .from("bookings")
-      .select("id, booking_number, first_name, last_name, address, city, state, zip_code, service_type, service_date, time_slot, arrival_window, total_estimate_cents, final_charge_cents, num_cleaners_assigned, cleaner_id, status, job_id")
+      .select("id, booking_number, first_name, last_name, address, city, state, zip_code, service_type, service_date, time_slot, arrival_window, total_estimate_cents, final_charge_cents, num_cleaners_assigned, cleaner_id, status, job_id, business_account_id")
       .eq("id", bookingId)
       .maybeSingle();
     if (bErr) throw bErr;
     if (!booking) return json({ error: "Booking not found" }, 404);
     if (booking.cleaner_id !== fromCleanerId) {
       return json({ error: "This job isn't assigned to you anymore." }, 403);
+    }
+
+    // Commercial compliance: a hand-off is a reassignment, and reassignment is
+    // a dispatch point. If the client's certificate has lapsed since this job
+    // was booked, nobody goes — including the crewmate being handed it.
+    if (booking.business_account_id) {
+      const compliance = await accountCompliance(admin, String(booking.business_account_id));
+      if (!compliance.ok) {
+        await logComplianceBlock(admin, {
+          compliance,
+          action: "Crew hand-off",
+          bookingId: booking.id,
+          detail: { from_cleaner_id: fromCleanerId, to_cleaner_id: toCleanerId },
+        });
+        return json({
+          error:
+            "This job is on hold — the client's certificate of insurance isn't current, so it can't be " +
+            "handed to anyone right now. The office has been told.",
+          code: "account_compliance_blocked",
+        }, 409);
+      }
     }
     if (["completed", "cancelled"].includes(String(booking.status))) {
       return json({ error: `Can't hand off a ${booking.status} job.` }, 400);

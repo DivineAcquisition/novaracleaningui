@@ -19,6 +19,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { runJobDispatchBackfill } from "../_shared/dispatch-backfill.ts";
 import { checklistUrlForToken, ensureJobChecklist } from "../_shared/job-checklist.ts";
 import { checkScheduleBuffer } from "../_shared/schedule-buffer.ts";
+import { accountCompliance, logComplianceBlock } from "../_shared/commercial-config.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -165,11 +166,38 @@ serve(async (req) => {
     // and the office finds out there's a job still to staff.
     const { data: acceptBooking } = await supabase
       .from("bookings")
-      .select("id")
+      .select("id, business_account_id")
       .eq("job_id", assignment.job_id)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
+
+    // Commercial compliance: an offer sent while the account was covered can
+    // be accepted days later, by which time the certificate may have lapsed.
+    // Acceptance is the moment a cleaner is actually committed to the site, so
+    // it is a dispatch point and gets the same gate.
+    if (acceptBooking?.business_account_id) {
+      const compliance = await accountCompliance(supabase, String(acceptBooking.business_account_id));
+      if (!compliance.ok) {
+        await logComplianceBlock(supabase, {
+          compliance,
+          action: "Offer acceptance",
+          bookingId: acceptBooking.id,
+          detail: { job_id: assignment.job_id, cleaner_id: assignment.cleaner_id },
+        });
+        return new Response(
+          JSON.stringify({
+            ok: false,
+            reason: "account_compliance_blocked",
+            message:
+              "This job is on hold — the client's certificate of insurance isn't current, " +
+              "so we can't send anyone to the site. The office has been told; nothing for you to do.",
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 409 },
+        );
+      }
+    }
+
     if (acceptBooking?.id) {
       const bufferCheck = await checkScheduleBuffer(supabase, {
         bookingId: acceptBooking.id,
