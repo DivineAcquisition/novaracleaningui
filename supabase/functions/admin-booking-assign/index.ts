@@ -34,6 +34,12 @@ import {
 } from "../_shared/schedule-buffer.ts";
 import { computeCrewPay, shareFor } from "../_shared/crew-pay.ts";
 import { jobValueForPay } from "../_shared/reclean.ts";
+import {
+  accountCompliance,
+  COI_CONSOLE_PATH,
+  complianceBlockMessage,
+  logComplianceBlock,
+} from "../_shared/commercial-config.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -318,19 +324,26 @@ serve(async (req) => {
     if (cleanerIds.length === 0) return json({ error: "cleanerIds required (1–12)" }, 400);
 
     // Commercial compliance gate: a signed agreement and a current COI are
-    // required to dispatch, not only to book. A certificate that was valid at
-    // booking time can lapse before the visit, and the account-level gap
-    // applies to every site under it.
+    // required to DISPATCH, not only to book. A certificate that was valid on
+    // the day the job was booked can lapse before the visit, and sending a
+    // crew to a site we are no longer insured to be on is the failure this
+    // exists to prevent. The gap sits on the account, so it applies to every
+    // site under it.
     if (booking.business_account_id) {
-      const { data: compliance } = await admin.rpc("commercial_account_compliance", {
-        p_account_id: booking.business_account_id,
-      });
-      if (compliance && compliance.ok === false) {
-        const blockers = Array.isArray(compliance.blockers) ? compliance.blockers : [];
+      const compliance = await accountCompliance(admin, String(booking.business_account_id));
+      if (!compliance.ok) {
+        await logComplianceBlock(admin, {
+          compliance,
+          action: "Crew assignment",
+          bookingId,
+          detail: { cleaner_ids: cleanerIds, service_date: booking.service_date },
+        });
         return json({
-          error: `Can't dispatch this job — ${blockers.join(" ")} Compliance sits on the account, so it blocks every site under it.`,
+          error: complianceBlockMessage(compliance, "Assigning a crew to this job"),
           code: "account_compliance_blocked",
-          blockers,
+          blockers: compliance.blockers,
+          coiStatus: compliance.coi_status,
+          fixPath: COI_CONSOLE_PATH,
         }, 409);
       }
     }

@@ -84,23 +84,77 @@ export async function loadCommercialConfig(admin: SB): Promise<CommercialPricing
 
 // ─── Account compliance ────────────────────────────────────────────────────
 
+export type CoiStatus = "not_on_file" | "current" | "expiring_soon" | "expired";
+
+export interface CoiOverride {
+  id: string;
+  reason: string;
+  expires_at: string;
+  created_by_name?: string | null;
+  created_at?: string;
+}
+
+export interface CoiState {
+  status: CoiStatus;
+  blocked: boolean;
+  expiration_date: string | null;
+  days_remaining: number | null;
+  documents_in_review: number;
+  override: CoiOverride | null;
+}
+
 export interface AccountCompliance {
   ok: boolean;
   blockers: string[];
   warnings: string[];
+  account_id?: string;
+  business_name?: string | null;
   agreement_signed_at?: string | null;
   coi_expires_at?: string | null;
   coi_sent_at?: string | null;
+  coi_status?: CoiStatus;
+  coi?: CoiState | null;
+  active_site_count?: number;
+}
+
+/** Where an admin goes to fix a COI gap, named in every block message. */
+export const COI_CONSOLE_PATH = "/admin/partner?tab=compliance";
+
+/**
+ * The message a blocked action shows.
+ *
+ * Every enforcement point says the same three things — which account, what is
+ * missing, and where to fix it — because a block a person cannot act on is
+ * just an error they will route around.
+ */
+export function complianceBlockMessage(
+  compliance: AccountCompliance,
+  action: string,
+): string {
+  const name = compliance.business_name || "This account";
+  const sites = Number(compliance.active_site_count) || 0;
+  const cascade = sites > 1
+    ? ` This applies to all ${sites} of the account's sites, not just this one.`
+    : "";
+  const fix = compliance.coi_status && compliance.coi_status !== "current"
+    ? ` Upload a current certificate under Partnerships → Compliance (${COI_CONSOLE_PATH}) and the block lifts immediately.`
+    : "";
+  return `${action} is blocked for ${name} — ${compliance.blockers.join(" ")}${cascade}${fix}`;
 }
 
 /**
  * Whether this account may have work confirmed and dispatched.
  *
- * The check lives in SQL (commercial_account_compliance) so the admin console,
- * the booking function, and any report all read the same rule. If the RPC is
- * unavailable the same logic is applied to the account row directly rather
- * than failing open — a compliance gate that disappears when a function is
- * missing is not a gate.
+ * The rule lives in SQL (commercial_account_compliance), which computes COI
+ * status from the expiry date on every read, so the admin console, the booking
+ * function, the recurring generator, and dispatch cannot disagree about
+ * whether an account is covered.
+ *
+ * If the RPC is unavailable the same logic is applied to the account row
+ * directly rather than failing open — a compliance gate that disappears when a
+ * function is missing is not a gate. The fallback deliberately ignores
+ * overrides: it cannot verify one, and guessing in the permissive direction is
+ * the wrong way to be wrong about insurance.
  */
 export async function accountCompliance(
   admin: SB,
@@ -111,32 +165,50 @@ export async function accountCompliance(
   });
   if (!error && data && typeof data === "object") {
     const d = data as Record<string, unknown>;
+    const coi = (d.coi && typeof d.coi === "object" ? d.coi : null) as Record<string, unknown> | null;
     return {
       ok: d.ok === true,
       blockers: Array.isArray(d.blockers) ? (d.blockers as string[]) : [],
       warnings: Array.isArray(d.warnings) ? (d.warnings as string[]) : [],
+      account_id: (d.account_id as string) ?? accountId,
+      business_name: (d.business_name as string) ?? null,
       agreement_signed_at: (d.agreement_signed_at as string) ?? null,
       coi_expires_at: (d.coi_expires_at as string) ?? null,
       coi_sent_at: (d.coi_sent_at as string) ?? null,
+      coi_status: (d.coi_status as CoiStatus) ?? undefined,
+      active_site_count: Number(d.active_site_count) || 0,
+      coi: coi
+        ? {
+          status: (coi.status as CoiStatus) || "not_on_file",
+          blocked: coi.blocked === true,
+          expiration_date: (coi.expiration_date as string) ?? null,
+          days_remaining: coi.days_remaining == null ? null : Number(coi.days_remaining),
+          documents_in_review: Number(coi.documents_in_review) || 0,
+          override: (coi.override as CoiOverride) ?? null,
+        }
+        : null,
     };
   }
 
   const { data: acct } = await admin
     .from("business_accounts")
-    .select("status, agreement_signed_at, coi_sent_at, coi_expires_at")
+    .select("business_name, status, agreement_signed_at, coi_sent_at, coi_expires_at")
     .eq("id", accountId).maybeSingle();
   if (!acct) return { ok: false, blockers: ["Account not found."], warnings: [] };
 
   const blockers: string[] = [];
   const warnings: string[] = [];
   const today = new Date().toISOString().slice(0, 10);
+  const expiry = acct.coi_expires_at ? String(acct.coi_expires_at).slice(0, 10) : null;
+  let status: CoiStatus = "not_on_file";
   if (!acct.agreement_signed_at) blockers.push("No signed agreement on the account.");
-  if (acct.coi_expires_at && String(acct.coi_expires_at).slice(0, 10) < today) {
-    blockers.push(`Certificate of insurance expired ${String(acct.coi_expires_at).slice(0, 10)}.`);
-  } else if (!acct.coi_expires_at && !acct.coi_sent_at) {
-    blockers.push("No certificate of insurance on file.");
-  } else if (!acct.coi_expires_at) {
-    warnings.push("Certificate of insurance on file has no recorded expiry date.");
+  if (expiry && expiry < today) {
+    status = "expired";
+    blockers.push(`Certificate of insurance expired ${expiry}.`);
+  } else if (expiry) {
+    status = "current";
+  } else {
+    blockers.push("No current certificate of insurance on file.");
   }
   if (acct.status === "offboarded") blockers.push("Account is offboarded.");
 
@@ -144,10 +216,45 @@ export async function accountCompliance(
     ok: blockers.length === 0,
     blockers,
     warnings,
+    account_id: accountId,
+    business_name: acct.business_name ?? null,
     agreement_signed_at: acct.agreement_signed_at ?? null,
     coi_expires_at: acct.coi_expires_at ?? null,
     coi_sent_at: acct.coi_sent_at ?? null,
+    coi_status: status,
   };
+}
+
+/**
+ * Record that a block actually fired.
+ *
+ * A gate nobody can see the effect of is indistinguishable from a bug report
+ * about "the button doesn't work", so every refusal lands on the events bus
+ * with the account and the reason.
+ */
+export async function logComplianceBlock(
+  admin: SB,
+  args: {
+    compliance: AccountCompliance;
+    action: string;
+    bookingId?: string | null;
+    detail?: Record<string, unknown>;
+  },
+): Promise<void> {
+  await admin.from("events").insert({
+    event_type: "coi.block.enforced",
+    booking_id: args.bookingId || null,
+    source: "commercial-compliance",
+    summary: `${args.action} blocked — ${args.compliance.business_name || "account"}: ${args.compliance.blockers.join(" ")}`,
+    data: {
+      account_id: args.compliance.account_id,
+      action: args.action,
+      blockers: args.compliance.blockers,
+      coi_status: args.compliance.coi_status,
+      active_site_count: args.compliance.active_site_count,
+      ...(args.detail || {}),
+    },
+  }).then(() => undefined, () => undefined);
 }
 
 // ─── Walkthroughs ──────────────────────────────────────────────────────────

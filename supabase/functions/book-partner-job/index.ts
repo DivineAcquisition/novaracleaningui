@@ -48,8 +48,11 @@ import {
 } from "../_shared/commercial-pricing.ts";
 import {
   accountCompliance,
+  COI_CONSOLE_PATH,
+  complianceBlockMessage,
   latestCompletedWalkthrough,
   loadCommercialConfig,
+  logComplianceBlock,
   walkthroughById,
   type WalkthroughRecord,
 } from "../_shared/commercial-config.ts";
@@ -272,13 +275,26 @@ serve(async (req) => {
       // Nothing goes live without a signed agreement and a current COI. The
       // gap is on the ACCOUNT, so it blocks every site under it — a second
       // location does not get to be an exception to the first one's paperwork.
+      //
+      // This runs before the walkthrough gate on purpose. A walkthrough can be
+      // scheduled and conducted at a blocked account — surveying a building
+      // does not require cover — but the firm price it produces cannot convert
+      // into a confirmed, dispatchable booking until the certificate is
+      // current, and that is the more fundamental refusal of the two.
       const compliance = await accountCompliance(admin, String(account.id));
       if (!compliance.ok) {
+        await logComplianceBlock(admin, {
+          compliance,
+          action: "Booking confirmation",
+          detail: { service_date: serviceDate, business_site_id: site?.id || null },
+        });
         return json({
           ok: false,
-          error: `${account.business_name} can't be booked yet — ${compliance.blockers.join(" ")}`,
+          error: complianceBlockMessage(compliance, "Confirming this booking"),
           code: "account_compliance_blocked",
           blockers: compliance.blockers,
+          coiStatus: compliance.coi_status,
+          fixPath: COI_CONSOLE_PATH,
         }, 409);
       }
       complianceWarnings = compliance.warnings;

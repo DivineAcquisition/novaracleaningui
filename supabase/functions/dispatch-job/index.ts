@@ -11,6 +11,12 @@ import { formatServiceDate, formatTimeSlot } from "../_shared/sms.ts";
 import { checkScheduleBuffer } from "../_shared/schedule-buffer.ts";
 import { computeCrewPay, shareFor } from "../_shared/crew-pay.ts";
 import { jobValueForPay } from "../_shared/reclean.ts";
+import {
+  accountCompliance,
+  COI_CONSOLE_PATH,
+  complianceBlockMessage,
+  logComplianceBlock,
+} from "../_shared/commercial-config.ts";
 
 // Pull the human-readable date + arrival window for a job from its linked
 // booking. We display the booking's stored time_slot (e.g. "8-12" →
@@ -472,18 +478,23 @@ serve(async (req) => {
     // every site under it. Offering the job anyway would put a crew on a site
     // we are not insured to be on.
     if (dispatchBooking?.business_account_id) {
-      const { data: compliance } = await supabase.rpc("commercial_account_compliance", {
-        p_account_id: dispatchBooking.business_account_id,
-      });
-      if (compliance && compliance.ok === false) {
-        const blockers = Array.isArray(compliance.blockers) ? compliance.blockers : [];
+      const compliance = await accountCompliance(supabase, String(dispatchBooking.business_account_id));
+      if (!compliance.ok) {
+        await logComplianceBlock(supabase, {
+          compliance,
+          action: "Offer dispatch",
+          bookingId: dispatchBooking.id,
+          detail: { job_id: jobId },
+        });
         return new Response(
           JSON.stringify({
             success: false,
             offersSent: 0,
-            error: `Offers held — ${blockers.join(" ")} Fix it on the account; it blocks every site under it.`,
+            error: complianceBlockMessage(compliance, "Sending offers for this job"),
             code: "account_compliance_blocked",
-            blockers,
+            blockers: compliance.blockers,
+            coiStatus: compliance.coi_status,
+            fixPath: COI_CONSOLE_PATH,
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 409 },
         );
