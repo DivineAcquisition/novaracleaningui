@@ -1,19 +1,20 @@
-import { Suspense } from "react";
-import AdminLayout from "@/components/admin/AdminLayout";
-import { ProtectedRoute } from "@/components/ProtectedRoute";
-import Partnerships from "@/views/admin/Partnerships";
+import { redirect } from "next/navigation";
 
-// Unified Partnerships console — Host Accounts (Airtable) + Turnover Ops (Supabase).
-export default function Page() {
-  return (
-    <ProtectedRoute requiredRole="admin_strict">
-      <AdminLayout>
-        <Suspense>
-          <Partnerships />
-        </Suspense>
-      </AdminLayout>
-    </ProtectedRoute>
-  );
+// Old Partnerships Hub URL. Tab aliases (proposals → pipeline, ops → str,
+// commercial → accounts, turnovers → str) are applied by the Commercial hub.
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>> | Record<string, string | string[] | undefined>;
+}) {
+  const params = await Promise.resolve(searchParams);
+  const qs = new URLSearchParams();
+  for (const [key, value] of Object.entries(params || {})) {
+    const v = Array.isArray(value) ? value[0] : value;
+    if (v) qs.set(key, v);
+  }
+  const suffix = qs.toString();
+  redirect(suffix ? `/admin/commercial?${suffix}` : "/admin/commercial");
 }
 
 export const dynamic = "force-dynamic";

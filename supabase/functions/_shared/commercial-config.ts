@@ -133,10 +133,10 @@ export interface AccountCompliance {
 }
 
 /** Where an admin goes to fix a COI gap, named in every block message. */
-export const COI_CONSOLE_PATH = "/admin/partner?tab=compliance";
+export const COI_CONSOLE_PATH = "/admin/commercial?tab=compliance";
 
 /** Where an admin goes to fix a proposal / agreement / billing gap. */
-export const DEAL_CONSOLE_PATH = "/admin/partner?tab=proposals";
+export const DEAL_CONSOLE_PATH = "/admin/commercial?tab=pipeline";
 
 // ─── Where the block is enforced ───────────────────────────────────────────
 //
@@ -180,12 +180,12 @@ export function complianceBlockMessage(
   const fixes: string[] = [];
   if (compliance.coi_status && compliance.coi_status !== "current") {
     fixes.push(
-      `Upload a current certificate under Partnerships → Compliance (${COI_CONSOLE_PATH}) and the block lifts immediately.`,
+      `Upload a current certificate under Commercial → Compliance (${COI_CONSOLE_PATH}) and the block lifts immediately.`,
     );
   }
   if (compliance.billing_configured === false || !compliance.agreement_signed_at) {
     fixes.push(
-      `The proposal, agreement and billing steps are under Partnerships → Proposals (${DEAL_CONSOLE_PATH}).`,
+      `The proposal, agreement and billing steps are under Commercial → Pipeline (${DEAL_CONSOLE_PATH}).`,
     );
   }
 
@@ -215,7 +215,7 @@ export async function accountCompliance(
     p_account_id: accountId,
   });
   if (!error && data && typeof data === "object") {
-    const d = data as Record<string, unknown>;
+    const d = data as unknown as Record<string, unknown>;
     const coi = (d.coi && typeof d.coi === "object" ? d.coi : null) as Record<string, unknown> | null;
     return {
       ok: d.ok === true,
@@ -340,7 +340,7 @@ export async function siteDispatchEligibility(
         "Could not confirm this site is cleared to dispatch. Nothing is dispatched on an unanswered check.",
     };
   }
-  const d = data as Record<string, unknown>;
+  const d = data as unknown as Record<string, unknown>;
   return {
     found: d.found === true,
     eligible: d.eligible === true,

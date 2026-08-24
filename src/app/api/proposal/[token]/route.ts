@@ -261,7 +261,7 @@ export async function POST(
           html: [
             `<p><strong>${by}</strong> asked for changes to proposal v${p.version} for <strong>${String(acct.business_name || "")}</strong>.</p>`,
             `<p style="border-left:3px solid #7c3aed;padding-left:12px;margin:16px 0;white-space:pre-wrap">${note.replace(/</g, "&lt;")}</p>`,
-            `<p>Build the revised version in Partnerships → Proposals. The current version has been retained and its link retired.</p>`,
+            `<p>Build the revised version in Commercial → Send Proposal. The current version has been retained and its link retired.</p>`,
           ].join(""),
         },
       });
@@ -401,7 +401,7 @@ export async function POST(
             chosen === "auto_pay"
               ? `<p>After signing you'll be asked to add a card or bank account for Auto-Pay. Nothing is charged at that point.</p>`
               : `<p>After signing you'll confirm the billing contact and invoicing terms. No payment details are collected.</p>`,
-            `<p>— Novara Cleaning Partnerships</p>`,
+            `<p>— Novara Cleaning</p>`,
           ].join(""),
         },
       });

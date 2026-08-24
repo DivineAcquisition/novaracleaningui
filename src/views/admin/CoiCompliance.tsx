@@ -44,6 +44,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import CompanyCoiPanel from "@/views/admin/CompanyCoiPanel";
 
 const BUCKET = "coi-documents";
 
@@ -193,6 +194,7 @@ export default function CoiCompliance() {
 
   return (
     <div className="space-y-3">
+      <CompanyCoiPanel />
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         <SummaryTile
           label="Blocked accounts" value={counts.expired + counts.not_on_file}

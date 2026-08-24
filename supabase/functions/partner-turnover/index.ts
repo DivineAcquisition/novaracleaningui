@@ -344,7 +344,7 @@ serve(async (req) => {
           { name: "Request", value: kindLabel, inline: true },
           { name: "Reason", value: (body.reason || "—").toString().slice(0, 500), inline: false },
         ],
-        description: "Action it in admin → Partnerships → crew, then mark the request resolved.",
+        description: "Action it in admin → Commercial → STR, then mark the request resolved.",
       }).catch(() => undefined);
 
       return json({ ok: true, requestId: reqRow.id });

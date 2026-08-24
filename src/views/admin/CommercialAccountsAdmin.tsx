@@ -29,6 +29,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { commercialTab } from "@/lib/commercial-proposal";
 
 export interface AccountRow {
   id: string;
@@ -462,10 +463,15 @@ export function AccountSheet({ account, onClose, reload }: { account: AccountRow
           <div className="rounded-lg border border-slate-200 p-3 space-y-2">
             <p className="text-xs font-bold text-slate-800">Onboarding actions</p>
             <div className="flex flex-wrap gap-2">
+              <Button size="sm" asChild>
+                <a href={commercialTab("send", { account: account.id })}>
+                  Send proposal
+                </a>
+              </Button>
               <Button size="sm" variant="outline" disabled={busy !== null}
                 onClick={() => void runAction("send_agreement", "Signing link created.")}>
                 {busy === "send_agreement" ? <RiLoader4Line className="w-3.5 h-3.5 mr-1 animate-spin" /> : null}
-                Send service agreement
+                Send signing link
               </Button>
               <Button size="sm" variant="outline" disabled={busy !== null}
                 onClick={() => void runAction("send_payment_link", "Payment setup link created.")}>
@@ -649,7 +655,7 @@ export function AccountSheet({ account, onClose, reload }: { account: AccountRow
           )}>
             <div className="flex items-center justify-between">
               <p className="text-xs font-bold text-slate-800">Certificate of insurance</p>
-              <a href="/admin/partner?tab=compliance"
+              <a href="/admin/commercial?tab=compliance"
                 className="text-[11px] font-semibold text-violet-700 hover:underline">
                 Manage in Compliance →
               </a>

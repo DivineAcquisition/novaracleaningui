@@ -93,7 +93,7 @@ serve(async (req) => {
       .gt("expires_at", new Date().toISOString());
 
     for (const raw of expiring || []) {
-      const p = raw as Record<string, unknown>;
+      const p = raw as unknown as Record<string, unknown>;
       // Once per proposal. A daily nudge on a commercial proposal reads as
       // desperation and is the fastest way to have the thread muted.
       const { count } = await admin
@@ -123,7 +123,7 @@ serve(async (req) => {
             `<p>Your proposal for <strong>${business}</strong> is open for ${days} more day${days === 1 ? "" : "s"}.</p>`,
             `<p><a href="https://commercial.novaracleaning.com/proposal/${String(p.token)}">Review the proposal</a></p>`,
             `<p>If the pricing or scope needs adjusting, use "Request changes" on the page and we'll send a revised version — no need to start over.</p>`,
-            `<p>— Novara Cleaning Partnerships</p>`,
+            `<p>— Novara Cleaning</p>`,
           ].join(""),
         );
       }
@@ -172,7 +172,7 @@ serve(async (req) => {
       .limit(200);
 
     for (const raw of stalled || []) {
-      const d = raw as Record<string, unknown>;
+      const d = raw as unknown as Record<string, unknown>;
       const signedDaysAgo = d.agreement_signed_at
         ? Math.floor((Date.now() - new Date(String(d.agreement_signed_at)).getTime()) / 86_400_000)
         : 0;
@@ -211,7 +211,7 @@ serve(async (req) => {
       .eq("lifecycle", "current");
 
     for (const raw of certs || []) {
-      const c = raw as Record<string, unknown>;
+      const c = raw as unknown as Record<string, unknown>;
       const days = c.expiration_date
         ? Math.ceil(
           (new Date(`${String(c.expiration_date)}T23:59:59Z`).getTime() - Date.now()) / 86_400_000,

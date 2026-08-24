@@ -147,6 +147,32 @@ export const BILLING_METHOD_LABELS: Record<BillingMethod, string> = {
   invoiced: "Invoiced",
 };
 
+/** Cadence cards on the send-proposal workspace — same role as the service-type cards on Internal Booking. */
+export const FREQUENCY_OPTIONS: Array<{ id: string; label: string; sub: string }> = [
+  { id: "weekly", label: "Weekly", sub: "~4.3 visits / month" },
+  { id: "2x / week", label: "Twice a week", sub: "~8.7 visits / month" },
+  { id: "3x / week", label: "3× a week", sub: "~13 visits / month" },
+  { id: "monthly", label: "Monthly", sub: "1 visit / month" },
+];
+
+export const BILLING_METHOD_OPTIONS: Array<{ id: BillingMethod; label: string; sub: string }> = [
+  { id: "invoiced", label: "Invoiced", sub: "Confirm contact, cycle, and net terms — no card" },
+  { id: "auto_pay", label: "Auto-Pay", sub: "Card or ACH captured after they sign, never charged now" },
+];
+
+export const TERM_OPTIONS: Array<{ id: "month_to_month" | "annual"; label: string; sub: string }> = [
+  { id: "month_to_month", label: "Month-to-month", sub: "Cancel with notice — the default" },
+  { id: "annual", label: "12-month term", sub: "Locked rate for the year" },
+];
+
+/** Canonical Commercial hub — old /admin/partner bookmarks redirect here. */
+export const COMMERCIAL_HUB_PATH = "/admin/commercial";
+
+export function commercialTab(tab: string, extra?: Record<string, string>): string {
+  const params = new URLSearchParams({ tab, ...(extra || {}) });
+  return `${COMMERCIAL_HUB_PATH}?${params.toString()}`;
+}
+
 export const PROPOSAL_STATUS_LABELS: Record<ProposalStatus, string> = {
   draft: "Draft",
   sent: "Sent",

@@ -111,7 +111,7 @@ const fmtD = (iso?: string | null) => (iso ? format(new Date(`${String(iso).slic
 export default function PartnershipAccounts() {
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<UnifiedAccount[]>([]);
-  const [typeFilter, setTypeFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("core");
   const [statusFilter, setStatusFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [openBiz, setOpenBiz] = useState<AccountRow | null>(null);
@@ -219,7 +219,9 @@ export default function PartnershipAccounts() {
   useEffect(() => { void load(); }, [load]);
 
   const filtered = useMemo(() => rows.filter((r) => {
-    if (typeFilter !== "all" && r.kind !== typeFilter) return false;
+    if (typeFilter === "core") {
+      if (r.kind === "str") return false;
+    } else if (typeFilter !== "all" && r.kind !== typeFilter) return false;
     if (statusFilter === "attention" && r.flags.length === 0) return false;
     if (statusFilter !== "all" && statusFilter !== "attention" && r.status !== statusFilter) return false;
     if (search) {
@@ -260,6 +262,7 @@ export default function PartnershipAccounts() {
         <Select value={typeFilter} onValueChange={setTypeFilter}>
           <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
           <SelectContent>
+            <SelectItem value="core">Commercial &amp; Office</SelectItem>
             <SelectItem value="all">All types</SelectItem>
             <SelectItem value="commercial">Commercial</SelectItem>
             <SelectItem value="office">Office</SelectItem>

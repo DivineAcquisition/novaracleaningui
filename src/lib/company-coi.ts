@@ -156,7 +156,7 @@ export async function sendCompanyCoi(
       ok: false,
       status: 409,
       error: !doc
-        ? "No company certificate of insurance is on file to send. Upload one under Partnerships → Compliance."
+        ? "No company certificate of insurance is on file to send. Upload one under Commercial → Compliance."
         : coiIsExpired(doc)
           ? "The company certificate on file has expired — upload the renewal before sending it to a client."
           : "The company certificate has no stored file.",
@@ -196,7 +196,7 @@ export async function sendCompanyCoi(
     `Carrier: ${doc.carrier || "—"}${doc.policy_number ? ` · Policy ${doc.policy_number}` : ""}<br/>Valid through: ${expires}`,
     doc.coverage_notes ? `Coverage: ${doc.coverage_notes}` : "",
     `We renew before this lapses and send the updated certificate automatically — you shouldn't need to ask for it.`,
-    `— Novara Cleaning Partnerships`,
+    `— Novara Cleaning`,
   ].filter(Boolean);
 
   const { error: mailError } = await supabase.functions.invoke("admin-send-email", {

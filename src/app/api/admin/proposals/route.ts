@@ -11,7 +11,9 @@
 //
 //   POST { action: … }
 //     create_draft        build the next version from the account's priced
-//                         sites. Refuses outright if any active site lacks a
+//                         sites. Pass send:true to mint the link and email
+//                         in the same click (Internal Booking's submit).
+//                         Refuses outright if any active site lacks a
 //                         firm price.
 //     update_draft        edit recipient, cadence, billing method, sites
 //     send                mint the link and email the decision-maker
@@ -89,6 +91,106 @@ async function emailOut(
 
 function paragraphs(lines: string[]): string {
   return lines.map((l) => `<p>${l}</p>`).join("");
+}
+
+const EMAIL_SIGN = "— Novara Cleaning";
+
+async function sendProposal(
+  supabase: Supa,
+  proposalId: string,
+  toOverride?: string | null,
+): Promise<
+  | { ok: true; link: string; emailed: boolean; emailError: string | null; expiresAt: string; version: number; totalPerVisitCents: number }
+  | { ok: false; error: string; status: number }
+> {
+  const { data: proposal } = await supabase.from("commercial_proposals")
+    .select(PROPOSAL_COLS).eq("id", proposalId).maybeSingle();
+  const p = row<Record<string, unknown>>(proposal);
+  if (!p) return { ok: false, error: "Proposal not found.", status: 404 };
+
+  if (!["draft", "sent"].includes(String(p.status))) {
+    return {
+      ok: false,
+      error: `A ${String(p.status).replace(/_/g, " ")} proposal cannot be sent. Build a new version.`,
+      status: 409,
+    };
+  }
+
+  const to = s(toOverride, 200) || (p.recipient_email as string | null);
+  if (!to) {
+    return {
+      ok: false,
+      error: "No recipient email on this proposal — add the decision-maker's address first.",
+      status: 400,
+    };
+  }
+
+  const { data: account } = await supabase.from("business_accounts")
+    .select("business_name").eq("id", p.business_account_id as string).maybeSingle();
+
+  const { data: days } = await supabase.rpc("commercial_proposal_setting_int", {
+    p_key: "proposal_expiry_days", p_default: 14,
+  });
+  const expiryDays = Number(days) || 14;
+  const expiresAt = new Date(Date.now() + expiryDays * 86400_000).toISOString();
+
+  // Resending keeps the same link — the recipient may have the first email
+  // still open — but pushes the expiry out.
+  let token = p.token as string | null;
+  if (!token) {
+    const { data: minted } = await supabase.rpc("mint_commercial_token");
+    token = String(minted || "");
+  }
+  if (!token) return { ok: false, error: "Could not mint a link.", status: 500 };
+
+  const { error } = await supabase.from("commercial_proposals").update({
+    status: "sent",
+    token,
+    expires_at: expiresAt,
+    sent_at: new Date().toISOString(),
+    sent_to: to,
+    recipient_email: to,
+    send_count: Number(p.send_count || 0) + 1,
+  }).eq("id", proposalId);
+  if (error) return { ok: false, error: error.message, status: 400 };
+
+  const link = proposalUrl(token);
+  const name = (p.recipient_name as string | null) || "there";
+  const business = (account as { business_name?: string } | null)?.business_name || "your facilities";
+  const monthly = p.estimated_monthly_cents
+    ? ` Estimated at ${money(Number(p.estimated_monthly_cents))} per month across every location.`
+    : "";
+
+  const mail = await emailOut(supabase, {
+    to,
+    subject: `Cleaning proposal for ${business} — Novara Cleaning`,
+    html: paragraphs([
+      `Hi ${name},`,
+      `Your cleaning proposal for <strong>${business}</strong> is ready to review.${monthly}`,
+      `It lists every location, the scope and crew we'd assign, and the per-visit rate — nothing to sign, and no payment details requested at this stage.`,
+      `<a href="${link}">Review the proposal</a>`,
+      `If anything needs adjusting, there's a "Request changes" option on the page — tell us what to change and we'll send a revised version.`,
+      `This proposal is open until ${new Date(expiresAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}.`,
+      EMAIL_SIGN,
+    ]),
+  });
+
+  await supabase.from("events").insert({
+    event_type: "commercial.proposal.sent",
+    source: "admin-proposals",
+    summary: `Proposal v${p.version} sent to ${to} for ${business} — ${money(Number(p.total_per_visit_cents || 0))} per visit across all sites.`,
+    data: { proposal_id: proposalId, account_id: p.business_account_id, version: p.version, to, emailed: mail.ok },
+  });
+
+  return {
+    ok: true,
+    link,
+    emailed: mail.ok,
+    emailError: mail.error || null,
+    expiresAt,
+    version: Number(p.version || 1),
+    totalPerVisitCents: Number(p.total_per_visit_cents || 0),
+  };
 }
 
 // ─── GET ───────────────────────────────────────────────────────────────────
@@ -238,7 +340,22 @@ export async function POST(req: Request): Promise<NextResponse> {
     const config = await loadCommercialConfigServer(supabase);
     const defaultFrequency = s(body.frequency, 80) || account.recurring_frequency || "weekly";
 
-    const rows: Array<Record<string, unknown>> = [];
+    // Per-site rate / cadence overrides from the send workspace. Same idea as
+    // Internal Booking's price override: the formula (or walkthrough) fills
+    // the box, typing a different number is a deliberate act.
+    const overrideMap = new Map<string, { cents: number | null; frequency: string | null }>();
+    if (Array.isArray(body.siteOverrides)) {
+      for (const raw of body.siteOverrides as Array<Record<string, unknown>>) {
+        const id = s(raw.siteId || raw.business_site_id, 60);
+        if (!id) continue;
+        overrideMap.set(id, {
+          cents: raw.perVisitPriceCents !== undefined ? int(raw.perVisitPriceCents) : null,
+          frequency: s(raw.frequency, 80),
+        });
+      }
+    }
+
+    const siteRows: Array<Record<string, unknown>> = [];
     let order = 0;
     for (const raw of ready.sites || []) {
       const site = raw as Record<string, unknown>;
@@ -267,7 +384,18 @@ export async function POST(req: Request): Promise<NextResponse> {
         source = "formula";
       }
 
-      rows.push({
+      const ov = overrideMap.get(String(site.site_id));
+      if (ov?.cents != null) {
+        if (ov.cents <= 0) {
+          return NextResponse.json(
+            { error: `${site.nickname} needs a rate above zero.` },
+            { status: 400 },
+          );
+        }
+        cents = ov.cents;
+      }
+
+      siteRows.push({
         business_site_id: site.site_id,
         nickname: String(site.nickname || "Site"),
         address: site.address ?? null,
@@ -277,7 +405,7 @@ export async function POST(req: Request): Promise<NextResponse> {
         crew_size: int(site.crew_size),
         service_window_start: site.service_window_start ?? null,
         service_window_end: site.service_window_end ?? null,
-        frequency: defaultFrequency,
+        frequency: ov?.frequency || defaultFrequency,
         per_visit_price_cents: cents,
         price_source: source,
         walkthrough_id: site.walkthrough_id ?? null,
@@ -286,7 +414,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       });
     }
 
-    if (!rows.length) {
+    if (!siteRows.length) {
       return NextResponse.json(
         { error: "This account has no priced sites to propose." },
         { status: 409 },
@@ -304,8 +432,8 @@ export async function POST(req: Request): Promise<NextResponse> {
       .order("version", { ascending: false }).limit(1).maybeSingle();
     const version = Number((maxRow as { version?: number } | null)?.version || 0) + 1;
 
-    const perVisit = totalPerVisitCents(rows as unknown as ProposalSite[]);
-    const monthly = estimatedMonthlyCents(rows as unknown as ProposalSite[], defaultFrequency);
+    const perVisit = totalPerVisitCents(siteRows as unknown as ProposalSite[]);
+    const monthly = estimatedMonthlyCents(siteRows as unknown as ProposalSite[], defaultFrequency);
 
     const { data: created, error } = await supabase.from("commercial_proposals").insert({
       business_account_id: accountId,
@@ -336,14 +464,43 @@ export async function POST(req: Request): Promise<NextResponse> {
     }
 
     const { error: siteErr } = await supabase.from("commercial_proposal_sites").insert(
-      rows.map((r) => ({ ...r, proposal_id: (created as { id: string }).id })),
+      siteRows.map((r) => ({ ...r, proposal_id: (created as { id: string }).id })),
     );
     if (siteErr) {
       await supabase.from("commercial_proposals").delete().eq("id", (created as { id: string }).id);
       return NextResponse.json({ error: siteErr.message }, { status: 400 });
     }
 
-    return NextResponse.json({ ok: true, proposalId: (created as { id: string }).id, version });
+    const proposalId = (created as { id: string }).id;
+    const payload: Record<string, unknown> = {
+      ok: true,
+      proposalId,
+      version,
+      totalPerVisitCents: perVisit,
+      estimatedMonthlyCents: monthly,
+    };
+
+    // Internal Booking submits and emails the pay link in one click. Send
+    // does the same for the proposal: one action, a live tokenized link.
+    if (body.send === true) {
+      const sent = await sendProposal(supabase, proposalId, s(body.recipientEmail, 200));
+      if (sent.ok === false) {
+        return NextResponse.json(
+          { ...payload, sent: false, error: sent.error },
+          { status: sent.status },
+        );
+      }
+      return NextResponse.json({
+        ...payload,
+        sent: true,
+        link: sent.link,
+        emailed: sent.emailed,
+        emailError: sent.emailError,
+        expiresAt: sent.expiresAt,
+      });
+    }
+
+    return NextResponse.json(payload);
   }
 
   // ── Edit a draft ───────────────────────────────────────────────────────
@@ -352,7 +509,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     if (!proposalId) return NextResponse.json({ error: "proposalId is required." }, { status: 400 });
 
     const { data: proposal } = await supabase.from("commercial_proposals")
-      .select("id, status, business_account_id").eq("id", proposalId).maybeSingle();
+      .select("id, status, business_account_id, proposed_frequency").eq("id", proposalId).maybeSingle();
     if (!proposal) return NextResponse.json({ error: "Proposal not found." }, { status: 404 });
     if ((proposal as { status: string }).status !== "draft") {
       return NextResponse.json(
@@ -365,6 +522,11 @@ export async function POST(req: Request): Promise<NextResponse> {
     if (body.recipientName !== undefined) patch.recipient_name = s(body.recipientName, 120);
     if (body.recipientEmail !== undefined) patch.recipient_email = s(body.recipientEmail, 200);
     if (body.recipientPhone !== undefined) patch.recipient_phone = s(body.recipientPhone, 40);
+    if (body.frequency !== undefined || body.proposedFrequency !== undefined) {
+      const freq = s(body.frequency ?? body.proposedFrequency, 80);
+      patch.proposed_frequency = freq;
+      patch.visits_per_month = visitsPerMonth(freq);
+    }
     if (body.term !== undefined) patch.term = s(body.term, 40) || "month_to_month";
     if (body.billingMethod !== undefined) patch.billing_method = body.billingMethod === "auto_pay" ? "auto_pay" : "invoiced";
     if (body.billingMethodLocked !== undefined) patch.billing_method_locked = body.billingMethodLocked === true;
@@ -405,10 +567,13 @@ export async function POST(req: Request): Promise<NextResponse> {
 
     const { data: sites } = await supabase.from("commercial_proposal_sites")
       .select(SITE_COLS).eq("proposal_id", proposalId);
-    const rows = (sites || []) as unknown as ProposalSite[];
-    const frequency = (patch.proposed_frequency as string) || undefined;
-    patch.total_per_visit_cents = totalPerVisitCents(rows);
-    patch.estimated_monthly_cents = estimatedMonthlyCents(rows, frequency);
+    const siteList = (sites || []) as unknown as ProposalSite[];
+    const frequency =
+      (patch.proposed_frequency as string) ||
+      (proposal as { proposed_frequency?: string | null }).proposed_frequency ||
+      undefined;
+    patch.total_per_visit_cents = totalPerVisitCents(siteList);
+    patch.estimated_monthly_cents = estimatedMonthlyCents(siteList, frequency);
 
     const { error } = await supabase.from("commercial_proposals").update(patch).eq("id", proposalId);
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
@@ -419,85 +584,15 @@ export async function POST(req: Request): Promise<NextResponse> {
   if (action === "send" || action === "resend") {
     const proposalId = s(body.proposalId, 60);
     if (!proposalId) return NextResponse.json({ error: "proposalId is required." }, { status: 400 });
-
-    const { data: proposal } = await supabase.from("commercial_proposals")
-      .select(PROPOSAL_COLS).eq("id", proposalId).maybeSingle();
-    const p = row<Record<string, unknown>>(proposal);
-    if (!p) return NextResponse.json({ error: "Proposal not found." }, { status: 404 });
-
-    if (!["draft", "sent"].includes(String(p.status))) {
-      return NextResponse.json(
-        { error: `A ${String(p.status).replace(/_/g, " ")} proposal cannot be sent. Build a new version.` },
-        { status: 409 },
-      );
-    }
-
-    const to = s(body.to, 200) || (p.recipient_email as string | null);
-    if (!to) {
-      return NextResponse.json(
-        { error: "No recipient email on this proposal — add the decision-maker's address first." },
-        { status: 400 },
-      );
-    }
-
-    const { data: account } = await supabase.from("business_accounts")
-      .select("business_name").eq("id", p.business_account_id as string).maybeSingle();
-
-    const { data: days } = await supabase.rpc("commercial_proposal_setting_int", {
-      p_key: "proposal_expiry_days", p_default: 14,
+    const sent = await sendProposal(supabase, proposalId, s(body.to, 200));
+    if (sent.ok === false) return NextResponse.json({ error: sent.error }, { status: sent.status });
+    return NextResponse.json({
+      ok: true,
+      link: sent.link,
+      emailed: sent.emailed,
+      emailError: sent.emailError,
+      expiresAt: sent.expiresAt,
     });
-    const expiryDays = Number(days) || 14;
-    const expiresAt = new Date(Date.now() + expiryDays * 86400_000).toISOString();
-
-    // Resending keeps the same link — the recipient may have the first email
-    // still open — but pushes the expiry out.
-    let token = p.token as string | null;
-    if (!token) {
-      const { data: minted } = await supabase.rpc("mint_commercial_token");
-      token = String(minted || "");
-    }
-    if (!token) return NextResponse.json({ error: "Could not mint a link." }, { status: 500 });
-
-    const { error } = await supabase.from("commercial_proposals").update({
-      status: "sent",
-      token,
-      expires_at: expiresAt,
-      sent_at: new Date().toISOString(),
-      sent_to: to,
-      recipient_email: to,
-      send_count: Number(p.send_count || 0) + 1,
-    }).eq("id", proposalId);
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-
-    const link = proposalUrl(token);
-    const name = (p.recipient_name as string | null) || "there";
-    const business = (account as { business_name?: string } | null)?.business_name || "your facilities";
-    const monthly = p.estimated_monthly_cents
-      ? ` Estimated at ${money(Number(p.estimated_monthly_cents))} per month across every location.`
-      : "";
-
-    const mail = await emailOut(supabase, {
-      to,
-      subject: `Cleaning proposal for ${business} — Novara Cleaning`,
-      html: paragraphs([
-        `Hi ${name},`,
-        `Your cleaning proposal for <strong>${business}</strong> is ready to review.${monthly}`,
-        `It lists every location, the scope and crew we'd assign, and the per-visit rate — nothing to sign, and no payment details requested at this stage.`,
-        `<a href="${link}">Review the proposal</a>`,
-        `If anything needs adjusting, there's a "Request changes" option on the page — tell us what to change and we'll send a revised version.`,
-        `This proposal is open until ${new Date(expiresAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}.`,
-        `— Novara Cleaning Partnerships`,
-      ]),
-    });
-
-    await supabase.from("events").insert({
-      event_type: "commercial.proposal.sent",
-      source: "admin-proposals",
-      summary: `Proposal v${p.version} sent to ${to} for ${business} — ${money(Number(p.total_per_visit_cents || 0))} per visit across all sites.`,
-      data: { proposal_id: proposalId, account_id: p.business_account_id, version: p.version, to, emailed: mail.ok },
-    });
-
-    return NextResponse.json({ ok: true, link, emailed: mail.ok, emailError: mail.error || null, expiresAt });
   }
 
   // ── Withdraw ───────────────────────────────────────────────────────────
@@ -571,7 +666,7 @@ export async function POST(req: Request): Promise<NextResponse> {
         a.billing_method === "auto_pay"
           ? `After signing you'll be asked to add a card or bank account for Auto-Pay. Nothing is charged at that point.`
           : `After signing you'll confirm the billing contact and invoicing terms. No payment details are collected.`,
-        `— Novara Cleaning Partnerships`,
+        EMAIL_SIGN,
       ]),
     });
 

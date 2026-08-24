@@ -220,7 +220,7 @@ export async function POST(req: Request): Promise<NextResponse> {
             to: [account.email],
             reply_to: "contact@novaracleaning.com",
             subject: `Set up payment for ${account.business_name} — Novara Cleaning`,
-            html: `<p>Hi ${account.contact_name || "there"},</p><p>To activate cleaning service for <strong>${account.business_name}</strong>, please add a payment method on file using this secure Stripe link:</p><p><a href="${session.url}">${session.url}</a></p><p>Nothing is charged now — this simply keeps a card or bank account on file for invoicing per your agreement.</p><p>— Novara Cleaning Partnerships</p>`,
+            html: `<p>Hi ${account.contact_name || "there"},</p><p>To activate cleaning service for <strong>${account.business_name}</strong>, please add a payment method on file using this secure Stripe link:</p><p><a href="${session.url}">${session.url}</a></p><p>Nothing is charged now — this simply keeps a card or bank account on file for invoicing per your agreement.</p><p>— Novara Cleaning</p>`,
           }),
         });
         emailed = res.ok;
@@ -277,7 +277,7 @@ export async function POST(req: Request): Promise<NextResponse> {
             `<p>Hi ${account.contact_name || "there"},</p>`,
             `<p>Your Commercial Cleaning Services Agreement is ready to sign. It's pre-filled, including the schedule of locations and rates in Exhibit A.</p>`,
             `<p><a href="${built.link}">Review and sign the agreement</a></p>`,
-            `<p>— Novara Cleaning Partnerships</p>`,
+            `<p>— Novara Cleaning</p>`,
           ].join(""),
         },
       });

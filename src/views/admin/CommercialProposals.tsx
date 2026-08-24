@@ -38,7 +38,7 @@ import {
 import { format } from "date-fns";
 import { toast } from "sonner";
 
-import { supabase } from "@/integrations/supabase/client";
+import { commercialProposalApi } from "@/lib/commercial-proposal-api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -63,6 +63,7 @@ import {
   STAGE_LABELS,
   money,
   titleCase,
+  commercialTab,
   type InvoiceCycle,
   type NetTerms,
   type PipelineStage,
@@ -194,19 +195,6 @@ const STAGE_ORDER: PipelineStage[] = [
   "dispatch_eligible",
 ];
 
-async function api(method: string, body?: unknown, query = ""): Promise<Record<string, any>> {
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
-  const res = await fetch(`/api/admin/proposals${query}`, {
-    method,
-    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-  });
-  const out = await res.json().catch(() => ({}));
-  if (!res.ok || out?.ok === false) throw new Error(out?.error || `Request failed (${res.status})`);
-  return out;
-}
-
 function shortDate(iso: string | null | undefined): string {
   if (!iso) return "—";
   return format(new Date(iso), "MMM d, yyyy");
@@ -222,7 +210,7 @@ export default function CommercialProposals() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const out = await api("GET", undefined, "?view=pipeline");
+      const out = await commercialProposalApi("GET", undefined, "?view=pipeline");
       setDeals((out.deals || []) as Deal[]);
     } catch (err) {
       toast.error((err as Error).message);
@@ -297,6 +285,12 @@ export default function CommercialProposals() {
           <RiRefreshLine className="mr-1.5 h-4 w-4" />
           Refresh
         </Button>
+        <Button size="sm" asChild>
+          <a href={commercialTab("send")}>
+            <RiMailSendLine className="mr-1.5 h-4 w-4" />
+            Send a proposal
+          </a>
+        </Button>
       </div>
 
       {loading ? (
@@ -348,7 +342,17 @@ export default function CommercialProposals() {
                     </p>
                   )}
                 </div>
-                <RiArrowRightLine className="h-4 w-4 shrink-0 text-slate-300" />
+                {["firm_price_ready", "changes_requested", "proposal_expired"].includes(deal.stage) ? (
+                  <a
+                    href={commercialTab("send", { account: deal.account_id })}
+                    onClick={(e) => e.stopPropagation()}
+                    className="shrink-0 text-xs font-semibold text-violet-700 hover:underline"
+                  >
+                    Send
+                  </a>
+                ) : (
+                  <RiArrowRightLine className="h-4 w-4 shrink-0 text-slate-300" />
+                )}
               </CardContent>
             </Card>
           ))}
@@ -391,7 +395,7 @@ function DealSheet({
 
   const load = useCallback(async () => {
     try {
-      const out = await api("GET", undefined, `?accountId=${deal.account_id}`);
+      const out = await commercialProposalApi("GET", undefined, `?accountId=${deal.account_id}`);
       const d = out as unknown as Detail;
       setDetail(d);
       setRecipientName((p) => p || d.account?.contact_name || "");
@@ -409,7 +413,7 @@ function DealSheet({
   const run = async (label: string, body: Record<string, unknown>, success: string) => {
     setBusy(label);
     try {
-      const out = await api("POST", body);
+      const out = await commercialProposalApi("POST", body);
       toast.success(success);
       await load();
       onChanged();

@@ -225,7 +225,7 @@ serve(async (req) => {
           milestone === "expired"
             ? `COI expired — ${row.business_name} is blocked`
             : `COI renewal needed — ${row.business_name} (${days} days)`,
-          `${detail}\n\nUpload the renewed certificate in the admin console under Partnerships → Compliance. A valid expiry date lifts the block immediately.`,
+          `${detail}\n\nUpload the renewed certificate in the admin console under Commercial → Compliance. A valid expiry date lifts the block immediately.`,
         );
         if (ok) channel = "events+email";
       }
