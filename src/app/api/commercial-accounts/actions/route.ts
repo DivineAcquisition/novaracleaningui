@@ -42,6 +42,21 @@ interface SiteBody {
   access_method?: string;
   access_instructions?: string;
   active?: boolean;
+  // Commercial specifics captured ONCE on the site, so every booking against
+  // it inherits them instead of re-entering security, dock, and window
+  // procedure per visit.
+  facility_type_key?: string;
+  scope_level?: string;
+  breakrooms?: number | string;
+  badge_required?: boolean;
+  alarm_code?: string;
+  security_contact_name?: string;
+  security_contact_phone?: string;
+  loading_dock_notes?: string;
+  after_hours_access_notes?: string;
+  service_window_start?: string;
+  service_window_end?: string;
+  photo_zones?: string[];
 }
 
 async function secret(key: string): Promise<string> {
@@ -116,6 +131,20 @@ export async function POST(req: Request): Promise<NextResponse> {
         access_method: s(site.access_method, 100),
         access_instructions: s(site.access_instructions, 1000),
         active: site.active !== false,
+        facility_type_key: s(site.facility_type_key, 40),
+        scope_level: s(site.scope_level, 20),
+        breakrooms: n(site.breakrooms),
+        badge_required: site.badge_required === true,
+        alarm_code: s(site.alarm_code, 60),
+        security_contact_name: s(site.security_contact_name, 120),
+        security_contact_phone: s(site.security_contact_phone, 40),
+        loading_dock_notes: s(site.loading_dock_notes, 1000),
+        after_hours_access_notes: s(site.after_hours_access_notes, 1000),
+        service_window_start: s(site.service_window_start, 8),
+        service_window_end: s(site.service_window_end, 8),
+        photo_zones: Array.isArray(site.photo_zones) && site.photo_zones.length
+          ? site.photo_zones.map((z) => String(z).trim()).filter(Boolean).slice(0, 12)
+          : null,
         updated_at: new Date().toISOString(),
       };
       let siteId = site.id ? String(site.id) : null;

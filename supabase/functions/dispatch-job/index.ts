@@ -460,11 +460,36 @@ serve(async (req) => {
     // would look staffed while nobody was coming.
     const { data: dispatchBooking } = await supabase
       .from("bookings")
-      .select("id")
+      .select("id, business_account_id")
       .eq("job_id", jobId)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
+
+    // Commercial compliance: a signed agreement and a current COI gate
+    // dispatch, not only booking. A certificate valid when the job was booked
+    // can lapse before the visit, and the gap is on the account — so it holds
+    // every site under it. Offering the job anyway would put a crew on a site
+    // we are not insured to be on.
+    if (dispatchBooking?.business_account_id) {
+      const { data: compliance } = await supabase.rpc("commercial_account_compliance", {
+        p_account_id: dispatchBooking.business_account_id,
+      });
+      if (compliance && compliance.ok === false) {
+        const blockers = Array.isArray(compliance.blockers) ? compliance.blockers : [];
+        return new Response(
+          JSON.stringify({
+            success: false,
+            offersSent: 0,
+            error: `Offers held — ${blockers.join(" ")} Fix it on the account; it blocks every site under it.`,
+            code: "account_compliance_blocked",
+            blockers,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 409 },
+        );
+      }
+    }
+
     const bufferBlocked = new Set<string>();
     if (dispatchBooking?.id) {
       const bufferView = await checkScheduleBuffer(supabase, {

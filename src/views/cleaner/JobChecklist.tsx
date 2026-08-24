@@ -41,6 +41,10 @@ interface ChecklistSection {
   items: string[];
   areaId?: string;
   instance?: number;
+  /** Before AND after photos are required before the checklist can finish. */
+  photoRequired?: boolean;
+  /** Documentation zone this section covers, on a large commercial site. */
+  zoneName?: string | null;
 }
 interface ItemState {
   done?: boolean;
@@ -145,6 +149,23 @@ interface ChecklistState {
     }>;
     photos_complete?: boolean;
     missing_photo_sections?: number[];
+  };
+  /**
+   * Large commercial sites are documented zone by zone rather than with one
+   * site-wide pair. Same per-section photo mechanism as focused areas.
+   */
+  zones?: {
+    enabled: boolean;
+    names?: string[];
+    photos_complete?: boolean;
+    missing_photo_sections?: number[];
+    progress?: Array<{
+      title: string;
+      zoneName: string | null;
+      tasksDone: boolean;
+      photosDone: boolean;
+      complete: boolean;
+    }>;
   };
   addons: {
     enabled: boolean;
@@ -462,10 +483,17 @@ export default function CleanerJobChecklistPage() {
 
   const progress = state?.checklist.progress_pct ?? 0;
   const isFocused = Boolean(state?.focused?.enabled);
+  const hasZones = Boolean(state?.zones?.enabled);
+  // Anything that documents section by section — focused areas, commercial
+  // zones — can't finish until every one of those sections has both photos.
+  const sectionPhotosComplete = state
+    ? (!isFocused || Boolean(state.focused?.photos_complete))
+      && (!hasZones || Boolean(state.zones?.photos_complete))
+    : false;
   const allDone = state
     ? state.checklist.completed_items >= state.checklist.total_items
       && state.checklist.total_items > 0
-      && (!isFocused || Boolean(state.focused?.photos_complete))
+      && sectionPhotosComplete
       && !(state.findings || []).some((f) => f.details.status === "pending_after")
     : false;
 
@@ -589,6 +617,29 @@ export default function CleanerJobChecklistPage() {
       {!state.canWrite && (
         <div className="rounded-xl border border-slate-200 bg-slate-100 px-4 py-3 text-sm text-slate-600 flex items-center gap-2">
           <RiAlertLine className="w-4 h-4 shrink-0" /> View-only preview — progress can only be updated from a cleaner's own link.
+        </div>
+      )}
+
+      {/* ─── Commercial documentation zones ──────────────────────────── */}
+      {hasZones && (state.zones?.progress?.length ?? 0) > 0 && (
+        <div className="rounded-2xl border border-violet-300 bg-violet-50 px-5 py-4 space-y-3">
+          <p className="text-sm font-semibold text-violet-950">
+            This site is documented <span className="font-bold">by zone</span>. Every zone below needs its own before
+            and after photos — one pair for the whole building doesn&apos;t show the office anything.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {(state.zones?.progress || []).filter((z) => z.zoneName).map((z) => (
+              <span
+                key={z.title}
+                className={cn(
+                  "inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold",
+                  z.complete ? "bg-emerald-600 text-white" : "bg-white border border-violet-200 text-violet-900",
+                )}
+              >
+                {z.zoneName}: {z.complete ? "complete" : z.tasksDone ? "photos needed" : "in progress"}
+              </span>
+            ))}
+          </div>
         </div>
       )}
 
@@ -732,11 +783,11 @@ export default function CleanerJobChecklistPage() {
               })}
             </ul>
 
-            {isFocused && (
+            {section.photoRequired && (
               <div className="px-5 py-4 border-t border-slate-100 space-y-3 bg-slate-50/60">
                 <p className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
                   <RiCameraLine className="w-4 h-4 text-violet-600" />
-                  Before &amp; after photos required for this area
+                  Before &amp; after photos required for {section.zoneName || "this area"}
                 </p>
                 <div className="grid grid-cols-2 gap-2">
                   <label className="rounded-xl border border-dashed border-slate-300 bg-white px-3 py-3 text-center text-xs cursor-pointer hover:border-violet-400">
@@ -1160,8 +1211,8 @@ export default function CleanerJobChecklistPage() {
             ? "Finish checklist — notify the office"
             : (state.findings || []).some((f) => f.details.status === "pending_after")
               ? "After photo still needed on the pest/mold finding"
-              : isFocused
-              ? "Finish every task (or skip with reason) + area photos"
+              : isFocused || hasZones
+              ? `Finish every task (or skip with reason) + ${hasZones ? "zone" : "area"} photos`
               : `Complete all ${checklist.total_items} tasks to finish`}
         </Button>
       )}
@@ -1178,6 +1229,8 @@ export default function CleanerJobChecklistPage() {
       <p className="text-xs text-center text-slate-400 pb-8">
         {isFocused
           ? "Focused clean — only the areas above. Extra work goes through the office."
+          : hasZones
+          ? "Large site — every zone needs its own before and after photos. One pair for the whole building isn't documentation."
           : "Questions on-site? Text dispatch — do not leave until every line is checked."}
       </p>
     </Shell>

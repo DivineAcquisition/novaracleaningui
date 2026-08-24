@@ -49,6 +49,9 @@ export interface AccountRow {
   stripe_customer_id: string | null;
   autopay_enabled: boolean;
   coi_sent_at: string | null;
+  coi_expires_at: string | null;
+  coi_carrier: string | null;
+  coi_policy_number: string | null;
   source: string | null;
   notes: string | null;
   lead_details: Record<string, unknown> | null;
@@ -65,12 +68,43 @@ const STATUS_STYLE: Record<string, string> = {
 };
 const money = (c: number | null | undefined) => (c != null ? `$${(Number(c) / 100).toFixed(2)}` : "—");
 
+const COI_WARNING_DAYS = 30;
+
+/**
+ * How many days until the certificate of insurance lapses. Negative means it
+ * already has.
+ */
+export function coiDaysRemaining(a: Pick<AccountRow, "coi_expires_at">): number | null {
+  if (!a.coi_expires_at) return null;
+  const expiry = Date.parse(`${String(a.coi_expires_at).slice(0, 10)}T23:59:59`);
+  if (!Number.isFinite(expiry)) return null;
+  return Math.floor((expiry - Date.now()) / 86400_000);
+}
+
+/**
+ * Compliance blockers on the account — the gaps that stop work outright.
+ *
+ * These sit on the ACCOUNT, which is the whole point: a commercial account
+ * with an expired COI cannot have work booked or dispatched at ANY of its
+ * sites, not just the one someone happened to open.
+ */
+export function complianceBlockers(a: AccountRow): string[] {
+  const blockers: string[] = [];
+  if (a.status === "offboarded") return blockers;
+  if (!a.agreement_signed_at) blockers.push("No signed agreement");
+  const days = coiDaysRemaining(a);
+  if (days != null && days < 0) blockers.push(`COI expired ${Math.abs(days)}d ago`);
+  else if (days == null && !a.coi_sent_at) blockers.push("No COI on file");
+  return blockers;
+}
+
 export function attentionFlags(a: AccountRow): string[] {
-  const flags: string[] = [];
+  const flags: string[] = [...complianceBlockers(a)];
   if (a.status === "offboarded") return flags;
-  if (!a.agreement_signed_at) flags.push("No signed agreement");
   if (!a.stripe_customer_id) flags.push("No payment on file");
-  if (a.account_type !== "partnership" && !a.coi_sent_at && a.status === "active") flags.push("COI not sent");
+  const days = coiDaysRemaining(a);
+  if (days != null && days >= 0 && days <= COI_WARNING_DAYS) flags.push(`COI expires in ${days}d`);
+  else if (days == null && a.coi_sent_at) flags.push("COI has no expiry recorded");
   if (a.last_activity_at && Date.now() - new Date(a.last_activity_at).getTime() > 30 * 86400_000) flags.push("Idle 30+ days");
   return flags;
 }
@@ -214,14 +248,36 @@ interface SiteRow {
   address: string | null;
   city: string | null;
   facility_type: string | null;
+  facility_type_key: string | null;
+  scope_level: string | null;
   sqft: number | null;
   restrooms: number | null;
+  breakrooms: number | null;
   floors: number | null;
   scope_notes: string | null;
   access_method: string | null;
   access_instructions: string | null;
+  badge_required: boolean | null;
+  alarm_code: string | null;
+  security_contact_name: string | null;
+  security_contact_phone: string | null;
+  loading_dock_notes: string | null;
+  after_hours_access_notes: string | null;
+  service_window_start: string | null;
+  service_window_end: string | null;
+  photo_zones: string[] | null;
   active: boolean;
 }
+
+const FACILITY_TYPE_KEYS = [
+  { key: "office", label: "Office" },
+  { key: "warehouse", label: "Warehouse/Industrial" },
+  { key: "retail", label: "Retail" },
+  { key: "restaurant", label: "Restaurant" },
+  { key: "gym", label: "Gym/Fitness" },
+  { key: "medical", label: "Medical/Clinical" },
+  { key: "other", label: "Other" },
+];
 
 // ─── Account detail / edit sheet ─────────────────────────────────────────────
 // Exported: the unified Accounts view (PartnershipAccounts) opens the same
@@ -237,6 +293,9 @@ export function AccountSheet({ account, onClose, reload }: { account: AccountRow
   const [stripeId, setStripeId] = useState(account.stripe_customer_id || "");
   const [autopay, setAutopay] = useState(account.autopay_enabled);
   const [coiSent, setCoiSent] = useState(Boolean(account.coi_sent_at));
+  const [coiExpires, setCoiExpires] = useState(account.coi_expires_at ? String(account.coi_expires_at).slice(0, 10) : "");
+  const [coiCarrier, setCoiCarrier] = useState(account.coi_carrier || "");
+  const [coiPolicy, setCoiPolicy] = useState(account.coi_policy_number || "");
   const [sites, setSites] = useState<SiteRow[]>([]);
   const [siteEdit, setSiteEdit] = useState<Partial<SiteRow> | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -291,6 +350,16 @@ export function AccountSheet({ account, onClose, reload }: { account: AccountRow
 
   const canGoActive = agreementSigned && stripeId.trim() !== "" && sites.some((st) => st.active);
 
+  const coiDays = coiDaysRemaining({ coi_expires_at: coiExpires || null });
+  const coiBlocked = (coiDays != null && coiDays < 0) || (!coiExpires && !coiSent);
+  const coiExpiringSoon = coiDays != null && coiDays >= 0 && coiDays <= COI_WARNING_DAYS;
+  // Compliance is an account fact. Showing it on the sites list is what stops
+  // it being noticed one site at a time.
+  const siteBlockers = [
+    ...(agreementSigned ? [] : ["no signed agreement"]),
+    ...(coiBlocked ? [coiDays != null && coiDays < 0 ? "expired COI" : "no COI on file"] : []),
+  ];
+
   const save = async () => {
     if (status === "active" && !canGoActive) {
       toast.error("Can't set Active — signed agreement + payment method + at least one site are required first.");
@@ -308,6 +377,9 @@ export function AccountSheet({ account, onClose, reload }: { account: AccountRow
         stripe_customer_id: stripeId.trim() || null,
         autopay_enabled: autopay,
         coi_sent_at: coiSent ? (account.coi_sent_at || new Date().toISOString()) : null,
+        coi_expires_at: coiExpires || null,
+        coi_carrier: coiCarrier.trim() || null,
+        coi_policy_number: coiPolicy.trim() || null,
       }).eq("id", account.id);
       if (error) throw error;
       toast.success("Account updated");
@@ -403,11 +475,24 @@ export function AccountSheet({ account, onClose, reload }: { account: AccountRow
             {sites.length === 0 && !siteEdit && (
               <p className="text-xs text-amber-600">No sites yet — at least one active site is required to go Active.</p>
             )}
+            {siteBlockers.length > 0 && sites.length > 0 && (
+              <p className="text-[11px] font-semibold text-rose-700">
+                ⚠ Every site below is blocked — {siteBlockers.join(" + ")} on the account.
+              </p>
+            )}
             {sites.map((st) => (
               <button key={st.id} onClick={() => setSiteEdit(st)}
-                className={cn("w-full text-left rounded-md border px-2.5 py-1.5 text-xs hover:border-violet-300", st.active ? "border-slate-200" : "border-slate-100 opacity-50")}>
+                className={cn(
+                  "w-full text-left rounded-md border px-2.5 py-1.5 text-xs hover:border-violet-300",
+                  !st.active ? "border-slate-100 opacity-50"
+                    : siteBlockers.length > 0 ? "border-rose-200 bg-rose-50/40"
+                    : "border-slate-200",
+                )}>
                 <span className="font-semibold text-slate-800">{st.nickname}</span>
                 <span className="text-slate-500"> · {st.facility_type || "—"}{st.sqft ? ` · ${st.sqft.toLocaleString()} sqft` : ""}{st.address ? ` · ${st.address}` : ""}</span>
+                {st.active && siteBlockers.length > 0 && (
+                  <span className="block text-rose-600 mt-0.5">Blocked: {siteBlockers.join(" + ")}</span>
+                )}
               </button>
             ))}
             {siteEdit && (
@@ -422,7 +507,77 @@ export function AccountSheet({ account, onClose, reload }: { account: AccountRow
                   <Input placeholder="Sqft" type="number" value={siteEdit.sqft ?? ""} onChange={(e) => setSiteEdit({ ...siteEdit, sqft: e.target.value ? Number(e.target.value) : null })} className="h-8 text-xs" />
                   <Input placeholder="Restrooms" type="number" value={siteEdit.restrooms ?? ""} onChange={(e) => setSiteEdit({ ...siteEdit, restrooms: e.target.value ? Number(e.target.value) : null })} className="h-8 text-xs" />
                 </div>
+
+                {/* Pricing defaults for this building. Captured here so a
+                    booking against the site never re-enters them. */}
+                <div className="grid grid-cols-3 gap-2">
+                  <Select value={siteEdit.facility_type_key || ""} onValueChange={(v) => setSiteEdit({ ...siteEdit, facility_type_key: v })}>
+                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Pricing facility type" /></SelectTrigger>
+                    <SelectContent>
+                      {FACILITY_TYPE_KEYS.map((f) => <SelectItem key={f.key} value={f.key}>{f.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Select value={siteEdit.scope_level || ""} onValueChange={(v) => setSiteEdit({ ...siteEdit, scope_level: v })}>
+                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Usual scope" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="light">Light</SelectItem>
+                      <SelectItem value="standard">Standard</SelectItem>
+                      <SelectItem value="detailed">Detailed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Input placeholder="Breakrooms" type="number" value={siteEdit.breakrooms ?? ""} onChange={(e) => setSiteEdit({ ...siteEdit, breakrooms: e.target.value ? Number(e.target.value) : null })} className="h-8 text-xs" />
+                </div>
+
+                {/* Service window — many commercial sites can only be cleaned
+                    before opening or after closing, and the window length is
+                    what sizes the crew. */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Label className="text-[10px] text-slate-500">Window starts</Label>
+                    <Input type="time" value={siteEdit.service_window_start?.slice(0, 5) || ""} onChange={(e) => setSiteEdit({ ...siteEdit, service_window_start: e.target.value })} className="h-8 text-xs mt-0.5" />
+                  </div>
+                  <div>
+                    <Label className="text-[10px] text-slate-500">Window ends</Label>
+                    <Input type="time" value={siteEdit.service_window_end?.slice(0, 5) || ""} onChange={(e) => setSiteEdit({ ...siteEdit, service_window_end: e.target.value })} className="h-8 text-xs mt-0.5" />
+                  </div>
+                </div>
+
                 <Input placeholder="Access (lockbox, key, badge…)" value={siteEdit.access_method || ""} onChange={(e) => setSiteEdit({ ...siteEdit, access_method: e.target.value })} className="h-8 text-xs" />
+
+                {/* Security & access complexity — badge procedure, alarm,
+                    dock. All of it reaches the crew's portal on confirmation,
+                    time-scoped like every other access detail. */}
+                <div className="rounded-md border border-slate-200 bg-white p-2 space-y-2">
+                  <label className="flex items-center gap-1.5 text-xs text-slate-700">
+                    <input type="checkbox" checked={siteEdit.badge_required === true} onChange={(e) => setSiteEdit({ ...siteEdit, badge_required: e.target.checked })} className="rounded" />
+                    Badge / keycard required
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <Input placeholder="Alarm code" value={siteEdit.alarm_code || ""} onChange={(e) => setSiteEdit({ ...siteEdit, alarm_code: e.target.value })} className="h-8 text-xs font-mono" />
+                    <Input placeholder="Security contact" value={siteEdit.security_contact_name || ""} onChange={(e) => setSiteEdit({ ...siteEdit, security_contact_name: e.target.value })} className="h-8 text-xs" />
+                    <Input placeholder="Security phone" value={siteEdit.security_contact_phone || ""} onChange={(e) => setSiteEdit({ ...siteEdit, security_contact_phone: e.target.value })} className="h-8 text-xs" />
+                  </div>
+                  <Textarea placeholder="After-hours building access (freight elevator, front desk, gate…)" value={siteEdit.after_hours_access_notes || ""} onChange={(e) => setSiteEdit({ ...siteEdit, after_hours_access_notes: e.target.value })} rows={2} className="text-xs" />
+                  <Textarea placeholder="Loading dock procedure" value={siteEdit.loading_dock_notes || ""} onChange={(e) => setSiteEdit({ ...siteEdit, loading_dock_notes: e.target.value })} rows={2} className="text-xs" />
+                </div>
+
+                <div>
+                  <Label className="text-[10px] text-slate-500">
+                    Documentation zones (comma separated) — leave blank to derive from square footage
+                  </Label>
+                  <Input
+                    placeholder="Warehouse floor, Dock, Offices, Restrooms"
+                    value={(siteEdit.photo_zones || []).join(", ")}
+                    onChange={(e) => setSiteEdit({
+                      ...siteEdit,
+                      photo_zones: e.target.value.split(",").map((z) => z.trim()).filter(Boolean),
+                    })}
+                    className="h-8 text-xs mt-0.5" />
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    Before and after photos are captured per zone — one pair proves nothing about a large facility.
+                  </p>
+                </div>
+
                 <Textarea placeholder="Scope notes" value={siteEdit.scope_notes || ""} onChange={(e) => setSiteEdit({ ...siteEdit, scope_notes: e.target.value })} rows={2} className="text-xs" />
                 <div className="flex gap-2 items-center">
                   <Button size="sm" className="h-7 text-xs" disabled={busy === "save_site"} onClick={() => void saveSite()}>
@@ -464,6 +619,50 @@ export function AccountSheet({ account, onClose, reload }: { account: AccountRow
                 <RiErrorWarningLine className="w-3.5 h-3.5" /> Active is locked until agreement + payment + at least one site are set.
               </p>
             )}
+          </div>
+
+          {/* Certificate of insurance. "Sent once" is not the same as
+              "current", and only the expiry date answers the question the
+              booking gate actually asks. */}
+          <div className={cn(
+            "rounded-lg border p-3 space-y-2",
+            coiBlocked ? "border-rose-300 bg-rose-50/60" : coiExpiringSoon ? "border-amber-300 bg-amber-50/60" : "border-slate-200",
+          )}>
+            <p className="text-xs font-bold text-slate-800">Certificate of insurance</p>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <Label className="text-xs">Expires</Label>
+                <Input type="date" value={coiExpires} onChange={(e) => setCoiExpires(e.target.value)} className="mt-1 h-8 text-xs" />
+              </div>
+              <div>
+                <Label className="text-xs">Carrier</Label>
+                <Input value={coiCarrier} onChange={(e) => setCoiCarrier(e.target.value)} className="mt-1 h-8 text-xs" />
+              </div>
+              <div>
+                <Label className="text-xs">Policy #</Label>
+                <Input value={coiPolicy} onChange={(e) => setCoiPolicy(e.target.value)} className="mt-1 h-8 text-xs font-mono" />
+              </div>
+            </div>
+            {coiBlocked ? (
+              <p className="text-[11px] text-rose-700 flex items-start gap-1">
+                <RiErrorWarningLine className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                {coiDays != null && coiDays < 0
+                  ? `Expired ${Math.abs(coiDays)} days ago.`
+                  : "No certificate on file."}{" "}
+                Commercial work at <strong>every one of this account&apos;s {sites.length} site
+                {sites.length === 1 ? "" : "s"}</strong> is blocked from booking and dispatch until it&apos;s current.
+              </p>
+            ) : coiExpiringSoon ? (
+              <p className="text-[11px] text-amber-700">
+                Expires in {coiDays} days. Renew before then or every site under this account stops booking.
+              </p>
+            ) : !coiExpires && coiSent ? (
+              <p className="text-[11px] text-amber-700">
+                Marked sent but no expiry recorded — add the date so the gate can tell current from lapsed.
+              </p>
+            ) : coiExpires ? (
+              <p className="text-[11px] text-emerald-700">Current — all sites clear to book.</p>
+            ) : null}
           </div>
 
           <div>

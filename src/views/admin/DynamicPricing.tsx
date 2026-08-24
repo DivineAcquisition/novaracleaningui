@@ -14,7 +14,10 @@
 //                    per service/band.
 //   4. Base tables — the UNRESOLVED two-price-tables discrepancy, surfaced
 //                    until admin confirms which is authoritative.
-//   5. Reports     — shadow comparison (charged vs would-be), clamp alerts,
+//   5. Commercial  — the separate commercial model (facility type × scope
+//                    level × size tier), its walkthrough threshold, and the
+//                    crew-sizing tunables.
+//   6. Reports     — shadow comparison (charged vs would-be), clamp alerts,
 //                    override activity per VA, audit log.
 //
 // Every config save INSERTS A NEW VERSION (immutable history) — historical
@@ -26,6 +29,7 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import {
   RiAlarmWarningLine,
+  RiBuilding2Line,
   RiCloseLine,
   RiEyeLine,
   RiHistoryLine,
@@ -46,6 +50,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import CommercialPricing from "@/views/admin/CommercialPricing";
 import { SEO } from "@/components/SEO";
 import { cn } from "@/lib/utils";
 import {
@@ -334,6 +339,7 @@ export default function DynamicPricing() {
           <TabsTrigger value="demand"><RiScales3Line className="w-3.5 h-3.5 mr-1.5" />Demand</TabsTrigger>
           <TabsTrigger value="guardrails"><RiShieldCheckLine className="w-3.5 h-3.5 mr-1.5" />Guardrails</TabsTrigger>
           <TabsTrigger value="tables"><RiTableLine className="w-3.5 h-3.5 mr-1.5" />Base tables</TabsTrigger>
+          <TabsTrigger value="commercial"><RiBuilding2Line className="w-3.5 h-3.5 mr-1.5" />Commercial</TabsTrigger>
           <TabsTrigger value="reports"><RiEyeLine className="w-3.5 h-3.5 mr-1.5" />Reports</TabsTrigger>
         </TabsList>
 
@@ -348,6 +354,12 @@ export default function DynamicPricing() {
         </TabsContent>
         <TabsContent value="tables" className="mt-4">
           <BaseTablesTab config={config} saving={saving} onSave={saveConfig} />
+        </TabsContent>
+        {/* Commercial prices off facility type x scope level x size tier —
+            a different model from the residential sqft bands above, tuned the
+            same evidence-driven way. */}
+        <TabsContent value="commercial" className="mt-4">
+          <CommercialPricing />
         </TabsContent>
         <TabsContent value="reports" className="mt-4">
           <ReportsTab audit={audit} overrides={overrides} versions={versions} config={config} />

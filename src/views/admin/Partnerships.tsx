@@ -9,13 +9,15 @@
 //     detail (sites/gates/rates vs properties/turnovers/pricing). The legacy
 //     Airtable host console is available inside as an advanced section.
 //   • Book Job   — the unified internal booking flow (all three types)
+//   • Walkthroughs — the gate for large commercial facilities: no firm price,
+//     and no booking, until someone has actually walked the building
 //   • Recurring  — partner cadences (the residential-style recurring setup)
 //   • Ops Queue  — turnover dispatch operations (crew, assignments, batches)
 
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { RiRefreshLine, RiHotelLine, RiToolsLine, RiLoader4Line, RiDashboardLine, RiCalendarCheckLine, RiArrowDownSLine } from "@remixicon/react";
+import { RiRefreshLine, RiHotelLine, RiToolsLine, RiLoader4Line, RiDashboardLine, RiCalendarCheckLine, RiArrowDownSLine, RiRulerLine } from "@remixicon/react";
 
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -25,9 +27,10 @@ import PartnershipsOverview from "@/views/admin/PartnershipsOverview";
 import PartnershipAccounts from "@/views/admin/PartnershipAccounts";
 import PartnershipBooking from "@/views/admin/PartnershipBooking";
 import PartnerRecurringSchedules from "@/views/admin/PartnerRecurringSchedules";
+import CommercialWalkthroughs from "@/views/admin/CommercialWalkthroughs";
 import { syncPartners, syncContractors } from "@/lib/partner-admin-api";
 
-const VALID_TABS = ["overview", "accounts", "book", "recurring", "ops"];
+const VALID_TABS = ["overview", "accounts", "book", "walkthroughs", "recurring", "ops"];
 // Old deep links keep working: commercial → accounts, turnovers → ops.
 const TAB_ALIASES: Record<string, string> = { commercial: "accounts", turnovers: "ops" };
 
@@ -107,6 +110,9 @@ export default function Partnerships() {
           <TabsTrigger value="book" className="gap-1.5">
             <RiCalendarCheckLine className="w-4 h-4" /> Book Job
           </TabsTrigger>
+          <TabsTrigger value="walkthroughs" className="gap-1.5">
+            <RiRulerLine className="w-4 h-4" /> Walkthroughs
+          </TabsTrigger>
           <TabsTrigger value="recurring" className="gap-1.5">
             <RiRefreshLine className="w-4 h-4" /> Recurring
           </TabsTrigger>
@@ -138,6 +144,9 @@ export default function Partnerships() {
         </TabsContent>
         <TabsContent value="book" className="mt-4">
           {tab === "book" && <PartnershipBooking />}
+        </TabsContent>
+        <TabsContent value="walkthroughs" className="mt-4">
+          {tab === "walkthroughs" && <CommercialWalkthroughs />}
         </TabsContent>
         <TabsContent value="recurring" className="mt-4">
           {tab === "recurring" && <PartnerRecurringSchedules />}

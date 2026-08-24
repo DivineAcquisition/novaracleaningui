@@ -69,13 +69,14 @@ export default function PartnershipsOverview() {
       monthStart.setDate(1);
       const monthStartIso = monthStart.toISOString().slice(0, 10);
 
-      const [acctRes, hostsRes, turnRes, leadsRes, propsRes] = await Promise.all([
-        (supabase.from as any)("business_accounts").select("id, account_type, status, business_name, default_rate_cents, agreement_signed_at, stripe_customer_id, coi_sent_at, last_activity_at").limit(1000),
+      const [acctRes, hostsRes, turnRes, leadsRes, propsRes, sitesRes] = await Promise.all([
+        (supabase.from as any)("business_accounts").select("id, account_type, status, business_name, default_rate_cents, agreement_signed_at, stripe_customer_id, coi_sent_at, coi_expires_at, last_activity_at").limit(1000),
         (supabase.from as any)("hosts").select("id, status, name, email").limit(1000),
         (supabase.from as any)("turnover_requests").select("id, status, price, requested_date").gte("requested_date", monthStartIso).limit(2000),
         (supabase.from as any)("leads").select("id, first_name, last_name, email, phone, status, lead_score, service_type, property_type, notes, created_at")
           .eq("source", "commercial_intake").order("created_at", { ascending: false }).limit(100),
         (supabase.from as any)("properties").select("id, nickname, turnover_price, host_id").limit(1000),
+        (supabase.from as any)("business_sites").select("id, business_account_id").eq("active", true).limit(2000),
       ]);
 
       const accounts = (acctRes.data || []) as Array<Record<string, any>>;
@@ -83,6 +84,15 @@ export default function PartnershipsOverview() {
       const turns = (turnRes.data || []) as Array<Record<string, any>>;
       const props = (propsRes.data || []) as Array<Record<string, any>>;
       const leadRows = (leadsRes.data || []) as LeadRow[];
+
+      // An account-level compliance gap blocks every site under it, so the
+      // alert says how many sites it takes down rather than reading like a
+      // single-location nudge.
+      const siteCountByAccount = new Map<string, number>();
+      for (const st of (sitesRes.data || []) as Array<Record<string, any>>) {
+        const key = String(st.business_account_id);
+        siteCountByAccount.set(key, (siteCountByAccount.get(key) || 0) + 1);
+      }
 
       const activeAccts = accounts.filter((a) => a.status === "active");
       const doneTurns = turns.filter((t) => ["completed", "assigned", "confirmed", "scheduled", "pending"].includes(String(t.status || "")));
@@ -105,7 +115,22 @@ export default function PartnershipsOverview() {
         if (["onboarding", "active"].includes(String(a.status))) {
           if (!a.agreement_signed_at) items.push({ label: `${a.business_name} — agreement unsigned`, detail: "Commercial · chase signature", severity: "high" });
           if (!a.stripe_customer_id) items.push({ label: `${a.business_name} — no payment on file`, detail: "Commercial · chase payment setup", severity: "high" });
-          if (a.status === "active" && !a.coi_sent_at) items.push({ label: `${a.business_name} — COI not sent`, detail: "Commercial · send certificate of insurance", severity: "medium" });
+          // COI state sits on the account and gates every site under it, so
+          // an expiry is a blocker for the whole relationship, not a nudge.
+          const coiDays = a.coi_expires_at
+            ? Math.floor((Date.parse(`${String(a.coi_expires_at).slice(0, 10)}T23:59:59`) - Date.now()) / 86400_000)
+            : null;
+          const sitesUnder = siteCountByAccount.get(String(a.id)) || 0;
+          const scope = sitesUnder > 1 ? ` · blocks all ${sitesUnder} sites` : "";
+          if (coiDays != null && coiDays < 0) {
+            items.push({ label: `${a.business_name} — COI expired ${Math.abs(coiDays)}d ago`, detail: `Commercial · booking and dispatch blocked${scope}`, severity: "high" });
+          } else if (coiDays != null && coiDays <= 30) {
+            items.push({ label: `${a.business_name} — COI expires in ${coiDays}d`, detail: `Commercial · renew before it lapses${scope}`, severity: "medium" });
+          } else if (coiDays == null && !a.coi_sent_at && a.status === "active") {
+            items.push({ label: `${a.business_name} — no COI on file`, detail: `Commercial · booking and dispatch blocked${scope}`, severity: "high" });
+          } else if (coiDays == null && a.coi_sent_at) {
+            items.push({ label: `${a.business_name} — COI has no expiry recorded`, detail: "Commercial · add the date so the gate can tell current from lapsed", severity: "medium" });
+          }
         }
         if (a.last_activity_at && Date.now() - new Date(a.last_activity_at).getTime() > 30 * 86400_000 && a.status === "active") {
           items.push({ label: `${a.business_name} — idle 30+ days`, detail: "Commercial · churn watch", severity: "medium" });

@@ -11,6 +11,14 @@
 //
 // Hard gates (also enforced server-side in book-partner-job):
 //   access method + scope + (deadline or window) — no exceptions.
+//
+// Commercial and office add the ones that only matter at this size:
+//   • the job belongs to a SITE under the account, never a loose address
+//   • the account's paperwork is current — signed agreement + live COI, and a
+//     gap on the account blocks every site under it
+//   • the price comes from facility type × scope level × size tier, and at or
+//     above the walkthrough threshold it comes from a walkthrough instead
+//   • the crew is sized to the scope and the hours actually available
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -19,12 +27,15 @@ import {
   RiBuilding4Line,
   RiCalendarCheckLine,
   RiCheckboxCircleFill,
+  RiErrorWarningLine,
   RiHomeSmile2Line,
   RiKey2Line,
   RiLoader4Line,
   RiMoneyDollarCircleLine,
   RiRepeatLine,
+  RiRulerLine,
   RiSearchLine,
+  RiShieldCheckLine,
   RiTeamLine,
 } from "@remixicon/react";
 import { toast } from "sonner";
@@ -36,6 +47,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useCommercialQuote } from "@/hooks/use-commercial-quote";
+import { formatCents, windowHoursBetween } from "@/lib/commercial-pricing";
 import { cn } from "@/lib/utils";
 
 type BookingType = "commercial" | "office" | "str_turnover";
@@ -56,7 +69,23 @@ const PAYMENT_STATUSES = [
 const WINDOWS = ["8:00 AM - 12:00 PM", "10:00 AM - 2:00 PM", "12:00 PM - 4:00 PM", "After 6 PM", "After close of business", "Overnight", "Anytime"];
 
 interface AccountOpt { id: string; business_name: string; account_type: string; status: string; email: string | null; facility_type: string | null }
-interface SiteOpt { id: string; nickname: string; address: string | null; facility_type: string | null; sqft: number | null }
+interface SiteOpt {
+  id: string;
+  nickname: string;
+  address: string | null;
+  facility_type: string | null;
+  facility_type_key: string | null;
+  scope_level: string | null;
+  sqft: number | null;
+  service_window_start: string | null;
+  service_window_end: string | null;
+  access_method: string | null;
+  access_instructions: string | null;
+  scope_notes: string | null;
+  badge_required: boolean | null;
+  security_contact_name: string | null;
+  loading_dock_notes: string | null;
+}
 interface PropertyOpt { id: string; nickname: string | null; address: string | null; turnover_price: number | null; host_id: string; host_name?: string }
 interface CleanerOpt { id: string; first_name: string | null; last_name: string | null; pay_percentage: number | null }
 
@@ -95,10 +124,19 @@ export default function PartnershipBooking() {
   const [officeNotes, setOfficeNotes] = useState("");
   const [coiRequired, setCoiRequired] = useState(false);
 
+  // Facility & scope (commercial / office) — the three pricing inputs
+  const [facilityTypeKey, setFacilityTypeKey] = useState("");
+  const [scopeLevel, setScopeLevel] = useState("standard");
+  const [sqftInput, setSqftInput] = useState("");
+  const [windowStart, setWindowStart] = useState("");
+  const [windowEnd, setWindowEnd] = useState("");
+
   // Pay + payment
   const [priceDollars, setPriceDollars] = useState("");
+  const [priceTouched, setPriceTouched] = useState(false);
   const [payPct, setPayPct] = useState("35");
   const [numCleaners, setNumCleaners] = useState("1");
+  const [crewTouched, setCrewTouched] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState("invoice");
 
   // Crew
@@ -107,12 +145,13 @@ export default function PartnershipBooking() {
 
   // Recurring
   const [recurring, setRecurring] = useState(false);
-  const [cadence, setCadence] = useState<"weekly" | "biweekly" | "monthly">("weekly");
+  const [cadence, setCadence] = useState<"daily" | "weekly" | "biweekly" | "monthly">("weekly");
 
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<{ ref: string; assigned: boolean } | null>(null);
+  const [result, setResult] = useState<{ ref: string; assigned: boolean; crewSize: number; priceCents: number; priceSource: string | null } | null>(null);
 
   const isStr = type === "str_turnover";
+  const isCommercial = type === "commercial" || type === "office";
 
   // ── Load pickers ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -134,11 +173,35 @@ export default function PartnershipBooking() {
     if (!accountId) { setSites([]); setSiteId(""); return; }
     void (async () => {
       const { data } = await (supabase.from as any)("business_sites")
-        .select("id, nickname, address, facility_type, sqft")
+        .select(
+          "id, nickname, address, facility_type, facility_type_key, scope_level, sqft, " +
+            "service_window_start, service_window_end, access_method, access_instructions, " +
+            "scope_notes, badge_required, security_contact_name, loading_dock_notes",
+        )
         .eq("business_account_id", accountId).eq("active", true).order("created_at");
-      setSites((data || []) as SiteOpt[]);
+      const rows = (data || []) as SiteOpt[];
+      setSites(rows);
+      // One site is not a choice. Pick it so the account-level data the site
+      // already carries flows in without a redundant click.
+      if (rows.length === 1) setSiteId(rows[0].id);
     })();
   }, [accountId]);
+
+  // A second booking against an existing site must not re-enter anything the
+  // site already knows: square footage, facility type, scope depth, the
+  // service window, how the crew gets in, what's in scope.
+  const selectedSite = useMemo(() => sites.find((s) => s.id === siteId) || null, [sites, siteId]);
+  useEffect(() => {
+    if (!selectedSite) return;
+    if (selectedSite.sqft != null) setSqftInput(String(selectedSite.sqft));
+    if (selectedSite.facility_type_key) setFacilityTypeKey(selectedSite.facility_type_key);
+    if (selectedSite.scope_level) setScopeLevel(selectedSite.scope_level);
+    if (selectedSite.service_window_start) setWindowStart(String(selectedSite.service_window_start).slice(0, 5));
+    if (selectedSite.service_window_end) setWindowEnd(String(selectedSite.service_window_end).slice(0, 5));
+    setAccessMethod((prev) => prev || selectedSite.access_method || "");
+    setAccessNotes((prev) => prev || selectedSite.access_instructions || "");
+    setScopeNotes((prev) => prev || selectedSite.scope_notes || "");
+  }, [selectedSite]);
 
   useEffect(() => {
     if (!isStr) return;
@@ -174,16 +237,64 @@ export default function PartnershipBooking() {
     return properties.filter((p) => `${p.nickname} ${p.host_name} ${p.address}`.toLowerCase().includes(q));
   }, [properties, clientSearch]);
 
+  // ── Live commercial quote ──────────────────────────────────────────────
+  const sqft = Math.max(0, Math.round(parseFloat(sqftInput) || 0));
+  const windowHours = windowHoursBetween(windowStart, windowEnd);
+  const commercialQuote = useCommercialQuote({
+    sqft,
+    facilityTypeKey,
+    scopeLevel,
+    windowHours,
+    businessAccountId: accountId || null,
+    businessSiteId: siteId || null,
+    enabled: isCommercial && sqft > 0 && Boolean(facilityTypeKey),
+  });
+  const quote = commercialQuote.quote;
+  const compliance = commercialQuote.compliance;
+  const walkthrough = commercialQuote.walkthrough;
+  const config = commercialQuote.config;
+  const needsWalkthrough = Boolean(isCommercial && quote?.requiresWalkthrough);
+  const walkthroughReady = Boolean(
+    walkthrough && walkthrough.status === "completed" && walkthrough.firm_price_cents,
+  );
+  const recommendedCrew = quote?.crew?.crewSize ?? null;
+
+  // The formula's number fills the price box below the threshold; above it,
+  // the walkthrough's firm price does. Either stops the moment an admin types
+  // their own number — a negotiated price is a deliberate act, not a default.
+  useEffect(() => {
+    if (!isCommercial || priceTouched) return;
+    const auto = needsWalkthrough
+      ? (walkthroughReady ? Number(walkthrough?.firm_price_cents) : 0)
+      : (quote?.ok ? quote.formulaCents : 0);
+    if (auto > 0) setPriceDollars((auto / 100).toFixed(2));
+  }, [isCommercial, priceTouched, needsWalkthrough, walkthroughReady, walkthrough, quote]);
+
+  useEffect(() => {
+    if (!isCommercial || crewTouched || !recommendedCrew) return;
+    setNumCleaners(String(recommendedCrew));
+  }, [isCommercial, crewTouched, recommendedCrew]);
+
   // ── Gates ──────────────────────────────────────────────────────────────
   const priceCents = Math.round((parseFloat(priceDollars) || 0) * 100);
   const payoutCents = Math.floor((priceCents * (parseInt(payPct, 10) || 35)) / 100);
   const gates = {
-    client: isStr ? Boolean(propertyId) : Boolean(accountId),
+    client: isStr
+      ? Boolean(propertyId)
+      // A commercial booking belongs to a site, not to an account with an
+      // address on it.
+      : Boolean(accountId) && (!isCommercial || Boolean(siteId)),
     when: Boolean(serviceDate) && (Boolean(hardDeadline) || Boolean(window_)),
     access: Boolean(accessMethod),
-    scope: scopeNotes.trim().length > 0,
+    scope: scopeNotes.trim().length > 0 && (!isCommercial || (sqft > 0 && Boolean(facilityTypeKey) && Boolean(scopeLevel))),
     pay: priceCents > 0,
-  };
+    ...(isCommercial
+      ? {
+        compliance: compliance ? compliance.ok : true,
+        walkthrough: !needsWalkthrough || walkthroughReady,
+      }
+      : {}),
+  } as Record<string, boolean>;
   const complete = Object.values(gates).every(Boolean);
 
   const submit = async () => {
@@ -212,6 +323,12 @@ export default function PartnershipBooking() {
           securityNotes: securityNotes || undefined,
           officeNotes: officeNotes || undefined,
           coiRequired,
+          facilityTypeKey: isCommercial ? facilityTypeKey : undefined,
+          scopeLevel: isCommercial ? scopeLevel : undefined,
+          squareFootage: isCommercial && sqft > 0 ? sqft : undefined,
+          serviceWindowStart: isCommercial && windowStart ? windowStart : undefined,
+          serviceWindowEnd: isCommercial && windowEnd ? windowEnd : undefined,
+          walkthroughId: needsWalkthrough && walkthrough?.id ? walkthrough.id : undefined,
           priceCents,
           cleanerPayPct: parseInt(payPct, 10) || 35,
           numCleaners: parseInt(numCleaners, 10) || 1,
@@ -221,9 +338,19 @@ export default function PartnershipBooking() {
         },
       });
       if (error) throw error;
-      const d = data as { ok?: boolean; error?: string; ref?: string; assigned?: boolean };
+      const d = data as {
+        ok?: boolean; error?: string; ref?: string; assigned?: boolean;
+        crewSize?: number; priceCents?: number; priceSource?: string | null; warnings?: string[];
+      };
       if (!d?.ok) throw new Error(d?.error || "Booking failed");
-      setResult({ ref: d.ref || "", assigned: Boolean(d.assigned) });
+      setResult({
+        ref: d.ref || "",
+        assigned: Boolean(d.assigned),
+        crewSize: Number(d.crewSize) || 1,
+        priceCents: Number(d.priceCents) || priceCents,
+        priceSource: d.priceSource || null,
+      });
+      for (const w of d.warnings || []) toast.warning(w);
       toast.success(`${d.ref} booked${d.assigned ? " — crew assigned, their portal is live" : " — routed to dispatch"}`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Booking failed");
@@ -240,6 +367,8 @@ export default function PartnershipBooking() {
     setSecurityNotes(""); setOfficeNotes(""); setCoiRequired(false); setPriceDollars("");
     setPayPct("35"); setNumCleaners("1"); setPaymentStatus("invoice");
     setSelectedCleaners([]); setRecurring(false);
+    setFacilityTypeKey(""); setScopeLevel("standard"); setSqftInput("");
+    setWindowStart(""); setWindowEnd(""); setPriceTouched(false); setCrewTouched(false);
   };
 
   if (result) {
@@ -249,8 +378,13 @@ export default function PartnershipBooking() {
           <RiCheckboxCircleFill className="w-12 h-12 text-emerald-500 mx-auto" />
           <h2 className="text-xl font-bold text-slate-900">{result.ref} booked</h2>
           <p className="text-sm text-slate-600">
+            {formatCents(result.priceCents)}
+            {result.priceSource ? ` · priced from the ${result.priceSource === "formula" ? "rate formula" : result.priceSource === "walkthrough" ? "walkthrough findings" : "negotiated override"}` : ""}
+            {result.crewSize > 1 ? ` · crew of ${result.crewSize}` : ""}
+          </p>
+          <p className="text-sm text-slate-600">
             {result.assigned
-              ? "Crew assigned — the job is live in their contractor portal with the deadline, access, scope, and locked pay."
+              ? "Crew assigned — the job is live in their contractor portal with the facility type, scope checklist, access and security details, the service window, and each member's locked pay."
               : "No crew pre-assigned — the job is in the Dispatch console awaiting assignment."}
           </p>
           <Button onClick={reset}>Book another</Button>
@@ -298,15 +432,21 @@ export default function PartnershipBooking() {
                   </Select>
                 </div>
                 <div>
-                  <Label>Site {sites.length > 0 ? "*" : "(none on file — uses account address)"}</Label>
+                  <Label>Site *</Label>
                   <Select value={siteId} onValueChange={setSiteId} disabled={sites.length === 0}>
-                    <SelectTrigger className="mt-1"><SelectValue placeholder={sites.length ? "Pick site…" : "No sites"} /></SelectTrigger>
+                    <SelectTrigger className="mt-1"><SelectValue placeholder={sites.length ? "Pick site…" : "No sites on this account"} /></SelectTrigger>
                     <SelectContent>
                       {sites.map((st) => (
                         <SelectItem key={st.id} value={st.id}>{st.nickname}{st.sqft ? ` · ${st.sqft.toLocaleString()} sqft` : ""}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  {accountId && sites.length === 0 && (
+                    <p className="text-[11px] text-rose-600 mt-1">
+                      No active site on this account. Add one under Accounts first — a commercial job belongs to a
+                      site so its address, access, and square footage live in one place.
+                    </p>
+                  )}
                 </div>
               </div>
             ) : (
@@ -322,6 +462,43 @@ export default function PartnershipBooking() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+            )}
+
+            {/* Account-level compliance. The gap is on the ACCOUNT, so it
+                blocks every site under it — surfacing it here means a VA
+                learns about an expired COI while the client is still on the
+                phone, not at submit. */}
+            {isCommercial && accountId && compliance && (
+              <div className={cn(
+                "rounded-lg border p-3 text-xs space-y-1",
+                compliance.ok
+                  ? compliance.warnings.length
+                    ? "border-amber-300 bg-amber-50/60"
+                    : "border-emerald-200 bg-emerald-50/60"
+                  : "border-rose-300 bg-rose-50/60",
+              )}>
+                <p className={cn(
+                  "font-bold flex items-center gap-1.5",
+                  compliance.ok ? (compliance.warnings.length ? "text-amber-800" : "text-emerald-800") : "text-rose-800",
+                )}>
+                  {compliance.ok ? <RiShieldCheckLine className="w-4 h-4" /> : <RiErrorWarningLine className="w-4 h-4" />}
+                  {compliance.ok ? "Account cleared to book" : "Account blocked — nothing can be booked or dispatched"}
+                </p>
+                {compliance.blockers.map((b) => (
+                  <p key={b} className="text-rose-700">✗ {b}</p>
+                ))}
+                {compliance.warnings.map((w) => (
+                  <p key={w} className="text-amber-700">⚠ {w}</p>
+                ))}
+                {!compliance.ok && (
+                  <p className="text-rose-600">
+                    Fix it on the account under Accounts — it applies to every site this account has, not just this one.
+                  </p>
+                )}
+                {compliance.ok && compliance.coi_expires_at && (
+                  <p className="text-slate-500">COI current through {String(compliance.coi_expires_at).slice(0, 10)}.</p>
+                )}
               </div>
             )}
           </CardContent></Card>
@@ -389,6 +566,144 @@ export default function PartnershipBooking() {
             <p className="text-[11px] text-slate-400">Access codes unlock in the cleaner's portal 48h before the visit — never earlier.</p>
           </CardContent></Card>
 
+          {/* ── 4b. Facility, scope level, size — the three price inputs ──── */}
+          {isCommercial && (
+            <Card className={cn(!gates.scope && "border-rose-200")}><CardContent className="p-4 space-y-3">
+              <p className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                <RiRulerLine className="w-4 h-4 text-violet-600" /> Facility &amp; scope
+                <span className="text-xs font-normal text-slate-400">— what the price is built from</span>
+              </p>
+              <div className="grid sm:grid-cols-3 gap-3">
+                <div>
+                  <Label>Facility type *</Label>
+                  <Select value={facilityTypeKey} onValueChange={setFacilityTypeKey}>
+                    <SelectTrigger className="mt-1"><SelectValue placeholder="Pick facility…" /></SelectTrigger>
+                    <SelectContent>
+                      {(config?.facilityTypes || []).map((f) => (
+                        <SelectItem key={f.key} value={f.key}>
+                          {f.label} · ${(Number(f.base_rate_cents_per_sqft) / 100).toFixed(2)}/sqft
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Sets the base rate — a restaurant kitchen costs multiples of warehouse floor per square foot.
+                  </p>
+                </div>
+                <div>
+                  <Label>Scope level *</Label>
+                  <Select value={scopeLevel} onValueChange={setScopeLevel}>
+                    <SelectTrigger className="mt-1"><SelectValue placeholder="Pick depth…" /></SelectTrigger>
+                    <SelectContent>
+                      {(config?.scopeLevels || []).map((s) => (
+                        <SelectItem key={s.key} value={s.key}>{s.label} · ×{Number(s.multiplier).toFixed(2)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    {config?.scopeLevels.find((s) => s.key === scopeLevel)?.summary ||
+                      "Light · Standard · Detailed — each level is the one before it plus more."}
+                  </p>
+                </div>
+                <div>
+                  <Label>Square footage *</Label>
+                  <Input type="number" min={0} step={100} value={sqftInput}
+                    onChange={(e) => setSqftInput(e.target.value)} className="mt-1"
+                    placeholder="e.g. 1800" />
+                  {quote?.breakdown && (
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      {quote.breakdown.size_tier_label} · ×{quote.breakdown.size_tier_multiplier.toFixed(2)} — bigger
+                      facilities cost less per foot.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid sm:grid-cols-3 gap-3">
+                <div>
+                  <Label>Service window starts</Label>
+                  <Input type="time" value={windowStart} onChange={(e) => setWindowStart(e.target.value)} className="mt-1" />
+                </div>
+                <div>
+                  <Label>Service window ends</Label>
+                  <Input type="time" value={windowEnd} onChange={(e) => setWindowEnd(e.target.value)} className="mt-1" />
+                </div>
+                <div className="rounded-lg bg-slate-50 border border-slate-200 p-2 flex flex-col justify-center">
+                  <p className="text-[10px] font-semibold text-slate-500 uppercase">Window</p>
+                  <p className="font-bold text-slate-800">
+                    {windowHours ? `${windowHours}h on site` : "Not set"}
+                  </p>
+                  <p className="text-[10px] text-slate-400">Overnight windows wrap past midnight.</p>
+                </div>
+              </div>
+
+              {/* The quote. The formula's number is always shown — above the
+                  threshold as an anchor, below it as the price. */}
+              {commercialQuote.loading && (
+                <p className="text-xs text-slate-500 flex items-center gap-1.5">
+                  <RiLoader4Line className="w-3.5 h-3.5 animate-spin" /> Pricing…
+                </p>
+              )}
+              {commercialQuote.error && (
+                <p className="text-xs text-rose-600">{commercialQuote.error}</p>
+              )}
+              {quote && !quote.ok && quote.error && (
+                <p className="text-xs text-amber-700">{quote.error}</p>
+              )}
+              {quote?.ok && quote.breakdown && (
+                <div className={cn(
+                  "rounded-lg border p-3 space-y-1.5",
+                  needsWalkthrough ? "border-amber-300 bg-amber-50/60" : "border-violet-200 bg-violet-50/60",
+                )}>
+                  <p className="text-xs text-slate-600">
+                    {quote.breakdown.sqft.toLocaleString()} sq ft × ${(quote.breakdown.base_rate_cents_per_sqft / 100).toFixed(2)}/sqft
+                    ({quote.breakdown.facility_type_label}) × {quote.breakdown.scope_multiplier.toFixed(2)} ({quote.breakdown.scope_label})
+                    × {quote.breakdown.size_tier_multiplier.toFixed(2)} ({quote.breakdown.size_tier_label})
+                  </p>
+                  {needsWalkthrough ? (
+                    <>
+                      <p className="text-lg font-bold text-amber-900">
+                        Estimate {formatCents(quote.estimateLowCents)} – {formatCents(quote.estimateHighCents)}
+                      </p>
+                      <p className="text-xs text-amber-800">
+                        At or above {quote.walkthroughThresholdSqft.toLocaleString()} sq ft this is a range, not a quote.
+                        Racking, dock areas, floor type, restroom count, and existing condition swing a facility this
+                        size too far to price from a desk. Formula anchor: {formatCents(quote.formulaCents)}.
+                      </p>
+                      {walkthroughReady ? (
+                        <p className="text-xs font-semibold text-emerald-800">
+                          ✓ Walkthrough {walkthrough?.conducted_on ? `on ${walkthrough.conducted_on}` : ""}
+                          {walkthrough?.conducted_by ? ` by ${walkthrough.conducted_by}` : ""} — firm price{" "}
+                          {formatCents(Number(walkthrough?.firm_price_cents || 0))}.
+                        </p>
+                      ) : (
+                        <p className="text-xs font-semibold text-rose-700">
+                          ✗ No completed walkthrough for this site. Schedule one under the Walkthroughs tab and set the
+                          firm price from its findings — this booking can't be confirmed until then.
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-lg font-bold text-violet-900">
+                      {formatCents(quote.formulaCents)}{" "}
+                      <span className="text-xs font-normal text-violet-700">quotable now — no walkthrough needed</span>
+                    </p>
+                  )}
+                  {quote.crew && (
+                    <p className="text-xs text-slate-600">
+                      <span className="font-semibold">Recommended crew: {quote.crew.crewSize}</span> — {quote.crew.rationale}
+                    </p>
+                  )}
+                  {commercialQuote.photoZones.length > 0 && (
+                    <p className="text-[11px] text-slate-500">
+                      Documented by zone: {commercialQuote.photoZones.join(", ")} — before and after for each.
+                    </p>
+                  )}
+                </div>
+              )}
+            </CardContent></Card>
+          )}
+
           {/* ── 5. Scope + type-specific vitals ───────────────────────────── */}
           <Card className={cn(!gates.scope && "border-rose-200")}><CardContent className="p-4 space-y-3">
             <p className="text-sm font-bold text-slate-800">Scope — what's included *</p>
@@ -445,7 +760,9 @@ export default function PartnershipBooking() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div>
                 <Label>Job price ($) *</Label>
-                <Input type="number" min={0} value={priceDollars} onChange={(e) => setPriceDollars(e.target.value)} className="mt-1" />
+                <Input type="number" min={0} value={priceDollars}
+                  onChange={(e) => { setPriceDollars(e.target.value); setPriceTouched(true); }}
+                  className="mt-1" />
               </div>
               <div>
                 <Label>Crew pay %</Label>
@@ -453,13 +770,33 @@ export default function PartnershipBooking() {
               </div>
               <div>
                 <Label># cleaners</Label>
-                <Input type="number" min={1} max={3} value={numCleaners} onChange={(e) => setNumCleaners(e.target.value)} className="mt-1" />
+                <Input type="number" min={1} max={isCommercial ? 12 : 3} value={numCleaners}
+                  onChange={(e) => { setNumCleaners(e.target.value); setCrewTouched(true); }}
+                  className="mt-1" />
               </div>
               <div className="rounded-lg bg-violet-50 border border-violet-200 p-2 flex flex-col justify-center">
-                <p className="text-[10px] font-semibold text-violet-600 uppercase">Crew earns</p>
+                <p className="text-[10px] font-semibold text-violet-600 uppercase">
+                  Crew pool{Number(numCleaners) > 1 ? ` ÷ ${numCleaners}` : ""}
+                </p>
                 <p className="font-bold text-violet-900">${(payoutCents / 100).toFixed(2)}</p>
+                {Number(numCleaners) > 1 && (
+                  <p className="text-[10px] text-violet-700">
+                    ≈ ${(payoutCents / 100 / Number(numCleaners)).toFixed(2)} each
+                  </p>
+                )}
               </div>
             </div>
+            {isCommercial && priceTouched && quote?.ok && priceCents !== quote.formulaCents && !walkthroughReady && (
+              <p className="text-[11px] text-amber-700">
+                Negotiated price — recorded as an override against the {formatCents(quote.formulaCents)} formula anchor.
+              </p>
+            )}
+            {isCommercial && Number(numCleaners) >= 3 && (
+              <p className="text-[11px] text-slate-500">
+                Crews of 3–4 and 5+ have their own pay brackets — the pool grows with crew size so per-person hourly
+                holds as coordination overhead does.
+              </p>
+            )}
             <div>
               <Label>Payment status</Label>
               <Select value={paymentStatus} onValueChange={setPaymentStatus}>
@@ -478,12 +815,22 @@ export default function PartnershipBooking() {
               <RiTeamLine className="w-4 h-4 text-violet-600" /> Crew
               <span className="text-xs font-normal text-slate-400">— assign now, or leave empty to route to Dispatch</span>
             </p>
+            {isCommercial && recommendedCrew != null && (
+              <p className={cn(
+                "text-xs",
+                selectedCleaners.length > 0 && selectedCleaners.length < recommendedCrew ? "text-amber-700" : "text-slate-500",
+              )}>
+                {selectedCleaners.length} of {recommendedCrew} recommended selected
+                {quote?.crew?.windowTooShort ? " — the window is too short for this scope at any crew size." : ""}
+              </p>
+            )}
             <div className="flex flex-wrap gap-1.5">
               {cleaners.map((c) => {
                 const on = selectedCleaners.includes(c.id);
+                const cap = isCommercial ? 12 : 3;
                 return (
                   <button key={c.id}
-                    onClick={() => setSelectedCleaners((prev) => on ? prev.filter((x) => x !== c.id) : prev.length < 3 ? [...prev, c.id] : prev)}
+                    onClick={() => setSelectedCleaners((prev) => on ? prev.filter((x) => x !== c.id) : prev.length < cap ? [...prev, c.id] : prev)}
                     className={cn(
                       "px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors",
                       on ? "bg-violet-600 text-white border-violet-600" : "bg-white text-slate-600 border-slate-200 hover:border-violet-300",
@@ -506,13 +853,15 @@ export default function PartnershipBooking() {
                 <Select value={cadence} onValueChange={(v) => setCadence(v as typeof cadence)}>
                   <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
                   <SelectContent>
+                    {isCommercial && <SelectItem value="daily">Daily</SelectItem>}
                     <SelectItem value="weekly">Weekly</SelectItem>
                     <SelectItem value="biweekly">Bi-weekly</SelectItem>
                     <SelectItem value="monthly">Monthly</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-slate-500">
-                  Future visits auto-generate a week ahead with the same access, scope, pay, and preferred crew.
+                  Future visits auto-generate a week ahead with the same facility, scope level, access, pay, and
+                  preferred crew — through the same gates as this one.
                 </p>
               </div>
             )}
@@ -520,7 +869,16 @@ export default function PartnershipBooking() {
 
           {/* ── Gates + submit ────────────────────────────────────────────── */}
           <div className="flex flex-wrap gap-1.5">
-            {([["client", isStr ? "Property" : "Account"], ["when", "Date + deadline/window"], ["access", "Access"], ["scope", "Scope"], ["pay", "Price"]] as const).map(([k, label]) => (
+            {([
+              ["client", isStr ? "Property" : "Account + site"],
+              ["when", "Date + deadline/window"],
+              ["access", "Access"],
+              ["scope", isCommercial ? "Facility + scope" : "Scope"],
+              ["pay", "Price"],
+              ...(isCommercial
+                ? ([["compliance", "COI + agreement"], ["walkthrough", needsWalkthrough ? "Walkthrough" : "No walkthrough needed"]] as Array<[string, string]>)
+                : []),
+            ] as Array<[string, string]>).map(([k, label]) => (
               <Badge key={k} className={cn("border-0", gates[k] ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700")}>
                 {gates[k] ? "✓" : "✗"} {label}
               </Badge>

@@ -98,6 +98,21 @@ interface InternalDetails {
   issuesFlag: boolean;
   issuesNotes: string | null;
 }
+interface CrewMember {
+  id: string;
+  name: string;
+  role: string;
+  isYou: boolean;
+}
+interface CommercialDetails {
+  facilityType: string | null;
+  scopeLevel: string | null;
+  squareFootage: number | null;
+  hardDeadline: string | null;
+  serviceWindowHours: number | null;
+  photoZones: string[];
+  recommendedCrewSize: number | null;
+}
 interface Job {
   id: string;
   bookingId: string;
@@ -125,6 +140,8 @@ interface Job {
   beforePhotos?: string[] | null;
   afterPhotos?: string[] | null;
   pay: JobPay;
+  crew?: CrewMember[];
+  commercial?: CommercialDetails | null;
   customerDetails: CustomerDetails | null;
   internalDetails: InternalDetails | null;
 }
@@ -222,6 +239,8 @@ function JobDetails({ job }: { job: Job }) {
   const [open, setOpen] = useState(false);
   const cd = job.customerDetails;
   const id = job.internalDetails;
+  const com = job.commercial;
+  const crew = job.crew || [];
   if (!cd && !id) return null;
 
   const homeBits = [
@@ -252,6 +271,58 @@ function JobDetails({ job }: { job: Job }) {
       </button>
       {open && (
         <div className="p-3 space-y-3 bg-background">
+          {/* Commercial vitals. What kind of building, how deep the clean,
+              how long you have, and how it must be documented — all straight
+              off the booking, none of it re-entered by anyone. */}
+          {com && (
+            <div>
+              <p className="text-[10px] font-bold text-violet-700 uppercase tracking-widest flex items-center gap-1 mb-1.5">
+                <RiToolsLine className="w-3 h-3" /> Facility
+              </p>
+              <DetailRow label="Facility type" value={com.facilityType} />
+              <DetailRow label="Scope level" value={com.scopeLevel ? titleCase(com.scopeLevel) : null} />
+              <DetailRow
+                label="Size"
+                value={com.squareFootage ? `${com.squareFootage.toLocaleString()} sq ft` : null}
+              />
+              <DetailRow
+                label="Service window"
+                value={com.serviceWindowHours ? `${com.serviceWindowHours}h on site` : null}
+              />
+              {com.hardDeadline ? (
+                <p className="mt-2 rounded-md bg-rose-50 border border-rose-200 px-2 py-1.5 text-[11px] font-semibold text-rose-900">
+                  ⏰ Must finish by: {com.hardDeadline}
+                </p>
+              ) : null}
+              {com.photoZones.length > 0 ? (
+                <p className="mt-2 rounded-md bg-violet-50 border border-violet-200 px-2 py-1.5 text-[11px] text-violet-900">
+                  <strong>Photo zones:</strong> {com.photoZones.join(", ")} — before and after for each. Your
+                  checklist has a section per zone; it won&apos;t complete without both.
+                </p>
+              ) : null}
+            </div>
+          )}
+          {/* Who else is on this job. A crew that doesn't know it's a crew
+              cleans the same aisle twice and misses the dock. */}
+          {crew.length > 1 && (
+            <div>
+              <p className="text-[10px] font-bold text-violet-700 uppercase tracking-widest flex items-center gap-1 mb-1.5">
+                <RiUser3Line className="w-3 h-3" /> Crew of {crew.length}
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {crew.map((c) => (
+                  <span key={c.id} className={cn(
+                    "rounded-full px-2 py-0.5 text-[11px] font-medium border",
+                    c.isYou
+                      ? "bg-violet-600 text-white border-violet-600"
+                      : "bg-muted/40 text-foreground border-border/60",
+                  )}>
+                    {c.isYou ? "You" : c.name}{c.role === "Lead" ? " · lead" : ""}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
           {cd && (
             <div>
               <p className="text-[10px] font-bold text-violet-700 uppercase tracking-widest flex items-center gap-1 mb-1.5">

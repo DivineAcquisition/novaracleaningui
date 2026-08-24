@@ -295,25 +295,40 @@ const COMMERCIAL_SCOPE_LABEL: Record<string, string> = {
   detailed: "Detailed",
 };
 
+// The list a commercial job gets when no scope level was recorded — every
+// booking made before scope levels existed. Left exactly as it was so an
+// in-flight job's item numbering doesn't shift under the crew working it.
 const COMMERCIAL_SECTIONS: ContractorChecklistSection[] = [
-  COMMERCIAL_ARRIVAL,
+  {
+    title: "Arrival & setup",
+    items: [
+      "Check in per site access instructions (badge / code / contact)",
+      "Notify the required contact on arrival (if specified)",
+      "Take BEFORE photos of all areas in scope",
+    ],
+  },
   {
     title: "Service areas",
     items: [
       "Clean all areas listed in the job scope",
-      ...COMMERCIAL_STANDARD_ITEMS,
+      "Restrooms: disinfect toilets, sinks, counters, mirrors; restock supplies",
+      "Empty all trash and recycling; replace liners; take to designated disposal",
+      "Vacuum carpets and mats; sweep and mop hard floors",
+      "Wipe and disinfect touch points (handles, switches, rails)",
+      "Break room / kitchenette: counters, sink, appliance exteriors, tables",
       "Dust surfaces, ledges, and reachable vents",
       "Interior glass at entrances (streak-free)",
     ],
   },
   {
-    title: "Documentation",
+    title: "Close-out",
     items: [
-      "Take BEFORE photos of all areas in scope",
+      "Complete any deep tasks scheduled for this visit (per scope)",
       "Take AFTER photos of every area cleaned",
+      "Secure the site per lock-up procedure (doors, alarm, lights)",
+      "Notify the required contact on departure (if specified)",
     ],
   },
-  COMMERCIAL_CLOSEOUT,
 ];
 
 /**
@@ -331,11 +346,14 @@ export function commercialChecklistSections(
   office = false,
 ): ContractorChecklistSection[] {
   const key = String(scopeLevel || "").toLowerCase().trim();
-  const items = COMMERCIAL_SCOPE_ITEMS[key];
+  const zones = (photoZones || []).map((z) => String(z || "").trim()).filter(Boolean);
+  // A job with zones but no recorded scope level still needs the zone
+  // sections, so fall back to Standard depth rather than the legacy list.
+  const items = COMMERCIAL_SCOPE_ITEMS[key] ||
+    (zones.length > 0 ? COMMERCIAL_SCOPE_ITEMS.standard : null);
   if (!items) return office ? OFFICE_SECTIONS : COMMERCIAL_SECTIONS;
 
-  const label = COMMERCIAL_SCOPE_LABEL[key] || key;
-  const zones = (photoZones || []).map((z) => String(z || "").trim()).filter(Boolean);
+  const label = COMMERCIAL_SCOPE_LABEL[key] || COMMERCIAL_SCOPE_LABEL.standard;
 
   const sections: ContractorChecklistSection[] = [
     COMMERCIAL_ARRIVAL,
@@ -396,10 +414,12 @@ const OFFICE_SECTIONS: ContractorChecklistSection[] = [
   ...COMMERCIAL_SECTIONS.slice(0, 2),
   ...OFFICE_ONLY_SECTIONS,
   {
-    title: "Documentation",
+    title: "After-hours close-out",
     items: [
-      "Take BEFORE photos of all areas in scope",
       "Take AFTER photos of every area cleaned",
+      "Turn off lights per building instructions",
+      "Set the alarm and lock up exactly per the security notes",
+      "Badge out / check out with security if required",
     ],
   },
 ];
