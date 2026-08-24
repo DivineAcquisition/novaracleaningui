@@ -1163,12 +1163,32 @@ SELECT
   a.company_coi_sent_at,
   a.requires_coi_on_file,
   (public.commercial_billing_state(a.id) ->> 'configured')::boolean AS billing_configured,
+  (public.commercial_coi_status(a.id) ->> 'blocked')::boolean       AS coi_blocked,
   -- Where the deal actually is. Read top-down: the furthest stage whose
   -- evidence exists.
+  --
+  -- dispatch_eligible here means the SAME four things
+  -- commercial_site_dispatch_eligibility enforces — firm price, signed
+  -- agreement, configured billing, current certificate. A console that shows
+  -- a green account the booking function then refuses is worse than no
+  -- console, so the two agree by construction rather than by intention.
   CASE
     WHEN a.agreement_signed_at IS NOT NULL
      AND (public.commercial_billing_state(a.id) ->> 'configured')::boolean
+     AND NOT (public.commercial_coi_status(a.id) ->> 'blocked')::boolean
+     AND COALESCE(r.priced_sites, 0) > 0
+     AND COALESCE(r.priced_sites, 0) = COALESCE(r.active_sites, 0) - COALESCE(r.excluded_sites, 0)
       THEN 'dispatch_eligible'
+    -- Signed and billable, but the certificate is the thing standing in the
+    -- way. Named separately because it is fixed in a different console.
+    WHEN a.agreement_signed_at IS NOT NULL
+     AND (public.commercial_billing_state(a.id) ->> 'configured')::boolean
+     AND (public.commercial_coi_status(a.id) ->> 'blocked')::boolean
+      THEN 'coi_blocked'
+    -- Everything else is done and the paperwork outran the pricing.
+    WHEN a.agreement_signed_at IS NOT NULL
+     AND (public.commercial_billing_state(a.id) ->> 'configured')::boolean
+      THEN 'pricing_pending'
     WHEN a.agreement_signed_at IS NOT NULL THEN 'billing_pending'
     WHEN g.status = 'pending' THEN 'agreement_sent'
     WHEN p.status = 'accepted' THEN 'proposal_accepted'

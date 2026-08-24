@@ -166,6 +166,7 @@ export const PIPELINE_STAGES = [
   "proposal_accepted",
   "agreement_sent",
   "billing_pending",
+  "coi_blocked",
   "dispatch_eligible",
 ] as const;
 
@@ -180,6 +181,7 @@ export const STAGE_LABELS: Record<PipelineStage, string> = {
   proposal_accepted: "Proposal accepted",
   agreement_sent: "Agreement out for signature",
   billing_pending: "Billing setup pending",
+  coi_blocked: "Blocked on certificate",
   dispatch_eligible: "Dispatch-eligible",
 };
 

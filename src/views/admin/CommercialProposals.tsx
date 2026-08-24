@@ -95,6 +95,7 @@ interface Deal {
   agreement_signed_at: string | null;
   billing_method: string | null;
   billing_configured: boolean | null;
+  coi_blocked: boolean | null;
   company_coi_sent_at: string | null;
   requires_coi_on_file: boolean | null;
   stage: PipelineStage;
@@ -174,6 +175,7 @@ const STAGE_CHIP: Record<PipelineStage, string> = {
   proposal_accepted: "bg-indigo-100 text-indigo-700",
   agreement_sent: "bg-blue-100 text-blue-700",
   billing_pending: "bg-amber-100 text-amber-800",
+  coi_blocked: "bg-rose-100 text-rose-700",
   dispatch_eligible: "bg-emerald-100 text-emerald-700",
 };
 
@@ -181,6 +183,7 @@ const STAGE_CHIP: Record<PipelineStage, string> = {
 // the pipeline rather than alphabetically.
 const STAGE_ORDER: PipelineStage[] = [
   "changes_requested",
+  "coi_blocked",
   "billing_pending",
   "proposal_expired",
   "proposal_accepted",
@@ -238,7 +241,7 @@ export default function CommercialProposals() {
       .filter((d) => {
         if (stageFilter === "open") return d.stage !== "dispatch_eligible" && d.stage !== "pricing_pending";
         if (stageFilter === "attention") {
-          return ["changes_requested", "billing_pending", "proposal_expired"].includes(d.stage);
+          return ["changes_requested", "coi_blocked", "billing_pending", "proposal_expired"].includes(d.stage);
         }
         if (stageFilter !== "all") return d.stage === stageFilter;
         return true;
@@ -337,6 +340,11 @@ export default function CommercialProposals() {
                   {deal.stage === "billing_pending" && (
                     <p className="mt-1 text-xs text-amber-700">
                       Signed {shortDate(deal.agreement_signed_at)} — billing not configured, so nothing dispatches.
+                    </p>
+                  )}
+                  {deal.stage === "coi_blocked" && (
+                    <p className="mt-1 text-xs text-rose-700">
+                      Signed and billable, but the certificate of insurance isn't current — fixed under Compliance.
                     </p>
                   )}
                 </div>
