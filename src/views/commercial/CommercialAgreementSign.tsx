@@ -169,16 +169,29 @@ export default function CommercialAgreementSign() {
   // Coming back from Stripe: resolve the saved method before rendering the
   // billing step again, so a signer who paid attention doesn't see the form
   // they just completed.
+  //
+  // The completion state is built from THIS response rather than a re-fetch,
+  // because configuring billing retires the link — re-loading would show the
+  // signer "this link is no longer valid" at the exact moment they finished.
   useEffect(() => {
     if (!returningFromStripe || !token) return;
     void (async () => {
       setBusy(true);
       try {
-        await fetch(`/api/commercial-agreement/${token}`, {
+        const res = await fetch(`/api/commercial-agreement/${token}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "billing_status" }),
         });
+        const json = await res.json();
+        if (json?.ok && json.billing?.configured) {
+          setState((prev) =>
+            prev.kind === "ready" || prev.kind === "complete"
+              ? { kind: "complete", data: { ...prev.data, billing: json.billing } }
+              : prev,
+          );
+          return;
+        }
         await load();
       } finally {
         setBusy(false);
@@ -227,6 +240,13 @@ export default function CommercialAgreementSign() {
         setError(json?.message || "We couldn't record the signature. Please try again.");
         return;
       }
+      // Signing burns the signing token and issues a continuation one, so the
+      // URL in the address bar is already dead. Move to the new one rather
+      // than re-fetching with a token that no longer resolves.
+      if (json.continuationUrl) {
+        window.location.replace(String(json.continuationUrl));
+        return;
+      }
       await load();
     } catch (err) {
       setError((err as Error).message || "We couldn't generate the signed document. Please reload and try again.");
@@ -260,6 +280,16 @@ export default function CommercialAgreementSign() {
       }
       if (json.outcome === "redirect" && json.url) {
         window.location.href = json.url;
+        return;
+      }
+      // Same reason as the Stripe return above: this succeeded, and the link
+      // is retired now, so complete from the response rather than re-fetching.
+      if (json.outcome === "billing_configured" && json.billing?.configured) {
+        setState((prev) =>
+          prev.kind === "ready" || prev.kind === "complete"
+            ? { kind: "complete", data: { ...prev.data, billing: json.billing } }
+            : prev,
+        );
         return;
       }
       await load();

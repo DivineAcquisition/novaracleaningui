@@ -106,6 +106,27 @@ async function resolveToken(token: string): Promise<Resolved> {
   return { ok: true, status: 200, reason: "ok", message: "", agreement };
 }
 
+/**
+ * Retire the post-signature link once billing is actually configured.
+ *
+ * The continuation token exists for one reason: to carry a signer across the
+ * Stripe redirect without leaving a live SIGNING link in circulation. Once
+ * billing is set up there is nothing left to do on the page, and a link that
+ * can still rewrite an account's billing details has outlived its purpose.
+ */
+async function retireContinuationToken(
+  supabase: ReturnType<typeof getAdminSupabase>,
+  agreement: Record<string, unknown>,
+  billingState: unknown,
+): Promise<void> {
+  const configured = (billingState as { configured?: boolean } | null)?.configured === true;
+  if (!configured || !agreement.token) return;
+  await supabase
+    .from("commercial_agreements")
+    .update({ token: null, updated_at: new Date().toISOString() })
+    .eq("id", agreement.id as string);
+}
+
 async function billingSnapshot(accountId: string) {
   const supabase = getAdminSupabase();
   const [{ data: state }, { data: profile }] = await Promise.all([
@@ -271,6 +292,18 @@ export async function POST(
         upsert: true,
       });
 
+    // A continuation token, minted BEFORE the signature lands so the row is
+    // never left without a working link. It replaces the signing token in the
+    // same write: a forwarded email cannot produce a second executed
+    // agreement, and the signer still survives the Stripe redirect.
+    //
+    // If minting fails the existing token is kept rather than nulled — a
+    // signer stranded on a dead link immediately after signing is a far worse
+    // outcome than a signing link that lives a little longer, and the
+    // status check below already makes a second signature impossible.
+    const { data: minted } = await supabase.rpc("mint_commercial_token");
+    const continuation = String(minted || "") || String(a.token || "");
+
     // The signature is the moment. Everything after this is best-effort and
     // must not be able to undo it.
     const { error } = await supabase
@@ -288,23 +321,14 @@ export async function POST(
         // the app is company-signed.
         countersigned_at: (a.countersigned_at as string) || now,
         countersigned_by_name: (a.countersigned_by_name as string) || "Malik Sannie",
-        token: null,
+        token: continuation || null,
+        expires_at: new Date(Date.now() + 7 * 86400_000).toISOString(),
         updated_at: now,
       })
       .eq("id", a.id as string)
       .eq("status", "pending");
     if (error) {
       return NextResponse.json({ ok: false, message: error.message }, { status: 400 });
-    }
-
-    // A continuation token so the billing step survives the Stripe redirect
-    // without leaving a live signing link in the wild.
-    const { data: minted } = await supabase.rpc("mint_commercial_token");
-    const continuation = String(minted || "");
-    if (continuation) {
-      await supabase.from("commercial_agreements")
-        .update({ token: continuation, expires_at: new Date(Date.now() + 7 * 86400_000).toISOString() })
-        .eq("id", a.id as string);
     }
 
     // Open the billing profile in the method the agreement was signed under,
@@ -454,6 +478,8 @@ export async function POST(
       if (error) return NextResponse.json({ ok: false, message: error.message }, { status: 400 });
 
       const billing = await billingSnapshot(accountId);
+      await retireContinuationToken(supabase, a, billing.state);
+
       await supabase.from("events").insert({
         event_type: "commercial.billing.configured",
         source: "commercial-agreement",
@@ -580,6 +606,7 @@ export async function POST(
     }
 
     const billing = await billingSnapshot(accountId);
+    await retireContinuationToken(supabase, a, billing.state);
     return NextResponse.json({ ok: true, billing: billing.state, billingProfile: billing.profile });
   }
 
