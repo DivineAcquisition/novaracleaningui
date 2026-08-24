@@ -55,6 +55,7 @@ import {
   latestCompletedWalkthrough,
   loadCommercialConfig,
   logComplianceBlock,
+  sitePricingState,
   walkthroughById,
   type WalkthroughRecord,
 } from "../_shared/commercial-config.ts";
@@ -327,6 +328,21 @@ serve(async (req) => {
       });
       photoZones = photoZonesForSite(config, effectiveSqft, site?.photo_zones);
 
+      // A site the walkthrough ruled out is never bookable, whatever its size
+      // and whatever the formula says. An exclusion is a stop, not a price
+      // adjustment, so it is checked before anything about square footage.
+      const pricingState = site?.id ? await sitePricingState(admin, String(site.id)) : null;
+      if (pricingState && pricingState.stage === "excluded") {
+        return json({
+          ok: false,
+          error:
+            `${site?.nickname || "This site"} can't be booked — a walkthrough found a condition outside what we service. ` +
+            `${pricingState.reason || ""} This needs to be resolved or referred out; it is not something to price around.`,
+          code: "site_excluded",
+          exclusionCode: pricingState.exclusion_code,
+        }, 409);
+      }
+
       // At or above the threshold the formula is an anchor, not a price. The
       // firm number has to come from what someone actually saw on site.
       if (quote.requiresWalkthrough) {
@@ -334,7 +350,7 @@ serve(async (req) => {
           ? await walkthroughById(admin, s(body.walkthroughId, 40))
           : await latestCompletedWalkthrough(admin, String(site?.id || ""));
 
-        if (!walkthrough || walkthrough.status !== "completed" || !walkthrough.firm_price_cents) {
+        if (!walkthrough || walkthrough.status !== "priced" || !walkthrough.firm_price_cents) {
           const anchor = quote.ok
             ? ` Formula anchor: $${(quote.formulaCents / 100).toFixed(2)} (estimate $${(quote.estimateLowCents / 100).toFixed(2)}–$${(quote.estimateHighCents / 100).toFixed(2)}).`
             : "";
@@ -342,8 +358,12 @@ serve(async (req) => {
             ok: false,
             error:
               `${effectiveSqft.toLocaleString()} sq ft is at or above the ${quote.walkthroughThresholdSqft.toLocaleString()} sq ft walkthrough threshold. ` +
-              `A facility this size can't be firm-quoted from a desk — complete a walkthrough and set the price from its findings first.${anchor}`,
+              `A facility this size can't be firm-quoted from a desk — ` +
+              `${pricingState?.reason || "complete a walkthrough and set the price from its findings first."}` +
+              `${anchor}`,
             code: "walkthrough_required",
+            walkthroughStage: pricingState?.stage || "not_started",
+            walkthroughId: pricingState?.walkthrough_id || null,
             estimate: {
               formulaCents: quote.formulaCents,
               lowCents: quote.estimateLowCents,
@@ -368,13 +388,17 @@ serve(async (req) => {
 
     let finalPriceCents = priceCents > 0 ? priceCents : strDefault;
     if (!isStr && account) {
-      if (walkthrough?.firm_price_cents) {
+      // The site carries the rate its walkthrough set, so a booking prices at
+      // the same number the agreement lists, without re-deriving it.
+      const sitePriceCents = Number(site?.firm_price_cents) > 0
+        ? Number(site?.firm_price_cents)
+        : Number(walkthrough?.firm_price_cents) || 0;
+
+      if (sitePriceCents > 0) {
         // The walkthrough IS the price at this size. An admin may still
         // override it, but that override is recorded as such.
-        finalPriceCents = priceCents > 0 && priceCents !== walkthrough.firm_price_cents
-          ? priceCents
-          : Number(walkthrough.firm_price_cents);
-        priceSource = finalPriceCents === Number(walkthrough.firm_price_cents) ? "walkthrough" : "manual";
+        finalPriceCents = priceCents > 0 && priceCents !== sitePriceCents ? priceCents : sitePriceCents;
+        priceSource = finalPriceCents === sitePriceCents ? "walkthrough" : "manual";
       } else if (priceCents > 0) {
         priceSource = quote?.ok && priceCents === quote.formulaCents ? "formula" : "manual";
         finalPriceCents = priceCents;
@@ -396,7 +420,11 @@ serve(async (req) => {
     // Residential crews are one or two people. A 30,000 sqft warehouse on a
     // four-hour overnight window is not that job, so the crew size follows
     // from the work rather than from a fixed default.
-    const recommendedCrew = quote?.crew?.crewSize ?? null;
+    // A walkthrough that measured the building beats a formula that inferred
+    // it: the crew size on the site came from someone standing in it.
+    const recommendedCrew = Number(site?.recommended_crew_size) > 0
+      ? Number(site?.recommended_crew_size)
+      : quote?.crew?.crewSize ?? null;
     const requestedCrew = Number(body.numCleanersOverride) > 0
       ? Math.round(Number(body.numCleanersOverride))
       : Number(body.numCleaners) > 0
@@ -512,7 +540,7 @@ serve(async (req) => {
           schedule_id: body.scheduleId || null,
           compliance_warnings: complianceWarnings.length ? complianceWarnings : null,
         },
-        commercial_walkthrough_id: walkthrough?.id || null,
+        commercial_walkthrough_id: walkthrough?.id || site?.walkthrough_id || null,
         price_source: priceSource,
         estimate_low_cents: quote?.ok ? quote.estimateLowCents : null,
         estimate_high_cents: quote?.ok ? quote.estimateHighCents : null,
@@ -522,8 +550,8 @@ serve(async (req) => {
             price_source: priceSource,
             requires_walkthrough: quote.requiresWalkthrough,
             walkthrough_threshold_sqft: quote.walkthroughThresholdSqft,
-            walkthrough_id: walkthrough?.id || null,
-            firm_price_cents: walkthrough?.firm_price_cents ?? null,
+            walkthrough_id: walkthrough?.id || site?.walkthrough_id || null,
+            firm_price_cents: site?.firm_price_cents ?? walkthrough?.firm_price_cents ?? null,
             crew: quote.crew,
           }
           : null,

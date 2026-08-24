@@ -282,6 +282,7 @@ export interface WalkthroughRecord {
   id: string;
   business_site_id: string;
   status: string;
+  priced_at?: string | null;
   conducted_on: string | null;
   conducted_by: string | null;
   firm_price_cents: number | null;
@@ -292,10 +293,16 @@ export interface WalkthroughRecord {
 }
 
 const WALKTHROUGH_COLS =
-  "id, business_site_id, status, conducted_on, conducted_by, firm_price_cents, " +
+  "id, business_site_id, status, conducted_on, conducted_by, priced_at, firm_price_cents, " +
   "recommended_crew_size, scope_level, facility_type_key, sqft";
 
-/** The most recent completed walkthrough for a site, if there is one. */
+/**
+ * The walkthrough that produced this site's current price, if any.
+ *
+ * `priced` is the pipeline stage where a human set a firm price from the
+ * findings. A walkthrough that is merely `conducted` has findings and no
+ * price, which is precisely the state this gate must not accept.
+ */
 export async function latestCompletedWalkthrough(
   admin: SB,
   siteId: string,
@@ -304,12 +311,42 @@ export async function latestCompletedWalkthrough(
     .from("commercial_walkthroughs")
     .select(WALKTHROUGH_COLS)
     .eq("business_site_id", siteId)
-    .eq("status", "completed")
+    .eq("status", "priced")
     .not("firm_price_cents", "is", null)
-    .order("conducted_on", { ascending: false })
+    .order("priced_at", { ascending: false })
     .limit(1);
   const row = Array.isArray(data) && data.length ? data[0] : null;
   return (row as WalkthroughRecord) || null;
+}
+
+export interface SitePricingState {
+  eligible: boolean;
+  requires_walkthrough?: boolean;
+  stage?: string;
+  reason?: string;
+  firm_price_cents?: number | null;
+  recommended_crew_size?: number | null;
+  walkthrough_id?: string | null;
+  exclusion_code?: string | null;
+}
+
+/**
+ * Whether a site may reach a confirmed, dispatchable booking, and if not, why.
+ *
+ * Computed in SQL from the site's square footage, the threshold, and where its
+ * walkthrough got to — so the booking flow, the admin pipeline board, and the
+ * site record cannot disagree about whether a building is priced. An excluded
+ * site is never eligible whatever its size: that is what an exclusion means.
+ */
+export async function sitePricingState(
+  admin: SB,
+  siteId: string,
+): Promise<SitePricingState | null> {
+  const { data, error } = await admin.rpc("commercial_site_pricing_state", {
+    p_site_id: siteId,
+  });
+  if (error || !data || typeof data !== "object") return null;
+  return data as SitePricingState;
 }
 
 export async function walkthroughById(
