@@ -29,6 +29,7 @@ import {
   contractorChecklistKeyForBooking,
   countChecklistItems,
   getContractorChecklist,
+  photoRequiredSectionIndexes,
 } from "../_shared/contractor-checklists.ts";
 import { ensureJobChecklist } from "../_shared/job-checklist.ts";
 import { documentBookingAddonsInQcSafe } from "../_shared/addon-qc.ts";
@@ -152,12 +153,19 @@ function countResolved(items: Record<string, unknown>, totalItems: number, secti
   return { completed, unresolvedKeys, skips };
 }
 
-function sectionPhotosOk(meta: Record<string, SectionMeta>, sectionCount: number): {
+/**
+ * Which photo-required sections still lack a before/after pair.
+ *
+ * Focused cleans mark every area; a large commercial site marks every
+ * documentation zone. Sections that aren't marked (arrival, close-out) are not
+ * photo evidence and are not checked here.
+ */
+function sectionPhotosOk(meta: Record<string, SectionMeta>, requiredIndexes: number[]): {
   ok: boolean;
   missing: number[];
 } {
   const missing: number[] = [];
-  for (let i = 0; i < sectionCount; i++) {
+  for (const i of requiredIndexes) {
     const m = meta[String(i)] || {};
     const before = Array.isArray(m.before) ? m.before : [];
     const after = Array.isArray(m.after) ? m.after : [];
@@ -224,7 +232,7 @@ serve(async (req) => {
 
     const { data: booking } = await supabase
       .from("bookings")
-      .select("id, booking_number, first_name, service_date, time_slot, arrival_window, add_ons, access_notes, team_notes, dispatch_notes, service_type, status, focused_areas, is_recurring, membership_plan, booking_channel")
+      .select("id, booking_number, first_name, service_date, time_slot, arrival_window, add_ons, access_notes, team_notes, dispatch_notes, service_type, status, focused_areas, is_recurring, membership_plan, booking_channel, scope_level, photo_zones, facility_type, square_footage, hard_deadline")
       .eq("job_id", jobId)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -258,7 +266,17 @@ serve(async (req) => {
     const checklistKey = checklistRow.completed_at
       ? String(checklistRow.service_type || serviceTypeRaw)
       : contractorChecklistKeyForBooking(booking, serviceTypeRaw);
-    const spec = getContractorChecklist(checklistKey, focusedAreas, focusedSettings);
+    const photoZones: string[] = Array.isArray(booking?.photo_zones)
+      ? booking.photo_zones.map(String).filter(Boolean)
+      : [];
+    const spec = getContractorChecklist(checklistKey, focusedAreas, focusedSettings, {
+      scopeLevel: booking?.scope_level || null,
+      photoZones,
+    });
+    // Sections that are photo evidence: every focused area, every commercial
+    // documentation zone. These are what the completion gate checks.
+    const photoSections = photoRequiredSectionIndexes(spec);
+    const hasPhotoSections = photoSections.length > 0;
     const totalItems = countChecklistItems(spec);
     const nowIso = new Date().toISOString();
     const cleanerName = cleaner
@@ -341,10 +359,15 @@ serve(async (req) => {
     }
 
     if (action === "save_section_photos") {
-      if (!isFocused) return json({ ok: false, error: "Per-area photos apply to focused cleans." }, 400);
+      if (!hasPhotoSections) {
+        return json({ ok: false, error: "This job documents with one site-wide before/after pair, not per-section photos." }, 400);
+      }
       const sectionIndex = Number(body?.sectionIndex);
       if (!Number.isInteger(sectionIndex) || !spec.sections[sectionIndex]) {
         return json({ ok: false, error: "Unknown area section." }, 400);
+      }
+      if (!photoSections.includes(sectionIndex)) {
+        return json({ ok: false, error: "That section isn't one of this job's documented areas." }, 400);
       }
       const before = Array.isArray(body?.before) ? body.before.map(String).filter(Boolean).slice(0, 12) : null;
       const after = Array.isArray(body?.after) ? body.after.map(String).filter(Boolean).slice(0, 12) : null;
@@ -590,8 +613,8 @@ serve(async (req) => {
           unresolvedKeys,
         }, 400);
       }
-      if (isFocused) {
-        const photoGate = sectionPhotosOk(sectionMeta, spec.sections.length);
+      if (hasPhotoSections) {
+        const photoGate = sectionPhotosOk(sectionMeta, photoSections);
         if (!photoGate.ok) {
           const names = photoGate.missing.map((i) => spec.sections[i]?.title || `Area ${i + 1}`).join(", ");
           return json({
@@ -628,7 +651,7 @@ serve(async (req) => {
           completed_items: completed,
           total_items: totalItems,
           skips,
-          section_meta: isFocused ? sectionMeta : undefined,
+          section_meta: hasPhotoSections ? sectionMeta : undefined,
         },
       }).then(() => undefined).catch(() => undefined);
     }
@@ -730,16 +753,20 @@ serve(async (req) => {
     const liveMeta = (freshChecklist?.section_meta && typeof freshChecklist.section_meta === "object")
       ? freshChecklist.section_meta as Record<string, SectionMeta>
       : sectionMeta;
-    const photoGate = isFocused ? sectionPhotosOk(liveMeta, spec.sections.length) : { ok: true, missing: [] as number[] };
+    const photoGate = hasPhotoSections
+      ? sectionPhotosOk(liveMeta, photoSections)
+      : { ok: true, missing: [] as number[] };
 
     const areasComplete = spec.sections.map((section, sIdx) => {
       const itemDone = section.items.every((_, iIdx) => isResolved(itemsMap[`${sIdx}:${iIdx}`]));
       const m = liveMeta[String(sIdx)] || {};
-      const photosDone = !isFocused
+      const photosDone = !section.photoRequired
         || ((Array.isArray(m.before) && m.before.length > 0) && (Array.isArray(m.after) && m.after.length > 0));
       return {
         title: section.title,
         areaId: section.areaId || null,
+        zoneName: section.zoneName || null,
+        photoRequired: Boolean(section.photoRequired),
         tasksDone: itemDone,
         photosDone,
         complete: itemDone && photosDone,
@@ -779,6 +806,10 @@ serve(async (req) => {
           dispatch_notes: booking.dispatch_notes || null,
           add_ons: includedAddOns,
           focused_areas: focusedAreas,
+          facility_type: booking.facility_type || null,
+          scope_level: booking.scope_level || null,
+          square_footage: booking.square_footage || null,
+          hard_deadline: booking.hard_deadline || null,
         }
         : null,
       cleaner: cleaner ? { id: cleaner.id, first_name: cleaner.first_name } : null,
@@ -803,6 +834,18 @@ serve(async (req) => {
           areas_label: formatFocusedAreasLabel(focusedAreas, focusedSettings),
           scope_boundary: focusedScopeBoundaryText(focusedAreas, focusedSettings),
           areas_progress: areasComplete,
+          photos_complete: photoGate.ok,
+          missing_photo_sections: photoGate.missing,
+        }
+        : { enabled: false },
+      // Same shape as `focused` — a large site is documented zone by zone, so
+      // the UI drives per-section photo capture the same way.
+      zones: photoZones.length
+        ? {
+          enabled: true,
+          names: photoZones,
+          sections: photoSections,
+          progress: areasComplete,
           photos_complete: photoGate.ok,
           missing_photo_sections: photoGate.missing,
         }

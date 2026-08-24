@@ -132,15 +132,30 @@ serve(async (req) => {
       );
     }
 
-    // 3. Calculate required cleaners based on sq_ft
-    const minCleaners = (booking.sqft || 2000) >= 3000 ? 3 : 2;
+    // 3. Calculate required cleaners.
+    // Commercial bookings arrive with a crew size already sized to the scope
+    // and the service window — a 30,000 sqft warehouse on a four-hour
+    // overnight window needs six cleaners, and the residential sqft heuristic
+    // has no way to know that. Honour it when it's there.
+    const commercialCrew = Number(booking.recommended_crew_size) > 0
+      ? Math.round(Number(booking.recommended_crew_size))
+      : Number(booking.num_cleaners_assigned) > 0
+      ? Math.round(Number(booking.num_cleaners_assigned))
+      : 0;
+    const minCleaners = commercialCrew > 0
+      ? Math.min(12, commercialCrew)
+      : (booking.sqft || 2000) >= 3000 ? 3 : 2;
     // Duration is keyed off home_size_id (canonical) and scaled by the
     // service-type multiplier, so Deep AND Move-In/Out get longer
-    // windows than a Standard clean of the same size.
-    const estimatedHours = getServiceDurationHours(
-      String(booking.home_size_id || ""),
-      booking.service_type,
-    );
+    // windows than a Standard clean of the same size. A commercial booking
+    // already carries the projected hours for its crew, and home_size_id is
+    // literally "commercial" there — the residential lookup has nothing to say.
+    const estimatedHours = commercialCrew > 0 && Number(booking.estimated_duration_hours) > 0
+      ? Number(booking.estimated_duration_hours)
+      : getServiceDurationHours(
+        String(booking.home_size_id || ""),
+        booking.service_type,
+      );
 
     logStep("Calculated job requirements", { minCleaners, estimatedHours });
 

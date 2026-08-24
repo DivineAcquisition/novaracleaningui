@@ -23,6 +23,15 @@ export interface ContractorChecklistSection {
   /** Focused cleans only — area type id for photo / conditions tying. */
   areaId?: string;
   instance?: number;
+  /**
+   * Before AND after photos are required for this section before the
+   * checklist can be completed. Focused areas set it; so does every zone of a
+   * large commercial site, because one photo pair proves nothing about
+   * 30,000 square feet.
+   */
+  photoRequired?: boolean;
+  /** Human label for the documentation zone this section covers. */
+  zoneName?: string;
 }
 
 export interface ContractorChecklist {
@@ -224,41 +233,146 @@ const TURNOVER_SECTIONS: ContractorChecklistSection[] = [
   },
 ];
 
+// ─── Commercial scope levels ────────────────────────────────────────────
+// Light / Standard / Detailed, the same three tiers the pricing model uses.
+// Each level is the one before it PLUS more, so the crew list and the price
+// describe the same job — a Standard-priced visit cannot show a crew a
+// Detailed checklist, and a Detailed one cannot quietly drop the scrubbing
+// the client paid for.
+
+const COMMERCIAL_ARRIVAL: ContractorChecklistSection = {
+  title: "Arrival & setup",
+  items: [
+    "Check in per site access instructions (badge / code / contact)",
+    "Notify the required contact on arrival (if specified)",
+    "Confirm the alarm is disarmed per the security notes before starting",
+    "Walk the site and note anything already damaged or blocked",
+  ],
+};
+
+const COMMERCIAL_LIGHT_ITEMS = [
+  "Sweep and vacuum all floors in scope",
+  "Empty all trash and recycling; replace liners; take to designated disposal",
+  "Restrooms: disinfect toilets, sinks, counters, mirrors; restock supplies",
+  "Spot-clean visible spills and marks",
+];
+
+const COMMERCIAL_STANDARD_ITEMS = [
+  ...COMMERCIAL_LIGHT_ITEMS,
+  "Mop all hard floors",
+  "Break room / kitchenette: counters, sink, appliance exteriors, tables",
+  "Individual offices and rooms: surfaces wiped, trash pulled, floors done",
+  "Wipe and disinfect touch points (handles, switches, rails)",
+];
+
+const COMMERCIAL_DETAILED_ITEMS = [
+  ...COMMERCIAL_STANDARD_ITEMS,
+  "Scrub floors — grout lines, edges, and corners, not just the open middle",
+  "High-touch sanitization pass: shared equipment, phones, rails, dispensers",
+  "Detail dusting: ledges, sills, vents, fixtures, tops of partitions",
+  "Interior glass and entry doors, streak-free",
+];
+
+const COMMERCIAL_CLOSEOUT: ContractorChecklistSection = {
+  title: "Close-out",
+  items: [
+    "Complete any deep tasks scheduled for this visit (per scope)",
+    "Return all furniture and equipment to where you found it",
+    "Secure the site per lock-up procedure (doors, alarm, lights)",
+    "Notify the required contact on departure (if specified)",
+  ],
+};
+
+const COMMERCIAL_SCOPE_ITEMS: Record<string, string[]> = {
+  light: COMMERCIAL_LIGHT_ITEMS,
+  standard: COMMERCIAL_STANDARD_ITEMS,
+  detailed: COMMERCIAL_DETAILED_ITEMS,
+};
+
+const COMMERCIAL_SCOPE_LABEL: Record<string, string> = {
+  light: "Light",
+  standard: "Standard",
+  detailed: "Detailed",
+};
+
 const COMMERCIAL_SECTIONS: ContractorChecklistSection[] = [
-  {
-    title: "Arrival & setup",
-    items: [
-      "Check in per site access instructions (badge / code / contact)",
-      "Notify the required contact on arrival (if specified)",
-      "Take BEFORE photos of all areas in scope",
-    ],
-  },
+  COMMERCIAL_ARRIVAL,
   {
     title: "Service areas",
     items: [
       "Clean all areas listed in the job scope",
-      "Restrooms: disinfect toilets, sinks, counters, mirrors; restock supplies",
-      "Empty all trash and recycling; replace liners; take to designated disposal",
-      "Vacuum carpets and mats; sweep and mop hard floors",
-      "Wipe and disinfect touch points (handles, switches, rails)",
-      "Break room / kitchenette: counters, sink, appliance exteriors, tables",
+      ...COMMERCIAL_STANDARD_ITEMS,
       "Dust surfaces, ledges, and reachable vents",
       "Interior glass at entrances (streak-free)",
     ],
   },
   {
-    title: "Close-out",
+    title: "Documentation",
     items: [
-      "Complete any deep tasks scheduled for this visit (per scope)",
+      "Take BEFORE photos of all areas in scope",
       "Take AFTER photos of every area cleaned",
-      "Secure the site per lock-up procedure (doors, alarm, lights)",
-      "Notify the required contact on departure (if specified)",
     ],
   },
+  COMMERCIAL_CLOSEOUT,
 ];
 
-const OFFICE_SECTIONS: ContractorChecklistSection[] = [
-  ...COMMERCIAL_SECTIONS.slice(0, 2),
+/**
+ * The crew list for one commercial visit.
+ *
+ * Zones are what make documentation scale with the building. A 1,800 sqft
+ * office is one before/after pair and that is genuinely the whole site; a
+ * 30,000 sqft warehouse gets a section per zone, each requiring its own pair,
+ * because a single photo of a loading dock says nothing about the racking
+ * aisles.
+ */
+export function commercialChecklistSections(
+  scopeLevel: string | null | undefined,
+  photoZones?: string[] | null,
+  office = false,
+): ContractorChecklistSection[] {
+  const key = String(scopeLevel || "").toLowerCase().trim();
+  const items = COMMERCIAL_SCOPE_ITEMS[key];
+  if (!items) return office ? OFFICE_SECTIONS : COMMERCIAL_SECTIONS;
+
+  const label = COMMERCIAL_SCOPE_LABEL[key] || key;
+  const zones = (photoZones || []).map((z) => String(z || "").trim()).filter(Boolean);
+
+  const sections: ContractorChecklistSection[] = [
+    COMMERCIAL_ARRIVAL,
+    { title: `${label} scope — every area in this job`, items: [...items] },
+  ];
+
+  if (office) sections.push(...OFFICE_ONLY_SECTIONS);
+
+  if (zones.length > 0) {
+    for (const zone of zones) {
+      sections.push({
+        title: `${zone} — clean & document`,
+        zoneName: zone,
+        photoRequired: true,
+        items: [
+          `Complete the ${label.toLowerCase()} scope for ${zone}`,
+          `BEFORE photos of ${zone} — taken before you start on it`,
+          `AFTER photos of ${zone} — same angles as the before shots`,
+          "Report anything in this zone you could not complete, and why",
+        ],
+      });
+    }
+  } else {
+    sections.push({
+      title: "Documentation",
+      items: [
+        "Take BEFORE photos of all areas in scope",
+        "Take AFTER photos of every area cleaned",
+      ],
+    });
+  }
+
+  sections.push(COMMERCIAL_CLOSEOUT);
+  return sections;
+}
+
+const OFFICE_ONLY_SECTIONS: ContractorChecklistSection[] = [
   {
     title: "Office rules",
     items: [
@@ -271,10 +385,21 @@ const OFFICE_SECTIONS: ContractorChecklistSection[] = [
   {
     title: "After-hours close-out",
     items: [
-      "Take AFTER photos of every area cleaned",
       "Turn off lights per building instructions",
       "Set the alarm and lock up exactly per the security notes",
       "Badge out / check out with security if required",
+    ],
+  },
+];
+
+const OFFICE_SECTIONS: ContractorChecklistSection[] = [
+  ...COMMERCIAL_SECTIONS.slice(0, 2),
+  ...OFFICE_ONLY_SECTIONS,
+  {
+    title: "Documentation",
+    items: [
+      "Take BEFORE photos of all areas in scope",
+      "Take AFTER photos of every area cleaned",
     ],
   },
 ];
@@ -364,17 +489,45 @@ export function jobServiceTypeForBooking(
   return String(booking?.service_type || fallbackServiceType || "standard");
 }
 
+export interface CommercialChecklistOptions {
+  /** light | standard | detailed — the scope level the job was priced at. */
+  scopeLevel?: string | null;
+  /** Documentation zones for a large site; empty means one site-wide pair. */
+  photoZones?: string[] | null;
+}
+
 export function getContractorChecklist(
   serviceType: string | null | undefined,
   focusedAreas?: FocusedAreaSelection[] | null,
   focusedSettings: FocusedSameDaySettings = FOCUSED_SAME_DAY_DEFAULTS,
+  commercial?: CommercialChecklistOptions | null,
 ): ContractorChecklist {
   const key = normalizeServiceType(serviceType);
   if (key === "focused") {
-    const sections = focusedChecklistSections(focusedAreas || [], focusedSettings);
+    const sections = focusedChecklistSections(focusedAreas || [], focusedSettings)
+      .map((s) => ({ ...s, photoRequired: true }));
     return { key: "focused", name: "Focused / Single-Area Clean", sections };
   }
+  if ((key === "commercial" || key === "office") && (commercial?.scopeLevel || commercial?.photoZones?.length)) {
+    const sections = commercialChecklistSections(
+      commercial.scopeLevel,
+      commercial.photoZones,
+      key === "office",
+    );
+    const label = COMMERCIAL_SCOPE_LABEL[String(commercial.scopeLevel || "").toLowerCase()];
+    const base = key === "office" ? "Office Clean (After-Hours)" : "Commercial Site Service";
+    return { key, name: label ? `${base} — ${label}` : base, sections };
+  }
   return CHECKLISTS[key] || CHECKLISTS.standard;
+}
+
+/** Indices of sections whose completion requires before AND after photos. */
+export function photoRequiredSectionIndexes(checklist: ContractorChecklist): number[] {
+  const out: number[] = [];
+  checklist.sections.forEach((s, i) => {
+    if (s.photoRequired) out.push(i);
+  });
+  return out;
 }
 
 export function countChecklistItems(checklist: ContractorChecklist): number {

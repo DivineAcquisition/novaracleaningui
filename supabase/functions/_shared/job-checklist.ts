@@ -42,14 +42,14 @@ async function loadBookingForChecklist(
   if (args.bookingId) {
     const { data } = await supabase
       .from("bookings")
-      .select("id, service_type, is_recurring, membership_plan, booking_channel, focused_areas")
+      .select("id, service_type, is_recurring, membership_plan, booking_channel, focused_areas, scope_level, photo_zones")
       .eq("id", args.bookingId)
       .maybeSingle();
     if (data) return data;
   }
   const { data } = await supabase
     .from("bookings")
-    .select("id, service_type, is_recurring, membership_plan, booking_channel, focused_areas")
+    .select("id, service_type, is_recurring, membership_plan, booking_channel, focused_areas, scope_level, photo_zones")
     .eq("job_id", args.jobId)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -77,6 +77,15 @@ export async function ensureJobChecklist(
   const booking = await loadBookingForChecklist(supabase, args);
   let focusedAreas: Array<{ areaId: string; quantity: number }> | null = null;
   if (Array.isArray(booking?.focused_areas)) focusedAreas = booking.focused_areas;
+  // A commercial booking carries its scope level and documentation zones, and
+  // both change the item count — so the checklist row's total has to be built
+  // from the same spec the crew will actually see.
+  const commercialOpts = {
+    scopeLevel: booking?.scope_level || null,
+    photoZones: Array.isArray(booking?.photo_zones)
+      ? booking.photo_zones.map(String).filter(Boolean)
+      : null,
+  };
 
   const checklistKey = contractorChecklistKeyForBooking(
     booking,
@@ -112,7 +121,7 @@ export async function ensureJobChecklist(
         } catch (_) { /* defaults */ }
       }
       const totalItems = countChecklistItems(
-        getContractorChecklist(checklistKey, focusedAreas, focusedSettings),
+        getContractorChecklist(checklistKey, focusedAreas, focusedSettings, commercialOpts),
       );
       await supabase.from("job_checklists").update({
         service_type: checklistKey,
@@ -140,7 +149,7 @@ export async function ensureJobChecklist(
     } catch (_) { /* defaults */ }
   }
   const totalItems = countChecklistItems(
-    getContractorChecklist(checklistKey, focusedAreas, focusedSettings),
+    getContractorChecklist(checklistKey, focusedAreas, focusedSettings, commercialOpts),
   );
 
   const { data: created, error } = await supabase

@@ -309,11 +309,31 @@ serve(async (req) => {
     const cleanerIds = (Array.isArray(body?.cleanerIds) ? body.cleanerIds : [])
       .map((id: unknown) => String(id).trim())
       .filter(Boolean)
-      .slice(0, 8);
+      // A large commercial facility on a short overnight window legitimately
+      // needs a crew well past the residential two.
+      .slice(0, 12);
     const mode = String(body?.mode || "replace").toLowerCase();
     const shouldNotify = body?.notify !== false;
 
-    if (cleanerIds.length === 0) return json({ error: "cleanerIds required (1–8)" }, 400);
+    if (cleanerIds.length === 0) return json({ error: "cleanerIds required (1–12)" }, 400);
+
+    // Commercial compliance gate: a signed agreement and a current COI are
+    // required to dispatch, not only to book. A certificate that was valid at
+    // booking time can lapse before the visit, and the account-level gap
+    // applies to every site under it.
+    if (booking.business_account_id) {
+      const { data: compliance } = await admin.rpc("commercial_account_compliance", {
+        p_account_id: booking.business_account_id,
+      });
+      if (compliance && compliance.ok === false) {
+        const blockers = Array.isArray(compliance.blockers) ? compliance.blockers : [];
+        return json({
+          error: `Can't dispatch this job — ${blockers.join(" ")} Compliance sits on the account, so it blocks every site under it.`,
+          code: "account_compliance_blocked",
+          blockers,
+        }, 409);
+      }
+    }
 
     // Deposit gate: don't dispatch a cleaner to a job the customer hasn't
     // paid for yet (common on internal/VA bookings whose deposit invoice is

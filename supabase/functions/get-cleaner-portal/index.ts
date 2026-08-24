@@ -54,6 +54,8 @@ function attributeCents(payout: Row, cleanerId: string): number | null {
 const BOOKING_SELECT =
   "id, booking_number, status, service_type, home_size_id, service_date, time_slot, arrival_window, " +
   "first_name, last_name, address, city, state, zip_code, " +
+  "booking_type, facility_type, scope_level, square_footage, photo_zones, hard_deadline, " +
+  "recommended_crew_size, service_window_hours, " +
   "bedrooms, bathrooms, sqft, dwelling_type, flooring_type, pets, add_ons, frequency, access_notes, " +
   "dispatch_notes, team_notes, issues_flag, issues_notes, " +
   "total_estimate_cents, cleaner_payout_cents, payout_status, job_id, check_in_time, " +
@@ -188,6 +190,12 @@ serve(async (req) => {
       crewSize: number | null;
       payTier: string | null;
     }>();
+    const crewByJob = new Map<string, Array<{
+      id: string;
+      name: string;
+      role: string;
+      isYou: boolean;
+    }>>();
     const jobIds = bookingRows.map((b) => b.job_id).filter(Boolean) as string[];
     if (jobIds.length > 0) {
       const { data: assigns } = await admin
@@ -206,6 +214,28 @@ serve(async (req) => {
           crewSize: a.crew_size_snapshot != null ? Number(a.crew_size_snapshot) : null,
           payTier: null,
         });
+      }
+
+      // Who else is on this job. A six-person commercial crew that doesn't
+      // know it is a six-person crew will clean the same aisle twice and miss
+      // the dock — so each member sees the roster and who leads.
+      const { data: crewRows } = await admin
+        .from("job_assignments")
+        .select("job_id, role, status, cleaners(id, first_name, last_name)")
+        .in("job_id", jobIds)
+        .or("status.ilike.confirmed,status.ilike.accepted,status.ilike.in progress");
+      for (const row of crewRows || []) {
+        const jid = String(row.job_id);
+        const c = Array.isArray(row.cleaners) ? row.cleaners[0] : row.cleaners;
+        if (!c?.id) continue;
+        const list = crewByJob.get(jid) || [];
+        list.push({
+          id: String(c.id),
+          name: `${c.first_name || ""} ${String(c.last_name || "").charAt(0)}`.trim() || "Crew member",
+          role: String(row.role || "Support"),
+          isYou: String(c.id) === cleanerId,
+        });
+        crewByJob.set(jid, list);
       }
     }
 
@@ -435,6 +465,22 @@ serve(async (req) => {
           photoViewToken: b.photo_view_token || null,
           beforePhotos: b.before_photos || null,
           afterPhotos: b.after_photos || null,
+          // Everyone on the job sees the crew, not just the lead.
+          crew: cancelled ? [] : (b.job_id ? crewByJob.get(String(b.job_id)) || [] : []),
+          // Commercial vitals: what kind of building, how deep the clean, how
+          // long the crew has, and how the site must be documented. All of it
+          // comes off the booking — the crew never re-enters or guesses it.
+          commercial: cancelled || !["commercial", "office"].includes(String(b.booking_type || ""))
+            ? null
+            : {
+              facilityType: b.facility_type || null,
+              scopeLevel: b.scope_level || null,
+              squareFootage: b.square_footage ?? null,
+              hardDeadline: b.hard_deadline || null,
+              serviceWindowHours: b.service_window_hours ?? null,
+              photoZones: Array.isArray(b.photo_zones) ? b.photo_zones.map(String) : [],
+              recommendedCrewSize: b.recommended_crew_size ?? null,
+            },
           pay: {
             actualCents,
             baseCents,
