@@ -200,7 +200,7 @@ export default function PartnershipsOverview() {
       }
       const pendingPricing = props.filter((p) => p.turnover_price == null);
       if (pendingPricing.length > 0) {
-        items.push({ label: `${pendingPricing.length} STR propert${pendingPricing.length === 1 ? "y" : "ies"} pending pricing`, detail: "STR · set rates under the STR tab", severity: "high", href: commercialTab("str") });
+        items.push({ label: `${pendingPricing.length} STR propert${pendingPricing.length === 1 ? "y" : "ies"} pending pricing`, detail: "STR · set rates under STR", severity: "high", href: commercialTab("str") });
       }
       const newLeads = leadRows.filter((l) => l.status === "new");
       if (newLeads.length > 0) {
