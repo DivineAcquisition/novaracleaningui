@@ -87,14 +87,20 @@ export function coiDaysRemaining(a: Pick<AccountRow, "coi_expires_at">): number 
  * These sit on the ACCOUNT, which is the whole point: a commercial account
  * with an expired COI cannot have work booked or dispatched at ANY of its
  * sites, not just the one someone happened to open.
+ *
+ * This mirrors commercial_account_compliance() in SQL, which is what actually
+ * enforces the block. The two must agree — a list that says an account is fine
+ * while the server refuses its bookings is worse than no list. In particular:
+ * no expiry date means no cover, whether or not a certificate was once marked
+ * as sent, because there is nothing to compute currency from.
  */
 export function complianceBlockers(a: AccountRow): string[] {
   const blockers: string[] = [];
-  if (a.status === "offboarded") return blockers;
+  if (a.status === "offboarded") return ["Account is offboarded"];
   if (!a.agreement_signed_at) blockers.push("No signed agreement");
   const days = coiDaysRemaining(a);
-  if (days != null && days < 0) blockers.push(`COI expired ${Math.abs(days)}d ago`);
-  else if (days == null && !a.coi_sent_at) blockers.push("No COI on file");
+  if (days == null) blockers.push("No current COI on file");
+  else if (days < 0) blockers.push(`COI expired ${Math.abs(days)}d ago`);
   return blockers;
 }
 
@@ -104,7 +110,6 @@ export function attentionFlags(a: AccountRow): string[] {
   if (!a.stripe_customer_id) flags.push("No payment on file");
   const days = coiDaysRemaining(a);
   if (days != null && days >= 0 && days <= COI_WARNING_DAYS) flags.push(`COI expires in ${days}d`);
-  else if (days == null && a.coi_sent_at) flags.push("COI has no expiry recorded");
   if (a.last_activity_at && Date.now() - new Date(a.last_activity_at).getTime() > 30 * 86400_000) flags.push("Idle 30+ days");
   return flags;
 }
@@ -293,9 +298,9 @@ export function AccountSheet({ account, onClose, reload }: { account: AccountRow
   const [stripeId, setStripeId] = useState(account.stripe_customer_id || "");
   const [autopay, setAutopay] = useState(account.autopay_enabled);
   const [coiSent, setCoiSent] = useState(Boolean(account.coi_sent_at));
-  const [coiExpires, setCoiExpires] = useState(account.coi_expires_at ? String(account.coi_expires_at).slice(0, 10) : "");
-  const [coiCarrier, setCoiCarrier] = useState(account.coi_carrier || "");
-  const [coiPolicy, setCoiPolicy] = useState(account.coi_policy_number || "");
+  const coiExpires = account.coi_expires_at ? String(account.coi_expires_at).slice(0, 10) : "";
+  const coiCarrier = account.coi_carrier || "";
+  const coiPolicy = account.coi_policy_number || "";
   const [sites, setSites] = useState<SiteRow[]>([]);
   const [siteEdit, setSiteEdit] = useState<Partial<SiteRow> | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -351,7 +356,9 @@ export function AccountSheet({ account, onClose, reload }: { account: AccountRow
   const canGoActive = agreementSigned && stripeId.trim() !== "" && sites.some((st) => st.active);
 
   const coiDays = coiDaysRemaining({ coi_expires_at: coiExpires || null });
-  const coiBlocked = (coiDays != null && coiDays < 0) || (!coiExpires && !coiSent);
+  // No expiry date means nothing to compute currency from, so it blocks —
+  // matching the server rule exactly, whatever the "COI sent" checkbox says.
+  const coiBlocked = coiDays == null || coiDays < 0;
   const coiExpiringSoon = coiDays != null && coiDays >= 0 && coiDays <= COI_WARNING_DAYS;
   // Compliance is an account fact. Showing it on the sites list is what stops
   // it being noticed one site at a time.
@@ -377,9 +384,9 @@ export function AccountSheet({ account, onClose, reload }: { account: AccountRow
         stripe_customer_id: stripeId.trim() || null,
         autopay_enabled: autopay,
         coi_sent_at: coiSent ? (account.coi_sent_at || new Date().toISOString()) : null,
-        coi_expires_at: coiExpires || null,
-        coi_carrier: coiCarrier.trim() || null,
-        coi_policy_number: coiPolicy.trim() || null,
+        // coi_expires_at / carrier / policy are NOT written here: they mirror
+        // the certificate on file and are maintained by the Compliance
+        // console. Two places to type the same date is how it goes stale.
       }).eq("id", account.id);
       if (error) throw error;
       toast.success("Account updated");
@@ -621,26 +628,34 @@ export function AccountSheet({ account, onClose, reload }: { account: AccountRow
             )}
           </div>
 
-          {/* Certificate of insurance. "Sent once" is not the same as
-              "current", and only the expiry date answers the question the
-              booking gate actually asks. */}
+          {/* Certificate of insurance — read-only here on purpose.
+              Status is computed from the expiry date of the certificate on
+              file, so the date is changed by recording a certificate, not by
+              typing over it. Editing it here would let the two drift, which is
+              the exact failure the computed status exists to prevent. */}
           <div className={cn(
             "rounded-lg border p-3 space-y-2",
             coiBlocked ? "border-rose-300 bg-rose-50/60" : coiExpiringSoon ? "border-amber-300 bg-amber-50/60" : "border-slate-200",
           )}>
-            <p className="text-xs font-bold text-slate-800">Certificate of insurance</p>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-bold text-slate-800">Certificate of insurance</p>
+              <a href="/admin/partner?tab=compliance"
+                className="text-[11px] font-semibold text-violet-700 hover:underline">
+                Manage in Compliance →
+              </a>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-xs">
               <div>
-                <Label className="text-xs">Expires</Label>
-                <Input type="date" value={coiExpires} onChange={(e) => setCoiExpires(e.target.value)} className="mt-1 h-8 text-xs" />
+                <p className="text-[10px] text-slate-500">Expires</p>
+                <p className="font-semibold text-slate-800">{coiExpires || "—"}</p>
               </div>
               <div>
-                <Label className="text-xs">Carrier</Label>
-                <Input value={coiCarrier} onChange={(e) => setCoiCarrier(e.target.value)} className="mt-1 h-8 text-xs" />
+                <p className="text-[10px] text-slate-500">Carrier</p>
+                <p className="font-semibold text-slate-800">{coiCarrier || "—"}</p>
               </div>
               <div>
-                <Label className="text-xs">Policy #</Label>
-                <Input value={coiPolicy} onChange={(e) => setCoiPolicy(e.target.value)} className="mt-1 h-8 text-xs font-mono" />
+                <p className="text-[10px] text-slate-500">Policy #</p>
+                <p className="font-mono text-slate-800">{coiPolicy || "—"}</p>
               </div>
             </div>
             {coiBlocked ? (
@@ -648,7 +663,7 @@ export function AccountSheet({ account, onClose, reload }: { account: AccountRow
                 <RiErrorWarningLine className="w-3.5 h-3.5 mt-0.5 shrink-0" />
                 {coiDays != null && coiDays < 0
                   ? `Expired ${Math.abs(coiDays)} days ago.`
-                  : "No certificate on file."}{" "}
+                  : "No certificate with a readable expiry date on file."}{" "}
                 Commercial work at <strong>every one of this account&apos;s {sites.length} site
                 {sites.length === 1 ? "" : "s"}</strong> is blocked from booking and dispatch until it&apos;s current.
               </p>
@@ -658,7 +673,8 @@ export function AccountSheet({ account, onClose, reload }: { account: AccountRow
               </p>
             ) : !coiExpires && coiSent ? (
               <p className="text-[11px] text-amber-700">
-                Marked sent but no expiry recorded — add the date so the gate can tell current from lapsed.
+                Marked sent but no certificate on file — record it under Compliance so the gate can tell current from
+                lapsed.
               </p>
             ) : coiExpires ? (
               <p className="text-[11px] text-emerald-700">Current — all sites clear to book.</p>

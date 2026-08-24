@@ -517,6 +517,11 @@ function WalkthroughSheet({
               <RiErrorWarningLine className="w-3.5 h-3.5 mt-0.5 shrink-0" />
               This is what bookings for this site will price at. Nothing at or above the threshold books without it.
             </p>
+            <p className="text-[11px] text-slate-500">
+              A walkthrough can be scheduled and conducted whatever the account&apos;s paperwork says — surveying a
+              building doesn&apos;t need cover. Converting this price into a confirmed, dispatchable booking does: if
+              the account&apos;s certificate of insurance has lapsed, the booking is refused until it&apos;s renewed.
+            </p>
           </div>
 
           <Button className="w-full" onClick={() => void save()} disabled={saving}>

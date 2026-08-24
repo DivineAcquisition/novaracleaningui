@@ -12,12 +12,15 @@
 //   • Walkthroughs — the gate for large commercial facilities: no firm price,
 //     and no booking, until someone has actually walked the building
 //   • Recurring  — partner cadences (the residential-style recurring setup)
+//   • Compliance — certificates of insurance: computed status, the escalation
+//     ladder, renewals, held visits, and the override log. An expired COI here
+//     is a hard block on every site under the account, not a dashboard flag
 //   • Ops Queue  — turnover dispatch operations (crew, assignments, batches)
 
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { RiRefreshLine, RiHotelLine, RiToolsLine, RiLoader4Line, RiDashboardLine, RiCalendarCheckLine, RiArrowDownSLine, RiRulerLine } from "@remixicon/react";
+import { RiRefreshLine, RiHotelLine, RiToolsLine, RiLoader4Line, RiDashboardLine, RiCalendarCheckLine, RiArrowDownSLine, RiRulerLine, RiShieldCheckLine } from "@remixicon/react";
 
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -28,9 +31,10 @@ import PartnershipAccounts from "@/views/admin/PartnershipAccounts";
 import PartnershipBooking from "@/views/admin/PartnershipBooking";
 import PartnerRecurringSchedules from "@/views/admin/PartnerRecurringSchedules";
 import CommercialWalkthroughs from "@/views/admin/CommercialWalkthroughs";
+import CoiCompliance from "@/views/admin/CoiCompliance";
 import { syncPartners, syncContractors } from "@/lib/partner-admin-api";
 
-const VALID_TABS = ["overview", "accounts", "book", "walkthroughs", "recurring", "ops"];
+const VALID_TABS = ["overview", "accounts", "book", "walkthroughs", "recurring", "compliance", "ops"];
 // Old deep links keep working: commercial → accounts, turnovers → ops.
 const TAB_ALIASES: Record<string, string> = { commercial: "accounts", turnovers: "ops" };
 
@@ -116,6 +120,9 @@ export default function Partnerships() {
           <TabsTrigger value="recurring" className="gap-1.5">
             <RiRefreshLine className="w-4 h-4" /> Recurring
           </TabsTrigger>
+          <TabsTrigger value="compliance" className="gap-1.5">
+            <RiShieldCheckLine className="w-4 h-4" /> Compliance
+          </TabsTrigger>
           <TabsTrigger value="ops" className="gap-1.5">
             <RiToolsLine className="w-4 h-4" /> Ops Queue
           </TabsTrigger>
@@ -150,6 +157,9 @@ export default function Partnerships() {
         </TabsContent>
         <TabsContent value="recurring" className="mt-4">
           {tab === "recurring" && <PartnerRecurringSchedules />}
+        </TabsContent>
+        <TabsContent value="compliance" className="mt-4">
+          {tab === "compliance" && <CoiCompliance />}
         </TabsContent>
         <TabsContent value="ops" className="mt-4">
           {tab === "ops" && <PartnerAdmin />}

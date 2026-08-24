@@ -460,8 +460,7 @@ export async function POST(req: Request): Promise<NextResponse> {
  * two, the second of which gets forgotten.
  */
 async function releaseHolds(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  supabase: any,
+  supabase: ReturnType<typeof getAdminSupabase>,
   accountId: string,
 ): Promise<{ released: number; failed: number }> {
   const today = new Date().toISOString().slice(0, 10);

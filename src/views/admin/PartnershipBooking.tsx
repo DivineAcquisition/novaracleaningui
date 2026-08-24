@@ -493,7 +493,11 @@ export default function PartnershipBooking() {
                 ))}
                 {!compliance.ok && (
                   <p className="text-rose-600">
-                    Fix it on the account under Accounts — it applies to every site this account has, not just this one.
+                    This applies to every site under the account, not just this one.{" "}
+                    <a href="/admin/partner?tab=compliance" className="font-semibold underline">
+                      Upload a current certificate in Compliance
+                    </a>{" "}
+                    and the block lifts immediately — no separate unblock step.
                   </p>
                 )}
                 {compliance.ok && compliance.coi_expires_at && (
