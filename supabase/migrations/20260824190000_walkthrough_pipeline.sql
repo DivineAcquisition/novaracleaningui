@@ -170,6 +170,11 @@ ALTER TABLE public.commercial_walkthroughs
  * A walkthrough that reaches `conducted` has all of this or it is not a
  * walkthrough — it is a visit somebody made.
  */
+-- The pipeline view reads this column, so it has to go first for the column
+-- definition below to stay authoritative on a re-run. It is rebuilt further
+-- down in this same migration.
+DROP VIEW IF EXISTS public.walkthrough_pipeline_v1;
+
 ALTER TABLE public.commercial_walkthroughs
   DROP COLUMN IF EXISTS findings_complete;
 ALTER TABLE public.commercial_walkthroughs
