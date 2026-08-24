@@ -52,9 +52,11 @@ import {
   accountCompliance,
   COI_CONSOLE_PATH,
   complianceBlockMessage,
+  DEAL_CONSOLE_PATH,
   latestCompletedWalkthrough,
   loadCommercialConfig,
   logComplianceBlock,
+  siteDispatchEligibility,
   sitePricingState,
   walkthroughById,
   type WalkthroughRecord,
@@ -286,18 +288,37 @@ serve(async (req) => {
       // current, and that is the more fundamental refusal of the two.
       const compliance = await accountCompliance(admin, String(account.id));
       if (!compliance.ok) {
+        // Four things have to be true before a crew stands on a client's
+        // floor: a firm price, a signed agreement, configured billing, and a
+        // current certificate. Name the ones that aren't, rather than
+        // reporting a generic refusal somebody then has to go diagnose.
+        const eligibility = site?.id
+          ? await siteDispatchEligibility(admin, String(site.id))
+          : null;
+
         await logComplianceBlock(admin, {
           compliance,
           action: "Booking confirmation",
-          detail: { service_date: serviceDate, business_site_id: site?.id || null },
+          detail: {
+            service_date: serviceDate,
+            business_site_id: site?.id || null,
+            outstanding: eligibility?.outstanding || compliance.blockers,
+          },
         });
         return json({
           ok: false,
-          error: complianceBlockMessage(compliance, "Confirming this booking"),
+          error: eligibility && !eligibility.eligible
+            ? eligibility.message
+            : complianceBlockMessage(compliance, "Confirming this booking"),
           code: "account_compliance_blocked",
           blockers: compliance.blockers,
+          outstanding: eligibility?.outstanding || compliance.blockers,
+          requirements: eligibility?.requirements || [],
           coiStatus: compliance.coi_status,
-          fixPath: COI_CONSOLE_PATH,
+          billingConfigured: compliance.billing_configured === true,
+          fixPath: compliance.billing_configured === false || !compliance.agreement_signed_at
+            ? DEAL_CONSOLE_PATH
+            : COI_CONSOLE_PATH,
         }, 409);
       }
       complianceWarnings = compliance.warnings;

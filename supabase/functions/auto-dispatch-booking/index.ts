@@ -6,6 +6,12 @@ import { ensureJobChecklist } from "../_shared/job-checklist.ts";
 import { getServiceDurationHours } from "../_shared/payout-utils.ts";
 import { parseTimeSlotToClock } from "../_shared/sms.ts";
 import { jobServiceTypeForBooking } from "../_shared/contractor-checklists.ts";
+import {
+  accountCompliance,
+  complianceBlockMessage,
+  logComplianceBlock,
+  siteDispatchEligibility,
+} from "../_shared/commercial-config.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -93,6 +99,41 @@ serve(async (req) => {
       serviceDate: booking.service_date,
       sqft: booking.sqft 
     });
+
+    // 1b. Commercial gate. dispatch-job refuses a blocked account when offers
+    // go out, but by then a job row exists for work that can never be offered.
+    // Refusing here keeps the queue honest, and the refusal names which of the
+    // four requirements — firm price, signed agreement, billing, certificate —
+    // is actually outstanding.
+    if (booking.business_account_id) {
+      const compliance = await accountCompliance(supabase, String(booking.business_account_id));
+      if (!compliance.ok) {
+        const site = booking.business_site_id
+          ? await siteDispatchEligibility(supabase, String(booking.business_site_id))
+          : null;
+        const message = site && !site.eligible
+          ? site.message
+          : complianceBlockMessage(compliance, "Dispatching this booking");
+
+        await logComplianceBlock(supabase, {
+          compliance,
+          action: "Auto-dispatch",
+          bookingId: String(booking.id),
+          detail: { outstanding: site?.outstanding || compliance.blockers },
+        });
+
+        return new Response(
+          JSON.stringify({
+            success: false,
+            reason: "account_compliance_blocked",
+            message,
+            outstanding: site?.outstanding || compliance.blockers,
+            requirements: site?.requirements || [],
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 409 },
+        );
+      }
+    }
 
     // 2. Check if job already exists
     if (booking.job_id) {

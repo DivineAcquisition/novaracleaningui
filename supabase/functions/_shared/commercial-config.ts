@@ -103,6 +103,18 @@ export interface CoiState {
   override: CoiOverride | null;
 }
 
+export interface BillingState {
+  configured: boolean;
+  method: "auto_pay" | "invoiced" | null;
+  reason?: string | null;
+  summary?: string | null;
+  payment_method_type?: string | null;
+  payment_method_last4?: string | null;
+  invoice_cycle?: string | null;
+  net_terms?: string | null;
+  billing_contact_email?: string | null;
+}
+
 export interface AccountCompliance {
   ok: boolean;
   blockers: string[];
@@ -114,11 +126,17 @@ export interface AccountCompliance {
   coi_sent_at?: string | null;
   coi_status?: CoiStatus;
   coi?: CoiState | null;
+  billing?: BillingState | null;
+  billing_configured?: boolean;
+  company_coi_sent_at?: string | null;
   active_site_count?: number;
 }
 
 /** Where an admin goes to fix a COI gap, named in every block message. */
 export const COI_CONSOLE_PATH = "/admin/partner?tab=compliance";
+
+/** Where an admin goes to fix a proposal / agreement / billing gap. */
+export const DEAL_CONSOLE_PATH = "/admin/partner?tab=proposals";
 
 // ─── Where the block is enforced ───────────────────────────────────────────
 //
@@ -155,10 +173,24 @@ export function complianceBlockMessage(
   const cascade = sites > 1
     ? ` This applies to all ${sites} of the account's sites, not just this one.`
     : "";
-  const fix = compliance.coi_status && compliance.coi_status !== "current"
-    ? ` Upload a current certificate under Partnerships → Compliance (${COI_CONSOLE_PATH}) and the block lifts immediately.`
-    : "";
-  return `${action} is blocked for ${name} — ${compliance.blockers.join(" ")}${cascade}${fix}`;
+
+  // Different gaps are fixed in different places, and sending someone to the
+  // compliance console to solve a missing signature is how a block becomes
+  // something people route around instead of resolving.
+  const fixes: string[] = [];
+  if (compliance.coi_status && compliance.coi_status !== "current") {
+    fixes.push(
+      `Upload a current certificate under Partnerships → Compliance (${COI_CONSOLE_PATH}) and the block lifts immediately.`,
+    );
+  }
+  if (compliance.billing_configured === false || !compliance.agreement_signed_at) {
+    fixes.push(
+      `The proposal, agreement and billing steps are under Partnerships → Proposals (${DEAL_CONSOLE_PATH}).`,
+    );
+  }
+
+  return `${action} is blocked for ${name} — ${compliance.blockers.join(" ")}${cascade}` +
+    (fixes.length ? ` ${fixes.join(" ")}` : "");
 }
 
 /**
@@ -195,6 +227,9 @@ export async function accountCompliance(
       coi_expires_at: (d.coi_expires_at as string) ?? null,
       coi_sent_at: (d.coi_sent_at as string) ?? null,
       coi_status: (d.coi_status as CoiStatus) ?? undefined,
+      billing: (d.billing as BillingState) ?? null,
+      billing_configured: d.billing_configured === true,
+      company_coi_sent_at: (d.company_coi_sent_at as string) ?? null,
       active_site_count: Number(d.active_site_count) || 0,
       coi: coi
         ? {
@@ -211,7 +246,10 @@ export async function accountCompliance(
 
   const { data: acct } = await admin
     .from("business_accounts")
-    .select("business_name, status, agreement_signed_at, coi_sent_at, coi_expires_at")
+    .select(
+      "business_name, status, agreement_signed_at, coi_sent_at, coi_expires_at, " +
+        "billing_configured_at, billing_method, company_coi_sent_at",
+    )
     .eq("id", accountId).maybeSingle();
   if (!acct) return { ok: false, blockers: ["Account not found."], warnings: [] };
 
@@ -221,6 +259,11 @@ export async function accountCompliance(
   const expiry = acct.coi_expires_at ? String(acct.coi_expires_at).slice(0, 10) : null;
   let status: CoiStatus = "not_on_file";
   if (!acct.agreement_signed_at) blockers.push("No signed agreement on the account.");
+  // The mirror column, not the profile: this path runs when the RPC is
+  // unavailable, so it reads the flattened copy the billing trigger keeps.
+  if (!acct.billing_configured_at) {
+    blockers.push("Billing has not been set up — neither Auto-Pay nor invoiced terms are on file.");
+  }
   if (expiry && expiry < today) {
     status = "expired";
     blockers.push(`Certificate of insurance expired ${expiry}.`);
@@ -241,6 +284,73 @@ export async function accountCompliance(
     coi_expires_at: acct.coi_expires_at ?? null,
     coi_sent_at: acct.coi_sent_at ?? null,
     coi_status: status,
+    billing_configured: Boolean(acct.billing_configured_at),
+    company_coi_sent_at: acct.company_coi_sent_at ?? null,
+  };
+}
+
+// ─── The four dispatch requirements, in one read ───────────────────────────
+
+export interface DispatchRequirement {
+  key: "firm_price" | "signed_agreement" | "billing_configured" | "coi_current";
+  label: string;
+  met: boolean;
+  detail: string | null;
+  fix_path: string | null;
+}
+
+export interface SiteDispatchEligibility {
+  found: boolean;
+  eligible: boolean;
+  site_id?: string;
+  site_nickname?: string;
+  account_id?: string;
+  business_name?: string | null;
+  requirements: DispatchRequirement[];
+  outstanding: string[];
+  message: string;
+}
+
+/**
+ * Whether one site may be booked and dispatched, and if not, which of the four
+ * requirements is missing.
+ *
+ * The individual gates in book-partner-job stay where they are — each has a
+ * far more useful message than a generic list, because each knows what it was
+ * about to do. This is for the callers that need the whole picture at once:
+ * the console, and the dispatch paths that would otherwise refuse without
+ * saying which requirement failed.
+ */
+export async function siteDispatchEligibility(
+  admin: SB,
+  siteId: string,
+): Promise<SiteDispatchEligibility> {
+  const { data, error } = await admin.rpc("commercial_site_dispatch_eligibility", {
+    p_site_id: siteId,
+  });
+  if (error || !data || typeof data !== "object") {
+    // Never fail open. A gate that disappears when a function is missing is
+    // not a gate.
+    return {
+      found: false,
+      eligible: false,
+      requirements: [],
+      outstanding: ["a dispatch eligibility check"],
+      message:
+        "Could not confirm this site is cleared to dispatch. Nothing is dispatched on an unanswered check.",
+    };
+  }
+  const d = data as Record<string, unknown>;
+  return {
+    found: d.found === true,
+    eligible: d.eligible === true,
+    site_id: (d.site_id as string) ?? siteId,
+    site_nickname: (d.site_nickname as string) ?? undefined,
+    account_id: (d.account_id as string) ?? undefined,
+    business_name: (d.business_name as string) ?? null,
+    requirements: Array.isArray(d.requirements) ? (d.requirements as DispatchRequirement[]) : [],
+    outstanding: Array.isArray(d.outstanding) ? (d.outstanding as string[]) : [],
+    message: String(d.message || ""),
   };
 }
 

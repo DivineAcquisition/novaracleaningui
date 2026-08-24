@@ -1324,7 +1324,26 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.expire_stale_commercial_proposals() TO service_role;
 
--- ─── 16. Sweep schedule ────────────────────────────────────────────────────
+-- ─── 16. Alert routing ─────────────────────────────────────────────────────
+-- Deal-stage movement is revenue news; anything that blocks dispatch or leaves
+-- a client holding a stale certificate is an operations problem.
+
+INSERT INTO public.discord_routes (event_type, webhook_key, role_keys) VALUES
+  ('commercial.proposal.sent',              'DISCORD_WEBHOOK_REVENUE',  ARRAY['DISCORD_ROLE_SALES']),
+  ('commercial.proposal.accepted',          'DISCORD_WEBHOOK_REVENUE',  ARRAY['DISCORD_ROLE_SALES']),
+  ('commercial.proposal.changes_requested', 'DISCORD_WEBHOOK_REVENUE',  ARRAY['DISCORD_ROLE_SALES']),
+  ('commercial.proposal.expiring',          'DISCORD_WEBHOOK_REVENUE',  ARRAY['DISCORD_ROLE_SALES']),
+  ('commercial.proposal.expired',           'DISCORD_WEBHOOK_FLAG',     ARRAY['DISCORD_ROLE_SALES']),
+  ('commercial.agreement.signed',           'DISCORD_WEBHOOK_REVENUE',  ARRAY['DISCORD_ROLE_SALES']),
+  ('commercial.billing.configured',         'DISCORD_WEBHOOK_REVENUE',  ARRAY['DISCORD_ROLE_SALES']),
+  ('commercial.billing.stalled',            'DISCORD_WEBHOOK_FLAG',     ARRAY['DISCORD_ROLE_OPERATIONS']),
+  ('company_coi.delivered',                 'DISCORD_WEBHOOK_FLAG',     ARRAY['DISCORD_ROLE_OPERATIONS']),
+  ('company_coi.delivery_failed',           'DISCORD_WEBHOOK_DISPATCH', ARRAY['DISCORD_ROLE_OPERATIONS']),
+  ('company_coi.expiring',                  'DISCORD_WEBHOOK_DISPATCH', ARRAY['DISCORD_ROLE_OPERATIONS'])
+ON CONFLICT (event_type) DO UPDATE
+  SET webhook_key = EXCLUDED.webhook_key, role_keys = EXCLUDED.role_keys, enabled = true;
+
+-- ─── 17. Sweep schedule ────────────────────────────────────────────────────
 -- Hourly at :40 — expires lapsed proposals, nudges the ones about to lapse,
 -- and warns when our own certificate is running out.
 
