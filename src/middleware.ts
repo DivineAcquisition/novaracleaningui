@@ -94,6 +94,17 @@ const ROUTE_OWNER: Array<[string, SubdomainKey]> = [
 
   // Public commercial / office / STR partnership intake funnel — no login.
   // Lead capture only (never prices); feeds the internal Partnerships Hub.
+  //
+  // /commercial-agreement is listed FIRST: ownerOf() matches on prefix
+  // boundaries, so "/commercial-agreement" would not be caught by the
+  // "/commercial" entry, but keeping them adjacent and ordered makes the
+  // relationship obvious rather than incidental.
+  //
+  // Both tokenized commercial pages live here so a prospect only ever opens
+  // one host: the proposal (review, accept or request changes — no signature,
+  // no payment) and then the agreement itself (e-sign, then billing setup).
+  ["/commercial-agreement", "commercial"],
+  ["/proposal", "commercial"],
   ["/commercial", "commercial"],
 
   // Public marketing + booking funnel (try.*). /book/confirmation stays
