@@ -325,7 +325,17 @@ export function AccountSheet({ account, onClose, reload }: { account: AccountRow
         toast.info(out.emailed ? "Link also emailed to the contact." : "Link copied — email delivery unavailable, send it manually.");
         setStripeId(String(out.customerId || stripeId));
       }
-      if (action === "send_agreement") setAgreementSigned(true);
+      // Deliberately does NOT mark the agreement signed. Sending a signing
+      // link is not a signature; the account flips when the client actually
+      // signs on the tokenized page.
+      if (action === "send_agreement" && out.link) {
+        await navigator.clipboard?.writeText(String(out.link)).catch(() => undefined);
+        toast.info(
+          out.emailed
+            ? "Signing link emailed to the contact and copied to your clipboard."
+            : "Signing link copied — email delivery unavailable, send it manually.",
+        );
+      }
       await reload();
       return out;
     } catch (e) {
@@ -453,7 +463,7 @@ export function AccountSheet({ account, onClose, reload }: { account: AccountRow
             <p className="text-xs font-bold text-slate-800">Onboarding actions</p>
             <div className="flex flex-wrap gap-2">
               <Button size="sm" variant="outline" disabled={busy !== null}
-                onClick={() => void runAction("send_agreement", "Agreement sent — completed copy emailed to the contact.")}>
+                onClick={() => void runAction("send_agreement", "Signing link created.")}>
                 {busy === "send_agreement" ? <RiLoader4Line className="w-3.5 h-3.5 mr-1 animate-spin" /> : null}
                 Send service agreement
               </Button>

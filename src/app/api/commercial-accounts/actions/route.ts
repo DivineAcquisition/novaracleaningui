@@ -21,7 +21,7 @@ import { requireAdmin, AdminAuthError } from "@/lib/admin-auth";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import { primeAirtablePat } from "@/lib/airtable/sources/prime-pat";
 import { syncCommercialAccount, syncSite } from "@/lib/airtable/mappers";
-import { sendAgreement, buildOneTimeValues, buildCommercialValues, buildExhibitA } from "@/lib/docuseal";
+import { generateAgreement } from "@/lib/commercial-agreement-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -228,66 +228,72 @@ export async function POST(req: Request): Promise<NextResponse> {
       return NextResponse.json({ ok: true, customerId, setupUrl: session.url, emailed });
     }
 
-    // ── Service agreement (existing DocuSeal engine) ─────────────────────
+    // ── Service agreement → tokenized signing link ───────────────────────
+    //
+    // This used to email a completed DocuSeal copy and stamp
+    // agreement_signed_at in the same breath, which meant an account counted
+    // as under contract on the strength of an email leaving the building. The
+    // agreement gate then let dispatch through for a contract nobody had
+    // signed.
+    //
+    // Now it mints the same tokenized signing link the accepted-proposal path
+    // uses, and agreement_signed_at is set by the database when the client
+    // actually signs. One signing mechanism, one definition of "signed".
     if (action === "send_agreement") {
       if (!account.email) return NextResponse.json({ ok: false, error: "Account has no email." }, { status: 400 });
 
-      // Exhibit A: the schedule of sites and the rate each was priced at by
-      // its walkthrough. Previously the agreement carried one account-level
-      // rate that no individual site was actually serviced at.
-      const { data: siteRows } = await supabase
-        .from("business_sites")
-        .select("nickname, address, city, state, zip_code, sqft, facility_type, scope_level, recommended_crew_size, firm_price_cents, excluded_at, exclusion_note")
+      // Prefer the accepted proposal — that is the normal path, and its
+      // snapshot is what the client agreed to. Falling back to the account's
+      // priced sites keeps the button usable for deals that were agreed off
+      // -platform.
+      const { data: accepted } = await supabase
+        .from("commercial_proposals")
+        .select("id")
         .eq("business_account_id", accountId)
-        .eq("active", true)
-        .order("nickname");
-      const sites = ((siteRows || []) as Array<Record<string, any>>).map((st) => ({
-        nickname: String(st.nickname),
-        address: [st.address, st.city, st.state, st.zip_code].filter(Boolean).join(", ") || null,
-        sqft: st.sqft ?? null,
-        facilityType: st.facility_type ?? null,
-        scopeLevel: st.scope_level ?? null,
-        crewSize: st.recommended_crew_size ?? null,
-        firmPriceCents: st.firm_price_cents ?? null,
-        cadence: account.recurring_frequency || null,
-        excluded: Boolean(st.excluded_at),
-        exclusionNote: st.exclusion_note ?? null,
-      }));
-      const exhibit = buildExhibitA(sites);
+        .eq("status", "accepted")
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-      const values = sites.length
-        ? buildCommercialValues({
-          businessName: account.business_name,
-          contactName: account.contact_name,
-          email: account.email,
-          phone: account.phone,
-          address: [account.address, account.city, account.state, account.zip_code].filter(Boolean).join(", ") || account.business_name,
-          sites,
-        })
-        : buildOneTimeValues({
-          name: account.contact_name || account.business_name,
-          email: account.email,
-          phone: account.phone || undefined,
-          address: [account.address, account.city, account.state, account.zip_code].filter(Boolean).join(", ") || account.business_name,
-          totalCents: account.default_rate_cents || undefined,
-        });
-      const result = await sendAgreement({
-        audience: "one_time",
-        email: account.email,
-        name: account.contact_name || account.business_name,
-        values,
-        metadata: { business_account_id: accountId, kind: "commercial" },
+      const built = await generateAgreement(supabase, {
+        proposalId: (accepted as { id?: string } | null)?.id || null,
+        accountId,
+        signerName: account.contact_name || account.business_name,
+        signerEmail: account.email,
+        actorName: "Admin",
       });
-      await supabase.from("business_accounts").update({
-        agreement_signed_at: new Date().toISOString(),
-      }).eq("id", accountId);
+      if (!built.ok) {
+        return NextResponse.json(
+          { ok: false, error: built.error, code: "agreement_not_ready" },
+          { status: built.status || 409 },
+        );
+      }
+
+      const { error: mailError } = await supabase.functions.invoke("admin-send-email", {
+        body: {
+          to: account.email,
+          subject: `Service agreement for signature — ${account.business_name}`,
+          html: [
+            `<p>Hi ${account.contact_name || "there"},</p>`,
+            `<p>Your Commercial Cleaning Services Agreement is ready to sign. It's pre-filled, including the schedule of locations and rates in Exhibit A.</p>`,
+            `<p><a href="${built.link}">Review and sign the agreement</a></p>`,
+            `<p>— Novara Cleaning Partnerships</p>`,
+          ].join(""),
+        },
+      });
+
+      await supabase.from("commercial_agreements").update({
+        sent_at: new Date().toISOString(),
+        sent_to: account.email,
+        send_count: 1,
+      }).eq("id", built.agreementId as string);
+
       return NextResponse.json({
         ok: true,
-        submissionId: result.submissionId,
-        exhibitA: exhibit.text,
-        pricedSites: exhibit.pricedCount,
-        pendingSites: exhibit.pendingCount,
-        totalPerVisitCents: exhibit.totalPerVisitCents,
+        agreementId: built.agreementId,
+        link: built.link,
+        emailed: !mailError,
+        fromProposal: Boolean((accepted as { id?: string } | null)?.id),
       });
     }
 
