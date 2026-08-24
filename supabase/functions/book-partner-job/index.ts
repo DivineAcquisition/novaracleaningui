@@ -317,12 +317,14 @@ serve(async (req) => {
           : await latestCompletedWalkthrough(admin, String(site?.id || ""));
 
         if (!walkthrough || walkthrough.status !== "completed" || !walkthrough.firm_price_cents) {
+          const anchor = quote.ok
+            ? ` Formula anchor: $${(quote.formulaCents / 100).toFixed(2)} (estimate $${(quote.estimateLowCents / 100).toFixed(2)}–$${(quote.estimateHighCents / 100).toFixed(2)}).`
+            : "";
           return json({
             ok: false,
             error:
               `${effectiveSqft.toLocaleString()} sq ft is at or above the ${quote.walkthroughThresholdSqft.toLocaleString()} sq ft walkthrough threshold. ` +
-              `A facility this size can't be firm-quoted from a desk — complete a walkthrough and set the price from its findings first. ` +
-              `Formula anchor: $${(quote.formulaCents / 100).toFixed(2)} (estimate $${(quote.estimateLowCents / 100).toFixed(2)}–$${(quote.estimateHighCents / 100).toFixed(2)}).`,
+              `A facility this size can't be firm-quoted from a desk — complete a walkthrough and set the price from its findings first.${anchor}`,
             code: "walkthrough_required",
             estimate: {
               formulaCents: quote.formulaCents,
@@ -332,12 +334,8 @@ serve(async (req) => {
             },
           }, 409);
         }
-        if (walkthrough.id && site?.id) {
-          const { data: owns } = await admin.from("commercial_walkthroughs")
-            .select("business_site_id").eq("id", walkthrough.id).maybeSingle();
-          if (owns && String(owns.business_site_id) !== String(site.id)) {
-            return json({ ok: false, error: "That walkthrough was conducted at a different site." }, 400);
-          }
+        if (site?.id && String(walkthrough.business_site_id) !== String(site.id)) {
+          return json({ ok: false, error: "That walkthrough was conducted at a different site." }, 400);
         }
       }
     }
@@ -481,7 +479,7 @@ serve(async (req) => {
         partner_details: {
           booking_type: bookingType,
           business_account_id: account?.id || null,
-          business_site_id: body.businessSiteId || null,
+          business_site_id: site?.id || null,
           host_id: property?.host_id || null,
           property_id: property?.id || null,
           str_checkout_time: s(body.strCheckoutTime, 40) || null,

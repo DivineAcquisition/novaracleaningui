@@ -154,6 +154,7 @@ export async function accountCompliance(
 
 export interface WalkthroughRecord {
   id: string;
+  business_site_id: string;
   status: string;
   conducted_on: string | null;
   conducted_by: string | null;
@@ -165,8 +166,8 @@ export interface WalkthroughRecord {
 }
 
 const WALKTHROUGH_COLS =
-  "id, status, conducted_on, conducted_by, firm_price_cents, recommended_crew_size, " +
-  "scope_level, facility_type_key, sqft";
+  "id, business_site_id, status, conducted_on, conducted_by, firm_price_cents, " +
+  "recommended_crew_size, scope_level, facility_type_key, sqft";
 
 /** The most recent completed walkthrough for a site, if there is one. */
 export async function latestCompletedWalkthrough(

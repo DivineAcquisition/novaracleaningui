@@ -249,26 +249,28 @@ BEGIN
   v_warn_days := COALESCE(v_warn_days, 30);
 
   IF v_acct.agreement_signed_at IS NULL THEN
-    v_blockers := v_blockers || 'No signed agreement on the account.';
+    v_blockers := array_append(v_blockers, 'No signed agreement on the account.');
   END IF;
 
   IF v_acct.coi_expires_at IS NOT NULL AND v_acct.coi_expires_at < CURRENT_DATE THEN
-    v_blockers := v_blockers
-      || format('Certificate of insurance expired %s.', to_char(v_acct.coi_expires_at, 'Mon DD, YYYY'));
+    v_blockers := array_append(
+      v_blockers,
+      format('Certificate of insurance expired %s.', to_char(v_acct.coi_expires_at, 'Mon DD, YYYY')));
   ELSIF v_acct.coi_expires_at IS NOT NULL
         AND v_acct.coi_expires_at <= CURRENT_DATE + v_warn_days THEN
-    v_warnings := v_warnings
-      || format('Certificate of insurance expires %s.', to_char(v_acct.coi_expires_at, 'Mon DD, YYYY'));
+    v_warnings := array_append(
+      v_warnings,
+      format('Certificate of insurance expires %s.', to_char(v_acct.coi_expires_at, 'Mon DD, YYYY')));
   ELSIF v_acct.coi_expires_at IS NULL AND v_acct.coi_sent_at IS NULL THEN
-    v_blockers := v_blockers || 'No certificate of insurance on file.';
+    v_blockers := array_append(v_blockers, 'No certificate of insurance on file.');
   ELSIF v_acct.coi_expires_at IS NULL THEN
     -- Recorded as sent before expiries were tracked. Not grounds to block work
     -- on an account that has been servicing, but it needs a real date.
-    v_warnings := v_warnings || 'Certificate of insurance on file has no recorded expiry date.';
+    v_warnings := array_append(v_warnings, 'Certificate of insurance on file has no recorded expiry date.');
   END IF;
 
   IF v_acct.status = 'offboarded' THEN
-    v_blockers := v_blockers || 'Account is offboarded.';
+    v_blockers := array_append(v_blockers, 'Account is offboarded.');
   END IF;
 
   RETURN jsonb_build_object(
