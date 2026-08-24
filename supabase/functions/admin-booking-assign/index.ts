@@ -161,6 +161,18 @@ async function suggestCleaners(
     (booking.job_id as string | null) || null,
   );
 
+  // What the site's walkthrough recorded it needs. Advisory, not a filter:
+  // one crew member can bring the scrubber, and excluding everyone who has not
+  // ticked a box would break dispatch for the many sites that need nothing
+  // special. The gap is shown so a human decides.
+  let requiredEquipment: string[] = [];
+  if (booking.business_site_id) {
+    const { data: site } = await admin.from("business_sites")
+      .select("required_equipment").eq("id", booking.business_site_id).maybeSingle();
+    const req = (site as { required_equipment?: string[] } | null)?.required_equipment;
+    if (Array.isArray(req)) requiredEquipment = req.map(String).filter(Boolean);
+  }
+
   const serviceDate = String(booking.service_date || "");
   const weekday = serviceDate
     ? new Date(`${serviceDate}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" })
@@ -169,7 +181,7 @@ async function suggestCleaners(
   const { data: cleaners } = await admin
     .from("cleaners")
     .select(
-      "id, first_name, last_name, email, phone, status, approved, available_for_bookings, home_lat, home_lng, average_rating, total_ratings, workload_score, acceptance_rate, on_time_rate, preferred_work_days, max_travel_miles, max_weekly_bookings",
+      "id, first_name, last_name, email, phone, status, approved, available_for_bookings, home_lat, home_lng, average_rating, total_ratings, workload_score, acceptance_rate, on_time_rate, preferred_work_days, max_travel_miles, max_weekly_bookings, supply_inventory",
     )
     .eq("approved", true)
     .eq("available_for_bookings", true)
@@ -216,6 +228,9 @@ async function suggestCleaners(
 
     if (!available && coords) continue;
 
+    const inventory = (c.supply_inventory || {}) as Record<string, boolean>;
+    const missingEquipment = requiredEquipment.filter((id) => inventory[id] !== true);
+
     ranked.push({
       id: c.id,
       first_name: c.first_name,
@@ -226,10 +241,18 @@ async function suggestCleaners(
       match_score: score,
       available,
       reason,
+      requiredEquipment,
+      missingEquipment,
+      equipmentReady: missingEquipment.length === 0,
     });
   }
 
-  ranked.sort((a, b) => b.match_score - a.match_score);
+  // Contractors who have certified the equipment this site needs come first;
+  // within each group the existing ranking is untouched.
+  ranked.sort((a, b) =>
+    Number(b.equipmentReady ?? true) - Number(a.equipmentReady ?? true) ||
+    b.match_score - a.match_score
+  );
   return ranked.slice(0, limit);
 }
 

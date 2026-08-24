@@ -9,7 +9,7 @@
 // SUPPLY_READY_PERCENT of the neededForJob essentials (ceil). Optional items
 // never count toward readiness.
 
-export type SupplyCategory = "solutions" | "tools" | "safety" | "optional";
+export type SupplyCategory = "solutions" | "tools" | "safety" | "optional" | "commercial_equipment";
 
 export interface SupplyItem {
   id: string;
@@ -17,6 +17,13 @@ export interface SupplyItem {
   category: SupplyCategory;
   /** True = counted toward the job-readiness %. */
   neededForJob: boolean;
+  /**
+   * Heavy equipment a commercial site may require. Declaring it is what makes
+   * a contractor eligible for sites whose walkthrough recorded that need — it
+   * is never counted toward residential readiness, because nobody needs an
+   * auto-scrubber to clean a two-bedroom flat.
+   */
+  commercialEquipment?: boolean;
 }
 
 export const SUPPLY_READY_PERCENT = 70;
@@ -58,13 +65,54 @@ export const SUPPLY_ITEMS: SupplyItem[] = [
   { id: "mask_respirator", label: "Mask/respirator (ovens, showers)", category: "optional", neededForJob: false },
   { id: "toilet_toothbrush", label: "Separate toilet toothbrush (different color)", category: "optional", neededForJob: false },
   { id: "leather_cleaner", label: "Leather cleaner (rare)", category: "optional", neededForJob: false },
+
+  // Commercial equipment — self-certified, never required for residential
+  // readiness. A commercial walkthrough records what a building demands
+  // (required_equipment on the site); these are the answers to that question.
+  { id: "auto_scrubber", label: "Ride-on or walk-behind auto-scrubber", category: "commercial_equipment", neededForJob: false, commercialEquipment: true },
+  { id: "floor_buffer", label: "Floor buffer / burnisher", category: "commercial_equipment", neededForJob: false, commercialEquipment: true },
+  { id: "carpet_extractor", label: "Carpet extractor", category: "commercial_equipment", neededForJob: false, commercialEquipment: true },
+  { id: "wet_vac", label: "Wet/dry shop vac", category: "commercial_equipment", neededForJob: false, commercialEquipment: true },
+  { id: "backpack_vacuum", label: "Backpack vacuum", category: "commercial_equipment", neededForJob: false, commercialEquipment: true },
+  { id: "high_duster", label: "High-reach duster / extension pole", category: "commercial_equipment", neededForJob: false, commercialEquipment: true },
+  { id: "pressure_washer", label: "Pressure washer", category: "commercial_equipment", neededForJob: false, commercialEquipment: true },
+  { id: "floor_scrubber_pads", label: "Floor pads & scrubbing chemicals", category: "commercial_equipment", neededForJob: false, commercialEquipment: true },
 ];
+
+/** The equipment catalog a commercial walkthrough picks from. */
+export function commercialEquipmentItems(): SupplyItem[] {
+  return SUPPLY_ITEMS.filter((i) => i.commercialEquipment === true);
+}
+
+export function commercialEquipmentLabel(id: string): string {
+  return SUPPLY_ITEMS.find((i) => i.id === id)?.label || id.replace(/_/g, " ");
+}
+
+/**
+ * Which of a site's required equipment this contractor has certified they own.
+ *
+ * Advisory, not a hard filter: a site can be worked by a crew where one member
+ * brings the scrubber, and refusing every cleaner who has not ticked a box
+ * would break dispatch for the many sites that need nothing special. Dispatch
+ * shows the gap and lets a human decide.
+ */
+export function equipmentMatch(
+  inventory: SupplyInventory | null | undefined,
+  requiredEquipment: string[] | null | undefined,
+): { required: string[]; owned: string[]; missing: string[]; ok: boolean } {
+  const required = (requiredEquipment || []).map(String).filter(Boolean);
+  const inv = inventory || {};
+  const owned = required.filter((id) => inv[id] === true);
+  const missing = required.filter((id) => inv[id] !== true);
+  return { required, owned, missing, ok: missing.length === 0 };
+}
 
 export const SUPPLY_CATEGORY_LABEL: Record<SupplyCategory, string> = {
   solutions: "Cleaning Solutions",
   tools: "Tools",
   safety: "Safety & Personal",
   optional: "Optional — Add Later",
+  commercial_equipment: "Commercial Equipment — Self-Certified",
 };
 
 export const SUPPLY_CHECKLIST_PDF = "/NovaraCleaning_Supply_Checklist_dd14.pdf";

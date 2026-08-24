@@ -87,8 +87,7 @@ function clock(v: unknown): string | null {
  * when the visit happened.
  */
 async function anchorFor(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  supabase: any,
+  supabase: ReturnType<typeof getAdminSupabase>,
   wt: Record<string, unknown>,
 ) {
   const config = await loadCommercialConfigServer(supabase);

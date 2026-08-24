@@ -22,6 +22,15 @@ export interface RankedCleaner {
   match_score: number;
   available: boolean;
   reason?: string;
+  /**
+   * Commercial equipment fit, present only for jobs at a site whose
+   * walkthrough recorded equipment requirements. Advisory: it orders the
+   * suggestions and shows the gap, it does not exclude anyone — a crew can
+   * cover a site where one member brings the scrubber.
+   */
+  requiredEquipment?: string[];
+  missingEquipment?: string[];
+  equipmentReady?: boolean;
 }
 
 export function scoreCleanerForJob(

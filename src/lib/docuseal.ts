@@ -138,6 +138,120 @@ export function buildOneTimeValues(b: {
   });
 }
 
+/**
+ * Exhibit A — the schedule of sites and rates a commercial agreement covers.
+ *
+ * Each rate here came from a walkthrough: someone stood in the building,
+ * measured it, and priced it from what they found. This renders that into the
+ * one place the client actually signs, so the agreement and the booking flow
+ * quote the same number instead of the agreement carrying a single
+ * account-level rate that no site is actually serviced at.
+ *
+ * Sites without a firm price are listed as pending rather than omitted — a
+ * schedule that quietly drops the unpriced locations reads as complete when
+ * it is not.
+ */
+export interface ExhibitASite {
+  nickname: string;
+  address?: string | null;
+  sqft?: number | null;
+  facilityType?: string | null;
+  scopeLevel?: string | null;
+  crewSize?: number | null;
+  firmPriceCents?: number | null;
+  cadence?: string | null;
+  excluded?: boolean;
+  exclusionNote?: string | null;
+}
+
+export function buildExhibitA(sites: ExhibitASite[]): {
+  text: string;
+  totalPerVisitCents: number;
+  pricedCount: number;
+  pendingCount: number;
+} {
+  const lines: string[] = [];
+  let total = 0;
+  let priced = 0;
+  let pending = 0;
+
+  for (const s of sites) {
+    const bits = [
+      s.sqft ? `${s.sqft.toLocaleString()} sq ft` : null,
+      s.facilityType || null,
+      s.scopeLevel ? `${s.scopeLevel} scope` : null,
+      s.crewSize ? `crew of ${s.crewSize}` : null,
+      s.cadence || null,
+    ].filter(Boolean).join(" · ");
+
+    if (s.excluded) {
+      pending += 1;
+      lines.push(
+        `${s.nickname}${s.address ? ` — ${s.address}` : ""}` +
+        `${bits ? ` (${bits})` : ""}: NOT SERVICEABLE. ${s.exclusionNote || "A site survey found a condition outside our scope of service."}`,
+      );
+      continue;
+    }
+    if (s.firmPriceCents && s.firmPriceCents > 0) {
+      priced += 1;
+      total += s.firmPriceCents;
+      lines.push(
+        `${s.nickname}${s.address ? ` — ${s.address}` : ""}` +
+        `${bits ? ` (${bits})` : ""}: $${(s.firmPriceCents / 100).toFixed(2)} per visit`,
+      );
+    } else {
+      pending += 1;
+      lines.push(
+        `${s.nickname}${s.address ? ` — ${s.address}` : ""}` +
+        `${bits ? ` (${bits})` : ""}: rate pending site walkthrough`,
+      );
+    }
+  }
+
+  return {
+    text: lines.length ? lines.join("\n") : "No sites on this account yet.",
+    totalPerVisitCents: total,
+    pricedCount: priced,
+    pendingCount: pending,
+  };
+}
+
+/**
+ * Commercial Service Agreement values.
+ *
+ * Reuses the one-time template's field names — the same contract shape the
+ * commercial `send_agreement` action has always used — and adds the Exhibit A
+ * schedule. Templates that carry no Exhibit A field simply ignore the extra
+ * values; the schedule is still recorded and shown in the admin console, so
+ * building it is never wasted.
+ */
+export function buildCommercialValues(b: {
+  businessName: string;
+  contactName?: string | null;
+  email: string;
+  phone?: string | null;
+  address?: string | null;
+  sites: ExhibitASite[];
+}): Record<string, string | number | boolean> {
+  const exhibit = buildExhibitA(b.sites);
+  return compact({
+    "Effective Date": today(),
+    "Client Name": b.contactName || b.businessName,
+    "Company Name": b.businessName,
+    "Service Address": b.address,
+    "Phone": b.phone || undefined,
+    "Email": b.email,
+    "Selected service type": true,
+    "Exhibit A": exhibit.text,
+    "Schedule of Sites": exhibit.text,
+    // Per-visit across every priced site — the account-level number that
+    // actually corresponds to the sites being serviced.
+    "Total Service Fee": exhibit.totalPerVisitCents > 0
+      ? dollars(exhibit.totalPerVisitCents)
+      : undefined,
+  });
+}
+
 /** Host Partnership Agreement (role: Host). */
 export function buildHostValues(h: {
   name?: string; company?: string; email: string; entityType?: "individual" | "entity";

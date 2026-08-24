@@ -9,6 +9,7 @@
 // failing: an admin who deactivates every facility type should get a usable
 // number and a support ticket, not a dead pricing step.
 
+import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import {
   DEFAULT_COMMERCIAL_CONFIG,
   DEFAULT_COMMERCIAL_SETTINGS,
@@ -19,8 +20,7 @@ import {
   type SizeTier,
 } from "@/lib/commercial-pricing";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Client = any;
+type Client = ReturnType<typeof getAdminSupabase>;
 
 export async function loadCommercialConfigServer(
   supabase: Client,

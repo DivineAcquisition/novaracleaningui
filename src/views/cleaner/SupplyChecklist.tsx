@@ -64,7 +64,10 @@ function Card({ children, className }: { children: React.ReactNode; className?: 
   );
 }
 
-const CATEGORY_ORDER: SupplyCategory[] = ["solutions", "tools", "safety", "optional"];
+// Commercial equipment sits last: it never counts toward job readiness, and
+// most contractors will tick none of it. Declaring a scrubber is what makes
+// someone eligible for the sites whose walkthrough said one is needed.
+const CATEGORY_ORDER: SupplyCategory[] = ["solutions", "tools", "safety", "optional", "commercial_equipment"];
 
 export default function SupplyChecklist() {
   const params = useParams<{ token: string }>();
@@ -191,7 +194,8 @@ export default function SupplyChecklist() {
         <p className="mt-1 text-sm text-slate-600">
           Hi {first} — check off what you already own. You don&apos;t need every essential on day one;
           we look for about {SUPPLY_READY_PERCENT}% of the job-needed items ({liveScore.threshold} of{" "}
-          {liveScore.totalNeeded}).
+          {liveScore.totalNeeded}). Commercial equipment at the bottom is optional — ticking it puts you in
+          line for larger sites that need it.
         </p>
         <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
           <div className="flex items-center justify-between gap-2 text-sm">

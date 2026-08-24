@@ -21,7 +21,7 @@ import { requireAdmin, AdminAuthError } from "@/lib/admin-auth";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import { primeAirtablePat } from "@/lib/airtable/sources/prime-pat";
 import { syncCommercialAccount, syncSite } from "@/lib/airtable/mappers";
-import { sendAgreement, buildOneTimeValues } from "@/lib/docuseal";
+import { sendAgreement, buildOneTimeValues, buildCommercialValues, buildExhibitA } from "@/lib/docuseal";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -231,13 +231,46 @@ export async function POST(req: Request): Promise<NextResponse> {
     // ── Service agreement (existing DocuSeal engine) ─────────────────────
     if (action === "send_agreement") {
       if (!account.email) return NextResponse.json({ ok: false, error: "Account has no email." }, { status: 400 });
-      const values = buildOneTimeValues({
-        name: account.contact_name || account.business_name,
-        email: account.email,
-        phone: account.phone || undefined,
-        address: [account.address, account.city, account.state, account.zip_code].filter(Boolean).join(", ") || account.business_name,
-        totalCents: account.default_rate_cents || undefined,
-      });
+
+      // Exhibit A: the schedule of sites and the rate each was priced at by
+      // its walkthrough. Previously the agreement carried one account-level
+      // rate that no individual site was actually serviced at.
+      const { data: siteRows } = await supabase
+        .from("business_sites")
+        .select("nickname, address, city, state, zip_code, sqft, facility_type, scope_level, recommended_crew_size, firm_price_cents, excluded_at, exclusion_note")
+        .eq("business_account_id", accountId)
+        .eq("active", true)
+        .order("nickname");
+      const sites = ((siteRows || []) as Array<Record<string, any>>).map((st) => ({
+        nickname: String(st.nickname),
+        address: [st.address, st.city, st.state, st.zip_code].filter(Boolean).join(", ") || null,
+        sqft: st.sqft ?? null,
+        facilityType: st.facility_type ?? null,
+        scopeLevel: st.scope_level ?? null,
+        crewSize: st.recommended_crew_size ?? null,
+        firmPriceCents: st.firm_price_cents ?? null,
+        cadence: account.recurring_frequency || null,
+        excluded: Boolean(st.excluded_at),
+        exclusionNote: st.exclusion_note ?? null,
+      }));
+      const exhibit = buildExhibitA(sites);
+
+      const values = sites.length
+        ? buildCommercialValues({
+          businessName: account.business_name,
+          contactName: account.contact_name,
+          email: account.email,
+          phone: account.phone,
+          address: [account.address, account.city, account.state, account.zip_code].filter(Boolean).join(", ") || account.business_name,
+          sites,
+        })
+        : buildOneTimeValues({
+          name: account.contact_name || account.business_name,
+          email: account.email,
+          phone: account.phone || undefined,
+          address: [account.address, account.city, account.state, account.zip_code].filter(Boolean).join(", ") || account.business_name,
+          totalCents: account.default_rate_cents || undefined,
+        });
       const result = await sendAgreement({
         audience: "one_time",
         email: account.email,
@@ -248,7 +281,14 @@ export async function POST(req: Request): Promise<NextResponse> {
       await supabase.from("business_accounts").update({
         agreement_signed_at: new Date().toISOString(),
       }).eq("id", accountId);
-      return NextResponse.json({ ok: true, submissionId: result.submissionId });
+      return NextResponse.json({
+        ok: true,
+        submissionId: result.submissionId,
+        exhibitA: exhibit.text,
+        pricedSites: exhibit.pricedCount,
+        pendingSites: exhibit.pendingCount,
+        totalPerVisitCents: exhibit.totalPerVisitCents,
+      });
     }
 
     // ── On-demand Airtable re-sync ───────────────────────────────────────
