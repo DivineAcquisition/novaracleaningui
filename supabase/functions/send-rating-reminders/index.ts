@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import {
   feedbackMaxReminders,
   feedbackReminderDelayHours,
+  isReviewSendWindow,
   sendFeedbackReminder,
   sendJobFeedbackOffer,
 } from "../_shared/job-feedback-offer.ts";
@@ -27,8 +28,10 @@ type SB = any;
  * Phase A — first feedback link (personalized SMS + email).
  *
  * Completed bookings with a cleaner + phone that were never sent a rating
- * reminder get the tokenized feedback link ~2h after completion. Keyed on
- * bookings.rating_reminder_sent_at so this fires exactly once per booking.
+ * reminder get the tokenized feedback link ~2h after completion, and only
+ * between 9 AM and 7 PM America/New_York. After-hours completions wait until
+ * the next in-window sweep. Keyed on bookings.rating_reminder_sent_at so this
+ * fires exactly once per booking.
  * sendJobFeedbackOffer mints the token, sends the personalized SMS + email
  * (name + booking summary + crew), and stamps job_feedback.sent_at.
  */
@@ -253,6 +256,22 @@ serve(async (req) => {
     );
 
     const now = Date.now();
+
+    if (!isReviewSendWindow(new Date(now))) {
+      logStep("Outside 9AM–7PM ET — holding review SMS/email until morning", {
+        tz: "America/New_York",
+      });
+      return new Response(
+        JSON.stringify({
+          success: true,
+          skipped: true,
+          reason: "outside_business_hours",
+          window: "9:00–19:00 America/New_York",
+          timestamp: new Date(now).toISOString(),
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
+      );
+    }
 
     const firstSend = await firstSendSweep(supabase, now);
 

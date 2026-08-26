@@ -12,6 +12,9 @@
 // app_secrets (FEEDBACK_POSITIVE_MIN_RATING / FEEDBACK_TOKEN_TTL_DAYS /
 // FEEDBACK_GOOGLE_REVIEW_URL / FEEDBACK_REMINDER_DELAY_HOURS /
 // FEEDBACK_MAX_REMINDERS).
+//
+// SMS + email only go out 9:00 AM – 7:00 PM America/New_York. Completions
+// after hours wait for the next in-window send-rating-reminders sweep.
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { sendSms } from "./sms.ts";
@@ -97,6 +100,27 @@ export async function feedbackMaxReminders(supabase: SupabaseClient): Promise<nu
 
 export function feedbackUrl(token: string): string {
   return `${SITE_BASE}/feedback/${token}`;
+}
+
+/** Operator timezone for customer-facing review SMS/email. */
+export const REVIEW_SEND_TZ = "America/New_York";
+/** Inclusive local start (9:00 AM). */
+export const REVIEW_SEND_START_HOUR = 9;
+/** Exclusive local end (7:00 PM). */
+export const REVIEW_SEND_END_HOUR = 19;
+
+/** True when review SMS/email may leave the system (9 AM–7 PM ET, any day). */
+export function isReviewSendWindow(now = new Date()): boolean {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: REVIEW_SEND_TZ,
+      hourCycle: "h23",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).formatToParts(now).map((p) => [p.type, p.value]),
+  ) as Record<string, string>;
+  const minutes = Number(parts.hour) * 60 + Number(parts.minute);
+  return minutes >= REVIEW_SEND_START_HOUR * 60 && minutes < REVIEW_SEND_END_HOUR * 60;
 }
 
 // ─── Personalization helpers ───────────────────────────────────────────
@@ -372,6 +396,11 @@ export async function sendJobFeedbackOffer(
     /* proceed — sweep also filters */
   }
 
+  if (!isReviewSendWindow()) {
+    const row = await ensureJobFeedback(supabase, bookingId);
+    return { feedbackUrl: feedbackUrl(row.token), token: row.token, smsSent: false, emailSent: false };
+  }
+
   const row = await ensureJobFeedback(supabase, bookingId);
   const url = feedbackUrl(row.token);
   const ctx = await feedbackContext(supabase, bookingId);
@@ -422,6 +451,10 @@ export async function sendFeedbackReminder(
     }
   } catch {
     /* proceed — sweep also filters */
+  }
+
+  if (!isReviewSendWindow()) {
+    return { smsSent: false, emailSent: false };
   }
 
   const url = feedbackUrl(token);

@@ -664,8 +664,9 @@ serve(async (req) => {
 
     // Mint the tokenized feedback link now so every completed job has one
     // immediately (single-purpose, job-specific, expiring). The SMS itself
-    // goes out via the send-rating-reminders sweep ~2h after completion so
-    // it doesn't stack on top of the completion texts above. Non-blocking.
+    // goes out via the send-rating-reminders sweep ~2h after completion
+    // (and only 9 AM–7 PM ET) so it doesn't stack on top of the completion
+    // texts above or land at night. Non-blocking.
     // Skip entirely when admin disabled review requests on this booking.
     if (booking.suppress_review_request === true || booking.is_reclean === true) {
       logStep(booking.is_reclean ? "Feedback link skipped — re-clean" : "Feedback link skipped — suppress_review_request");
