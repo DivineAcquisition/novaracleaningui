@@ -622,8 +622,9 @@ type MileageDraftRow = {
   name: string;
   miles: string;
   amount: string;
-  /** Flat cleaner pay bump ($) — recorded as surge via admin-extra-pay. */
-  payAdjust: string;
+  /** Locked dashboard payout ($) — written to job_assignments.estimated_pay_cents. */
+  payout: string;
+  recommendedPayoutDollars: number | null;
   recommendedMiles: number | null;
   recommendedAmountDollars: number | null;
   include: boolean;
@@ -850,25 +851,32 @@ function BookingAssignBlock({
     })
     .filter(Boolean);
 
-  const buildMileageRows = (distanceById: Map<string, number | null>): MileageDraftRow[] =>
+  const buildMileageRows = (
+    distanceById: Map<string, number | null>,
+    payoutById: Map<string, number | null> = new Map(),
+  ): MileageDraftRow[] =>
     selectedIds.map((id) => {
       const c = cleaners.find((x) => x.id === id);
       const name = c ? `${c.first_name || ""} ${c.last_name || ""}`.trim() || "Cleaner" : "Cleaner";
       const miles = distanceById.get(id) ?? null;
       const recommended = recommendedMileageDollars(miles);
+      const formulaCents = payoutById.get(id);
+      const formulaDollars =
+        formulaCents != null && Number.isFinite(formulaCents) ? formulaCents / 100 : null;
       return {
         cleanerId: id,
         name,
         miles: miles != null ? String(miles) : "",
         amount: recommended != null ? recommended.toFixed(2) : "",
-        payAdjust: "",
+        payout: formulaDollars != null ? formulaDollars.toFixed(2) : "",
+        recommendedPayoutDollars: formulaDollars,
         recommendedMiles: miles,
         recommendedAmountDollars: recommended,
         include: miles != null && miles > 0,
       };
     });
 
-  /** Open mileage + pay-adjustment popup before assign — $0.70/mi from distance. */
+  /** Open mileage + locked-payout popup before assign — $0.70/mi from distance. */
   const openMileageThenAssign = async (
     allowUnpaid = false,
     bufferOverrideReason?: string,
@@ -887,16 +895,26 @@ function BookingAssignBlock({
       for (const s of suggestions) {
         if (s.distance_miles != null) distanceById.set(s.id, Number(s.distance_miles));
       }
-      const { data, error } = await supabase.functions.invoke("admin-booking-assign", {
-        body: { action: "suggest_cleaners", bookingId: booking.id, limit: 80 },
-      });
+      const [{ data, error }, payPreview] = await Promise.all([
+        supabase.functions.invoke("admin-booking-assign", {
+          body: { action: "suggest_cleaners", bookingId: booking.id, limit: 80 },
+        }),
+        supabase.functions.invoke("admin-booking-assign", {
+          body: { action: "preview_pay", bookingId: booking.id, cleanerIds: selectedIds },
+        }),
+      ]);
       if (!error) {
         const rows = (data as { suggestions?: SuggestedCleaner[] })?.suggestions || [];
         for (const s of rows) {
           if (s.distance_miles != null) distanceById.set(s.id, Number(s.distance_miles));
         }
       }
-      setMileageRows(buildMileageRows(distanceById));
+      const payoutById = new Map<string, number | null>();
+      const shares = (payPreview.data as { shares?: Array<{ cleanerId: string; shareCents: number }> })?.shares || [];
+      for (const s of shares) {
+        if (s.cleanerId) payoutById.set(s.cleanerId, Number(s.shareCents) || 0);
+      }
+      setMileageRows(buildMileageRows(distanceById, payoutById));
     } catch {
       setMileageRows(buildMileageRows(new Map()));
     } finally {
@@ -906,7 +924,7 @@ function BookingAssignBlock({
 
   const updateMileageRow = (
     cleanerId: string,
-    patch: Partial<Pick<MileageDraftRow, "miles" | "amount" | "payAdjust" | "include">>,
+    patch: Partial<Pick<MileageDraftRow, "miles" | "amount" | "payout" | "include">>,
   ) => {
     setMileageRows((prev) =>
       prev.map((r) => {
@@ -925,8 +943,8 @@ function BookingAssignBlock({
   };
 
   /**
-   * Record assign-time mileage and/or flat pay adjustment via job_extra_pay.
-   * Portal pay (get-cleaner-portal) already folds these extras into display.
+   * Record assign-time mileage via job_extra_pay. Job payout itself is locked
+   * on the assignment row — extras are only mileage on top.
    */
   const recordAssignExtras = async (rows: MileageDraftRow[]) => {
     let paid = 0;
@@ -936,31 +954,19 @@ function BookingAssignBlock({
       const amountCents = row.include
         ? Math.max(0, Math.round((parseFloat(row.amount) || 0) * 100))
         : 0;
-      const payAdjustCents = Math.max(0, Math.round((parseFloat(row.payAdjust) || 0) * 100));
-      if (amountCents <= 0 && payAdjustCents <= 0) continue;
+      if (amountCents <= 0) continue;
 
       // admin-extra-pay stores miles × rate; derive rate so customized $ sticks.
       const body: Record<string, unknown> = {
         action: "pay",
         cleanerId: row.cleanerId,
         bookingId: booking.id,
-        note:
-          amountCents > 0 && payAdjustCents > 0
-            ? "Assign-time mileage + pay adjustment"
-            : payAdjustCents > 0
-              ? "Assign-time pay adjustment"
-              : "Assign-time mileage",
+        note: "Assign-time mileage",
       };
-      if (amountCents > 0) {
-        const milesForApi = miles > 0 ? miles : 1;
-        body.mileageMiles = milesForApi;
-        body.mileageRateCents =
-          miles > 0 ? Math.max(1, Math.round(amountCents / miles)) : amountCents;
-      }
-      if (payAdjustCents > 0) {
-        // Flat bump to cleaner pay — same ledger the portal shows as extras.
-        body.surgeCents = payAdjustCents;
-      }
+      const milesForApi = miles > 0 ? miles : 1;
+      body.mileageMiles = milesForApi;
+      body.mileageRateCents =
+        miles > 0 ? Math.max(1, Math.round(amountCents / miles)) : amountCents;
 
       try {
         const { data, error } = await supabase.functions.invoke("admin-extra-pay", { body });
@@ -974,6 +980,18 @@ function BookingAssignBlock({
       }
     }
     return { paid, failed };
+  };
+
+  const payoutCentsByCleaner = (rows: MileageDraftRow[]): Record<string, number> => {
+    const out: Record<string, number> = {};
+    for (const row of rows) {
+      const raw = String(row.payout ?? "").trim();
+      if (!raw) continue;
+      const dollars = parseFloat(raw);
+      if (!Number.isFinite(dollars) || dollars < 0) continue;
+      out[row.cleanerId] = Math.round(dollars * 100);
+    }
+    return out;
   };
 
   const assign = async (
@@ -994,6 +1012,7 @@ function BookingAssignBlock({
           mode: "replace",
           allowUnpaid,
           bufferOverrideReason,
+          payoutCentsByCleaner: payoutCentsByCleaner(mileage || mileageRows),
         },
       });
       // On non-2xx the supabase client returns a FunctionsHttpError whose
@@ -1035,11 +1054,7 @@ function BookingAssignBlock({
       let extrasNote = "";
       const hasExtras =
         mileage &&
-        mileage.some(
-          (r) =>
-            (r.include && (parseFloat(r.amount) || 0) > 0) ||
-            (parseFloat(r.payAdjust) || 0) > 0,
-        );
+        mileage.some((r) => r.include && (parseFloat(r.amount) || 0) > 0);
       if (hasExtras) {
         const { paid, failed } = await recordAssignExtras(mileage);
         if (paid > 0) extrasNote = ` · extras recorded for ${paid}`;
@@ -1063,7 +1078,13 @@ function BookingAssignBlock({
   const confirmMileageAndAssign = async (withExtras: boolean) => {
     const opts = pendingAssign || { allowUnpaid: false };
     setMileageOpen(false);
-    await assign(opts.allowUnpaid, opts.bufferOverrideReason, withExtras ? mileageRows : []);
+    // Always pass the draft so the Payout ($) field locks even when extras
+    // are skipped. Mileage is only recorded when withExtras is true.
+    await assign(
+      opts.allowUnpaid,
+      opts.bufferOverrideReason,
+      withExtras ? mileageRows : mileageRows.map((r) => ({ ...r, include: false, amount: "0" })),
+    );
   };
 
   const invokeOfferDispatch = async (
@@ -1704,9 +1725,9 @@ function BookingAssignBlock({
           <DialogHeader>
             <DialogTitle>Mileage &amp; pay for this assignment</DialogTitle>
             <DialogDescription>
-              Mileage recommended at ${(MILEAGE_RATE_CENTS / 100).toFixed(2)}/mi from home to the
-              job. Optional pay adjustment is added on top of base cut and shows in the cleaner
-              portal as extras.
+              Payout is what this cleaner sees on their dashboard. Formula is prefilled —
+              edit it to lock a different amount. Mileage at ${(MILEAGE_RATE_CENTS / 100).toFixed(2)}/mi
+              is extra on top.
             </DialogDescription>
           </DialogHeader>
           {mileageLoading ? (
@@ -1774,20 +1795,22 @@ function BookingAssignBlock({
                     </div>
                   </div>
                   <div>
-                    <Label className="text-xs text-slate-600">Pay adjustment ($)</Label>
+                    <Label className="text-xs text-slate-600">Payout ($)</Label>
                     <Input
                       type="number"
                       min={0}
                       step="0.01"
-                      value={row.payAdjust}
+                      value={row.payout}
                       onChange={(e) =>
-                        updateMileageRow(row.cleanerId, { payAdjust: e.target.value })
+                        updateMileageRow(row.cleanerId, { payout: e.target.value })
                       }
                       placeholder="0.00"
                       className="bg-white mt-1"
                     />
                     <p className="text-[10px] text-slate-500 mt-1">
-                      Flat bump to this cleaner&apos;s pay for the job (optional). Leave blank to skip.
+                      {row.recommendedPayoutDollars != null
+                        ? `Formula ${row.recommendedPayoutDollars.toLocaleString("en-US", { style: "currency", currency: "USD" })} — this amount is what the contractor dashboard shows.`
+                        : "This amount is what the contractor dashboard shows."}
                     </p>
                   </div>
                 </div>

@@ -868,6 +868,7 @@ export default function CleanerDashboard() {
                   const sharePct = profile?.pay_percentage ?? 35;
                   const enriched = enrichJob(job);
                   const pay =
+                    enriched?.pay?.displayCents ??
                     job.estimated_pay_cents ??
                     job.cleaner_payout_cents ??
                     (job.total_estimate_cents
@@ -1045,7 +1046,10 @@ export default function CleanerDashboard() {
                   const zip = zipForJob(job);
                   const enriched = enrichJob(job);
                   const pay =
-                    job.estimated_pay_cents ?? job.cleaner_payout_cents ?? null;
+                    enriched?.pay?.displayCents ??
+                    job.estimated_pay_cents ??
+                    job.cleaner_payout_cents ??
+                    null;
 
                   return (
                     <div

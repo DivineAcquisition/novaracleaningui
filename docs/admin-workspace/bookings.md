@@ -79,9 +79,10 @@ The directory shows badges next to each contractor — **Available**, **Inactive
 approval**, **Not taking jobs** — and there's a **Suggested (nearby & available)** row of up
 to six at the top. You can select up to eight people.
 
-When you assign directly, a **Mileage & pay** dialog appears first, where you can add miles,
-a mileage amount and a pay adjustment per cleaner. You can skip it with **Assign without
-extras**.
+When you assign directly, a **Mileage & pay** dialog appears first. **Payout ($)** is
+prefilled from the crew-pay formula — edit it and that amount is what the contractor
+dashboard shows. Mileage is extra on top. You can skip mileage with **Assign without
+extras**; the payout still locks.
 
 ### The two things that block an assignment
 

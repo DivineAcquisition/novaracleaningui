@@ -111,7 +111,7 @@ serve(async (req) => {
     try {
       const { data: assigns } = await supabase
         .from("job_assignments")
-        .select("id, cleaner_id, role, pay_percentage_snapshot")
+        .select("id, cleaner_id, role, pay_percentage_snapshot, estimated_pay_cents")
         .eq("job_id", booking.job_id || "")
         .in("status", ["Confirmed", "Accepted", "accepted", "In Progress", "completed"]);
 
@@ -142,13 +142,17 @@ serve(async (req) => {
         const shares = await computeCrewPay(supabase, revenue, performingCrew);
 
         const now = new Date().toISOString();
-        for (const a of (assigns || []) as { id: string; cleaner_id: string }[]) {
+        for (const a of (assigns || []) as { id: string; cleaner_id: string; estimated_pay_cents?: number | null }[]) {
           const share = shareFor(shares, a.cleaner_id);
           if (!share) continue;
+          // Never drop an admin-locked assign payout below the formula. Scope
+          // add-ons can raise pay; completing must not erase what dispatch set.
+          const locked = Number(a.estimated_pay_cents) || 0;
+          const payCents = Math.max(locked, share.shareCents);
           await supabase
             .from("job_assignments")
             .update({
-              estimated_pay_cents: share.shareCents,
+              estimated_pay_cents: payCents,
               pay_percentage_snapshot: share.ratePercent,
               crew_size_snapshot: share.crewSize,
               // The performing crew is final, so the figure is now locked.
@@ -160,12 +164,13 @@ serve(async (req) => {
 
         // Stamp the lead cleaner's suggested share on the booking. Custom
         // Payout / Run Payroll may send a different confirmed amount via
-        // Stripe Connect.
+        // Stripe Connect. Keep a higher assign-time lock if one was set.
         const leadShare = shareFor(shares, booking.cleaner_id)
           || shares[0]
           || null;
         if (leadShare) {
-          recomputedPayoutCents = leadShare.shareCents;
+          const assignedLead = Number(booking.cleaner_payout_cents) || 0;
+          recomputedPayoutCents = Math.max(assignedLead, leadShare.shareCents);
           recomputedPayPct = leadShare.ratePercent;
         }
 
