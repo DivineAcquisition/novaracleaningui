@@ -22,6 +22,11 @@ export const dynamic = "force-dynamic";
 
 const EXCLUSION_CODES = WALKTHROUGH_EXCLUSION_CODES;
 
+function jsonError(e: unknown, fallback: string, status = 500) {
+  const message = e instanceof Error && e.message.trim() ? e.message : fallback;
+  return NextResponse.json({ error: message }, { status });
+}
+
 function clock(v: unknown): string | null {
   const raw = String(v ?? "").trim().slice(0, 5);
   return /^\d{2}:\d{2}$/.test(raw) ? raw : null;
@@ -69,122 +74,134 @@ export async function GET(
   _req: Request,
   { params }: { params: { token: string } },
 ): Promise<NextResponse> {
-  const { supabase, wt, error } = await resolveToken(params.token);
-  if (error && !wt) return NextResponse.json({ error }, { status: 404 });
-  if (!wt) return NextResponse.json({ error: error || "Not found" }, { status: 404 });
-  if (error && !wt.token_submitted_at) return NextResponse.json({ error }, { status: 410 });
+  try {
+    const { supabase, wt, error } = await resolveToken(params.token);
+    if (error && !wt) return NextResponse.json({ error }, { status: 404 });
+    if (!wt) return NextResponse.json({ error: error || "Not found" }, { status: 404 });
+    if (error && !wt.token_submitted_at) return NextResponse.json({ error }, { status: 410 });
 
-  const ctx = await loadContext(supabase, wt);
-  return NextResponse.json({
-    ok: true,
-    expired: Boolean(error),
-    submitted: Boolean(wt.token_submitted_at),
-    status: wt.status,
-    walkthroughId: wt.id,
-    propertyType: ctx.type,
-    checklist: ctx.checklist,
-    answers: wt.checklist_answers || {},
-    photos: Array.isArray(wt.photos) ? wt.photos : [],
-    scheduledAt: wt.scheduled_at,
-    site: {
-      nickname: ctx.site?.nickname || wt.site_address,
-      address: [ctx.site?.address, ctx.site?.city, ctx.site?.state, ctx.site?.zip_code].filter(Boolean).join(", ") || wt.site_address,
-      clientStatedSqft: wt.client_stated_sqft,
-    },
-    access: {
-      name: wt.access_contact_name,
-      phone: wt.access_contact_phone,
-    },
-    account: ctx.account ? { name: ctx.account.business_name, contact: ctx.account.contact_name } : null,
-    cleaner: ctx.cleaner
-      ? { name: [ctx.cleaner.first_name, ctx.cleaner.last_name].filter(Boolean).join(" ") }
-      : { name: wt.conducted_by },
-    exclusionCodes: Object.fromEntries(
-      Object.entries(EXCLUSION_CODES).filter(([k]) => k !== "none"),
-    ),
-  });
+    const ctx = await loadContext(supabase, wt);
+    return NextResponse.json({
+      ok: true,
+      expired: Boolean(error),
+      submitted: Boolean(wt.token_submitted_at),
+      status: wt.status,
+      walkthroughId: wt.id,
+      propertyType: ctx.type,
+      checklist: ctx.checklist,
+      answers: wt.checklist_answers || {},
+      photos: Array.isArray(wt.photos) ? wt.photos : [],
+      scheduledAt: wt.scheduled_at,
+      site: {
+        nickname: ctx.site?.nickname || wt.site_address,
+        address: [ctx.site?.address, ctx.site?.city, ctx.site?.state, ctx.site?.zip_code].filter(Boolean).join(", ") || wt.site_address,
+        clientStatedSqft: wt.client_stated_sqft,
+      },
+      access: {
+        name: wt.access_contact_name,
+        phone: wt.access_contact_phone,
+      },
+      account: ctx.account ? { name: ctx.account.business_name, contact: ctx.account.contact_name } : null,
+      cleaner: ctx.cleaner
+        ? { name: [ctx.cleaner.first_name, ctx.cleaner.last_name].filter(Boolean).join(" ") }
+        : { name: wt.conducted_by },
+      exclusionCodes: Object.fromEntries(
+        Object.entries(EXCLUSION_CODES).filter(([k]) => k !== "none"),
+      ),
+    });
+  } catch (e) {
+    return jsonError(e, "Could not open this walkthrough.");
+  }
 }
 
 export async function PATCH(
   req: Request,
   { params }: { params: { token: string } },
 ): Promise<NextResponse> {
-  const { supabase, wt, error } = await resolveToken(params.token);
-  if (!wt) return NextResponse.json({ error: error || "Not found" }, { status: 404 });
-  if (error) return NextResponse.json({ error }, { status: 410 });
-  if (wt.token_submitted_at || ["conducted", "priced", "excluded", "cancelled"].includes(String(wt.status))) {
-    return NextResponse.json({ ok: true, submitted: true });
-  }
-
-  let body: Record<string, unknown>;
   try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid body." }, { status: 400 });
-  }
+    const { supabase, wt, error } = await resolveToken(params.token);
+    if (!wt) return NextResponse.json({ error: error || "Not found" }, { status: 404 });
+    if (error) return NextResponse.json({ error }, { status: 410 });
+    if (wt.token_submitted_at || ["conducted", "priced", "excluded", "cancelled"].includes(String(wt.status))) {
+      return NextResponse.json({ ok: true, submitted: true });
+    }
 
-  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
-  if (body.answers && typeof body.answers === "object") {
-    patch.checklist_answers = { ...(wt.checklist_answers || {}), ...(body.answers as object) };
+    let body: Record<string, unknown>;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid body." }, { status: 400 });
+    }
+
+    const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (body.answers && typeof body.answers === "object") {
+      patch.checklist_answers = { ...(wt.checklist_answers || {}), ...(body.answers as object) };
+    }
+    if (Array.isArray(body.photos)) {
+      patch.photos = body.photos.map((u) => String(u)).filter(Boolean).slice(0, 40);
+    }
+    const { error: upErr } = await supabase.from("commercial_walkthroughs").update(patch).eq("id", wt.id);
+    if (upErr) return NextResponse.json({ error: upErr.message }, { status: 400 });
+    return NextResponse.json({ ok: true, savedAt: patch.updated_at });
+  } catch (e) {
+    return jsonError(e, "Could not save.");
   }
-  if (Array.isArray(body.photos)) {
-    patch.photos = body.photos.map((u) => String(u)).filter(Boolean).slice(0, 40);
-  }
-  const { error: upErr } = await supabase.from("commercial_walkthroughs").update(patch).eq("id", wt.id);
-  if (upErr) return NextResponse.json({ error: upErr.message }, { status: 400 });
-  return NextResponse.json({ ok: true, savedAt: patch.updated_at });
 }
 
 export async function POST(
   req: Request,
   { params }: { params: { token: string } },
 ): Promise<NextResponse> {
-  const { supabase, wt, error } = await resolveToken(params.token);
-  if (!wt) return NextResponse.json({ error: error || "Not found" }, { status: 404 });
-  if (error) return NextResponse.json({ error }, { status: 410 });
-  if (wt.token_submitted_at) return NextResponse.json({ ok: true, alreadySubmitted: true, status: wt.status });
-
-  let body: Record<string, unknown>;
   try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid body." }, { status: 400 });
-  }
+    const { supabase, wt, error } = await resolveToken(params.token);
+    if (!wt) return NextResponse.json({ error: error || "Not found" }, { status: 404 });
+    if (error) return NextResponse.json({ error }, { status: 410 });
+    if (wt.token_submitted_at) return NextResponse.json({ ok: true, alreadySubmitted: true, status: wt.status });
 
-  const ctx = await loadContext(supabase, wt);
-  const answers = {
-    ...(wt.checklist_answers || {}),
-    ...((body.answers as Record<string, unknown>) || {}),
-  };
-  if (Array.isArray(body.photos)) answers.photos = body.photos;
-  else if (Array.isArray(wt.photos) && wt.photos.length) answers.photos = wt.photos;
+    let body: Record<string, unknown>;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid body." }, { status: 400 });
+    }
 
-  const items = ctx.checklist.all;
-  const missing = missingRequired(items, answers);
-  const exclusion = exclusionFromAnswers(answers);
+    const ctx = await loadContext(supabase, wt);
+    const answers = {
+      ...(wt.checklist_answers || {}),
+      ...((body.answers as Record<string, unknown>) || {}),
+    };
+    if (Array.isArray(body.photos)) answers.photos = body.photos;
+    else if (Array.isArray(wt.photos) && wt.photos.length) answers.photos = wt.photos;
 
-  if (exclusion) {
-    const note = exclusion.note;
-    if (note.length < 10) {
+    const items = ctx.checklist.all;
+    const missing = missingRequired(items, answers);
+    const exclusion = exclusionFromAnswers(answers);
+
+    if (exclusion) {
+      const note = exclusion.note;
+      if (note.length < 10) {
+        return NextResponse.json({
+          error: "Describe the excluded condition — this is the record of why we cannot price the site.",
+          missing: ["exclusion notes"],
+        }, { status: 400 });
+      }
+      if (!EXCLUSION_CODES[exclusion.code] || exclusion.code === "none") {
+        return NextResponse.json({ error: "Pick which excluded condition was found." }, { status: 400 });
+      }
+      return applyExclusion(supabase, wt, ctx, answers, exclusion.code, note);
+    }
+
+    if (missing.length) {
       return NextResponse.json({
-        error: "Describe the excluded condition — this is the record of why we cannot price the site.",
-        missing: ["exclusion notes"],
+        error: `A walkthrough isn't complete without every finding the price depends on. Still needed: ${missing.join(", ")}.`,
+        missing,
       }, { status: 400 });
     }
-    if (!EXCLUSION_CODES[exclusion.code] || exclusion.code === "none") {
-      return NextResponse.json({ error: "Pick which excluded condition was found." }, { status: 400 });
-    }
-    return applyExclusion(supabase, wt, ctx, answers, exclusion.code, note);
-  }
 
-  if (missing.length) {
-    return NextResponse.json({
-      error: `A walkthrough isn't complete without every finding the price depends on. Still needed: ${missing.join(", ")}.`,
-      missing,
-    }, { status: 400 });
+    return applyConduct(supabase, wt, ctx, answers);
+  } catch (e) {
+    return jsonError(e, "Could not submit this walkthrough.");
   }
-
-  return applyConduct(supabase, wt, ctx, answers);
 }
 
 async function applyExclusion(

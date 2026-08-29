@@ -77,7 +77,7 @@ export default function WalkthroughIntakeForm() {
     setLoading(true);
     try {
       const res = await fetch(`/api/walkthrough/${token}`);
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok || data?.ok === false) throw new Error(data?.error || "Link not valid");
       setInfo(data as FormPayload);
       setAnswers(data.answers || {});
@@ -100,7 +100,7 @@ export default function WalkthroughIntakeForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ answers: nextAnswers, photos: nextPhotos }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || "Save failed");
       setSaveState("saved");
       setTimeout(() => setSaveState("idle"), 1500);
@@ -156,7 +156,7 @@ export default function WalkthroughIntakeForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ answers: { ...answers, photos }, photos }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || "Submit failed");
       setDone(data.excluded ? "excluded" : "conducted");
       toast.success(data.excluded ? "Exclusion recorded — pricing stopped." : "Walkthrough submitted. Findings are in the pricing pipeline.");
