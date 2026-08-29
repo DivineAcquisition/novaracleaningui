@@ -53,6 +53,7 @@ import { cn } from "@/lib/utils";
 import {
   CommercialScopePreview,
   commercialKindFromBooking,
+  isOfficeBooking,
 } from "@/components/checklists/CommercialScopePreview";
 
 type BookingType = "commercial" | "office" | "str_turnover";
@@ -716,6 +717,7 @@ export default function PartnershipBooking() {
                 </p>
                 <CommercialScopePreview
                   kind={commercialKindFromBooking(type, scopeLevel)}
+                  office={isOfficeBooking(type)}
                   compact
                 />
               </div>

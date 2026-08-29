@@ -10,10 +10,13 @@ import {
 import { cn } from "@/lib/utils";
 import {
   COMMERCIAL_COMPARISON,
+  COMMERCIAL_SCOPE_LABEL,
   commercialChecklistPath,
   commercialChecklistSections,
+  commercialChecklistSectionsForJob,
   parseCommercialScope,
   type CommercialChecklistKind,
+  type CommercialScopeKey,
 } from "@/lib/commercial-checklists";
 import { CHECKLISTS } from "@/lib/checklists";
 
@@ -26,24 +29,37 @@ const KIND_SLUG: Record<CommercialChecklistKind, keyof typeof CHECKLISTS> = {
 
 export function CommercialScopePreview({
   kind,
+  office = false,
   className,
   compact = false,
 }: {
   kind: CommercialChecklistKind;
+  /** After-hours office extras on top of the selected scope depth. */
+  office?: boolean;
   className?: string;
   compact?: boolean;
 }) {
-  const sections = commercialChecklistSections(kind);
-  const slug = KIND_SLUG[kind];
+  const scope: CommercialScopeKey = kind === "office" ? "standard" : kind;
+  const showOffice = office || kind === "office";
+  const sections = showOffice && kind !== "office"
+    ? commercialChecklistSectionsForJob(scope, true)
+    : commercialChecklistSections(kind);
+  const slug = KIND_SLUG[kind === "office" ? "office" : kind];
   const published = CHECKLISTS[slug];
-  const href = commercialChecklistPath(kind === "office" ? "office" : "commercial", kind === "office" ? "standard" : kind);
+  const href = commercialChecklistPath(showOffice ? "office" : "commercial", scope);
+  const title = showOffice && kind !== "office"
+    ? `Office Clean — ${COMMERCIAL_SCOPE_LABEL[scope]}`
+    : published.name;
+  const tagline = showOffice && kind !== "office"
+    ? `${published.tagline} plus after-hours desk and lock-up rules.`
+    : published.tagline;
 
   return (
     <div className={cn("rounded-xl border border-slate-200 bg-white", className)}>
       <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-3">
         <div>
-          <p className="text-sm font-semibold text-slate-900">{published.name}</p>
-          <p className="text-xs text-slate-500 mt-0.5">{published.tagline}</p>
+          <p className="text-sm font-semibold text-slate-900">{title}</p>
+          <p className="text-xs text-slate-500 mt-0.5">{tagline}</p>
         </div>
         <Link
           href={href}
@@ -139,6 +155,13 @@ export function commercialKindFromBooking(
   serviceType?: string | null,
   scopeLevel?: string | null,
 ): CommercialChecklistKind {
-  if (String(serviceType || "").toLowerCase() === "office") return "office";
+  if (String(serviceType || "").toLowerCase() === "office") {
+    const scope = parseCommercialScope(scopeLevel);
+    return scope === "standard" ? "office" : scope;
+  }
   return parseCommercialScope(scopeLevel);
+}
+
+export function isOfficeBooking(serviceType?: string | null): boolean {
+  return String(serviceType || "").toLowerCase() === "office";
 }

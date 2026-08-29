@@ -121,14 +121,13 @@ export function isCommercialChecklistKind(
 }
 
 /**
- * Customer / admin layout for one published commercial checklist.
- * Office is Standard depth plus the office-only rules the crew also works.
+ * Customer / admin layout for one visit: a scope depth, plus office extras
+ * when the job is after-hours office work. Mirrors the crew builder.
  */
-export function commercialChecklistSections(
-  kind: CommercialChecklistKind,
+export function commercialChecklistSectionsForJob(
+  scope: CommercialScopeKey,
+  office = false,
 ): CommercialChecklistSection[] {
-  const office = kind === "office";
-  const scope: CommercialScopeKey = office ? "standard" : kind;
   const label = COMMERCIAL_SCOPE_LABEL[scope];
   const sections: CommercialChecklistSection[] = [
     COMMERCIAL_ARRIVAL,
@@ -139,6 +138,19 @@ export function commercialChecklistSections(
   sections.push(COMMERCIAL_CLOSEOUT);
   if (office) sections.push(OFFICE_AFTER_HOURS);
   return sections;
+}
+
+/**
+ * Published template pages. Office is Standard depth plus the office-only
+ * rules; Light / Detailed office jobs still use those scope pages plus
+ * the office extras at dispatch.
+ */
+export function commercialChecklistSections(
+  kind: CommercialChecklistKind,
+): CommercialChecklistSection[] {
+  const office = kind === "office";
+  const scope: CommercialScopeKey = office ? "standard" : kind;
+  return commercialChecklistSectionsForJob(scope, office);
 }
 
 export function normalizeCommercialScopeKey(
