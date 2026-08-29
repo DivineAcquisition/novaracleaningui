@@ -533,7 +533,10 @@ async function enrichSnapshot(supabase: SB, doc: DocRow): Promise<{
   if (doc.job_id) {
     const { data: cl } = await supabase
       .from("job_checklists")
-      .select("service_type, items, total_items, completed_items, progress_pct, completed_at")
+      .select(
+        "service_type, items, total_items, completed_items, progress_pct, completed_at, " +
+          "sections_snapshot, item_id_map",
+      )
       .eq("job_id", doc.job_id)
       .maybeSingle();
     if (cl) {
@@ -544,6 +547,13 @@ async function enrichSnapshot(supabase: SB, doc: DocRow): Promise<{
         total_items: Number(cl.total_items) || 0,
         completed_at: cl.completed_at || null,
         items: cl.items || {},
+        // The list as issued to this crew, plus the stable item ids behind the
+        // positional progress keys. Checklist wording changes over time now, so
+        // a packet that only carried "3:2 — done" would be unreadable against a
+        // later version. The packet has to show what they were actually asked
+        // to do, not what the checklist says today.
+        sections_snapshot: cl.sections_snapshot || null,
+        item_id_map: cl.item_id_map || {},
       };
     }
     if (!cleanerNames) {
