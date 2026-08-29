@@ -20,19 +20,16 @@
 
 import { NextResponse } from "next/server";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
-import {
-  generateAgreement,
-  row,
-  PROPOSAL_COLS,
-  PROPOSAL_SITE_COLS,
-} from "@/lib/commercial-agreement-server";
+import { row, PROPOSAL_COLS, PROPOSAL_SITE_COLS } from "@/lib/commercial-agreement-server";
 import {
   agreementUrl,
   estimatedMonthlyCents,
-  money,
   VALUE_STACK,
   type ProposalSite,
 } from "@/lib/commercial-proposal";
+// Acceptance and change-requests are shared with the consolidated onboarding
+// session — one implementation, so the two entry points cannot drift.
+import { acceptProposal, requestProposalChanges } from "@/lib/commercial-onboarding/operations";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -222,72 +219,20 @@ export async function POST(
     const note = clip(body.note, 4000);
     if (note.length < 5) {
       return NextResponse.json(
-        {
-          ok: false,
-          message: "Tell us what to change and we'll send a revised proposal.",
-        },
+        { ok: false, message: "Tell us what to change and we'll send a revised proposal." },
         { status: 400 },
       );
     }
-    const by = clip(body.name, 120) || (p.recipient_name as string) || "The client";
-
-    // The version is kept exactly as it was sent and the link is retired.
-    // A revision becomes a NEW version, so the negotiation stays readable
-    // rather than being overwritten in place.
-    const { error } = await supabase
-      .from("commercial_proposals")
-      .update({
-        status: "changes_requested",
-        changes_requested_at: new Date().toISOString(),
-        change_request_note: note,
-        change_request_by_name: by,
-        token: null,
-      })
-      .eq("id", p.id as string);
-    if (error) {
-      return NextResponse.json({ ok: false, message: error.message }, { status: 400 });
-    }
-
-    // Route it back to whoever owns the deal, with the reason attached.
-    const owner =
-      (p.assigned_to_email as string | null) ||
-      (acct.assigned_va_email as string | null) ||
-      null;
-    if (owner) {
-      await supabase.functions.invoke("admin-send-email", {
-        body: {
-          to: owner,
-          subject: `Changes requested — ${String(acct.business_name || "commercial proposal")} (v${p.version})`,
-          html: [
-            `<p><strong>${by}</strong> asked for changes to proposal v${p.version} for <strong>${String(acct.business_name || "")}</strong>.</p>`,
-            `<p style="border-left:3px solid #7c3aed;padding-left:12px;margin:16px 0;white-space:pre-wrap">${note.replace(/</g, "&lt;")}</p>`,
-            `<p>Build the revised version in Commercial → Send Proposal. The current version has been retained and its link retired.</p>`,
-          ].join(""),
-        },
-      });
-    }
-
-    await supabase.from("events").insert({
-      event_type: "commercial.proposal.changes_requested",
-      source: "commercial-proposal",
-      summary:
-        `${by} requested changes to proposal v${p.version} for ` +
-        `${String(acct.business_name || "an account")}: ${note.slice(0, 240)}`,
-      data: {
-        proposal_id: p.id,
-        account_id: p.business_account_id,
-        version: p.version,
-        note,
-        assigned_to: owner,
-      },
+    const result = await requestProposalChanges(supabase, {
+      proposal: p,
+      account: acct,
+      note,
+      byName: clip(body.name, 120) || (p.recipient_name as string) || "The client",
     });
-
-    return NextResponse.json({
-      ok: true,
-      outcome: "changes_requested",
-      message:
-        "Thanks — that's with your account manager now. We'll send a revised proposal shortly.",
-    });
+    if (!result.ok) {
+      return NextResponse.json({ ok: false, message: result.message }, { status: 400 });
+    }
+    return NextResponse.json({ ok: true, outcome: "changes_requested", message: result.message });
   }
 
   // ── Accept ─────────────────────────────────────────────────────────────
@@ -313,63 +258,23 @@ export async function POST(
             ? "invoiced"
             : offered;
 
-    const { error } = await supabase
-      .from("commercial_proposals")
-      .update({
-        status: "accepted",
-        accepted_at: new Date().toISOString(),
-        accepted_by_name: acceptedBy,
-        accepted_by_email: clip(body.email, 200) || (p.recipient_email as string) || null,
-        accepted_billing_method: chosen,
-        accepted_ip: ip,
-        accepted_user_agent: userAgent,
-        token: null,
-      })
-      .eq("id", p.id as string)
-      .eq("status", "sent");
-    if (error) {
-      return NextResponse.json({ ok: false, message: error.message }, { status: 400 });
+    const result = await acceptProposal(supabase, {
+      proposal: p,
+      account: acct,
+      acceptedBy,
+      acceptedEmail: clip(body.email, 200) || undefined,
+      billingMethod: chosen as "auto_pay" | "invoiced",
+      signerName: clip(body.signerName, 120) || undefined,
+      signerEmail: clip(body.signerEmail, 200) || undefined,
+      signerTitle: clip(body.signerTitle, 120) || null,
+      ctx: { ip, userAgent },
+    });
+
+    if (!result.ok) {
+      return NextResponse.json({ ok: false, message: result.message }, { status: 400 });
     }
 
-    // The whole point of acceptance: the Agreement is built now, pre-filled
-    // from what was just accepted, with no human retyping any of it.
-    const signerName = clip(body.signerName, 120) || acceptedBy;
-    const signerEmail =
-      clip(body.signerEmail, 200) ||
-      clip(body.email, 200) ||
-      (p.recipient_email as string) ||
-      (acct.email as string) ||
-      "";
-
-    const built = await generateAgreement(supabase, {
-      proposalId: String(p.id),
-      signerName,
-      signerEmail,
-      signerTitle: clip(body.signerTitle, 120) || null,
-      billingMethod: chosen as "auto_pay" | "invoiced",
-      actorName: acceptedBy,
-    });
-
-    await supabase.from("events").insert({
-      event_type: "commercial.proposal.accepted",
-      source: "commercial-proposal",
-      summary:
-        `${acceptedBy} accepted proposal v${p.version} for ${String(acct.business_name || "an account")} — ` +
-        `${money(Number(p.total_per_visit_cents || 0))} per visit, billed by ` +
-        `${chosen === "auto_pay" ? "Auto-Pay" : "invoice"}.` +
-        (built.ok ? " Agreement generated." : ` Agreement NOT generated: ${built.error}`),
-      data: {
-        proposal_id: p.id,
-        account_id: p.business_account_id,
-        version: p.version,
-        accepted_by: acceptedBy,
-        billing_method: chosen,
-        agreement_id: built.agreementId || null,
-        agreement_error: built.ok ? null : built.error,
-      },
-    });
-
-    if (!built.ok) {
+    if (!result.agreementReady) {
       // Acceptance stands regardless — it is the client's act, not ours. The
       // agreement gap is loud rather than silent so somebody picks it up.
       return NextResponse.json({
@@ -381,6 +286,9 @@ export async function POST(
           "agreement for signature shortly.",
       });
     }
+
+    const signerEmail = result.signerEmail || "";
+    const signerName = clip(body.signerName, 120) || acceptedBy;
 
     // Hand the signer straight to the document. If the signer is the person
     // already on the page, they continue without waiting for an email.
@@ -397,7 +305,7 @@ export async function POST(
           html: [
             `<p>Hi ${signerName},</p>`,
             `<p>Thanks for accepting the proposal. The Commercial Cleaning Services Agreement is ready to sign — it's pre-filled with everything you accepted, including the schedule of locations and rates in Exhibit A.</p>`,
-            `<p><a href="${agreementUrl(String(built.token))}">Review and sign the agreement</a></p>`,
+            `<p><a href="${agreementUrl(String(result.agreementToken))}">Review and sign the agreement</a></p>`,
             chosen === "auto_pay"
               ? `<p>After signing you'll be asked to add a card or bank account for Auto-Pay. Nothing is charged at that point.</p>`
               : `<p>After signing you'll confirm the billing contact and invoicing terms. No payment details are collected.</p>`,
@@ -408,7 +316,7 @@ export async function POST(
       await supabase
         .from("commercial_agreements")
         .update({ sent_at: new Date().toISOString(), sent_to: signerEmail, send_count: 1 })
-        .eq("id", built.agreementId as string);
+        .eq("id", result.agreementId as string);
     }
 
     return NextResponse.json({
@@ -417,7 +325,7 @@ export async function POST(
       agreementReady: true,
       // Only handed back when the signer is the person on the page. Otherwise
       // the link goes to the authorized signer by email and nowhere else.
-      agreementUrl: sameSigner ? built.link : null,
+      agreementUrl: sameSigner ? agreementUrl(String(result.agreementToken)) : null,
       signerEmail: signerEmail || null,
       message: sameSigner
         ? "Accepted. Your service agreement is ready to sign."
