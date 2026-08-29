@@ -1,12 +1,15 @@
 import { Suspense } from "react";
 
+import { PortalLayout } from "@/components/portal/PortalLayout";
 import MemberBookingSuccess from "@/views/portal/MemberBookingSuccess";
 
 export default function Page() {
   return (
-    <Suspense fallback={null}>
-      <MemberBookingSuccess />
-    </Suspense>
+    <PortalLayout>
+      <Suspense fallback={null}>
+        <MemberBookingSuccess />
+      </Suspense>
+    </PortalLayout>
   );
 }
 

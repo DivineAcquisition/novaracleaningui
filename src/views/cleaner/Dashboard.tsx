@@ -7,7 +7,6 @@ import {
   RiErrorWarningLine,
   RiExternalLinkLine,
   RiLoader4Line,
-  RiLogoutBoxRLine,
   RiMapPinLine,
   RiMoneyDollarCircleLine,
   RiSettings3Line,
@@ -590,11 +589,6 @@ export default function CleanerDashboard() {
     };
   }, [profile?.id, profile?.pay_percentage, fetchJobs]);
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    router.replace("/cleaner/auth");
-  };
-
   const handleCheckIn = async (job: UpcomingJob) => {
     if (!profile || !job.assignmentId) {
       toast.error("Cannot check in for this job");
@@ -694,7 +688,7 @@ export default function CleanerDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/10 flex items-center justify-center">
+      <div className="flex items-center justify-center py-24">
         <div className="text-center space-y-4">
           <RiLoader4Line className="w-10 h-10 animate-spin text-primary mx-auto" />
           <p className="text-muted-foreground">Loading your dashboard...</p>
@@ -724,47 +718,41 @@ export default function CleanerDashboard() {
   const zipForJob = (j: UpcomingJob | CompletedJob) => j.zip || j.zip_code || "";
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/10">
+    <div className="mx-auto max-w-3xl space-y-6">
       <SEO title="Contractor Dashboard" noindex />
 
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-lg border-b shadow-sm">
-        <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {profile.avatar_url ? (
-              <img
-                src={profile.avatar_url}
-                alt="Avatar"
-                className="w-11 h-11 rounded-full object-cover border-2 border-primary/20 ring-2 ring-background"
-              />
-            ) : (
-              <div className="w-11 h-11 rounded-full bg-primary/15 flex items-center justify-center ring-2 ring-background">
-                <RiUserLine className="w-6 h-6 text-primary" />
-              </div>
-            )}
-            <div>
-              <p className="font-semibold text-base">
-                {profile.first_name} {profile.last_name}
-              </p>
-              <Badge
-                variant="secondary"
-                className={
-                  profile.status === "active"
-                    ? "bg-emerald-500/15 text-emerald-700 border-0 text-xs"
-                    : "text-xs"
-                }
-              >
-                {profile.status === "active" ? "Active" : profile.status}
-              </Badge>
+      <div className="panel rounded-2xl p-4 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          {profile.avatar_url ? (
+            <img
+              src={profile.avatar_url}
+              alt="Avatar"
+              className="w-11 h-11 rounded-xl object-cover ring-1 ring-primary/15"
+            />
+          ) : (
+            <div className="w-11 h-11 rounded-xl bg-brand-50 flex items-center justify-center">
+              <RiUserLine className="w-6 h-6 text-primary" />
             </div>
+          )}
+          <div className="min-w-0">
+            <p className="font-heading font-semibold text-base tracking-tight truncate">
+              {profile.first_name} {profile.last_name}
+            </p>
+            <Badge
+              variant="secondary"
+              className={
+                profile.status === "active"
+                  ? "bg-emerald-500/15 text-emerald-700 border-0 text-xs"
+                  : "text-xs"
+              }
+            >
+              {profile.status === "active" ? "Active" : profile.status}
+            </Badge>
           </div>
-          <Button variant="ghost" size="icon" onClick={handleSignOut} aria-label="Sign out">
-            <RiLogoutBoxRLine className="w-5 h-5" />
-          </Button>
         </div>
-      </header>
+      </div>
 
-      <main className="max-w-lg mx-auto px-4 py-6 space-y-6">
+      <main className="space-y-6">
         {/* Suspension status — new assignments paused, pay unaffected. */}
         <SuspensionBanner status={profile.status} suspendedUntil={profile.suspended_until} />
 

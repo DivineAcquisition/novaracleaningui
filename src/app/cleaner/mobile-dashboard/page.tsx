@@ -1,11 +1,15 @@
 import { Suspense } from "react";
+
+import { ContractorLayout } from "@/components/contractor/ContractorLayout";
 import MobileDashboardPage from "@/views/cleaner/MobileDashboard";
 
 export default function Page() {
   return (
-    <Suspense>
-      <MobileDashboardPage />
-    </Suspense>
+    <ContractorLayout>
+      <Suspense>
+        <MobileDashboardPage />
+      </Suspense>
+    </ContractorLayout>
   );
 }
 
