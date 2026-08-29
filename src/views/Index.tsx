@@ -315,7 +315,7 @@ const Index = () => {
                       type="submit"
                       size="lg"
                       disabled={zipCode.length !== 5 || isValidating}
-                      className="w-full h-13 text-base font-semibold bg-gradient-primary hover:opacity-90 transition-opacity"
+                      className="w-full h-13 text-base font-semibold"
                     >
                       {isValidating ? "Checking..." : "Get My Price"}
                       <RiArrowRightLine className="w-5 h-5 ml-2" />
@@ -431,7 +431,7 @@ const Index = () => {
                         phone.replace(/\D/g, "").length !== 10 ||
                         isSubmitting
                       }
-                      className="w-full h-13 text-base font-semibold bg-gradient-primary hover:opacity-90 transition-opacity"
+                      className="w-full h-13 text-base font-semibold"
                     >
                       {isSubmitting ? "Processing..." : "See My Quote"}
                       <RiArrowRightLine className="w-5 h-5 ml-2" />
@@ -669,7 +669,7 @@ const Index = () => {
             </p>
             <Button
               size="lg"
-              className="h-14 px-10 text-base font-semibold bg-gradient-primary hover:opacity-90 transition-opacity shadow-lg"
+              className="h-14 px-10 text-base font-semibold"
               onClick={() => {
                 window.scrollTo({ top: 0, behavior: "smooth" });
               }}
