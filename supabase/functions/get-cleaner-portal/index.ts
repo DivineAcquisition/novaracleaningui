@@ -132,11 +132,12 @@ serve(async (req) => {
     const bookingRows: Row[] = bookings || [];
     const primaryIds = new Set(bookingRows.map((b) => b.id));
 
-    // Re-cleans are offered to the original cleaner before bookings.cleaner_id
-    // is set (that happens on accept). Merge them so the dashboard shows the
-    // paid Spotless Guarantee follow-up as soon as admin approves.
+    // Support-crew + re-clean assignments: bookings.cleaner_id is the lead,
+    // so a second cleaner would otherwise miss upcoming jobs (and the
+    // assign-time payout locked on their assignment row). Merge every live
+    // assignment, not only re-cleans.
     try {
-      const { data: recleanAssigns } = await admin
+      const { data: liveAssigns } = await admin
         .from("job_assignments")
         .select("job_id, status, estimated_pay_cents, pay_percentage_snapshot, crew_size_snapshot, response_token")
         .eq("cleaner_id", cleanerId)
@@ -144,23 +145,24 @@ serve(async (req) => {
           "Offered", "Broadcast", "Confirmed", "Accepted", "accepted",
           "Assigned", "In Progress", "in_progress",
         ]);
-      const recleanJobIds = [...new Set(
-        (recleanAssigns || []).map((a: Row) => a.job_id).filter(Boolean),
+      const assignedJobIds = [...new Set(
+        (liveAssigns || []).map((a: Row) => a.job_id).filter(Boolean),
       )] as string[];
-      if (recleanJobIds.length > 0) {
-        const { data: recleanBookings } = await admin
+      if (assignedJobIds.length > 0) {
+        const { data: assignedBookings } = await admin
           .from("bookings")
           .select(BOOKING_SELECT)
-          .in("job_id", recleanJobIds)
-          .eq("is_reclean", true);
-        for (const rb of recleanBookings || []) {
+          .in("job_id", assignedJobIds)
+          .order("service_date", { ascending: false })
+          .limit(60);
+        for (const rb of assignedBookings || []) {
           if (!primaryIds.has(String(rb.id))) {
             bookingRows.push(rb);
             primaryIds.add(String(rb.id));
           }
         }
       }
-    } catch { /* reclean merge is additive */ }
+    } catch { /* assignment merge is additive */ }
 
     // ── Tips: 100% pass-through gifts, shown separately from job pay (they
     //    never touch scores, tiers, or the pay math). The full list feeds
