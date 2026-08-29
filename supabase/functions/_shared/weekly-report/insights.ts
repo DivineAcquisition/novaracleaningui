@@ -1,9 +1,10 @@
 // Insight layer: every claim cites a pulled number; language is hypothesis
-// only. Uses the same LLM_PROVIDER / model secrets as admin-chat-agent.
-// If the model is missing or returns uncited text, fall back to deterministic
-// comparisons so the report still ships.
+// only. Routed through the model-control layer at the STRONGEST tier — a
+// wrong reading here goes into a report leadership acts on. If that tier is
+// unavailable the layer degrades to the fallback tier; if the model is missing
+// entirely or returns uncited text, deterministic comparisons still ship.
 
-import { resolveSecret } from "../app-secrets.ts";
+import { callModel, loadModelControl, modelLabel } from "../llm.ts";
 import type { Insight, WeeklySnapshot } from "./types.ts";
 import { formatRangeLabel } from "./period.ts";
 
@@ -138,54 +139,6 @@ function deterministicInsights(snapshot: WeeklySnapshot, max: number, priorWatch
   };
 }
 
-async function callOpenAI(apiKey: string, model: string, system: string, user: string) {
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model,
-      temperature: 0.2,
-      response_format: { type: "json_object" },
-      messages: [{ role: "system", content: system }, { role: "user", content: user }],
-    }),
-  });
-  const text = await res.text();
-  if (!res.ok) return { ok: false as const, error: `OpenAI ${res.status}: ${text.slice(0, 400)}` };
-  let body: { choices?: Array<{ message?: { content?: string } }> } = {};
-  try { body = JSON.parse(text); } catch { return { ok: false as const, error: "OpenAI envelope not JSON" }; }
-  const content = body?.choices?.[0]?.message?.content;
-  if (!content) return { ok: false as const, error: "OpenAI returned no content" };
-  try { return { ok: true as const, analysis: JSON.parse(content) }; }
-  catch { return { ok: false as const, error: "OpenAI content not JSON" }; }
-}
-
-async function callAnthropic(apiKey: string, model: string, system: string, user: string) {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: 2200,
-      temperature: 0.2,
-      system,
-      messages: [{ role: "user", content: user }],
-    }),
-  });
-  const text = await res.text();
-  if (!res.ok) return { ok: false as const, error: `Anthropic ${res.status}: ${text.slice(0, 400)}` };
-  let body: { content?: Array<{ text?: string }> } = {};
-  try { body = JSON.parse(text); } catch { return { ok: false as const, error: "Anthropic envelope not JSON" }; }
-  const content = body?.content?.[0]?.text;
-  if (!content) return { ok: false as const, error: "Anthropic returned no content" };
-  const cleaned = content.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
-  try { return { ok: true as const, analysis: JSON.parse(cleaned) }; }
-  catch { return { ok: false as const, error: "Anthropic content not JSON" }; }
-}
-
 export async function generateInsights(
   sb: SB,
   snapshot: WeeklySnapshot,
@@ -195,15 +148,7 @@ export async function generateInsights(
   const compact = compactSnapshot(snapshot);
   const haystack = JSON.stringify(compact).toLowerCase();
 
-  const providerRaw = ((await resolveSecret(sb, "LLM_PROVIDER")) || "anthropic").toLowerCase();
-  const provider = providerRaw === "openai" ? "openai" : "anthropic";
-  const apiKey = await resolveSecret(sb, provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY");
-  const model = (await resolveSecret(sb, provider === "openai" ? "LLM_MODEL_OPENAI" : "LLM_MODEL_ANTHROPIC"))
-    || (provider === "openai" ? "gpt-4o" : "claude-sonnet-4-5");
-
-  if (!apiKey) {
-    return { ...fallback, model: `${fallback.model} (no ${provider} key)` };
-  }
+  const settings = await loadModelControl(sb);
 
   const system = `You write the Insight & Analysis section of Novara Cleaning's weekly internal report.
 Rules (non-negotiable):
@@ -222,15 +167,25 @@ Return JSON: { "executive_summary": "3-5 sentences", "insights": [...], "watch_l
 PRIOR WATCH LIST ${JSON.stringify(opts.priorWatch)}
 DATA ${JSON.stringify(compact)}`;
 
-  const llm = provider === "anthropic"
-    ? await callAnthropic(apiKey, model, system, user)
-    : await callOpenAI(apiKey, model, system, user);
+  const llm = await callModel(sb, {
+    tier: "strongest",
+    surface: "weekly-report",
+    system,
+    user,
+    jsonMode: true,
+    settings,
+    maxTokens: 2200,
+  });
 
-  if (!llm.ok) {
-    return { ...fallback, model: `${model} failed → ${fallback.model}`, model_version: llm.error.slice(0, 180) };
+  if (!llm.ok || !llm.json) {
+    return {
+      ...fallback,
+      model: `${llm.model} unavailable → ${fallback.model}`,
+      model_version: (llm.error || "model returned unusable content").slice(0, 180),
+    };
   }
 
-  const analysis = llm.analysis as {
+  const analysis = llm.json as {
     executive_summary?: string;
     insights?: Insight[];
     watch_list?: string[];
@@ -257,7 +212,9 @@ DATA ${JSON.stringify(compact)}`;
     executive_summary: executive_summary.slice(0, 1200),
     insights,
     watch_list,
-    model,
-    model_version: provider,
+    // What actually produced this, including a fallback if one happened. The
+    // report stores this on weekly_reports.insight_model.
+    model: modelLabel(llm),
+    model_version: `${llm.provider}:${llm.tier}`,
   };
 }

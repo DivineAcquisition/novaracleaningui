@@ -16,15 +16,21 @@
 // exactly one LEAD STAGE from the closed vocabulary in _shared/ghl-tags.ts;
 // everything else it observes belongs in a custom field, which is filterable.
 //
-// Provider selection (in app_secrets first, env fallback):
-//   - LLM_PROVIDER  : "anthropic" (default) | "openai"
-//   - ANTHROPIC_API_KEY  /  OPENAI_API_KEY
-//   - LLM_MODEL_ANTHROPIC (default: claude-sonnet-4-5)
-//   - LLM_MODEL_OPENAI    (default: gpt-4o-mini)
+// Model selection goes through the shared model-control layer
+// (_shared/llm.ts): general traffic uses the DEFAULT tier, and a
+// money-adjacent intent (pricing, pay, refund, billing…) routes to the
+// STRONGEST tier, because a plausible wrong number here gets quoted to a
+// customer or a contractor. A strongest-tier outage degrades to the fallback
+// tier and is recorded rather than failing the request.
+//
+// Which model sits in each tier is admin-editable configuration — see
+// app_settings.model_control_settings. The API key is resolved by NAME from
+// the secrets manager and never appears in code or config.
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { enforceTagPolicy, LEAD_STAGES, leadStageTag } from "../_shared/ghl-tags.ts";
+import { callModel, loadModelControl, modelLabel, tierForIntent } from "../_shared/llm.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -245,115 +251,6 @@ HARD RULES
 - If the last message is OUTBOUND and the customer hasn't replied yet, recommended_next_action.type="wait" UNLESS overdue >24h.`;
 }
 
-async function callOpenAI(apiKey: string, model: string, system: string, user: string) {
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model,
-      temperature: 0.2,
-      response_format: { type: "json_object" },
-      messages: [{ role: "system", content: system }, { role: "user", content: user }],
-    }),
-  });
-  const text = await res.text();
-  if (!res.ok) return { ok: false as const, error: `OpenAI ${res.status}: ${text.slice(0, 400)}` };
-  let body: any = {};
-  try { body = JSON.parse(text); } catch { return { ok: false as const, error: "OpenAI envelope not JSON" }; }
-  const content = body?.choices?.[0]?.message?.content;
-  if (!content) return { ok: false as const, error: "OpenAI returned no content" };
-  let analysis: any = {};
-  try { analysis = JSON.parse(content); }
-  catch { return { ok: false as const, error: `OpenAI content not JSON: ${content.slice(0, 200)}` }; }
-  return { ok: true as const, analysis };
-}
-
-async function callAnthropic(apiKey: string, model: string, system: string, user: string) {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: 1500,
-      temperature: 0.2,
-      system,
-      messages: [{ role: "user", content: user }],
-    }),
-  });
-  const text = await res.text();
-  if (!res.ok) return { ok: false as const, error: `Anthropic ${res.status}: ${text.slice(0, 400)}` };
-  let body: any = {};
-  try { body = JSON.parse(text); } catch { return { ok: false as const, error: "Anthropic envelope not JSON" }; }
-  const content = body?.content?.[0]?.text;
-  if (!content) return { ok: false as const, error: "Anthropic returned no content" };
-  const cleaned = content
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/\s*```\s*$/i, "")
-    .trim();
-  let analysis: any = {};
-  try { analysis = JSON.parse(cleaned); }
-  catch { return { ok: false as const, error: `Anthropic content not JSON: ${cleaned.slice(0, 200)}` }; }
-  return { ok: true as const, analysis };
-}
-
-function filterExtractedFields(
-  extracted: Record<string, unknown> | undefined,
-  schema: FieldDescriptor[],
-) {
-  if (!extracted || typeof extracted !== "object") return {};
-  const byBare = new Map(schema.map((f) => [f.bareKey, f]));
-  const out: Record<string, string> = {};
-  for (const [k, v] of Object.entries(extracted)) {
-    if (v === undefined || v === null || v === "") continue;
-    const f = byBare.get(k) ||
-      schema.find((d) => d.bareKey === k || d.fieldKey === k || d.name === k);
-    if (!f) continue;
-    const value = String(v).trim();
-    if (!value) continue;
-    if (f.dataType === "SINGLE_OPTIONS" && f.picklistOptions && f.picklistOptions.length) {
-      const exact = f.picklistOptions.find((opt) => opt.toLowerCase() === value.toLowerCase());
-      if (!exact) continue;
-      out[f.bareKey] = exact;
-    } else if (f.dataType === "NUMERICAL") {
-      const n = value.replace(/[^0-9.\-]/g, "");
-      if (n) out[f.bareKey] = n;
-    } else if (f.dataType === "MONETORY") {
-      const n = value.replace(/[^0-9.\-]/g, "");
-      if (n) out[f.bareKey] = n;
-    } else {
-      out[f.bareKey] = value;
-    }
-  }
-  return out;
-}
-
-async function applyToGhl(supabase: any, body: {
-  email?: string;
-  phone?: string;
-  firstName?: string;
-  lastName?: string;
-  tags: string[];
-  fields: Record<string, string>;
-  source: string;
-}) {
-  const r = await supabase.functions.invoke("admin-ghl-update-contact", {
-    body: {
-      email: body.email,
-      phone: body.phone,
-      firstName: body.firstName,
-      lastName: body.lastName,
-      source: body.source,
-      tags: body.tags,
-      customFieldsByKey: body.fields,
-    },
-  });
-  return r;
-}
-
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
   try {
@@ -393,25 +290,12 @@ serve(async (req) => {
       }), { status: 200, headers: { ...cors, "Content-Type": "application/json" } });
     }
 
-    const providerRaw = (await resolveSecret(supabase, "LLM_PROVIDER")).toLowerCase() || "openai";
-    const provider = providerRaw === "anthropic" ? "anthropic" : "openai";
-    const apiKey = await resolveSecret(
-      supabase,
-      provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY",
-    );
-    const model = (await resolveSecret(
-      supabase,
-      provider === "openai" ? "LLM_MODEL_OPENAI" : "LLM_MODEL_ANTHROPIC",
-    )) || (provider === "openai" ? "gpt-4o-mini" : "claude-sonnet-4-5");
-    if (!apiKey) {
-      return new Response(JSON.stringify({
-        ok: false,
-        reason: `${provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY"} not configured`,
-        contactId,
-        conversationId,
-        message_count: messages.length,
-      }), { status: 200, headers: { ...cors, "Content-Type": "application/json" } });
-    }
+    const modelSettings = await loadModelControl(supabase);
+    // Money-adjacent work answers from the strongest tier; everything else
+    // uses the default. The caller names the intent; absent one, this is
+    // general traffic.
+    const intent = typeof body.intent === "string" ? body.intent : null;
+    const tier = tierForIntent(intent, modelSettings);
 
     const systemPrompt = buildSystemPrompt(schema.fields);
     const contactSummary = contact
@@ -422,20 +306,28 @@ serve(async (req) => {
       .join("\n");
     const userPrompt = `CONTACT\n${contactSummary}\n\nTRANSCRIPT (oldest to newest)\n${transcript}\n\nReturn the JSON object now.`;
 
-    const llm = provider === "anthropic"
-      ? await callAnthropic(apiKey, model, systemPrompt, userPrompt)
-      : await callOpenAI(apiKey, model, systemPrompt, userPrompt);
-    if (!llm.ok) {
+    const llm = await callModel(supabase, {
+      tier,
+      surface: "admin-chat-agent",
+      intent,
+      system: systemPrompt,
+      user: userPrompt,
+      jsonMode: true,
+      settings: modelSettings,
+    });
+    if (!llm.ok || !llm.json) {
       return new Response(JSON.stringify({
         ok: false,
-        reason: llm.error,
+        reason: llm.error || "Model returned unusable content",
+        model: llm.model,
+        tier: llm.tier,
         contactId,
         conversationId,
         message_count: messages.length,
       }), { status: 200, headers: { ...cors, "Content-Type": "application/json" } });
     }
 
-    const analysis = llm.analysis;
+    const analysis = llm.json as any;
     const cleanFields = filterExtractedFields(analysis?.extracted_fields, schema.fields);
 
     // The agent no longer invents tags. It may propose ONE lead stage from the
@@ -491,8 +383,10 @@ serve(async (req) => {
           last_analyzed_at: new Date().toISOString(),
           last_analyzed_message_ts: lastTs,
           message_count: messages.length,
-          provider,
-          model,
+          provider: llm.provider,
+          // The model that actually answered, tier included — a fallback is
+          // visible here rather than being recorded as the tier we asked for.
+          model: modelLabel(llm),
           lead_temperature: analysis?.lead_temperature || null,
           stage: analysis?.stage || null,
           sentiment: analysis?.sentiment || null,
@@ -512,8 +406,11 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({
       ok: true,
-      provider,
-      model,
+      provider: llm.provider,
+      model: modelLabel(llm),
+      tier: llm.tier,
+      requestedTier: llm.requestedTier,
+      fellBack: llm.fellBack,
       contactId,
       conversationId,
       message_count: messages.length,
