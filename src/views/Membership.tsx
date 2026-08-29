@@ -69,13 +69,13 @@ const MEMBERSHIP_TIERS = [
 
 export default function Membership() {
   const router = useRouter();
-  const { subscription, checkSubscription } = useAuth();
+  const { user, subscription, checkSubscription } = useAuth();
   const [pauseResumeDialogOpen, setPauseResumeDialogOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className={user ? "mx-auto max-w-6xl" : "min-h-screen bg-background"}>
       <SEO title="Membership Plans" description="Save up to 30% with a Novara Glow membership. Choose from monthly, bi-weekly, or weekly plans with dedicated cleaners and priority scheduling." />
-      {/* Navigation */}
+      {!user && (
       <div className="border-b border-border/50 hairline-glow">
         <div className="container max-w-7xl mx-auto px-4 py-3">
           <Button
@@ -97,6 +97,7 @@ export default function Membership() {
           </Button>
         </div>
       </div>
+      )}
 
       {/* Hero */}
       <div className="relative overflow-hidden">

@@ -1,12 +1,15 @@
 import { Suspense } from "react";
 
+import { ContractorLayout } from "@/components/contractor/ContractorLayout";
 import CleanerTrainingPage from "@/views/cleaner/Training";
 
 export default function Page() {
   return (
-    <Suspense>
-      <CleanerTrainingPage />
-    </Suspense>
+    <ContractorLayout>
+      <Suspense>
+        <CleanerTrainingPage />
+      </Suspense>
+    </ContractorLayout>
   );
 }
 

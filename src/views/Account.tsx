@@ -11,7 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Progress } from "@/components/ui/progress";
 import {
-  RiUserLine, RiBankCardLine, RiCalendarLine, RiLogoutBoxRLine, RiLoader4Line,
+  RiUserLine, RiBankCardLine, RiCalendarLine, RiLoader4Line,
   RiCheckboxCircleFill, RiLockLine, RiTimeLine, RiMapPinLine, RiBox3Line,
   RiAlertLine, RiHomeLine, RiCloseLine, RiArrowDownSLine, RiArrowUpSLine,
   RiStarLine, RiSparklingLine, RiArrowRightLine, RiSettings3Line, RiNotification3Line,
@@ -28,6 +28,7 @@ import { RatingDialog } from "@/components/booking/RatingDialog";
 import { CancelBookingDialog } from "@/components/booking/CancelBookingDialog";
 import { cn } from "@/lib/utils";
 import { SEO } from "@/components/SEO";
+import { Panel } from "@/components/ui/panel";
 import { parseServiceDate } from "@/lib/service-date";
 
 // Signed-in customers book in-app at /portal/book (credits, saved addresses,
@@ -70,7 +71,7 @@ interface MembershipCredit {
 
 export default function Account() {
   const router = useRouter();
-  const { user, subscription, signOut, checkSubscription, openCustomerPortal, resetPassword } = useAuth();
+  const { user, subscription, checkSubscription, openCustomerPortal, resetPassword } = useAuth();
   const [isResettingPassword, setIsResettingPassword] = useState(false);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [membershipCredits, setMembershipCredits] = useState<MembershipCredit | null>(null);
@@ -127,12 +128,6 @@ export default function Account() {
     } catch (error: any) {
       console.error('Error fetching membership credits:', error);
     }
-  };
-
-  const handleSignOut = async () => {
-    await signOut();
-    toast.success("Signed out successfully");
-    router.push("/");
   };
 
   // Signed-in customers always book in-app at /portal/book (credits / saved
@@ -293,7 +288,7 @@ export default function Account() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="flex items-center justify-center py-24">
         <RiLoader4Line className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
@@ -304,43 +299,29 @@ export default function Account() {
     : 0;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="mx-auto max-w-5xl space-y-5 md:space-y-6">
       <SEO title="My Account" description="Manage your bookings, membership credits, and account settings. View upcoming and past cleanings." noindex />
-      {/* Dashboard Header */}
-      <div className="relative overflow-hidden">
-        <div className="absolute inset-0" style={{ background: 'var(--gradient-primary)', opacity: 0.06 }} />
-        <div className="relative border-b border-border/50">
-          <div className="container max-w-5xl mx-auto px-4 py-5 md:py-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3 md:gap-4">
-                <div className="w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center text-primary-foreground font-bold text-lg shadow-lg" style={{ background: 'var(--gradient-primary)' }}>
-                  {userInitials}
-                </div>
-                <div>
-                  <h1 className="text-lg md:text-xl font-bold tracking-tight">
-                    Welcome back, {userName.split(' ')[0]}
-                  </h1>
-                  <p className="text-xs md:text-sm text-muted-foreground">{user.email}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-1.5 md:gap-2">
-                <Button size="sm" onClick={handleBookNow} className="h-9 px-3 md:px-4 bg-gradient-primary shadow-md hover:shadow-lg transition-shadow">
-                  <RiCalendarLine size={16} className="md:mr-1.5" />
-                  <span className="hidden md:inline">Book Now</span>
-                </Button>
-                <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => router.push("/")}>
-                  <RiHomeLine className="w-4 h-4" />
-                </Button>
-                <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-destructive" onClick={handleSignOut}>
-                  <RiLogoutBoxRLine className="w-4 h-4" />
-                </Button>
-              </div>
+      <Panel className="p-5 md:p-6">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 md:gap-4 min-w-0">
+            <div className="w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center text-primary-foreground font-bold text-lg shadow-[0_8px_20px_-8px_rgba(92,15,254,0.55)]" style={{ background: "var(--gradient-primary)" }}>
+              {userInitials}
+            </div>
+            <div className="min-w-0">
+              <h1 className="font-heading text-lg md:text-xl font-bold tracking-tight">
+                Welcome back, {userName.split(" ")[0]}
+              </h1>
+              <p className="text-xs md:text-sm text-muted-foreground truncate">{user.email}</p>
             </div>
           </div>
+          <Button size="sm" onClick={handleBookNow}>
+            <RiCalendarLine size={16} className="md:mr-1.5" />
+            <span className="hidden md:inline">Book now</span>
+          </Button>
         </div>
-      </div>
+      </Panel>
 
-      <div className="container max-w-5xl mx-auto px-4 py-5 md:py-8 space-y-5 md:space-y-6">
+      <div className="space-y-5 md:space-y-6">
 
         {/* Incomplete Booking Alert */}
         {incompleteBookings.length > 0 && (
@@ -546,7 +527,7 @@ export default function Account() {
           )}
 
           {/* Account & Quick Actions */}
-          <Card className="animate-fade-in-up stagger-2 shadow-md">
+          <Card id="settings" className="animate-fade-in-up stagger-2 shadow-md scroll-mt-20">
             <CardContent className="p-5">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center">

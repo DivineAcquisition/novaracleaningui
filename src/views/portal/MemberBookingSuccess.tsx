@@ -51,7 +51,7 @@ export default function MemberBookingSuccess() {
   }, [sessionId]);
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-4">
+    <div className="flex items-center justify-center px-4 py-10">
       <SEO title="Booking Confirmed" description="Your cleaning is booked." noindex />
       <Card className="max-w-lg w-full border-0 shadow-xl overflow-hidden animate-scale-in">
         <div className="h-1 w-full" style={{ background: "var(--gradient-primary)" }} />

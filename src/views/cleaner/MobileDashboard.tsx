@@ -14,8 +14,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { MobileHeader } from "@/components/mobile/MobileHeader";
-import { MobileBottomNav } from "@/components/mobile/MobileBottomNav";
 import { PullToRefresh } from "@/components/mobile/PullToRefresh";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
@@ -349,14 +347,10 @@ export default function MobileDashboard() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background pb-20">
-        <MobileHeader title="Dashboard" />
-        <div className="p-4 space-y-4">
-          <Skeleton className="h-32 w-full" />
-          <Skeleton className="h-24 w-full" />
-          <Skeleton className="h-48 w-full" />
-        </div>
-        <MobileBottomNav />
+      <div className="space-y-4">
+        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-24 w-full" />
+        <Skeleton className="h-48 w-full" />
       </div>
     );
   }
@@ -369,19 +363,16 @@ export default function MobileDashboard() {
           cleaner={cleaner}
           onComplete={fetchData}
         />
-        <MobileBottomNav />
       </>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background pb-20">
-      <MobileHeader title="Dashboard" />
-
+    <div className="mx-auto max-w-3xl">
       <PullToRefresh onRefresh={handleRefresh}>
-        <div className="p-4 space-y-4">
+        <div className="space-y-4">
           <div className="space-y-2">
-            <h2 className="text-2xl font-bold">
+            <h2 className="font-heading text-2xl font-bold tracking-tight">
               Welcome back, {cleaner?.first_name}!
             </h2>
             <p className="text-muted-foreground">
@@ -503,8 +494,6 @@ export default function MobileDashboard() {
           </Tabs>
         </div>
       </PullToRefresh>
-
-      <MobileBottomNav />
     </div>
   );
 }
