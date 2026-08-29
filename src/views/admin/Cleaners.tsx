@@ -135,6 +135,15 @@ interface CleanerRow {
   terminated_at: string | null;
 }
 
+const CLEANER_DIRECTORY_SELECT =
+  "id,user_id,first_name,last_name,email,phone,status,approved,available_for_bookings,walkthrough_eligible,home_zip,state,pay_tier,pay_percentage,completed_bookings,total_bookings,acceptance_rate,on_time_rate,average_rating,weighted_score,workload_score,novara_score,quality_score,overall_score,scores_computed_at,constraints,jobs_assigned_last_7d,onboarding_complete,phone_verified,ob_payouts_setup,ob_agreement_signed,ob_agreement_signed_at,payouts_enabled,stripe_account_id,home_address,home_city,home_zip,service_zip_codes,max_travel_miles,preferred_work_days,skillset,ghl_synced_at,ghl_sync_error,created_at,activated_at,rehire_status,termination_reason,terminated_at";
+
+// Schema deploys can lag the UI. A missing optional column must not blank the roster.
+const CLEANER_DIRECTORY_SELECT_CORE = CLEANER_DIRECTORY_SELECT.replace(
+  "available_for_bookings,walkthrough_eligible,home_zip",
+  "available_for_bookings,home_zip",
+);
+
 const STATUS_FILTERS = [
   { id: "all", label: "All" },
   { id: "active", label: "Active" },
@@ -200,13 +209,17 @@ export default function AdminCleaners() {
 
   const load = async (opts: { silent?: boolean } = {}) => {
     if (!opts.silent) setLoading(true);
-    const { data, error } = await supabase
-      .from("cleaners")
-      .select(
-        "id,user_id,first_name,last_name,email,phone,status,approved,available_for_bookings,walkthrough_eligible,home_zip,state,pay_tier,pay_percentage,completed_bookings,total_bookings,acceptance_rate,on_time_rate,average_rating,weighted_score,workload_score,novara_score,quality_score,overall_score,scores_computed_at,constraints,jobs_assigned_last_7d,onboarding_complete,phone_verified,ob_payouts_setup,ob_agreement_signed,ob_agreement_signed_at,payouts_enabled,stripe_account_id,home_address,home_city,home_zip,service_zip_codes,max_travel_miles,preferred_work_days,skillset,ghl_synced_at,ghl_sync_error,created_at,activated_at,rehire_status,termination_reason,terminated_at",
-      )
-      .order("created_at", { ascending: false })
-      .limit(500);
+    const fetchRoster = (columns: string) =>
+      supabase
+        .from("cleaners")
+        .select(columns)
+        .order("created_at", { ascending: false })
+        .limit(500);
+
+    let { data, error } = await fetchRoster(CLEANER_DIRECTORY_SELECT);
+    if (error && /does not exist/i.test(error.message)) {
+      ({ data, error } = await fetchRoster(CLEANER_DIRECTORY_SELECT_CORE));
+    }
     if (error) {
       if (!opts.silent) toast.error("Couldn't load cleaners", { description: error.message });
     } else {
@@ -540,7 +553,9 @@ export default function AdminCleaners() {
                 <tr>
                   <td colSpan={7} className="text-center py-12 text-slate-500">
                     <RiAlertLine className="w-7 h-7 mx-auto text-slate-300 mb-2" />
-                    No cleaners match this filter.
+                    {cleaners.length === 0
+                      ? "No contractors in the directory."
+                      : "No cleaners match this filter."}
                   </td>
                 </tr>
               ) : (
