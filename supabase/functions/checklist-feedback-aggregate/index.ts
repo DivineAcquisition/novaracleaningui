@@ -207,10 +207,12 @@ async function collectReviewThemeSignals(
   const themes = Object.entries(keywords);
   if (themes.length === 0) return [];
 
+  // The review-gating flow files its QC path as reported_via='customer'
+  // (job-feedback submit_qc), so that is where review free-text lands.
   const { data, error } = await sb
     .from("qc_issues")
     .select("id, booking_id, job_id, description, title, created_at, reported_via")
-    .in("reported_via", ["feedback", "customer", "review"])
+    .eq("reported_via", "customer")
     .gte("created_at", since)
     .limit(1000);
   if (error) {
@@ -468,9 +470,20 @@ serve(async (req) => {
       });
     }
 
+    // Re-running a cycle must not undo an admin's decision. Anything already
+    // resolved this cycle is left exactly as they left it.
+    const { data: resolvedRows } = await sb
+      .from("checklist_insights")
+      .select("item_id")
+      .eq("cycle_start", cycleStartStr)
+      .neq("status", "open");
+    const alreadyResolved = new Set(
+      ((resolvedRows || []) as Array<{ item_id: string }>).map((r) => r.item_id),
+    );
+
     const byId = new Map(aggregated.map((a) => [a.item_id, a]));
     const payload = result.insights
-      .filter((i) => byId.has(i.item_id))
+      .filter((i) => byId.has(i.item_id) && !alreadyResolved.has(i.item_id))
       .map((i) => {
         const a = byId.get(i.item_id)!;
         return {
@@ -497,12 +510,13 @@ serve(async (req) => {
         };
       });
 
-    // Re-running the same cycle refreshes counts on rows nobody has acted on
-    // yet, and leaves resolved rows alone.
-    const { error: upsertErr } = await sb
-      .from("checklist_insights")
-      .upsert(payload, { onConflict: "item_id,cycle_start", ignoreDuplicates: false });
-    if (upsertErr) return json({ ok: false, error: upsertErr.message }, 500);
+    // Re-running the same cycle refreshes counts on rows nobody has acted on.
+    if (payload.length > 0) {
+      const { error: upsertErr } = await sb
+        .from("checklist_insights")
+        .upsert(payload, { onConflict: "item_id,cycle_start", ignoreDuplicates: false });
+      if (upsertErr) return json({ ok: false, error: upsertErr.message }, 500);
+    }
 
     await sb.from("events").insert({
       event_type: "checklist.review_cycle_surfaced",
@@ -523,6 +537,7 @@ serve(async (req) => {
       signals_written: written,
       candidates: aggregated.length,
       surfaced: payload.length,
+      left_resolved: alreadyResolved.size,
       model: result.model,
     });
   } catch (err) {
