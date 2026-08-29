@@ -95,6 +95,21 @@ function asClass(v: unknown): RecleanClassification | null {
 function asScope(v: unknown): RecleanScope {
   return v === "full" ? "full" : "targeted";
 }
+/**
+ * Stable checklist item ids this re-clean covers. Falls back to whatever was
+ * already recorded so re-saving a classification never drops the tags.
+ */
+function checklistItemIds(
+  body: Record<string, unknown>,
+  issue: Record<string, unknown>,
+): string[] {
+  const incoming = body.checklistItemIds;
+  if (Array.isArray(incoming)) {
+    return Array.from(new Set(incoming.map(String).map((s) => s.trim()).filter(Boolean))).slice(0, 60);
+  }
+  const existing = issue.reclean_checklist_item_ids;
+  return Array.isArray(existing) ? (existing as string[]) : [];
+}
 function httpUrls(v: unknown): string[] {
   if (!Array.isArray(v)) return [];
   return v.map(String).filter((u) => u.startsWith("http"));
@@ -593,6 +608,9 @@ serve(async (req) => {
         reclean_scope: scope,
         reclean_areas_named: areas,
         reclean_scope_items: Array.isArray(body.items) ? body.items : issue.reclean_scope_items,
+        // The targeted scope resolved to stable checklist item ids, so this
+        // re-clean's classification becomes countable signal against the item.
+        reclean_checklist_item_ids: checklistItemIds(body, issue),
       }).eq("id", issueId).select("*").single();
       if (error) throw error;
       await logEvent(admin, issueId, "reclean_classified", actor, { classification, notes, qualityHitApplies: qualityHitApplies(classification) }, notes || null);
@@ -763,6 +781,7 @@ serve(async (req) => {
         reclean_scope: scope,
         reclean_areas_named: resolvedAreas,
         reclean_scope_items: Array.isArray(body.items) ? body.items : resolvedAreas.map((areaId) => ({ areaId, quantity: 1 })),
+        reclean_checklist_item_ids: checklistItemIds(body, issue),
         reclean_booking_id: recleanBooking.id,
         reclean_assessed_value_cents: assessed,
         reclean_customer_prefers_other: customerPrefersOther,

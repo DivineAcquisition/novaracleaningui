@@ -20,6 +20,13 @@ import {
 export interface ContractorChecklistSection {
   title: string;
   items: string[];
+  /**
+   * Stable catalog ids, index-aligned with `items` (see
+   * src/lib/checklist-catalog.ts). Present on the commercial and office lists,
+   * which are addressable; the residential lists are still positional until
+   * they are migrated onto the catalog.
+   */
+  itemIds?: string[];
   /** Focused cleans only — area type id for photo / conditions tying. */
   areaId?: string;
   instance?: number;
@@ -240,46 +247,87 @@ const TURNOVER_SECTIONS: ContractorChecklistSection[] = [
 // Detailed checklist, and a Detailed one cannot quietly drop the scrubbing
 // the client paid for.
 
+// Edition 1.0 wording and ids, mirroring src/lib/checklist-catalog.ts. Ids are
+// what make a crew's completion (and a later re-clean against it) countable
+// against one item, so they must stay in step with the catalog.
 const COMMERCIAL_ARRIVAL: ContractorChecklistSection = {
   title: "Arrival & setup",
   items: [
-    "Check in per site access instructions (badge / code / contact)",
-    "Notify the required contact on arrival (if specified)",
-    "Confirm the alarm is disarmed per the security notes before starting",
+    "Follow the access/security procedure recorded at walkthrough — badge, alarm, loading dock protocol",
+    "Respect the confirmed service window — don't begin before or run past without notifying the office",
     "Walk the site and note anything already damaged or blocked",
+  ],
+  itemIds: [
+    "commercial.universal.access",
+    "commercial.universal.window",
+    "",
   ],
 };
 
 const COMMERCIAL_LIGHT_ITEMS = [
-  "Sweep and vacuum all floors in scope",
-  "Empty all trash and recycling; replace liners; take to designated disposal",
-  "Restrooms: disinfect toilets, sinks, counters, mirrors; restock supplies",
-  "Spot-clean visible spills and marks",
+  "Sweep/vacuum all floors",
+  "Empty all trash and recycling; replace liners",
+  "Service restrooms — toilets, sinks, mirrors, restock supplies",
+  "Spot-clean entry glass",
+  "Wipe down high-touch surfaces (door handles, light switches, push bars)",
+];
+const COMMERCIAL_LIGHT_IDS = [
+  "commercial.light.floors",
+  "commercial.light.trash",
+  "commercial.light.restrooms",
+  "commercial.light.entry_glass",
+  "commercial.light.high_touch",
 ];
 
 const COMMERCIAL_STANDARD_ITEMS = [
   ...COMMERCIAL_LIGHT_ITEMS,
   "Mop all hard floors",
-  "Break room / kitchenette: counters, sink, appliance exteriors, tables",
-  "Individual offices and rooms: surfaces wiped, trash pulled, floors done",
-  "Wipe and disinfect touch points (handles, switches, rails)",
+  "Clean breakroom/kitchen area — counters, tables, appliance exteriors, sink",
+  "Clean individual offices/rooms per the site's room count",
+  "Dust reachable surfaces in common areas",
+  "Restock all consumables to par level",
+];
+const COMMERCIAL_STANDARD_IDS = [
+  ...COMMERCIAL_LIGHT_IDS,
+  "commercial.standard.mop",
+  "commercial.standard.breakroom",
+  "commercial.standard.rooms",
+  "commercial.standard.dust_common",
+  "commercial.standard.consumables",
 ];
 
 const COMMERCIAL_DETAILED_ITEMS = [
   ...COMMERCIAL_STANDARD_ITEMS,
-  "Scrub floors — grout lines, edges, and corners, not just the open middle",
-  "High-touch sanitization pass: shared equipment, phones, rails, dispensers",
-  "Detail dusting: ledges, sills, vents, fixtures, tops of partitions",
-  "Interior glass and entry doors, streak-free",
+  "Scrub restroom tile and grout",
+  "High-touch surface sanitization pass beyond daily wipe-down",
+  "Dust vents, light fixtures, and high surfaces",
+  "Interior glass and partition cleaning",
+  "Baseboard detail cleaning",
+  "Deep floor care appropriate to floor type (per walkthrough findings)",
+];
+const COMMERCIAL_DETAILED_IDS = [
+  ...COMMERCIAL_STANDARD_IDS,
+  "commercial.detailed.grout",
+  "commercial.detailed.sanitization",
+  "commercial.detailed.high_dusting",
+  "commercial.detailed.glass_partitions",
+  "commercial.detailed.baseboards",
+  "commercial.detailed.deep_floor_care",
 ];
 
 const COMMERCIAL_CLOSEOUT: ContractorChecklistSection = {
   title: "Close-out",
   items: [
-    "Complete any deep tasks scheduled for this visit (per scope)",
+    "Report any condition beyond scope immediately (mold, pest, biohazard, structural hazard) — stop and report, don't attempt",
     "Return all furniture and equipment to where you found it",
     "Secure the site per lock-up procedure (doors, alarm, lights)",
-    "Notify the required contact on departure (if specified)",
+    "Crew Lead (if crew of 2+) confirms zone-by-zone completion before the crew leaves",
+  ],
+  itemIds: [
+    "commercial.universal.report_beyond_scope",
+    "",
+    "",
+    "commercial.universal.crew_lead_signoff",
   ],
 };
 
@@ -287,6 +335,12 @@ const COMMERCIAL_SCOPE_ITEMS: Record<string, string[]> = {
   light: COMMERCIAL_LIGHT_ITEMS,
   standard: COMMERCIAL_STANDARD_ITEMS,
   detailed: COMMERCIAL_DETAILED_ITEMS,
+};
+
+const COMMERCIAL_SCOPE_IDS: Record<string, string[]> = {
+  light: COMMERCIAL_LIGHT_IDS,
+  standard: COMMERCIAL_STANDARD_IDS,
+  detailed: COMMERCIAL_DETAILED_IDS,
 };
 
 const COMMERCIAL_SCOPE_LABEL: Record<string, string> = {
@@ -357,7 +411,11 @@ export function commercialChecklistSections(
 
   const sections: ContractorChecklistSection[] = [
     COMMERCIAL_ARRIVAL,
-    { title: `${label} scope — every area in this job`, items: [...items] },
+    {
+      title: `${label} scope — every area in this job`,
+      items: [...items],
+      itemIds: [...(COMMERCIAL_SCOPE_IDS[key] || COMMERCIAL_SCOPE_IDS.standard)],
+    },
   ];
 
   if (office) sections.push(...OFFICE_ONLY_SECTIONS);
@@ -381,8 +439,9 @@ export function commercialChecklistSections(
       title: "Documentation",
       items: [
         "Take BEFORE photos of all areas in scope",
-        "Take AFTER photos of every area cleaned",
+        "Before/after photos required, organized by zone/area for larger sites",
       ],
+      itemIds: ["", "commercial.universal.photos"],
     });
   }
 
@@ -394,10 +453,16 @@ const OFFICE_ONLY_SECTIONS: ContractorChecklistSection[] = [
   {
     title: "Office rules",
     items: [
-      "Respect the desk policy — do NOT move or touch papers/electronics unless scope says otherwise",
-      "Clean around workstations: wipe desks per policy, sanitize phones/shared equipment only if in scope",
+      "Follow the site's desk policy — clear-desk sites get the full desk surface; do-not-touch-papers sites get dusting around items only",
+      "Confirm out-of-scope areas before starting (server/IT rooms, executive offices, secure storage) per walkthrough findings",
+      "Service confidential/shredding bins separately from general trash if in scope",
       "Conference rooms: tables, chairs, glass, whiteboard trays (do not erase boards)",
-      "Handle sensitive areas exactly per instructions (server rooms, exec offices)",
+    ],
+    itemIds: [
+      "office.rules.desk_policy",
+      "office.rules.restricted_areas",
+      "office.rules.confidential_waste",
+      "",
     ],
   },
   {

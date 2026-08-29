@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { RecleanBadge } from "@/components/reclean/RecleanCallout";
+import { ChecklistItemPicker } from "@/components/checklists/ChecklistItemPicker";
 
 const AREAS = [
   { id: "kitchen", label: "Kitchen" },
@@ -63,6 +64,9 @@ export default function RecleanWorkflow({
   const [classification, setClassification] = useState<string>("");
   const [scope, setScope] = useState<"targeted" | "full">("targeted");
   const [areas, setAreas] = useState<string[]>([]);
+  // Targeted scope resolved to stable checklist item IDs. This is what makes a
+  // quality-miss countable against the item rather than just against the job.
+  const [checklistItemIds, setChecklistItemIds] = useState<string[]>([]);
   const [serviceDate, setServiceDate] = useState("");
   const [timeSlot, setTimeSlot] = useState("");
   const [customerPrefersOther, setCustomerPrefersOther] = useState(false);
@@ -88,6 +92,11 @@ export default function RecleanWorkflow({
       const named = Array.isArray(issue.reclean_areas_named) ? (issue.reclean_areas_named as string[]) : [];
       const pktAreas = ((d.packet as { namedAreas?: string[] } | undefined)?.namedAreas) || [];
       setAreas(named.length ? named : pktAreas);
+      setChecklistItemIds(
+        Array.isArray(issue.reclean_checklist_item_ids)
+          ? (issue.reclean_checklist_item_ids as string[])
+          : [],
+      );
       setCustomerPrefersOther(Boolean(issue.reclean_customer_prefers_other));
       const outside = !(d.inWindow ?? issue.reclean_inside_window);
       setHonorOutsideWindow(Boolean(issue.reclean_honored_outside_window) || outside);
@@ -305,6 +314,17 @@ export default function RecleanWorkflow({
               Admin-approve full re-service (reserved for jobs that substantially failed)
             </label>
           )}
+
+          <ChecklistItemPicker
+            value={checklistItemIds}
+            onChange={setChecklistItemIds}
+            label="Checklist items this re-clean covers"
+            hint={
+              classification === "scope_confusion"
+                ? "Tag the items whose scope boundary was unclear. Scope-confusion is tracked separately from quality-miss — it points at wording, not workmanship."
+                : "Tag the items that were missed. A valid quality-miss against the same item across jobs is the strongest signal the checklist under-specifies it."
+            }
+          />
           <label className="flex items-center gap-2 text-xs text-slate-700">
             <Checkbox checked={customerPrefersOther} onCheckedChange={(v) => setCustomerPrefersOther(v === true)} />
             Customer requested a different team (overrides offering the original cleaner)
@@ -336,7 +356,7 @@ export default function RecleanWorkflow({
               size="sm"
               variant="outline"
               disabled={!classification || busy !== null}
-              onClick={() => void call({ action: "classify", classification, scope, areas }, "classify", "Classified")}
+              onClick={() => void call({ action: "classify", classification, scope, areas, checklistItemIds }, "classify", "Classified")}
             >
               {busy === "classify" && <RiLoader4Line className="w-3.5 h-3.5 animate-spin mr-1" />}
               Save classification
@@ -349,6 +369,7 @@ export default function RecleanWorkflow({
                 classification,
                 scope,
                 areas,
+                checklistItemIds,
                 serviceDate: serviceDate || undefined,
                 timeSlot,
                 customerPrefersOther,

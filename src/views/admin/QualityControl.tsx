@@ -49,6 +49,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import AccountabilityActionDialog from "@/components/admin/AccountabilityActionDialog";
 import RecleanWorkflow from "@/components/admin/RecleanWorkflow";
+import { ChecklistItemPicker } from "@/components/checklists/ChecklistItemPicker";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -710,6 +711,8 @@ function IssueSheet({ issue, doc, onClose, reload }: {
           {issue.issue_type === "addon" && issue.details && (
             <AddonEvidence details={issue.details} />
           )}
+
+          <ChecklistTagging issue={issue} onSaved={reload} />
 
           {((issue.reclean_status && issue.reclean_status !== "none") || ["reclean", "complaint", "quality_flag"].includes(issue.issue_type)) && (
             <RecleanWorkflow issueId={issue.id} onChanged={reload} />
@@ -1908,6 +1911,57 @@ function AddonEvidence({ details }: { details: Record<string, unknown> }) {
       <p className="text-[11px] text-slate-500">
         Documentation record for extra services — not a quality complaint. Lives on the same QC packet as the rest of the job.
       </p>
+    </div>
+  );
+}
+
+/**
+ * Tag the checklist items a quality case relates to. This is the tag the
+ * feedback loop counts, so it stays on the record rather than living in the
+ * case description where nothing can aggregate it.
+ */
+function ChecklistTagging({
+  issue,
+  onSaved,
+}: {
+  issue: IssueRow & { checklist_item_ids?: string[] | null };
+  onSaved: () => void;
+}) {
+  const [ids, setIds] = useState<string[]>(
+    Array.isArray(issue.checklist_item_ids) ? issue.checklist_item_ids : [],
+  );
+  const [busy, setBusy] = useState(false);
+  const saved = Array.isArray(issue.checklist_item_ids) ? issue.checklist_item_ids : [];
+  const dirty =
+    ids.length !== saved.length || ids.some((v) => !saved.includes(v));
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("qc-issues", {
+        body: { action: "tag_checklist_items", issueId: issue.id, checklistItemIds: ids },
+      });
+      if (error) throw error;
+      if ((data as { ok?: boolean; error?: string })?.ok === false) {
+        throw new Error((data as { error?: string }).error || "Tagging failed");
+      }
+      toast.success("Checklist items tagged on this case.");
+      onSaved();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Tagging failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-slate-200 p-3 space-y-3">
+      <ChecklistItemPicker value={ids} onChange={setIds} />
+      {dirty && (
+        <Button size="sm" className="h-7 text-xs" disabled={busy} onClick={() => void save()}>
+          {busy ? "Saving…" : "Save checklist tags"}
+        </Button>
+      )}
     </div>
   );
 }
