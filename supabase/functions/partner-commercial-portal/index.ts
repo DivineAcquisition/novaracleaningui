@@ -70,14 +70,31 @@ serve(async (req) => {
       isHost = Boolean(hostByEmail?.id);
     }
 
-    const { data: account } = await admin
+    // Commercial identity. portal_user_id is the authoritative link, set when
+    // the client creates their login during onboarding. Email matching stays
+    // as a fallback for accounts provisioned before that column existed —
+    // and because the person signing is very often not the address on the
+    // account, matching on email alone was never something we could rely on.
+    let account: Record<string, unknown> | null = null;
+    const { data: byUserId } = await admin
       .from("business_accounts")
       .select("*")
-      .ilike("email", user.email)
+      .eq("portal_user_id", user.id)
       .neq("status", "offboarded")
-      .order("created_at", { ascending: false })
-      .limit(1)
       .maybeSingle();
+    account = byUserId || null;
+
+    if (!account) {
+      const { data: byEmail } = await admin
+        .from("business_accounts")
+        .select("*")
+        .ilike("email", user.email)
+        .neq("status", "offboarded")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      account = byEmail || null;
+    }
 
     if (action === "lookup") {
       return json({

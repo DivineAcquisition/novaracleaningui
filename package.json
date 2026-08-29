@@ -29,7 +29,9 @@
     "docs:capture": "tsx scripts/docs/capture-screenshots.ts",
     "docs:verify": "tsx scripts/docs/verify-docs.ts",
     "docs:export": "tsx scripts/docs/export-knowledge.ts",
-    "docs:preview": "tsx scripts/docs/preview.ts"
+    "docs:preview": "tsx scripts/docs/preview.ts",
+    "commercial:verify:sql": "bash scripts/migrations/verify-commercial-onboarding.sh",
+    "commercial:verify:ui": "tsx scripts/commercial/verify-onboarding-ui.ts"
   },
   "dependencies": {
     "@capacitor/android": "^7.4.4",

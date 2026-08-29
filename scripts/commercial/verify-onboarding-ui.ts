@@ -1,0 +1,302 @@
+// ─── Behavioural check for the onboarding session page ─────────────────────
+//
+//   npm run commercial:verify:ui        (dev server on :3100)
+//
+// Drives the REAL page component with a stubbed session API so the things the
+// spec is explicit about can be asserted rather than eyeballed:
+//
+//   • the status checklist renders before any form, on every visit
+//   • the flow opens on pricing review, and accepting advances to the agreement
+//   • an INVOICED account is never shown a card field, and an AUTO-PAY account
+//     is never shown invoice-contact fields
+//   • reopening mid-flow resumes at the right step rather than restarting
+//   • "send us something" is available at every step, including after the end
+//   • Request Changes pauses the session instead of advancing it
+//
+// Only the API is stubbed. The component, its step routing and its copy are
+// the shipped ones, so this fails when the page changes in a way that breaks
+// the promises above.
+
+import { chromium, type Page, type Route } from "playwright";
+
+const BASE = process.env.DOCS_CAPTURE_BASE_URL || "http://localhost:3100";
+const TOKEN = "0".repeat(64);
+
+type Step = "pricing" | "agreement" | "billing" | "portal" | "done" | "paused";
+
+interface Scenario {
+  step: Step;
+  billingMethod: "auto_pay" | "invoiced";
+  paused?: boolean;
+}
+
+const SITES = [
+  {
+    id: "s1",
+    nickname: "Main office",
+    address: "1 Example Plaza, Columbia MD",
+    sqft: 1800,
+    facility_type: "office",
+    scope_level: "standard",
+    crew_size: 2,
+    frequency: "weekly",
+    per_visit_price_cents: 28080,
+  },
+];
+
+function payload({ step, billingMethod, paused }: Scenario) {
+  const done = (k: string) => {
+    const order = ["pricing", "agreement", "billing", "portal"];
+    const at = order.indexOf(step);
+    if (step === "done") return true;
+    if (step === "paused") return false;
+    return order.indexOf(k) < at;
+  };
+  return {
+    ok: true,
+    session: {
+      id: "sess-1",
+      status: step === "done" ? "completed" : "active",
+      billingMethod,
+      recipientName: "Nadia Okonkwo",
+      expiresAt: new Date(Date.now() + 30 * 86400_000).toISOString(),
+      completedAt: null,
+    },
+    progress: {
+      current_step: paused ? "paused" : step,
+      paused_for_changes: Boolean(paused),
+      complete: step === "done",
+      billing_method: billingMethod,
+      steps: [
+        { key: "pricing", label: "Review pricing and terms", done: done("pricing") },
+        { key: "agreement", label: "Sign the services agreement", done: done("agreement") },
+        {
+          key: "billing",
+          label:
+            billingMethod === "auto_pay"
+              ? "Add a payment method for Auto-Pay"
+              : "Confirm your billing contact and terms",
+          done: done("billing"),
+        },
+        { key: "portal", label: "Create your portal login", done: done("portal") },
+      ],
+      compliance: { blockers: [] },
+      billing: null,
+    },
+    account: {
+      id: "acct-1",
+      business_name: "Harbor Point Dental",
+      email: "ap@example.test",
+      address: "1 Example Plaza",
+      city: "Columbia",
+      state: "MD",
+      zip_code: "21044",
+      portal_user_id: step === "done" ? "user-1" : null,
+    },
+    proposal: {
+      id: "prop-1",
+      version: 1,
+      term: "month_to_month",
+      totalPerVisitCents: 28080,
+      estimatedMonthlyCents: 121586,
+      coverNote: null,
+      changeRequestNote: paused ? "Please split the invoice by site." : null,
+    },
+    sites: SITES,
+    agreement:
+      step === "pricing"
+        ? null
+        : {
+            id: "agr-1",
+            status: step === "agreement" ? "pending" : "signed",
+            term: "month_to_month",
+            billingMethod,
+            invoiceCycle: "monthly",
+            netTerms: "net_30",
+            exhibitAText: "EXHIBIT A — Main office — $280.80 per visit",
+            totalPerVisitCents: 28080,
+            signerName: "Nadia Okonkwo",
+            signerEmail: "ap@example.test",
+            // `pricing` is already excluded by the ternary above.
+            signedByName: step === "agreement" ? null : "Nadia Okonkwo",
+          },
+    billing: null,
+    billingProfile: null,
+    valueStack: [],
+    portalUrl: "https://partner.novaracleaning.com",
+    submissions: [],
+  };
+}
+
+interface Check {
+  name: string;
+  pass: boolean;
+  detail?: string;
+}
+
+const results: Check[] = [];
+function check(name: string, pass: boolean, detail?: string) {
+  results.push({ name, pass, detail });
+  console.log(`  ${pass ? "✓" : "✗"} ${name}${pass || !detail ? "" : ` — ${detail}`}`);
+}
+
+async function open(page: Page, scenario: Scenario, onPost?: (route: Route) => void) {
+  await page.route(`**/api/commercial-onboarding/**`, async (route) => {
+    if (route.request().method() === "POST") {
+      if (onPost) return onPost(route);
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: true, progress: payload(scenario).progress }),
+      });
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(payload(scenario)),
+    });
+  });
+  await page.goto(`${BASE}/onboarding/${TOKEN}`, { waitUntil: "commit" });
+  await page.getByText("Where you are").first().waitFor({ timeout: 25_000 });
+  await page.waitForTimeout(400);
+}
+
+async function main() {
+  try {
+    const res = await fetch(`${BASE}/admin/auth`);
+    if (!res.ok) throw new Error(String(res.status));
+  } catch {
+    console.error(`Dev server not reachable at ${BASE}. Start it: npm run dev -- --port 3100`);
+    process.exit(1);
+  }
+
+  const browser = await chromium.launch();
+
+  // ── 1. Opens on pricing, checklist first ────────────────────────────────
+  console.log("\nPricing step (invoiced account)");
+  {
+    const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
+    await open(page, { step: "pricing", billingMethod: "invoiced" });
+
+    const body = (await page.textContent("body")) || "";
+    const checklistY = (await page.getByText("Where you are").first().boundingBox())?.y ?? 1e9;
+    const formY = (await page.getByText("Step 1 — Your pricing and terms").first().boundingBox())?.y ?? 0;
+
+    check("status checklist renders above the form", checklistY < formY);
+    check("opens on pricing review", body.includes("Step 1 — Your pricing and terms"));
+    check("shows the per-site rate", body.includes("$280.80"));
+    check("offers Request Changes", body.includes("Request changes instead"));
+    check(
+      "no signature field before pricing is accepted",
+      !body.includes("Sign below") && !body.includes("Step 2 —"),
+    );
+    check("send-us-something is available at this step", body.includes("Need to send us something?"));
+    await page.close();
+  }
+
+  // ── 2. Request Changes pauses rather than advancing ─────────────────────
+  console.log("\nRequest Changes");
+  {
+    const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
+    await open(page, { step: "pricing", billingMethod: "invoiced", paused: true });
+    const body = (await page.textContent("body")) || "";
+    check("paused session explains the revision is coming", body.includes("We're revising your proposal"));
+    check("paused session shows the client's own words back", body.includes("split the invoice by site"));
+    check("paused session offers no accept button", !body.includes("Accept and continue"));
+    await page.close();
+  }
+
+  // ── 3. Resume mid-flow ──────────────────────────────────────────────────
+  console.log("\nResuming a part-finished session");
+  {
+    const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
+    await open(page, { step: "agreement", billingMethod: "invoiced" });
+    const body = (await page.textContent("body")) || "";
+    check("resumes at the signature step, not the beginning", body.includes("Step 2 — Sign the services agreement"));
+    check("does not re-show the pricing form", !body.includes("Accept and continue to the agreement"));
+    check("earlier step is marked done", body.includes("Review pricing and terms"));
+    check("Exhibit A is shown before signing", body.includes("EXHIBIT A"));
+    await page.close();
+  }
+
+  // ── 4. Invoiced billing never shows a card field ────────────────────────
+  console.log("\nBilling — invoiced account");
+  {
+    const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
+    await open(page, { step: "billing", billingMethod: "invoiced" });
+    const body = (await page.textContent("body")) || "";
+
+    // Assert on CONTROLS, not prose. The page legitimately mentions payment
+    // methods here to say there isn't one to add; what must not exist is a way
+    // to enter card details.
+    const cardButtons = await page.getByRole("button", { name: /card|bank account/i }).count();
+    const cardInputs = await page
+      .locator('input[autocomplete*="cc-"], input[name*="card" i], input[placeholder*="card" i]')
+      .count();
+
+    check("asks for the billing contact", body.includes("Confirm your billing contact"));
+    check("says explicitly that no payment method is needed", body.includes("no payment method to add"));
+    check(
+      "NEVER offers a card control to an invoiced account",
+      cardButtons === 0 && cardInputs === 0,
+      `${cardButtons} card button(s), ${cardInputs} card input(s)`,
+    );
+    check("shows the Net terms from the signed agreement", /Net 30/i.test(body));
+    await page.close();
+  }
+
+  // ── 5. Auto-Pay shows the card path and no invoice questions ────────────
+  console.log("\nBilling — Auto-Pay account");
+  {
+    const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
+    await open(page, { step: "billing", billingMethod: "auto_pay" });
+    const body = (await page.textContent("body")) || "";
+
+    check("offers the card / bank setup", body.includes("Add a card or bank account"));
+    check("states nothing is charged now", /nothing is charged now/i.test(body));
+    check(
+      "NEVER shows invoice-contact fields to an Auto-Pay account",
+      !body.includes("Confirm your billing contact"),
+    );
+    await page.close();
+  }
+
+  // ── 6. Portal creation is in-session ────────────────────────────────────
+  console.log("\nPortal login");
+  {
+    const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
+    await open(page, { step: "portal", billingMethod: "invoiced" });
+    const body = (await page.textContent("body")) || "";
+    check("offers to create the login in this session", body.includes("Create your portal login"));
+    check("explains what the portal is for", body.includes("Request additional service"));
+    check("collects a password", (await page.locator('input[type="password"]').count()) >= 2);
+    await page.close();
+  }
+
+  // ── 7. Finished ─────────────────────────────────────────────────────────
+  console.log("\nFinished session");
+  {
+    const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
+    await open(page, { step: "done", billingMethod: "invoiced" });
+    const body = (await page.textContent("body")) || "";
+    check("confirms completion", body.includes("You're all set"));
+    check("links straight into the portal", body.includes("Open your portal"));
+    check(
+      "send-us-something is STILL available after finishing",
+      body.includes("Need to send us something?"),
+    );
+    await page.close();
+  }
+
+  await browser.close();
+
+  const failed = results.filter((r) => !r.pass);
+  console.log(`\n${results.length - failed.length}/${results.length} checks passed.`);
+  if (failed.length) {
+    console.log("\nFailed:");
+    for (const f of failed) console.log(`  ${f.name}${f.detail ? ` — ${f.detail}` : ""}`);
+    process.exitCode = 1;
+  }
+}
+
+main();

@@ -116,6 +116,11 @@ const ROUTE_OWNER: Array<[string, SubdomainKey]> = [
   // no payment) and then the agreement itself (e-sign, then billing setup).
   ["/commercial-agreement", "commercial"],
   ["/proposal", "commercial"],
+  // The consolidated onboarding session: one tokenized link carrying a
+  // commercial client from pricing review through signature, billing and
+  // portal creation. Lives beside /proposal and /commercial-agreement (which
+  // it supersedes for new accounts) so a client only ever opens one host.
+  ["/onboarding", "commercial"],
   ["/commercial", "commercial"],
 
   // Public marketing + booking funnel (try.*). /book/confirmation stays

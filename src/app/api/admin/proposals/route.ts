@@ -55,6 +55,13 @@ import {
   PROPOSAL_SITE_COLS as SITE_COLS,
 } from "@/lib/commercial-agreement-server";
 import { sendCompanyCoi } from "@/lib/company-coi";
+import {
+  changeBillingMethod,
+  onboardingAttention,
+  sendOnboardingLink,
+  startOnboardingSession,
+} from "@/lib/commercial-onboarding/admin";
+import { onboardingUrl } from "@/lib/commercial-onboarding/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -206,13 +213,26 @@ export async function GET(req: Request): Promise<NextResponse> {
   const view = url.searchParams.get("view") || (accountId ? "account" : "pipeline");
 
   if (view === "pipeline") {
-    const { data, error } = await supabase
-      .from("commercial_deal_pipeline_v1")
-      .select("*")
-      .order("business_name")
-      .limit(500);
+    const [{ data, error }, { data: sessions }, attention] = await Promise.all([
+      supabase.from("commercial_deal_pipeline_v1").select("*").order("business_name").limit(500),
+      supabase
+        .from("commercial_onboarding_sessions_v1")
+        .select("*")
+        .eq("status", "active")
+        .order("idle_hours", { ascending: false })
+        .limit(500),
+      onboardingAttention(supabase),
+    ]);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ ok: true, deals: data || [] });
+    return NextResponse.json({
+      ok: true,
+      deals: data || [],
+      // Onboarding sessions ride alongside the deal stages rather than
+      // replacing them: the stage still says where the DEAL is, the session
+      // says where the CLIENT is inside their setup.
+      onboarding: sessions || [],
+      onboardingAttention: attention,
+    });
   }
 
   if (proposalId) {
@@ -229,6 +249,8 @@ export async function GET(req: Request): Promise<NextResponse> {
   }
 
   const [
+    { data: onboardingSession },
+    { data: onboardingSubmissions },
     { data: account },
     { data: readiness },
     { data: proposals },
@@ -236,11 +258,27 @@ export async function GET(req: Request): Promise<NextResponse> {
     { data: billing },
     { data: deliveries },
   ] = await Promise.all([
+    // The live onboarding session for this account, if any, plus anything the
+    // client has sent through it.
+    supabase
+      .from("commercial_onboarding_sessions_v1")
+      .select("*")
+      .eq("business_account_id", accountId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("commercial_onboarding_submissions")
+      .select("*")
+      .eq("business_account_id", accountId)
+      .order("submitted_at", { ascending: false })
+      .limit(50),
     supabase.from("business_accounts")
       .select("id, business_name, contact_name, email, phone, address, city, state, zip_code, " +
         "account_type, status, recurring_frequency, billing_terms, agreement_signed_at, " +
         "assigned_va_email, requires_coi_on_file, company_coi_sent_at, billing_method, " +
-        "billing_configured_at, stripe_customer_id")
+        "billing_configured_at, stripe_customer_id, preferred_billing_method, " +
+        "preferred_billing_method_set_at, preferred_billing_method_set_by, portal_user_id, portal_created_at")
       .eq("id", accountId).maybeSingle(),
     supabase.rpc("commercial_proposal_readiness", { p_account_id: accountId }),
     supabase.from("commercial_proposals").select(PROPOSAL_COLS)
@@ -284,6 +322,8 @@ export async function GET(req: Request): Promise<NextResponse> {
     })),
     billing: billing || null,
     coiDeliveries: deliveries || [],
+    onboarding: onboardingSession || null,
+    onboardingSubmissions: onboardingSubmissions || [],
   });
 }
 
@@ -718,6 +758,124 @@ export async function POST(req: Request): Promise<NextResponse> {
 
     const { data: state } = await supabase.rpc("commercial_billing_state", { p_account_id: accountId });
     return NextResponse.json({ ok: true, billing: state });
+  }
+
+  // ── Consolidated onboarding session ────────────────────────────────────
+  //
+  // Approving an account for onboarding REQUIRES the billing decision. That is
+  // the point of the adjustment: the client is not asked mid-flow, so somebody
+  // has to answer before the link exists.
+  if (action === "start_onboarding") {
+    const accountId = s(body.accountId, 60);
+    if (!accountId) return NextResponse.json({ error: "accountId is required." }, { status: 400 });
+
+    const method = body.billingMethod === "auto_pay" ? "auto_pay" : body.billingMethod === "invoiced" ? "invoiced" : null;
+    if (!method) {
+      return NextResponse.json(
+        { error: "Choose Invoice or Auto-Pay before generating the onboarding link." },
+        { status: 400 },
+      );
+    }
+
+    const result = await startOnboardingSession(supabase, {
+      accountId,
+      billingMethod: method,
+      proposalId: s(body.proposalId, 60) || null,
+      recipientName: s(body.recipientName, 120) || null,
+      recipientEmail: s(body.recipientEmail, 200) || null,
+      recipientPhone: s(body.recipientPhone, 40) || null,
+      actorName,
+      send: body.send !== false,
+    });
+    if (!result.ok) {
+      return NextResponse.json({ error: result.message }, { status: result.status });
+    }
+    return NextResponse.json({
+      ok: true,
+      sessionId: result.sessionId,
+      link: result.link,
+      emailed: result.emailed ?? false,
+      texted: result.texted ?? false,
+    });
+  }
+
+  if (action === "resend_onboarding") {
+    const sessionId = s(body.sessionId, 60);
+    if (!sessionId) return NextResponse.json({ error: "sessionId is required." }, { status: 400 });
+
+    const { data: session } = await supabase
+      .from("commercial_onboarding_sessions")
+      .select("id, token, status, billing_method, recipient_name, recipient_email, recipient_phone, business_account_id")
+      .eq("id", sessionId)
+      .maybeSingle();
+    if (!session || session.status !== "active" || !session.token) {
+      return NextResponse.json({ error: "That onboarding link is no longer live." }, { status: 409 });
+    }
+    const { data: account } = await supabase
+      .from("business_accounts")
+      .select("business_name")
+      .eq("id", session.business_account_id as string)
+      .maybeSingle();
+
+    const to = s(body.to, 200) || (session.recipient_email as string);
+    if (!to) return NextResponse.json({ error: "No email to send to." }, { status: 400 });
+
+    const sent = await sendOnboardingLink(supabase, {
+      sessionId,
+      accountName: String(account?.business_name || "your account"),
+      recipientName: (session.recipient_name as string) || null,
+      recipientEmail: to,
+      recipientPhone: (session.recipient_phone as string) || null,
+      billingMethod: session.billing_method === "auto_pay" ? "auto_pay" : "invoiced",
+      link: onboardingUrl(String(session.token)),
+      reminder: body.reminder !== false,
+    });
+    return NextResponse.json({ ok: true, ...sent, link: onboardingUrl(String(session.token)) });
+  }
+
+  if (action === "cancel_onboarding") {
+    const sessionId = s(body.sessionId, 60);
+    if (!sessionId) return NextResponse.json({ error: "sessionId is required." }, { status: 400 });
+    const { error } = await supabase
+      .from("commercial_onboarding_sessions")
+      .update({ status: "cancelled", token: null, updated_at: new Date().toISOString() })
+      .eq("id", sessionId)
+      .eq("status", "active");
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ ok: true });
+  }
+
+  // Changing the method after the fact is a targeted billing re-setup, never a
+  // full re-onboarding — they do not sign again.
+  if (action === "change_billing_method") {
+    const accountId = s(body.accountId, 60);
+    const method = body.billingMethod === "auto_pay" ? "auto_pay" : body.billingMethod === "invoiced" ? "invoiced" : null;
+    if (!accountId || !method) {
+      return NextResponse.json({ error: "accountId and billingMethod are required." }, { status: 400 });
+    }
+    const result = await changeBillingMethod(supabase, { accountId, billingMethod: method, actorName });
+    if (!result.ok) return NextResponse.json({ error: result.message }, { status: result.status });
+    return NextResponse.json({ ok: true, message: result.message, link: result.link || null });
+  }
+
+  // ── Review what a client sent during onboarding ────────────────────────
+  if (action === "review_submission") {
+    const submissionId = s(body.submissionId, 60);
+    const status = ["reviewed", "actioned", "dismissed"].includes(String(body.status))
+      ? String(body.status)
+      : "reviewed";
+    if (!submissionId) return NextResponse.json({ error: "submissionId is required." }, { status: 400 });
+    const { error } = await supabase
+      .from("commercial_onboarding_submissions")
+      .update({
+        status,
+        reviewed_at: new Date().toISOString(),
+        reviewed_by_name: actorName,
+        review_note: s(body.reviewNote, 2000),
+      })
+      .eq("id", submissionId);
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ ok: true });
   }
 
   // ── Deliver our certificate on request ─────────────────────────────────
