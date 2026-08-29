@@ -7,6 +7,10 @@ scope levels — distinct from the walkthrough/assessment checklists used for pr
 
 Sourced from current STR, janitorial, and ISSA-aligned commercial cleaning standards (2026).
 
+**Printable copy:** [`public/NovaraCleaning_Standard_Cleaning_Checklists_v1.pdf`](../public/NovaraCleaning_Standard_Cleaning_Checklists_v1.pdf)
+— generated from the catalog with `npm run checklists:pdf`, so the paper copy can't drift from
+the live standard. Re-run it after a checklist edit.
+
 > This is the **standing baseline**. It is a living document: real job outcomes — QC cases,
 > re-cleans, reviews, duration variance — feed back into these checklists through the
 > checklist feedback loop (Commercial → Checklists → Review queue). Every change is a human

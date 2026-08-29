@@ -20,6 +20,7 @@ import {
   RiCheckboxCircleFill,
   RiExternalLinkLine,
   RiFileCopyLine,
+  RiFileDownloadLine,
   RiInformationLine,
   RiLoader4Line,
   RiRefreshLine,
@@ -311,6 +312,12 @@ function StandardView({
           <p className="text-sm text-slate-500 mt-1">{checklist.tagline}</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <a href="/NovaraCleaning_Standard_Cleaning_Checklists_v1.pdf" target="_blank" rel="noopener noreferrer">
+              <RiFileDownloadLine className="w-3.5 h-3.5 mr-1.5" />
+              Printable PDF
+            </a>
+          </Button>
           <Button variant="outline" size="sm" onClick={() => void copyLink()}>
             <RiFileCopyLine className="w-3.5 h-3.5 mr-1.5" />
             Copy public link
