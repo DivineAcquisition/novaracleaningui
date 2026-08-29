@@ -18,7 +18,7 @@ export function HeaderNav({ onSignOut }: HeaderNavProps) {
   const { credits, hasCredits } = useMembershipCredits();
 
   return (
-    <header className="border-b border-border/40 bg-background/80 backdrop-blur-xl sticky top-0 z-50 hairline-glow">
+    <header className="border-b border-[color:var(--hairline)] bg-background/80 backdrop-blur-xl sticky top-0 z-50 hairline-glow">
       <div className="container mx-auto px-4 h-14 md:h-16 flex justify-between items-center">
         <Link href="/" className="flex items-center gap-2.5 min-w-0 group">
           <img src={logo} alt="NovaraCleaning Logo" className="w-8 h-8 md:w-9 md:h-9 rounded-xl flex-shrink-0 shadow-sm transition-transform group-hover:scale-105" />
@@ -50,7 +50,7 @@ export function HeaderNav({ onSignOut }: HeaderNavProps) {
           </div>
         ) : (
           <Link href="/auth">
-            <Button size="sm" className="h-8 md:h-9 rounded-lg bg-gradient-primary shadow-sm px-4">
+            <Button size="sm" className="h-8 md:h-9 rounded-lg px-4">
               Sign In
             </Button>
           </Link>

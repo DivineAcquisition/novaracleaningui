@@ -362,7 +362,7 @@ export default function BookingZip() {
           </div>
 
           {/* Main Card */}
-          <Card variant="outlined" className="border-primary/30 shadow-card overflow-hidden">
+          <Card className="overflow-hidden">
             <CardContent className="pt-8 pb-8 space-y-6">
               
               {/* ZIP Code Form */}
@@ -393,7 +393,7 @@ export default function BookingZip() {
                     type="submit" 
                     size="lg" 
                     disabled={zipCode.length !== 5 || isValidating} 
-                    className="w-full h-12 md:h-14 text-base md:text-lg font-semibold bg-gradient-primary"
+                    className="w-full h-12 md:h-14 text-base md:text-lg font-semibold"
                   >
                     {isValidating ? "Checking..." : "Continue"}
                     <RiArrowRightLine className="w-4 h-4 md:w-5 md:h-5 ml-2" />
@@ -486,7 +486,7 @@ export default function BookingZip() {
                     type="submit" 
                     size="lg" 
                     disabled={!firstName || !lastName || !email || phone.replace(/\D/g, '').length !== 10 || isSubmitting} 
-                    className="w-full h-12 md:h-14 text-base md:text-lg font-semibold bg-gradient-primary"
+                    className="w-full h-12 md:h-14 text-base md:text-lg font-semibold"
                   >
                     {isSubmitting ? "Processing..." : "Claim My Discount →"}
                   </Button>
@@ -606,7 +606,7 @@ export default function BookingZip() {
                     type="submit" 
                     size="lg" 
                     disabled={!firstName || !lastName || !email || phone.replace(/\D/g, '').length !== 10 || isSubmitting} 
-                    className="w-full h-12 md:h-14 text-base md:text-lg font-semibold bg-gradient-primary"
+                    className="w-full h-12 md:h-14 text-base md:text-lg font-semibold"
                   >
                     {isSubmitting ? "Adding to Waitlist..." : "Join the Waitlist"}
                     <RiTimeLine className="w-4 h-4 md:w-5 md:h-5 ml-2" />

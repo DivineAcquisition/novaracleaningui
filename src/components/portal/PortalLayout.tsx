@@ -87,7 +87,7 @@ function SidebarContent({
               className={cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150",
                 isActive
-                  ? "bg-primary/10 text-primary shadow-sm"
+                  ? "bg-brand-50 text-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] ring-1 ring-primary/10"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
               )}
             >
@@ -211,7 +211,7 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
     <div className="relative min-h-screen bg-background flex">
       <BrandAtmosphere />
       {/* Desktop Sidebar */}
-      <aside className="relative z-10 hidden lg:flex lg:w-[260px] lg:flex-col border-r border-border bg-card/80 backdrop-blur-xl flex-shrink-0 sticky top-0 h-screen">
+      <aside className="relative z-10 hidden lg:flex lg:w-[260px] lg:flex-col border-r border-[color:var(--hairline)] bg-card/70 backdrop-blur-xl flex-shrink-0 sticky top-0 h-screen">
         <SidebarContent
           navItems={navItems}
           pathname={pathname}

@@ -34,6 +34,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
+import { BrandAtmosphere } from "@/components/brand/atmosphere";
 
 // ─── Types ───────────────────────────────────────────────────────────────
 
@@ -130,7 +131,7 @@ function StarRow({
           className="p-1 rounded-lg transition-transform hover:scale-110 disabled:opacity-50"
         >
           <RiStarFill
-            className={`w-8 h-8 ${n <= value ? "text-amber-400" : "text-slate-200"}`}
+            className={`w-8 h-8 ${n <= value ? "text-amber-400" : "text-muted-foreground/30"}`}
           />
         </button>
       ))}
@@ -333,7 +334,7 @@ export default function JobFeedbackPage({ token }: { token: string }) {
     return (
       <Shell>
         <div className="text-center py-16">
-          <RiLoader4Line className="w-8 h-8 animate-spin text-violet-500 mx-auto" />
+          <RiLoader4Line className="w-8 h-8 animate-spin text-primary mx-auto" />
         </div>
       </Shell>
     );
@@ -349,15 +350,15 @@ export default function JobFeedbackPage({ token }: { token: string }) {
             ) : (
               <RiErrorWarningLine className="w-10 h-10 text-amber-500 mx-auto" />
             )}
-            <h1 className="text-xl font-bold text-slate-900">
+            <h1 className="text-xl font-bold text-foreground">
               {step === "expired" ? "This link has expired" : "Link not found"}
             </h1>
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-muted-foreground">
               {step === "expired"
                 ? "Feedback links are only valid for a short window after your clean."
                 : "This feedback link is invalid."}{" "}
               Need anything? Email{" "}
-              <a className="text-violet-600 underline" href="mailto:hello@novaracleaning.com">
+              <a className="text-primary underline" href="mailto:hello@novaracleaning.com">
                 hello@novaracleaning.com
               </a>{" "}
               and we&apos;ll take care of you.
@@ -381,11 +382,11 @@ export default function JobFeedbackPage({ token }: { token: string }) {
           <CardContent className="pt-6 space-y-7">
             {QUESTIONS.map((q, i) => (
               <div key={q.key} className="space-y-2">
-                <p className="font-semibold text-slate-900">
+                <p className="font-semibold text-foreground">
                   {i + 1}. {q.title}
                 </p>
                 <StarRow value={values[q.key]} onChange={setters[q.key]} disabled={busy} />
-                <p className="text-xs text-slate-400">{q.hint}</p>
+                <p className="text-xs text-muted-foreground">{q.hint}</p>
               </div>
             ))}
             {error && <p className="text-sm text-destructive">{error}</p>}
@@ -413,7 +414,7 @@ export default function JobFeedbackPage({ token }: { token: string }) {
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
-              <RiHeart3Fill className="w-5 h-5 text-violet-600" />
+              <RiHeart3Fill className="w-5 h-5 text-primary" />
               Tip your {crew.length > 1 ? "crew" : "cleaner"} (optional)
             </CardTitle>
             <CardDescription>
@@ -430,10 +431,8 @@ export default function JobFeedbackPage({ token }: { token: string }) {
                     setTipAmount(cents);
                     setCustomTip("");
                   }}
-                  className={`rounded-xl border-2 py-3 font-bold text-lg transition-colors ${
-                    tipAmount === cents
-                      ? "border-violet-600 bg-violet-50 text-violet-700"
-                      : "border-slate-200 text-slate-700 hover:border-violet-300"
+                  className={`choice-chip py-3 font-bold text-lg ${
+                    tipAmount === cents ? "choice-chip-active" : ""
                   }`}
                 >
                   ${cents / 100}
@@ -466,8 +465,8 @@ export default function JobFeedbackPage({ token }: { token: string }) {
                     onClick={() => setDirectedCleanerId("")}
                     className={`rounded-full border px-3 py-1.5 text-sm ${
                       !directedCleanerId
-                        ? "border-violet-600 bg-violet-50 text-violet-700 font-semibold"
-                        : "border-slate-200 text-slate-600"
+                        ? "choice-chip-active font-semibold"
+                        : "choice-chip text-muted-foreground"
                     }`}
                   >
                     Split across the crew
@@ -479,8 +478,8 @@ export default function JobFeedbackPage({ token }: { token: string }) {
                       onClick={() => setDirectedCleanerId(c.id)}
                       className={`rounded-full border px-3 py-1.5 text-sm ${
                         directedCleanerId === c.id
-                          ? "border-violet-600 bg-violet-50 text-violet-700 font-semibold"
-                          : "border-slate-200 text-slate-600"
+                          ? "choice-chip-active font-semibold"
+                          : "border-border text-muted-foreground"
                       }`}
                     >
                       {c.name}
@@ -519,13 +518,13 @@ export default function JobFeedbackPage({ token }: { token: string }) {
       <Shell>
         <Card className="text-center">
           <CardContent className="pt-8 pb-8 space-y-4">
-            <div className="w-14 h-14 rounded-2xl bg-violet-100 flex items-center justify-center mx-auto">
-              <RiCheckLine className="w-8 h-8 text-violet-600" />
+            <div className="w-14 h-14 rounded-2xl bg-brand-50 flex items-center justify-center mx-auto">
+              <RiCheckLine className="w-8 h-8 text-primary" />
             </div>
-            <h1 className="text-xl font-bold text-slate-900">
+            <h1 className="text-xl font-bold text-foreground">
               {tipConfirmed ? "Tip received — thank you!" : "You're the best!"}
             </h1>
-            <p className="text-sm text-slate-600">
+            <p className="text-sm text-muted-foreground">
               {tipConfirmed
                 ? "100% of it goes to your crew — they've been notified. One last favor?"
                 : "One last favor?"}{" "}
@@ -535,7 +534,7 @@ export default function JobFeedbackPage({ token }: { token: string }) {
               <RiGoogleFill className="w-5 h-5 mr-2" />
               Leave a Google review
             </Button>
-            <p className="text-xs text-slate-400">Takes about 30 seconds. Thank you! 💜</p>
+            <p className="text-xs text-muted-foreground">Takes about 30 seconds. Thank you! 💜</p>
           </CardContent>
         </Card>
       </Shell>
@@ -561,8 +560,8 @@ export default function JobFeedbackPage({ token }: { token: string }) {
                     onClick={() => setIssueType(opt.value)}
                     className={`w-full text-left rounded-xl border-2 px-4 py-3 text-sm transition-colors ${
                       issueType === opt.value
-                        ? "border-violet-600 bg-violet-50 text-violet-800 font-semibold"
-                        : "border-slate-200 text-slate-700 hover:border-violet-300"
+                        ? "choice-chip-active font-semibold"
+                        : "choice-chip"
                     }`}
                   >
                     {opt.label}
@@ -585,7 +584,7 @@ export default function JobFeedbackPage({ token }: { token: string }) {
               {busy ? <RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> : null}
               Send to our quality team
             </Button>
-            <p className="text-xs text-slate-400 text-center">
+            <p className="text-xs text-muted-foreground text-center">
               This goes straight to our QC team — not a public review. We&apos;ll follow up personally.
             </p>
           </CardContent>
@@ -602,16 +601,16 @@ export default function JobFeedbackPage({ token }: { token: string }) {
           <div className="w-14 h-14 rounded-2xl bg-emerald-100 flex items-center justify-center mx-auto">
             <RiShieldCheckLine className="w-8 h-8 text-emerald-600" />
           </div>
-          <h1 className="text-xl font-bold text-slate-900">We&apos;re on it.</h1>
-          <p className="text-sm text-slate-600">
+          <h1 className="text-xl font-bold text-foreground">We&apos;re on it.</h1>
+          <p className="text-sm text-muted-foreground">
             Your report is with our quality team and covered by our{" "}
             <strong>Spotless Guarantee</strong> — if something wasn&apos;t cleaned to standard,
             we&apos;ll make it right, including a free re-clean of the missed areas. Expect to
             hear from us shortly.
           </p>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-muted-foreground">
             Questions in the meantime?{" "}
-            <a className="text-violet-600 underline" href="mailto:hello@novaracleaning.com">
+            <a className="text-primary underline" href="mailto:hello@novaracleaning.com">
               hello@novaracleaning.com
             </a>
           </p>
@@ -625,10 +624,11 @@ export default function JobFeedbackPage({ token }: { token: string }) {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-brand-50 to-background py-10 px-4">
-      <div className="max-w-md mx-auto space-y-6">
+    <div className="relative min-h-screen bg-background py-10 px-4">
+      <BrandAtmosphere />
+      <div className="relative z-10 max-w-md mx-auto space-y-6">
         {children}
-        <p className="text-center text-xs text-slate-400">Novara Cleaning · novaracleaning.com</p>
+        <p className="text-center text-xs text-muted-foreground">Novara Cleaning · novaracleaning.com</p>
       </div>
     </div>
   );
@@ -637,8 +637,8 @@ function Shell({ children }: { children: React.ReactNode }) {
 function Header({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <div className="text-center space-y-2">
-      <h1 className="text-2xl font-bold text-slate-900">{title}</h1>
-      <p className="text-sm text-slate-500">{subtitle}</p>
+      <h1 className="text-2xl font-bold text-foreground">{title}</h1>
+      <p className="text-sm text-muted-foreground">{subtitle}</p>
     </div>
   );
 }

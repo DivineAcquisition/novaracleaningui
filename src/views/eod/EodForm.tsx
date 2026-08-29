@@ -302,7 +302,7 @@ export default function EodForm({
           This day is locked and can no longer be edited.
         </p>
       ) : (
-        <div className="sticky bottom-0 -mx-4 border-t border-slate-200 bg-white/90 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
+        <div className="sticky bottom-0 -mx-4 border-t border-[color:var(--hairline)] bg-background/90 px-4 py-3 backdrop-blur-xl sm:-mx-6 sm:px-6">
           <div className="mx-auto flex max-w-3xl items-center gap-3">
             <div className="min-w-0 flex-1 text-xs text-slate-500">
               {showErrors && issues.length ? (

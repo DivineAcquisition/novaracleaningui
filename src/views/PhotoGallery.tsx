@@ -27,6 +27,7 @@ import { SEO } from "@/components/SEO";
 import { MediaThumb } from "@/components/job-media/MediaThumb";
 import { isVideoUrl } from "@/lib/job-media";
 import { cn } from "@/lib/utils";
+import { BrandAtmosphere } from "@/components/brand/atmosphere";
 
 interface GalleryData {
   kind: "booking" | "turnover";
@@ -100,18 +101,18 @@ export default function PhotoGalleryPage() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <SEO title="Photo gallery" description="View your cleaning before & after photos." noindex />
-        <div className="max-w-md w-full rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm">
-          <div className="mx-auto mb-3 inline-flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+        <div className="max-w-md w-full token-card p-6 text-center">
+          <div className="mx-auto mb-3 inline-flex h-12 w-12 items-center justify-center rounded-full bg-brand-50 text-muted-foreground">
             <RiImage2Line className="h-6 w-6" />
           </div>
-          <p className="font-semibold text-slate-900">This photo link isn't available.</p>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="font-semibold text-foreground">This photo link isn't available.</p>
+          <p className="mt-1 text-sm text-muted-foreground">
             The link may have expired or the photos aren't ready yet. If you think this is a
             mistake, reply to the text you received or reach our team.
           </p>
           <a
             href="tel:+18447352070"
-            className="mt-4 inline-block text-sm font-medium text-emerald-600 hover:underline"
+            className="mt-4 inline-block text-sm font-medium text-primary hover:underline"
           >
             Call (844) 735-2070
           </a>
@@ -123,10 +124,11 @@ export default function PhotoGalleryPage() {
   const totalPhotos = data.beforePhotos.length + data.afterPhotos.length;
 
   return (
-    <div className="min-h-screen bg-background pb-16">
+    <div className="relative min-h-screen bg-background pb-16">
+      <BrandAtmosphere />
       <SEO title="Your cleaning photos" description="Before & after photos from your Novara clean." noindex />
 
-      <header className="bg-gradient-to-br from-emerald-600 to-teal-500 text-white">
+      <header className="token-hero rounded-none relative z-10">
         <div className="max-w-3xl mx-auto px-4 py-6">
           <div className="flex items-center gap-2">
             <img src="/novara-logo.png" alt="Novara" className="h-8 w-8 rounded-lg shadow-sm" />
@@ -136,7 +138,7 @@ export default function PhotoGalleryPage() {
             <RiSparklingLine className="mt-0.5 h-5 w-5 flex-shrink-0" />
             <div>
               <h1 className="text-lg font-bold leading-tight">{data.title}</h1>
-              <p className="mt-1 text-xs text-emerald-50">
+              <p className="mt-1 text-xs text-white/80">
                 {data.completedAt && (
                   <span className="inline-flex items-center gap-1">
                     <RiCheckboxCircleFill className="h-3.5 w-3.5" /> Completed
@@ -147,7 +149,7 @@ export default function PhotoGalleryPage() {
                 )}
               </p>
               {data.addressLine && (
-                <p className="mt-1 flex items-center gap-1 text-xs text-emerald-50/90">
+                <p className="mt-1 flex items-center gap-1 text-xs text-white/70">
                   <RiMapPinLine className="h-3.5 w-3.5" /> {data.addressLine}
                 </p>
               )}
@@ -156,32 +158,32 @@ export default function PhotoGalleryPage() {
         </div>
       </header>
 
-      <div className="max-w-3xl mx-auto px-4 py-6 space-y-8">
+      <div className="relative z-10 max-w-3xl mx-auto px-4 py-6 space-y-8">
         {totalPhotos === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center">
-            <RiImage2Line className="mx-auto mb-2 h-8 w-8 text-slate-300" />
-            <p className="text-sm text-slate-500">Photos haven't been uploaded yet. Check back soon.</p>
+          <div className="token-card border-dashed p-10 text-center">
+            <RiImage2Line className="mx-auto mb-2 h-8 w-8 text-muted-foreground/50" />
+            <p className="text-sm text-muted-foreground">Photos haven't been uploaded yet. Check back soon.</p>
           </div>
         ) : (
           <>
             <PhotoSection
               label="Before"
-              accent="text-slate-700"
+              accent="text-foreground"
               urls={data.beforePhotos}
               onOpen={(index) => setLightbox({ urls: data.beforePhotos, index })}
             />
             <PhotoSection
               label="After"
-              accent="text-emerald-700"
+              accent="text-primary"
               urls={data.afterPhotos}
               onOpen={(index) => setLightbox({ urls: data.afterPhotos, index })}
             />
           </>
         )}
 
-        <p className="text-center text-xs text-slate-400">
+        <p className="text-center text-xs text-muted-foreground">
           Questions about your clean?{" "}
-          <a href="tel:+18447352070" className="text-emerald-600 hover:underline">
+          <a href="tel:+18447352070" className="text-primary hover:underline">
             Call (844) 735-2070
           </a>
         </p>
@@ -219,7 +221,7 @@ function PhotoSection({
     <section>
       <div className="mb-3 flex items-center justify-between">
         <h2 className={cn("text-sm font-bold uppercase tracking-widest", accent)}>{label}</h2>
-        <span className="text-xs text-slate-400">{urls.length} file{urls.length === 1 ? "" : "s"}</span>
+        <span className="text-xs text-muted-foreground">{urls.length} file{urls.length === 1 ? "" : "s"}</span>
       </div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {urls.map((u, i) => (
@@ -227,7 +229,7 @@ function PhotoSection({
             key={u}
             type="button"
             onClick={() => onOpen(i)}
-            className="group relative aspect-square overflow-hidden rounded-xl border border-slate-200 bg-slate-100"
+            className="group relative aspect-square overflow-hidden rounded-xl border border-[color:var(--hairline)] bg-brand-50"
           >
             <MediaThumb
               url={u}

@@ -181,7 +181,7 @@ export function AuthScaffold({
 /** The clean glass form card that sits on the right surface. */
 export function AuthCard({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={`relative overflow-hidden rounded-2xl border border-border/70 bg-card p-7 shadow-[0_1px_3px_rgba(16,24,40,0.06),0_18px_50px_-20px_rgba(92,15,254,0.28)] ${className}`}>
+    <div className={`relative overflow-hidden rounded-2xl dialog-surface p-7 ${className}`}>
       <ShineBorder borderWidth={1.5} duration={12} />
       <div className="relative z-10">{children}</div>
     </div>

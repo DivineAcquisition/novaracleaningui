@@ -298,7 +298,7 @@ export default function BookingOffer() {
                 </div>
                 
                 <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                  <Button asChild size="lg" className="bg-gradient-primary">
+                  <Button asChild size="lg">
                     <a href="tel:+18447352070">
                       <RiPhoneLine className="w-4 h-4 mr-2" />
                       Call Now
@@ -431,7 +431,7 @@ export default function BookingOffer() {
                     </ul>
                     <Button
                       size="lg"
-                      className="w-full bg-gradient-primary hover:opacity-90 font-semibold"
+                      className="w-full font-semibold"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleSelectFocused();
@@ -545,7 +545,7 @@ export default function BookingOffer() {
 
                     <Button
                       size="lg"
-                      className="w-full bg-gradient-primary hover:opacity-90 font-semibold"
+                      className="w-full font-semibold"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleSelectStandard();
@@ -645,7 +645,7 @@ export default function BookingOffer() {
 
                       <Button
                         size="lg"
-                        className="w-full bg-gradient-primary hover:opacity-90 font-semibold"
+                        className="w-full font-semibold"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleSelectDeepClean();
@@ -768,7 +768,7 @@ export default function BookingOffer() {
 
                     <Button
                       size="lg"
-                      className="w-full bg-gradient-primary hover:opacity-90 font-semibold"
+                      className="w-full font-semibold"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleSelectCombo();
@@ -866,7 +866,7 @@ export default function BookingOffer() {
                 <div className="space-y-2 pt-1">
                   <Button
                     size="lg"
-                    className="w-full bg-gradient-primary hover:opacity-90 font-semibold"
+                    className="w-full font-semibold"
                     onClick={(e) => {
                       e.stopPropagation();
                       handleSelectMembership();

@@ -270,7 +270,7 @@ function Report({ token, sessionEmail }: { token?: string; sessionEmail: string 
   return (
     <div className="min-h-screen bg-background">
       <SEO title="End of Day Report" noindex />
-      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/85 backdrop-blur">
+      <header className="sticky top-0 z-30 border-b border-[color:var(--hairline)] bg-background/85 backdrop-blur-xl hairline-glow">
         <div className="mx-auto flex h-14 max-w-3xl items-center gap-3 px-4 sm:px-6">
           <span
             className="flex h-7 w-7 items-center justify-center rounded-lg text-white"
@@ -280,7 +280,7 @@ function Report({ token, sessionEmail }: { token?: string; sessionEmail: string 
             <RiCalendarCheckLine className="h-4 w-4" />
           </span>
           <div className="min-w-0">
-            <h1 className="font-jakarta text-sm font-semibold tracking-tight text-slate-900">
+            <h1 className="font-jakarta text-sm font-semibold tracking-tight text-foreground">
               End of day
             </h1>
             {boot && <p className="truncate text-[11px] text-slate-500">{boot.va.name}</p>}

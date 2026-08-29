@@ -207,7 +207,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     <div className="relative min-h-screen flex w-full bg-background text-foreground font-sans">
       <BrandAtmosphere />
       {/* ─── Desktop sidebar ─────────────────────────────────────────── */}
-      <aside className="relative z-10 hidden lg:flex w-64 flex-col border-r border-border bg-card/80 backdrop-blur-xl shrink-0">
+      <aside className="relative z-10 hidden lg:flex w-64 flex-col border-r border-[color:var(--hairline)] bg-card/70 backdrop-blur-xl shrink-0">
         <SidebarBrand />
         <SidebarNav pathname={pathname} items={navItems} />
         <SidebarFooter user={user} onSignOut={handleSignOut} />
@@ -222,11 +222,11 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       )}
       <aside
         className={cn(
-          "lg:hidden fixed inset-y-0 left-0 z-50 w-72 flex-col bg-card border-r border-border transition-transform",
+          "lg:hidden fixed inset-y-0 left-0 z-50 w-72 flex-col bg-card/95 backdrop-blur-xl border-r border-[color:var(--hairline)] transition-transform",
           mobileOpen ? "translate-x-0 flex" : "-translate-x-full flex",
         )}
       >
-        <div className="flex items-center justify-between p-4 border-b border-border">
+        <div className="flex items-center justify-between p-4 border-b border-[color:var(--hairline)]">
           <SidebarBrand compact />
           <Button
             variant="ghost"
@@ -243,7 +243,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
       {/* ─── Main column ─────────────────────────────────────────────── */}
       <main className="relative z-10 flex-1 flex flex-col min-w-0">
-        <header className="h-14 flex items-center gap-3 px-4 sm:px-6 border-b border-border bg-background/80 backdrop-blur-xl sticky top-0 z-30 hairline-glow">
+        <header className="h-14 flex items-center gap-3 px-4 sm:px-6 border-b border-[color:var(--hairline)] bg-background/80 backdrop-blur-xl sticky top-0 z-30 hairline-glow">
           <Button
             variant="ghost"
             size="sm"
@@ -289,7 +289,7 @@ function SidebarBrand({ compact = false }: { compact?: boolean }) {
   return (
     <div
       className={cn(
-        "relative flex items-center gap-2 overflow-hidden px-5 py-5 border-b border-border",
+        "relative flex items-center gap-2 overflow-hidden px-5 py-5 border-b border-[color:var(--hairline)]",
         compact && "border-0 py-0",
       )}
     >
@@ -321,9 +321,9 @@ function SidebarNav({ pathname, items }: { pathname: string | null; items: NavIt
             key={item.url}
             href={item.url}
             className={cn(
-              "group relative flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-150 text-sm",
+              "group relative flex items-center gap-3 px-3 py-2 rounded-xl transition-all duration-150 text-sm",
               isActive
-                ? "bg-brand-50 text-primary font-semibold"
+                ? "bg-brand-50 text-primary font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] ring-1 ring-primary/10"
                 : "text-muted-foreground hover:text-foreground hover:bg-muted/70",
             )}
           >
@@ -369,7 +369,7 @@ function SidebarFooter({
   onSignOut: () => void;
 }) {
   return (
-    <div className="border-t border-border p-3 space-y-2">
+    <div className="border-t border-[color:var(--hairline)] p-3 space-y-2">
       <div className="px-3 py-2 rounded-lg surface-sunken">
         <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-bold">
           Signed in

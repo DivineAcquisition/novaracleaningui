@@ -36,6 +36,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { SEO } from "@/components/SEO";
 import { cn } from "@/lib/utils";
+import { BrandAtmosphere } from "@/components/brand/atmosphere";
 
 interface ManageState {
   ok: boolean;
@@ -154,8 +155,8 @@ export default function RecurringManagePage() {
   if (loading) {
     return (
       <Shell>
-        <div className="flex flex-col items-center justify-center py-24 gap-3 text-slate-500">
-          <RiLoader4Line className="w-8 h-8 animate-spin text-violet-600" />
+        <div className="flex flex-col items-center justify-center py-24 gap-3 text-muted-foreground">
+          <RiLoader4Line className="w-8 h-8 animate-spin text-primary" />
           <p className="text-sm">Loading your cleaning plan…</p>
         </div>
       </Shell>
@@ -173,8 +174,8 @@ export default function RecurringManagePage() {
       <SEO title="Manage your recurring clean" noindex />
 
       {/* Header */}
-      <div className="rounded-2xl overflow-hidden border border-violet-200 bg-white shadow-sm">
-        <div className="px-5 py-4" style={{ background: "linear-gradient(135deg,#5C0FFE 0%,#8F7BFD 100%)" }}>
+      <div className="rounded-2xl overflow-hidden token-card p-0">
+        <div className="token-hero rounded-none">
           <p className="text-[11px] uppercase tracking-wider font-semibold text-white/70">
             Novara Cleaning · Your plan
           </p>
@@ -197,13 +198,13 @@ export default function RecurringManagePage() {
             </div>
           ) : (
             <div className="flex items-start gap-3">
-              <span className="w-11 h-11 rounded-xl bg-violet-100 text-violet-700 flex items-center justify-center shrink-0">
+              <span className="w-11 h-11 rounded-xl bg-brand-50 text-primary flex items-center justify-center shrink-0">
                 <RiCalendarEventLine className="w-6 h-6" />
               </span>
               <div>
-                <p className="text-xs text-slate-500 font-semibold uppercase tracking-wide">Next visit</p>
-                <p className="font-bold text-slate-900">{fmtDay(schedule.next_service_date)}</p>
-                <p className="text-sm text-slate-500">
+                <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Next visit</p>
+                <p className="font-bold text-foreground">{fmtDay(schedule.next_service_date)}</p>
+                <p className="text-sm text-muted-foreground">
                   {schedule.preferred_time_slot || "Arrival window TBD"}
                   {schedule.city ? ` · ${schedule.city}` : ""}
                 </p>
@@ -214,12 +215,12 @@ export default function RecurringManagePage() {
           {/* Upcoming (cadence-aware) */}
           {schedule.active && preview.length > 1 && (
             <div className="mt-4">
-              <p className="text-xs text-slate-500 font-semibold uppercase tracking-wide mb-1.5">
+              <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide mb-1.5">
                 Following visits ({CADENCE_LABEL[schedule.cadence]?.toLowerCase() || schedule.cadence})
               </p>
               <div className="flex flex-wrap gap-1.5">
                 {preview.slice(1).map((d) => (
-                  <span key={d} className="rounded-full bg-slate-100 text-slate-600 text-xs px-2.5 py-1">
+                  <span key={d} className="rounded-full bg-brand-50 text-muted-foreground text-xs px-2.5 py-1">
                     {format(new Date(`${d}T12:00:00`), "EEE, MMM d")}
                   </span>
                 ))}
@@ -230,7 +231,7 @@ export default function RecurringManagePage() {
       </div>
 
       {/* ── Actions ── */}
-      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm divide-y divide-slate-100">
+      <div className="token-card p-0 divide-y divide-[color:var(--hairline)]">
         {/* Change date/time */}
         <div className="p-4">
           <button
@@ -238,10 +239,10 @@ export default function RecurringManagePage() {
             className="w-full flex items-center justify-between gap-2 text-left"
             onClick={() => setPanel(panel === "date" ? "none" : "date")}
           >
-            <span className="flex items-center gap-2.5 font-semibold text-slate-900 text-sm">
-              <RiCalendarEventLine className="w-5 h-5 text-violet-600" /> Change next visit's date / time
+            <span className="flex items-center gap-2.5 font-semibold text-foreground text-sm">
+              <RiCalendarEventLine className="w-5 h-5 text-primary" /> Change next visit's date / time
             </span>
-            <span className="text-slate-400 text-xs">{panel === "date" ? "Close" : "Open"}</span>
+            <span className="text-muted-foreground text-xs">{panel === "date" ? "Close" : "Open"}</span>
           </button>
           {panel === "date" && (
             <div className="mt-3 space-y-3">
@@ -251,19 +252,19 @@ export default function RecurringManagePage() {
                   min={minDate}
                   value={newDate}
                   onChange={(e) => setNewDate(e.target.value)}
-                  className="h-11 rounded-lg border border-slate-200 px-3 text-sm w-full focus:outline-none focus:ring-2 focus:ring-violet-300"
+                  className="field-native"
                 />
                 <select
                   value={newSlot}
                   onChange={(e) => setNewSlot(e.target.value)}
-                  className="h-11 rounded-lg border border-slate-200 px-3 text-sm w-full bg-white focus:outline-none focus:ring-2 focus:ring-violet-300"
+                  className="field-native"
                 >
                   <option value="">Keep current window</option>
                   {TIME_SLOTS.map((t) => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
               {ripple.length > 0 && (
-                <div className="rounded-lg bg-violet-50 border border-violet-100 px-3 py-2 text-xs text-violet-800">
+                <div className="rounded-lg bg-brand-50 border border-primary/15 px-3 py-2 text-xs text-primary">
                   <p className="font-semibold mb-1">Your {CADENCE_LABEL[schedule.cadence]?.toLowerCase() || schedule.cadence} plan would continue:</p>
                   <p>{ripple.map((d) => format(new Date(`${d}T12:00:00`), "MMM d")).join("  →  ")} …</p>
                 </div>
@@ -294,7 +295,7 @@ export default function RecurringManagePage() {
             <select
               value={newSlot}
               onChange={(e) => setNewSlot(e.target.value)}
-              className="h-11 rounded-lg border border-slate-200 px-3 text-sm flex-1 bg-white focus:outline-none focus:ring-2 focus:ring-violet-300"
+              className="field-native flex-1"
             >
               <option value="">Pick a window…</option>
               {TIME_SLOTS.map((t) => <option key={t} value={t}>{t}</option>)}
@@ -312,8 +313,8 @@ export default function RecurringManagePage() {
         {/* Skip next */}
         {schedule.active && schedule.next_service_date && (
           <div className="p-4 flex flex-wrap items-center justify-between gap-2">
-            <span className="flex items-center gap-2.5 font-semibold text-slate-900 text-sm">
-              <RiSkipForwardLine className="w-5 h-5 text-violet-600" /> Skip the {format(new Date(`${schedule.next_service_date}T12:00:00`), "MMM d")} visit
+            <span className="flex items-center gap-2.5 font-semibold text-foreground text-sm">
+              <RiSkipForwardLine className="w-5 h-5 text-primary" /> Skip the {format(new Date(`${schedule.next_service_date}T12:00:00`), "MMM d")} visit
             </span>
             <Button
               variant="outline"
@@ -337,10 +338,10 @@ export default function RecurringManagePage() {
             className="w-full flex items-center justify-between gap-2 text-left"
             onClick={() => setPanel(panel === "cadence" ? "none" : "cadence")}
           >
-            <span className="flex items-center gap-2.5 font-semibold text-slate-900 text-sm">
-              <RiRepeatLine className="w-5 h-5 text-violet-600" /> Change frequency
+            <span className="flex items-center gap-2.5 font-semibold text-foreground text-sm">
+              <RiRepeatLine className="w-5 h-5 text-primary" /> Change frequency
             </span>
-            <span className="text-xs text-slate-400">{CADENCE_LABEL[schedule.cadence] || schedule.cadence}</span>
+            <span className="text-xs text-muted-foreground">{CADENCE_LABEL[schedule.cadence] || schedule.cadence}</span>
           </button>
           {panel === "cadence" && (
             <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -351,14 +352,12 @@ export default function RecurringManagePage() {
                   disabled={busy === "set_cadence"}
                   onClick={() => void act("set_cadence", { action: "set_cadence", cadence: c }, `Frequency changed to ${CADENCE_LABEL[c].toLowerCase()}.`)}
                   className={cn(
-                    "rounded-lg border px-3 py-2.5 text-sm font-medium transition-all",
-                    schedule.cadence === c
-                      ? "border-violet-500 bg-violet-50 text-violet-800 ring-2 ring-violet-200"
-                      : "border-slate-200 bg-white text-slate-700 hover:border-violet-300",
+                    "choice-chip px-3 py-2.5 text-sm font-medium",
+                    schedule.cadence === c && "choice-chip-active",
                   )}
                 >
                   {CADENCE_LABEL[c]}
-                  {schedule.cadence === c && <RiCheckboxCircleFill className="w-4 h-4 inline ml-1.5 text-violet-600" />}
+                  {schedule.cadence === c && <RiCheckboxCircleFill className="w-4 h-4 inline ml-1.5 text-primary" />}
                 </button>
               ))}
             </div>
@@ -367,8 +366,8 @@ export default function RecurringManagePage() {
 
         {/* Different cleaner */}
         <div className="p-4 flex flex-wrap items-center justify-between gap-2">
-          <span className="flex items-center gap-2.5 font-semibold text-slate-900 text-sm">
-            <RiUserSearchLine className="w-5 h-5 text-violet-600" /> Request a different cleaner
+          <span className="flex items-center gap-2.5 font-semibold text-foreground text-sm">
+            <RiUserSearchLine className="w-5 h-5 text-primary" /> Request a different cleaner
           </span>
           <Button
             variant="outline"
@@ -386,9 +385,9 @@ export default function RecurringManagePage() {
 
         {/* Pause / resume */}
         <div className="p-4 flex flex-wrap items-center justify-between gap-2">
-          <span className="flex items-center gap-2.5 font-semibold text-slate-900 text-sm">
+          <span className="flex items-center gap-2.5 font-semibold text-foreground text-sm">
             {schedule.active
-              ? <><RiPauseCircleLine className="w-5 h-5 text-violet-600" /> Pause my plan</>
+              ? <><RiPauseCircleLine className="w-5 h-5 text-primary" /> Pause my plan</>
               : <><RiPlayCircleLine className="w-5 h-5 text-emerald-600" /> Resume my plan</>}
           </span>
           <Button
@@ -409,15 +408,15 @@ export default function RecurringManagePage() {
 
       {/* Already-booked upcoming visits */}
       {upcoming.length > 0 && (
-        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-4">
-          <p className="text-xs text-slate-500 font-semibold uppercase tracking-wide mb-2">Booked visits</p>
+        <div className="token-card">
+          <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide mb-2">Booked visits</p>
           <ul className="space-y-1.5">
             {upcoming.map((b) => (
               <li key={b.id} className="flex items-center justify-between text-sm">
-                <span className="text-slate-800">{fmtDay(b.service_date)}{b.time_slot ? ` · ${b.time_slot}` : ""}</span>
+                <span className="text-foreground">{fmtDay(b.service_date)}{b.time_slot ? ` · ${b.time_slot}` : ""}</span>
                 <span className={cn(
                   "text-xs rounded-full px-2 py-0.5 capitalize",
-                  b.status === "cancelled" ? "bg-slate-100 text-slate-500" : "bg-emerald-50 text-emerald-700",
+                  b.status === "cancelled" ? "bg-muted text-muted-foreground" : "bg-emerald-50 text-emerald-700",
                 )}>
                   {b.status}
                 </span>
@@ -427,7 +426,7 @@ export default function RecurringManagePage() {
         </div>
       )}
 
-      <p className="text-xs text-center text-slate-400 pb-8">
+      <p className="text-xs text-center text-muted-foreground pb-8">
         Need something else? Just reply to our text or email hello@novaracleaning.com.
       </p>
     </Shell>
@@ -450,10 +449,10 @@ function ActionRow({
         className="w-full flex items-center justify-between gap-2 text-left"
         onClick={() => setOpen((v) => !v)}
       >
-        <span className="flex items-center gap-2.5 font-semibold text-slate-900 text-sm">
-          <Icon className="w-5 h-5 text-violet-600" /> {label}
+        <span className="flex items-center gap-2.5 font-semibold text-foreground text-sm">
+          <Icon className="w-5 h-5 text-primary" /> {label}
         </span>
-        <span className="text-xs text-slate-400">{open ? "Close" : hint || "Open"}</span>
+        <span className="text-xs text-muted-foreground">{open ? "Close" : hint || "Open"}</span>
       </button>
       {open && <div className="mt-3">{children}</div>}
     </div>
@@ -462,18 +461,19 @@ function ActionRow({
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-background">
-      <div className="max-w-xl mx-auto px-4 py-5 space-y-4">{children}</div>
+    <div className="relative min-h-screen bg-background">
+      <BrandAtmosphere />
+      <div className="relative z-10 max-w-xl mx-auto px-4 py-5 space-y-4">{children}</div>
     </div>
   );
 }
 
 function ErrorCard({ title, hint }: { title: string; hint: string }) {
   return (
-    <div className="rounded-2xl border border-rose-200 bg-white shadow-sm px-6 py-10 text-center mt-16">
+    <div className="token-card px-6 py-10 text-center mt-16">
       <RiAlertLine className="w-10 h-10 text-rose-500 mx-auto mb-3" />
-      <h1 className="font-bold text-slate-900 text-lg">{title}</h1>
-      <p className="text-sm text-slate-500 mt-1">{hint}</p>
+      <h1 className="font-bold text-foreground text-lg">{title}</h1>
+      <p className="text-sm text-muted-foreground mt-1">{hint}</p>
     </div>
   );
 }

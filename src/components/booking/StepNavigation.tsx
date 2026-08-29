@@ -43,11 +43,11 @@ export function StepNavigation({ currentStep, steps }: StepNavigationProps) {
     <div className="hidden md:block w-full max-w-4xl mx-auto px-4 py-6">
       <div className="relative">
         {/* Progress Line Background */}
-        <div className="absolute top-5 left-0 right-0 h-0.5 bg-border" />
+        <div className="absolute top-5 left-0 right-0 h-px bg-[color:var(--hairline)]" />
         
         {/* Active Progress Line */}
         <div
-          className="absolute top-5 left-0 h-0.5 bg-primary transition-all duration-500 ease-out"
+          className="absolute top-5 left-0 h-px bg-gradient-primary transition-all duration-500 ease-out"
           style={{ width: `${((currentStep - 1) / (steps.length - 1)) * 100}%` }}
         />
 
@@ -73,10 +73,10 @@ export function StepNavigation({ currentStep, steps }: StepNavigationProps) {
                 <div
                   className={cn(
                     "w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all duration-300 border-2",
-                    isCompleted && "bg-primary text-primary-foreground border-primary",
+                    isCompleted && "bg-primary text-primary-foreground border-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.22)]",
                     isCompleted && "group-hover:scale-110 group-hover:shadow-lg group-hover:shadow-primary/25",
-                    isCurrent && "bg-primary text-primary-foreground border-primary ring-4 ring-primary/20",
-                    !isCompleted && !isCurrent && "bg-muted text-muted-foreground border-muted"
+                    isCurrent && "bg-primary text-primary-foreground border-primary ring-4 ring-primary/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.22)]",
+                    !isCompleted && !isCurrent && "bg-background text-muted-foreground border-[color:var(--hairline)]",
                   )}
                 >
                   {isCompleted ? (

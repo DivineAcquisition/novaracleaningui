@@ -18,7 +18,7 @@ export function BookingHeader({ currentStep, totalSteps, stepLabel }: BookingHea
   const progressPercent = Math.round((currentStep / totalSteps) * 100);
 
   return (
-    <div className="w-full bg-background/95 backdrop-blur-xl border-b border-border sticky top-0 z-50 hairline-glow">
+    <div className="w-full bg-background/95 backdrop-blur-xl border-b border-[color:var(--hairline)] sticky top-0 z-50 hairline-glow">
       <div className="container max-w-6xl mx-auto px-4 py-4">
         {/* Top Row: Logo and Actions */}
         <div className="flex items-center justify-between mb-4">
@@ -71,7 +71,7 @@ export function BookingHeader({ currentStep, totalSteps, stepLabel }: BookingHea
         </div>
 
         {/* Progress Bar */}
-        <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+        <div className="w-full h-1.5 bg-brand-50 rounded-full overflow-hidden ring-1 ring-[color:var(--hairline)]">
           <div 
             className={cn(
             "h-full rounded-full transition-all duration-500 ease-out",

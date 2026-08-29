@@ -1353,7 +1353,7 @@ export default function BookingCheckout() {
                     <p className="text-3xl font-bold text-green-700">$0.00</p>
                     <p className="text-green-600 mt-1">Covered by your membership credit!</p>
                   </div>
-                  <Button onClick={() => router.push("/book/success")} size="lg" className="w-full bg-gradient-primary hover:opacity-90">
+                  <Button onClick={() => router.push("/book/success")} size="lg" className="w-full">
                     Confirm Booking
                   </Button>
                 </div>}

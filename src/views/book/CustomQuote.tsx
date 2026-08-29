@@ -107,7 +107,7 @@ export default function CustomQuote() {
             
             <Button
               size="lg"
-              className="w-full h-14 text-base font-semibold bg-gradient-primary shadow-neon"
+              className="w-full h-14 text-base font-semibold"
               onClick={() => router.push("/")}
             >
               Return to Home
@@ -228,7 +228,7 @@ export default function CustomQuote() {
                 <Button
                   type="submit"
                   size="lg"
-                  className="flex-1 h-14 text-base font-semibold bg-gradient-primary shadow-lavender"
+                  className="flex-1 h-14 text-base font-semibold"
                   disabled={isSubmitting}
                 >
                   {isSubmitting ? (

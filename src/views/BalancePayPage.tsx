@@ -25,6 +25,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { StripePaymentForm } from "@/components/booking/StripePaymentForm";
 import { getStripePromise } from "@/lib/stripe-client";
 import { cn } from "@/lib/utils";
+import { BrandAtmosphere } from "@/components/brand/atmosphere";
 
 const money = (cents: number | null | undefined) =>
   cents == null ? "—" : `$${(cents / 100).toFixed(2)}`;
@@ -152,7 +153,8 @@ export default function BalancePayPage() {
 
   if (loading) {
     return (
-      <main className="mx-auto max-w-lg p-4 space-y-4">
+      <main className="relative mx-auto max-w-lg p-4 space-y-4">
+        <BrandAtmosphere />
         <Skeleton className="h-40 w-full rounded-2xl" />
         <Skeleton className="h-64 w-full rounded-2xl" />
       </main>
@@ -161,7 +163,8 @@ export default function BalancePayPage() {
 
   if (loadError || !summary) {
     return (
-      <main className="mx-auto max-w-lg p-4">
+      <main className="relative mx-auto max-w-lg p-4">
+        <BrandAtmosphere />
         <div className="rounded-2xl border border-rose-200 bg-rose-50 p-5">
           <p className="flex items-center gap-2 font-semibold text-rose-900">
             <RiErrorWarningLine className="h-5 w-5" />
@@ -183,36 +186,37 @@ export default function BalancePayPage() {
   const b = summary.booking;
 
   return (
-    <main className="mx-auto max-w-lg p-4 space-y-4 pb-16">
+    <main className="relative mx-auto max-w-lg p-4 space-y-4 pb-16">
+      <BrandAtmosphere />
       {/* What was done, and what it comes to */}
-      <header className="rounded-2xl bg-gradient-to-br from-violet-600 to-purple-500 p-5 text-white shadow-md">
-        <p className="text-xs uppercase tracking-wide text-violet-100">{b.ref}</p>
+      <header className="token-hero">
+        <p className="text-xs uppercase tracking-wide text-white/70">{b.ref}</p>
         <h1 className="mt-1 font-jakarta text-xl font-bold leading-tight">
           {isPaid || nothingDue
             ? `Thanks, ${b.firstName || "there"} — you're all settled`
             : `Your clean is complete, ${b.firstName || "there"}`}
         </h1>
-        <p className="mt-1 text-sm text-violet-100">
+        <p className="mt-1 text-sm text-white/80">
           {b.serviceLabel}
           {b.serviceDate ? ` · ${prettyDate(b.serviceDate)}` : ""}
         </p>
         {addressLine ? (
-          <p className="text-sm text-violet-100">{addressLine}</p>
+          <p className="text-sm text-white/80">{addressLine}</p>
         ) : null}
 
         <div className="mt-4 grid grid-cols-3 gap-2 rounded-xl bg-white/15 p-3 text-center">
           <div>
-            <p className="text-[10px] uppercase tracking-wide text-violet-100">Total</p>
+            <p className="text-[10px] uppercase tracking-wide text-white/70">Total</p>
             <p className="text-sm font-bold">{money(summary.finalTotalCents)}</p>
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-wide text-violet-100">Already paid</p>
+            <p className="text-[10px] uppercase tracking-wide text-white/70">Already paid</p>
             <p className="text-sm font-bold">
               {money(summary.alreadyPaidCents ?? summary.depositPaidCents)}
             </p>
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-wide text-violet-100">
+            <p className="text-[10px] uppercase tracking-wide text-white/70">
               {isPaid || nothingDue ? "Balance" : "Due now"}
             </p>
             <p className="text-sm font-bold">
@@ -224,21 +228,21 @@ export default function BalancePayPage() {
 
       {/* Proof the work happened, before we ask for money */}
       {(summary.checklist || summary.beforePhotos > 0 || summary.afterPhotos > 0) && (
-        <section className="rounded-2xl border border-slate-200 bg-white p-4">
-          <h2 className="text-sm font-semibold text-slate-900">What we completed</h2>
+        <section className="token-card">
+          <h2 className="text-sm font-semibold text-foreground">What we completed</h2>
           {summary.checklist && summary.checklist.totalItems > 0 ? (
             <div className="mt-2">
-              <div className="flex items-center justify-between text-xs text-slate-600">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <span>Cleaning checklist</span>
                 <span className="tabular-nums">
                   {summary.checklist.completedItems}/{summary.checklist.totalItems} tasks
                 </span>
               </div>
-              <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-slate-100">
+              <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-brand-50">
                 <div
                   className={cn(
                     "h-full rounded-full",
-                    summary.checklist.progressPct >= 100 ? "bg-emerald-500" : "bg-violet-500",
+                    summary.checklist.progressPct >= 100 ? "bg-emerald-500" : "bg-primary",
                   )}
                   style={{ width: `${Math.min(100, summary.checklist.progressPct)}%` }}
                 />
@@ -246,8 +250,8 @@ export default function BalancePayPage() {
             </div>
           ) : null}
           {summary.beforePhotos > 0 || summary.afterPhotos > 0 ? (
-            <p className="mt-3 flex items-center gap-1.5 text-xs text-slate-600">
-              <RiImage2Line className="h-4 w-4 text-slate-400" />
+            <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
+              <RiImage2Line className="h-4 w-4 text-muted-foreground" />
               {summary.beforePhotos} before &amp; {summary.afterPhotos} after photos on file
             </p>
           ) : null}
@@ -255,26 +259,26 @@ export default function BalancePayPage() {
       )}
 
       {/* The number, line by line */}
-      <section className="rounded-2xl border border-slate-200 bg-white p-4">
-        <h2 className="text-sm font-semibold text-slate-900">How your total was calculated</h2>
+      <section className="token-card">
+        <h2 className="text-sm font-semibold text-foreground">How your total was calculated</h2>
         <ul className="mt-3 space-y-2">
           {summary.items.map((item, i) => (
             <li key={`${item.label}-${i}`} className="flex items-start justify-between gap-3">
               <span className="min-w-0">
-                <span className="flex items-center gap-1.5 text-sm text-slate-800">
+                <span className="flex items-center gap-1.5 text-sm text-foreground">
                   {item.kind === "addon" ? (
                     <RiCheckLine className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
                   ) : null}
                   {item.label}
                 </span>
                 {item.note ? (
-                  <span className="block text-xs text-slate-500">{item.note}</span>
+                  <span className="block text-xs text-muted-foreground">{item.note}</span>
                 ) : null}
               </span>
               <span
                 className={cn(
                   "shrink-0 text-sm tabular-nums",
-                  (item.amountCents ?? 0) < 0 ? "text-emerald-700" : "text-slate-900",
+                  (item.amountCents ?? 0) < 0 ? "text-emerald-700" : "text-foreground",
                 )}
               >
                 {item.amountCents == null
@@ -285,20 +289,20 @@ export default function BalancePayPage() {
           ))}
         </ul>
 
-        <div className="mt-3 space-y-1.5 border-t border-slate-200 pt-3 text-sm">
+        <div className="mt-3 space-y-1.5 border-t border-[color:var(--hairline)] pt-3 text-sm">
           <div className="flex justify-between">
-            <span className="text-slate-600">Total for the clean</span>
+            <span className="text-muted-foreground">Total for the clean</span>
             <span className="font-semibold tabular-nums">{money(summary.finalTotalCents)}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-slate-600">Deposit already paid</span>
+            <span className="text-muted-foreground">Deposit already paid</span>
             <span className="tabular-nums text-emerald-700">
               −{money(summary.depositPaidCents)}
             </span>
           </div>
           {(summary.addonCapturedCents ?? 0) > 0 ? (
             <div className="flex justify-between">
-              <span className="text-slate-600">Add-ons already paid</span>
+              <span className="text-muted-foreground">Add-ons already paid</span>
               <span className="tabular-nums text-emerald-700">
                 −{money(summary.addonCapturedCents)}
               </span>
@@ -306,15 +310,15 @@ export default function BalancePayPage() {
           ) : null}
           {(summary.completionCapturedCents ?? 0) > 0 ? (
             <div className="flex justify-between">
-              <span className="text-slate-600">Completion already captured</span>
+              <span className="text-muted-foreground">Completion already captured</span>
               <span className="tabular-nums text-emerald-700">
                 −{money(summary.completionCapturedCents)}
               </span>
             </div>
           ) : null}
-          <div className="flex justify-between border-t border-slate-200 pt-1.5 text-base">
-            <span className="font-semibold text-slate-900">Balance due</span>
-            <span className="font-bold tabular-nums text-slate-900">
+          <div className="flex justify-between border-t border-[color:var(--hairline)] pt-1.5 text-base">
+            <span className="font-semibold text-foreground">Balance due</span>
+            <span className="font-bold tabular-nums text-foreground">
               {isPaid || nothingDue ? "$0.00" : money(summary.balanceDueCents)}
             </span>
           </div>
@@ -335,8 +339,8 @@ export default function BalancePayPage() {
           </p>
         </section>
       ) : (
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
-          <h2 className="text-sm font-semibold text-slate-900">
+        <section className="token-card space-y-3">
+          <h2 className="text-sm font-semibold text-foreground">
             Pay your balance — {money(summary.balanceDueCents)}
           </h2>
 
@@ -350,7 +354,7 @@ export default function BalancePayPage() {
           ) : null}
 
           {!payError && (starting || !clientSecret || !stripePromise) ? (
-            <p className="flex items-center gap-1.5 text-xs text-slate-500">
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <RiLoader4Line className="h-3.5 w-3.5 animate-spin" />
               Preparing secure payment…
             </p>
@@ -373,7 +377,7 @@ export default function BalancePayPage() {
             </Elements>
           ) : null}
 
-          <p className="text-[11px] leading-relaxed text-slate-500">
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
             Payments are processed securely by Stripe. Questions about this total? Text us at{" "}
             <a className="underline" href="tel:+18334432004">
               (833) 443-2004

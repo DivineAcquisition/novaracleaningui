@@ -40,7 +40,7 @@ export default function CommercialSuccess() {
         </div>
         <div className="grid gap-3 text-left">
           {steps.map((s, i) => (
-            <div key={i} className="rounded-2xl border border-slate-200 bg-white p-5 flex items-start gap-4">
+            <div key={i} className="token-card flex items-start gap-4">
               <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: PURPLE_GRADIENT }}>
                 <s.icon className="w-5 h-5 text-white" />
               </div>

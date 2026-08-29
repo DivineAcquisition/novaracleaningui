@@ -43,6 +43,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SEO } from "@/components/SEO";
 import { IncludedValueStack } from "@/components/booking/IncludedValueStack";
+import { BrandAtmosphere } from "@/components/brand/atmosphere";
 
 interface PaySummary {
   bookingId: string;
@@ -328,7 +329,8 @@ export default function PayPage() {
   // ── Render states ────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="min-h-screen bg-background p-4 max-w-md mx-auto space-y-4">
+      <div className="relative min-h-screen bg-background p-4 max-w-md mx-auto space-y-4">
+        <BrandAtmosphere />
         <Skeleton className="h-28 w-full rounded-2xl" />
         <Skeleton className="h-64 w-full rounded-2xl" />
       </div>
@@ -337,9 +339,10 @@ export default function PayPage() {
 
   if (loadErr || !summary) {
     return (
-      <div className="min-h-screen bg-background p-4 max-w-md mx-auto">
+      <div className="relative min-h-screen bg-background p-4 max-w-md mx-auto">
+        <BrandAtmosphere />
         <SEO title="Payment link" noindex />
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-900 mt-8">
+        <div className="relative z-10 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-900 mt-8">
           <p className="font-semibold flex items-center gap-1.5">
             <RiErrorWarningLine className="w-4 h-4" />
             {loadErr === "cancelled" ? "This booking was cancelled." : "This payment link isn't valid anymore."}
@@ -356,18 +359,19 @@ export default function PayPage() {
   const paid = paidNow || summary.paid;
 
   return (
-    <div className="min-h-screen bg-background pb-16">
+    <div className="relative min-h-screen bg-background pb-16">
+      <BrandAtmosphere />
       <SEO title="Pay your deposit to confirm — Novara Cleaning" noindex />
-      <div className="max-w-md mx-auto p-4 space-y-4">
+      <div className="relative z-10 max-w-md mx-auto p-4 space-y-4">
         {/* Booking summary */}
-        <header className="rounded-2xl bg-gradient-to-br from-violet-600 to-purple-500 p-5 text-white shadow-md">
+        <header className="token-hero">
           <div className="flex items-center gap-2">
             <RiSparklingLine className="w-5 h-5" />
             <p className="text-sm font-semibold">
               Hi {summary.firstName || "there"} — your clean is pending
             </p>
           </div>
-          <p className="mt-2 text-xs text-violet-50 leading-snug">
+          <p className="mt-2 text-xs text-white/80 leading-snug">
             NVC-{String(summary.bookingNumber || 0).padStart(4, "0")} · {serviceLabel}
             <span className="block">
               {summary.serviceDate
@@ -379,19 +383,19 @@ export default function PayPage() {
           </p>
           <div className="mt-3 rounded-xl bg-white/15 p-3 grid grid-cols-3 gap-2 text-center">
             <div>
-              <p className="text-[10px] uppercase tracking-wide text-violet-100">Total</p>
+              <p className="text-[10px] uppercase tracking-wide text-white/70">Total</p>
               <p className="text-sm font-bold">{money(summary.totalCents)}</p>
             </div>
             <div>
-              <p className="text-[10px] uppercase tracking-wide text-violet-100">Due today</p>
+              <p className="text-[10px] uppercase tracking-wide text-white/70">Due today</p>
               <p className="text-sm font-bold">{money(summary.depositCents)}</p>
             </div>
             <div>
-              <p className="text-[10px] uppercase tracking-wide text-violet-100">After clean</p>
+              <p className="text-[10px] uppercase tracking-wide text-white/70">After clean</p>
               <p className="text-sm font-bold">{money(summary.remainingCents)}</p>
             </div>
           </div>
-          <p className="mt-2 text-[11px] text-violet-100/90 leading-snug">
+          <p className="mt-2 text-[11px] text-white/80 leading-snug">
             The remaining {money(summary.remainingCents)} is only authorized on your card a few
             days before service and charged after we complete the clean.
           </p>
@@ -423,17 +427,17 @@ export default function PayPage() {
               paid, since the deposit and the pre-auth hold both derive from
               the total. */}
           {addOns && !addOnsLocked ? (
-            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="rounded-2xl token-card">
               <button
                 type="button"
                 onClick={() => setAddOnsOpen((v) => !v)}
                 className="flex w-full items-center justify-between gap-3 text-left"
               >
                 <span>
-                  <span className="block text-sm font-semibold text-slate-900">
+                  <span className="block text-sm font-semibold text-foreground">
                     Want anything else done?
                   </span>
-                  <span className="block text-xs text-slate-500">
+                  <span className="block text-xs text-muted-foreground">
                     {addOns.filter((a) => a.selected).length > 0
                       ? `${addOns.filter((a) => a.selected).length} add-on${
                         addOns.filter((a) => a.selected).length === 1 ? "" : "s"
@@ -441,13 +445,13 @@ export default function PayPage() {
                       : "Add fridge, oven, windows and more — your total updates instantly"}
                   </span>
                 </span>
-                <span className="shrink-0 text-xs font-medium text-violet-700">
+                <span className="shrink-0 text-xs font-medium text-primary">
                   {addOnsOpen ? "Close" : "Edit"}
                 </span>
               </button>
 
               {addOnsOpen ? (
-                <div className="mt-3 space-y-1.5 border-t border-slate-100 pt-3">
+                <div className="mt-3 space-y-1.5 border-t border-[color:var(--hairline)] pt-3">
                   {addOnError ? (
                     <p className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-800">
                       {addOnError}
@@ -459,30 +463,30 @@ export default function PayPage() {
                       className={cn(
                         "flex cursor-pointer items-center justify-between gap-3 rounded-lg border px-3 py-2 transition-colors",
                         a.selected
-                          ? "border-violet-300 bg-violet-50"
-                          : "border-slate-200 hover:bg-slate-50",
+                          ? "border-primary/30 bg-brand-50"
+                          : "border-border hover:bg-brand-50/50",
                         savingAddOns && "opacity-60",
                       )}
                     >
                       <span className="flex min-w-0 items-center gap-2">
                         <input
                           type="checkbox"
-                          className="h-4 w-4 shrink-0 accent-violet-600"
+                          className="h-4 w-4 shrink-0 accent-primary"
                           checked={a.selected}
                           disabled={savingAddOns}
                           onChange={(e) => void toggleAddOn(a.id, e.target.checked)}
                         />
                         <span className="min-w-0">
-                          <span className="block truncate text-sm text-slate-900">{a.label}</span>
-                          <span className="block truncate text-[11px] text-slate-500">{a.note}</span>
+                          <span className="block truncate text-sm text-foreground">{a.label}</span>
+                          <span className="block truncate text-[11px] text-muted-foreground">{a.note}</span>
                         </span>
                       </span>
-                      <span className="shrink-0 text-sm font-medium tabular-nums text-slate-900">
+                      <span className="shrink-0 text-sm font-medium tabular-nums text-foreground">
                         {a.includedFree ? "Included" : `+${money(a.priceCents)}`}
                       </span>
                     </label>
                   ))}
-                  <p className="pt-1 text-[11px] text-slate-500">
+                  <p className="pt-1 text-[11px] text-muted-foreground">
                     Changes are applied to your total straight away. Anything added here is
                     charged the same way as the rest of your booking.
                   </p>
@@ -495,18 +499,18 @@ export default function PayPage() {
           /* ── STEP 1: LEGAL (required before payment unlocks) ── */
           <>
           <IncludedValueStack serviceType={summary.serviceType} compact />
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-4">
+          <div className="token-card space-y-4">
             <div className="flex items-center gap-2">
-              <RiQuillPenLine className="w-4 h-4 text-violet-700" />
-              <p className="text-sm font-semibold text-slate-900">Step 1 of 2 — Review &amp; sign</p>
+              <RiQuillPenLine className="w-4 h-4 text-primary" />
+              <p className="text-sm font-semibold text-foreground">Step 1 of 2 — Review &amp; sign</p>
             </div>
 
             <div className="space-y-3">
               <label className="flex items-start gap-2.5 cursor-pointer">
                 <Checkbox checked={agreeService} onCheckedChange={(v) => setAgreeService(v === true)} className="mt-0.5" />
-                <span className="text-xs text-slate-700 leading-snug">
+                <span className="text-xs text-foreground/80 leading-snug">
                   I have read and agree to the{" "}
-                  <a href="/agreements/one-time-service-agreement.pdf" target="_blank" rel="noopener noreferrer" className="text-violet-700 underline font-medium">
+                  <a href="/agreements/one-time-service-agreement.pdf" target="_blank" rel="noopener noreferrer" className="text-primary underline font-medium">
                     One-Time Service Agreement
                   </a>{" "}
                   (service policy), including the deposit and post-service balance charge.
@@ -514,22 +518,22 @@ export default function PayPage() {
               </label>
               <label className="flex items-start gap-2.5 cursor-pointer">
                 <Checkbox checked={agreeTerms} onCheckedChange={(v) => setAgreeTerms(v === true)} className="mt-0.5" />
-                <span className="text-xs text-slate-700 leading-snug">
+                <span className="text-xs text-foreground/80 leading-snug">
                   I agree to the{" "}
-                  <a href="https://novaracleaning.com/terms" target="_blank" rel="noopener noreferrer" className="text-violet-700 underline font-medium">
+                  <a href="https://novaracleaning.com/terms" target="_blank" rel="noopener noreferrer" className="text-primary underline font-medium">
                     Terms of Service
                   </a>{" "}
                   and{" "}
-                  <a href="https://novaracleaning.com/refund-policy" target="_blank" rel="noopener noreferrer" className="text-violet-700 underline font-medium">
+                  <a href="https://novaracleaning.com/refund-policy" target="_blank" rel="noopener noreferrer" className="text-primary underline font-medium">
                     Refund Policy
                   </a>.
                 </span>
               </label>
               <label className="flex items-start gap-2.5 cursor-pointer">
                 <Checkbox checked={agreeDisclaimer} onCheckedChange={(v) => setAgreeDisclaimer(v === true)} className="mt-0.5" />
-                <span className="text-xs text-slate-700 leading-snug">
+                <span className="text-xs text-foreground/80 leading-snug">
                   I acknowledge the{" "}
-                  <a href="https://novaracleaning.com/disclaimer" target="_blank" rel="noopener noreferrer" className="text-violet-700 underline font-medium">
+                  <a href="https://novaracleaning.com/disclaimer" target="_blank" rel="noopener noreferrer" className="text-primary underline font-medium">
                     Disclaimer
                   </a>.
                 </span>
@@ -537,7 +541,7 @@ export default function PayPage() {
             </div>
 
             <div className="space-y-2">
-              <Label className="text-xs text-slate-600">Your full legal name</Label>
+              <Label className="text-xs text-muted-foreground">Your full legal name</Label>
               <Input
                 value={legalName}
                 onChange={(e) => setLegalName(e.target.value)}
@@ -547,14 +551,14 @@ export default function PayPage() {
             </div>
 
             <div className="space-y-2">
-              <Label className="text-xs text-slate-600">Sign below</Label>
-              <div className="rounded-xl border border-slate-300 bg-slate-50/60 overflow-hidden">
+              <Label className="text-xs text-muted-foreground">Sign below</Label>
+              <div className="rounded-xl border border-[color:var(--hairline)] bg-brand-50/40 overflow-hidden">
                 <SignaturePad onChange={setSignatureDataUrl} />
               </div>
             </div>
 
             <Button
-              className="w-full h-12 bg-violet-600 hover:bg-violet-700 text-white font-semibold"
+              className="w-full h-12"
               disabled={!canSign || signing}
               onClick={handleSign}
             >
@@ -565,7 +569,7 @@ export default function PayPage() {
               )}
             </Button>
             {!allAccepted && (
-              <p className="text-[11px] text-slate-400 text-center">
+              <p className="text-[11px] text-muted-foreground text-center">
                 All three boxes must be checked — and your signature added — before payment unlocks.
               </p>
             )}
@@ -573,11 +577,11 @@ export default function PayPage() {
           </>
         ) : (
           /* ── STEP 2: PAYMENT (only reachable after the signed agreement) ── */
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-4">
+          <div className="token-card space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <RiLockLine className="w-4 h-4 text-violet-700" />
-                <p className="text-sm font-semibold text-slate-900">Step 2 of 2 — Pay your deposit</p>
+                <RiLockLine className="w-4 h-4 text-primary" />
+                <p className="text-sm font-semibold text-foreground">Step 2 of 2 — Pay your deposit</p>
               </div>
               <span className="text-[11px] text-emerald-700 font-medium flex items-center gap-1">
                 <RiCheckboxCircleLine className="w-3.5 h-3.5" /> Agreement signed
@@ -586,8 +590,8 @@ export default function PayPage() {
 
             {intentLoading || !clientSecret || !stripePromise ? (
               <div className="py-10 text-center">
-                <RiLoader4Line className="w-7 h-7 animate-spin text-violet-600 mx-auto mb-2" />
-                <p className="text-xs text-slate-500">Preparing secure payment…</p>
+                <RiLoader4Line className="w-7 h-7 animate-spin text-primary mx-auto mb-2" />
+                <p className="text-xs text-muted-foreground">Preparing secure payment…</p>
               </div>
             ) : (
               <Elements stripe={stripePromise} options={{ clientSecret }}>
@@ -610,7 +614,7 @@ export default function PayPage() {
                 />
               </Elements>
             )}
-            <p className="text-[11px] text-slate-400 text-center leading-snug">
+            <p className="text-[11px] text-muted-foreground text-center leading-snug">
               Paying saves your card securely with Stripe so we can authorize the remaining{" "}
               {money(summary.remainingCents)} before service and charge it only after your clean is done.
             </p>
@@ -619,7 +623,7 @@ export default function PayPage() {
           </>
         )}
 
-        <p className="text-center text-[11px] text-slate-400">
+        <p className="text-center text-[11px] text-muted-foreground">
           Questions? Call <a href="tel:+18447352070" className="underline">(844) 735-2070</a> — Novara Cleaning
         </p>
       </div>

@@ -2,7 +2,7 @@
 
 export function BookingFooter() {
   return (
-    <footer className="mt-auto py-6 px-4 border-t border-border/40 bg-background/60 hairline-glow">
+    <footer className="mt-auto py-6 px-4 border-t border-[color:var(--hairline)] bg-background/60 hairline-glow">
       <div className="container max-w-4xl mx-auto">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
           <div className="flex flex-wrap items-center justify-center gap-4">

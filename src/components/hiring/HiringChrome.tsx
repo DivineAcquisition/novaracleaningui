@@ -33,7 +33,7 @@ export function HiringMotionStyle() {
 
 export function HiringNav({ ctaHref = "#positions" }: { ctaHref?: string }) {
   return (
-    <header className="sticky top-0 z-40 border-b border-border/80 bg-background/85 backdrop-blur-xl hairline-glow">
+    <header className="sticky top-0 z-40 border-b border-[color:var(--hairline)] bg-background/85 backdrop-blur-xl hairline-glow">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:px-6">
         <Link
           href="/hiring"
@@ -54,7 +54,7 @@ export function HiringNav({ ctaHref = "#positions" }: { ctaHref?: string }) {
           </Link>
           <a
             href={ctaHref}
-            className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-[13px] font-semibold text-white shadow-[0_10px_28px_-12px_rgba(92,15,254,0.55)] transition hover:opacity-95"
+            className="btn-coss btn-trail inline-flex items-center gap-1.5 rounded-full border border-white/20 px-4 py-2 text-[13px] font-semibold text-white shadow-[0_10px_28px_-12px_rgba(92,15,254,0.55)] transition hover:opacity-95"
             style={{ background: HIRING_GRADIENT }}
           >
             Open roles

@@ -94,8 +94,8 @@ function Shell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-background px-4 py-8">
       <div className="mx-auto w-full max-w-2xl space-y-4">
         <div className="text-center">
-          <p className="text-sm font-semibold tracking-tight text-slate-900">Novara Cleaning</p>
-          <p className="text-xs text-slate-500">Commercial Cleaning Services Agreement</p>
+          <p className="text-sm font-semibold tracking-tight text-foreground">Novara Cleaning</p>
+          <p className="text-xs text-muted-foreground">Commercial Cleaning Services Agreement</p>
         </div>
         {children}
       </div>
@@ -105,7 +105,7 @@ function Shell({ children }: { children: React.ReactNode }) {
 
 function Card({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={`rounded-2xl border border-slate-200 bg-white p-5 shadow-sm ${className || ""}`}>
+    <div className={`token-card ${className || ""}`}>
       {children}
     </div>
   );
@@ -319,7 +319,7 @@ export default function CommercialAgreementSign() {
         <SEO title="Service agreement" noindex />
         <Card className="text-center">
           <RiAlertLine className="mx-auto mb-3 h-8 w-8 text-amber-500" />
-          <p className="text-sm text-slate-700">{state.message}</p>
+          <p className="text-sm text-foreground/80">{state.message}</p>
         </Card>
       </Shell>
     );
@@ -335,16 +335,16 @@ export default function CommercialAgreementSign() {
         <SEO title="All set" noindex />
         <Card className="text-center">
           <RiCheckboxCircleFill className="mx-auto mb-3 h-9 w-9 text-emerald-500" />
-          <p className="text-base font-semibold text-slate-900">You're all set</p>
-          <p className="mt-2 text-sm text-slate-600">
+          <p className="text-base font-semibold text-foreground">You're all set</p>
+          <p className="mt-2 text-sm text-muted-foreground">
             The agreement for {business} is signed and billing is configured.
           </p>
           {billing?.summary && (
-            <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            <p className="mt-3 rounded-lg bg-brand-50 px-3 py-2 text-xs text-muted-foreground">
               {billing.summary}
             </p>
           )}
-          <p className="mt-4 text-xs text-slate-500">
+          <p className="mt-4 text-xs text-muted-foreground">
             A copy of the executed agreement and our current certificate of insurance have been
             emailed to you.
           </p>
@@ -359,36 +359,36 @@ export default function CommercialAgreementSign() {
 
       {/* Progress */}
       <div className="flex items-center gap-2 px-1 text-xs">
-        <span className={`flex items-center gap-1.5 ${signed ? "text-emerald-600" : "text-violet-600 font-medium"}`}>
-          {signed ? <RiCheckboxCircleFill className="h-4 w-4" /> : <span className="flex h-4 w-4 items-center justify-center rounded-full bg-violet-600 text-[10px] font-bold text-white">1</span>}
+        <span className={`flex items-center gap-1.5 ${signed ? "text-emerald-600" : "text-primary font-medium"}`}>
+          {signed ? <RiCheckboxCircleFill className="h-4 w-4" /> : <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-white">1</span>}
           Sign
         </span>
-        <span className="h-px flex-1 bg-slate-200" />
-        <span className={`flex items-center gap-1.5 ${signed ? "text-violet-600 font-medium" : "text-slate-400"}`}>
-          <span className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold text-white ${signed ? "bg-violet-600" : "bg-slate-300"}`}>2</span>
+        <span className="h-px flex-1 bg-[color:var(--hairline)]" />
+        <span className={`flex items-center gap-1.5 ${signed ? "text-primary font-medium" : "text-muted-foreground"}`}>
+          <span className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold text-white ${signed ? "bg-primary" : "bg-muted-foreground/40"}`}>2</span>
           Billing setup
         </span>
       </div>
 
       {/* Exhibit A — always visible, signed or not */}
       <Card>
-        <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-900">
-          <RiBuilding4Line className="h-4 w-4 text-violet-600" />
+        <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold text-foreground">
+          <RiBuilding4Line className="h-4 w-4 text-primary" />
           Exhibit A — schedule of sites and rates
         </h2>
-        <p className="mb-3 text-xs text-slate-500">
+        <p className="mb-3 text-xs text-muted-foreground">
           {TERM_LABELS[agreement.term] || titleCase(agreement.term)} ·{" "}
           {agreement.billingMethod === "auto_pay"
             ? "Auto-Pay"
             : `Invoiced ${INVOICE_CYCLE_LABELS[(agreement.invoiceCycle || "monthly") as InvoiceCycle]}, ${NET_TERMS_LABELS[(agreement.netTerms || "on_receipt") as NetTerms]}`}
         </p>
-        <div className="divide-y divide-slate-100">
+        <div className="divide-y divide-[color:var(--hairline)]">
           {sites.map((site, i) => (
             <div key={i} className="flex items-start justify-between gap-4 py-2.5">
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-slate-900">{site.nickname}</p>
-                {site.address && <p className="truncate text-xs text-slate-500">{site.address}</p>}
-                <p className="text-xs text-slate-600">
+                <p className="truncate text-sm font-medium text-foreground">{site.nickname}</p>
+                {site.address && <p className="truncate text-xs text-muted-foreground">{site.address}</p>}
+                <p className="text-xs text-muted-foreground">
                   {[
                     site.sqft ? `${site.sqft.toLocaleString()} sq ft` : null,
                     site.scope_level ? `${titleCase(site.scope_level)} scope` : null,
@@ -398,15 +398,15 @@ export default function CommercialAgreementSign() {
                     .join(" · ")}
                 </p>
               </div>
-              <p className="shrink-0 text-sm font-semibold text-slate-900">
+              <p className="shrink-0 text-sm font-semibold text-foreground">
                 {money(site.per_visit_price_cents)}
               </p>
             </div>
           ))}
         </div>
-        <div className="mt-3 flex items-center justify-between border-t border-slate-200 pt-3">
-          <p className="text-sm font-medium text-slate-700">Total per visit</p>
-          <p className="text-base font-semibold text-violet-700">
+        <div className="mt-3 flex items-center justify-between border-t border-[color:var(--hairline)] pt-3">
+          <p className="text-sm font-medium text-foreground/80">Total per visit</p>
+          <p className="text-base font-semibold text-primary">
             {money(agreement.totalPerVisitCents)}
           </p>
         </div>
@@ -415,13 +415,13 @@ export default function CommercialAgreementSign() {
       {/* Step 1 — sign */}
       {!signed && (
         <Card className="space-y-4">
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-            <RiFileTextLine className="h-4 w-4 text-violet-600" />
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <RiFileTextLine className="h-4 w-4 text-primary" />
             Sign the agreement
           </h2>
 
-          <div className="max-h-56 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs leading-relaxed text-slate-700">
-            <p className="mb-2 font-semibold text-slate-900">Commercial Cleaning Services Agreement</p>
+          <div className="max-h-56 overflow-y-auto rounded-lg border border-[color:var(--hairline)] bg-brand-50/50 p-3 text-xs leading-relaxed text-foreground/80">
+            <p className="mb-2 font-semibold text-foreground">Commercial Cleaning Services Agreement</p>
             <p className="mb-2">
               NovaraCleaning LLC ("Company") will provide commercial janitorial services at each
               location listed in Exhibit A above, at the scope level and frequency stated there.
@@ -481,7 +481,7 @@ export default function CommercialAgreementSign() {
               onChange={(e) => setAgreed(e.target.checked)}
               className="mt-0.5 h-4 w-4 rounded border-slate-300"
             />
-            <span className="text-sm text-slate-700">
+            <span className="text-sm text-foreground/80">
               I have read and agree to the Commercial Cleaning Services Agreement, including the
               schedule of sites and rates in Exhibit A, and I am authorized to sign for{" "}
               {business}.
@@ -505,15 +505,15 @@ export default function CommercialAgreementSign() {
       {signed && (
         <Card className="space-y-4">
           <div>
-            <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
               {agreement.billingMethod === "auto_pay" ? (
-                <RiBankCardLine className="h-4 w-4 text-violet-600" />
+                <RiBankCardLine className="h-4 w-4 text-primary" />
               ) : (
-                <RiMailLine className="h-4 w-4 text-violet-600" />
+                <RiMailLine className="h-4 w-4 text-primary" />
               )}
               {agreement.billingMethod === "auto_pay" ? "Set up Auto-Pay" : "Confirm invoicing"}
             </h2>
-            <p className="mt-1 text-xs text-slate-600">
+            <p className="mt-1 text-xs text-muted-foreground">
               {agreement.billingMethod === "auto_pay"
                 ? "Save a card or bank account for automatic payment. Nothing is charged now."
                 : "Confirm where invoices go and on what terms. No payment details are collected."}
@@ -589,7 +589,7 @@ export default function CommercialAgreementSign() {
         </Card>
       )}
 
-      <p className="pb-4 text-center text-xs text-slate-400">
+      <p className="pb-4 text-center text-xs text-muted-foreground">
         NovaraCleaning LLC · A copy of the executed agreement is emailed to you.
       </p>
     </Shell>

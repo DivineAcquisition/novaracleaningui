@@ -79,8 +79,8 @@ function Shell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-background px-4 py-8">
       <div className="mx-auto w-full max-w-3xl space-y-4">
         <div className="text-center">
-          <p className="text-sm font-semibold tracking-tight text-slate-900">Novara Cleaning</p>
-          <p className="text-xs text-slate-500">Commercial service proposal</p>
+          <p className="text-sm font-semibold tracking-tight text-foreground">Novara Cleaning</p>
+          <p className="text-xs text-muted-foreground">Commercial service proposal</p>
         </div>
         {children}
       </div>
@@ -90,7 +90,7 @@ function Shell({ children }: { children: React.ReactNode }) {
 
 function Card({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={`rounded-2xl border border-slate-200 bg-white p-5 shadow-sm ${className || ""}`}>
+    <div className={`token-card ${className || ""}`}>
       {children}
     </div>
   );
@@ -206,7 +206,7 @@ export default function ProposalPage() {
         <SEO title="Commercial proposal" noindex />
         <Card className="text-center">
           <RiAlertLine className="mx-auto mb-3 h-8 w-8 text-amber-500" />
-          <p className="text-sm text-slate-700">{state.message}</p>
+          <p className="text-sm text-foreground/80">{state.message}</p>
         </Card>
       </Shell>
     );
@@ -218,8 +218,8 @@ export default function ProposalPage() {
         <SEO title="Changes requested" noindex />
         <Card className="text-center">
           <RiCheckboxCircleFill className="mx-auto mb-3 h-9 w-9 text-emerald-500" />
-          <p className="text-base font-semibold text-slate-900">Thanks — we're on it</p>
-          <p className="mt-2 text-sm text-slate-600">{state.message}</p>
+          <p className="text-base font-semibold text-foreground">Thanks — we're on it</p>
+          <p className="mt-2 text-sm text-muted-foreground">{state.message}</p>
         </Card>
       </Shell>
     );
@@ -231,8 +231,8 @@ export default function ProposalPage() {
         <SEO title="Proposal accepted" noindex />
         <Card className="text-center">
           <RiCheckboxCircleFill className="mx-auto mb-3 h-9 w-9 text-emerald-500" />
-          <p className="text-base font-semibold text-slate-900">Proposal accepted</p>
-          <p className="mt-2 text-sm text-slate-600">{state.message}</p>
+          <p className="text-base font-semibold text-foreground">Proposal accepted</p>
+          <p className="mt-2 text-sm text-muted-foreground">{state.message}</p>
           {state.agreementUrl && (
             <Button className="mt-5" onClick={() => { window.location.href = state.agreementUrl!; }}>
               Review and sign the agreement
@@ -252,7 +252,7 @@ export default function ProposalPage() {
       <SEO title={`Cleaning proposal — ${business}`} noindex />
 
       {/* Headline */}
-      <div className="rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600 p-6 text-white shadow-sm">
+      <div className="token-hero p-6">
         <p className="text-xs font-medium uppercase tracking-wide text-white/70">
           Proposal v{proposal.version}
           {proposal.expiresAt ? ` · open until ${longDate(proposal.expiresAt)}` : ""}
@@ -278,26 +278,26 @@ export default function ProposalPage() {
 
       {proposal.coverNote && (
         <Card>
-          <p className="whitespace-pre-wrap text-sm text-slate-700">{proposal.coverNote}</p>
+          <p className="whitespace-pre-wrap text-sm text-foreground/80">{proposal.coverNote}</p>
           {proposal.preparedBy && (
-            <p className="mt-3 text-xs text-slate-500">— {proposal.preparedBy}, Novara Cleaning</p>
+            <p className="mt-3 text-xs text-muted-foreground">— {proposal.preparedBy}, Novara Cleaning</p>
           )}
         </Card>
       )}
 
       {/* The schedule */}
       <Card>
-        <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-900">
-          <RiBuilding4Line className="h-4 w-4 text-violet-600" />
+        <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
+          <RiBuilding4Line className="h-4 w-4 text-primary" />
           Locations and rates
         </h2>
         <div className="divide-y divide-slate-100">
           {sites.map((site, i) => (
             <div key={site.id || i} className="flex items-start justify-between gap-4 py-3">
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-slate-900">{site.nickname}</p>
-                {site.address && <p className="truncate text-xs text-slate-500">{site.address}</p>}
-                <p className="mt-1 text-xs text-slate-600">
+                <p className="truncate text-sm font-medium text-foreground">{site.nickname}</p>
+                {site.address && <p className="truncate text-xs text-muted-foreground">{site.address}</p>}
+                <p className="mt-1 text-xs text-muted-foreground">
                   {[
                     site.sqft ? `${site.sqft.toLocaleString()} sq ft` : null,
                     site.facility_type ? titleCase(site.facility_type) : null,
@@ -310,10 +310,10 @@ export default function ProposalPage() {
                 </p>
               </div>
               <div className="shrink-0 text-right">
-                <p className="text-sm font-semibold text-slate-900">
+                <p className="text-sm font-semibold text-foreground">
                   {money(site.per_visit_price_cents)}
                 </p>
-                <p className="text-xs text-slate-500">per visit</p>
+                <p className="text-xs text-muted-foreground">per visit</p>
               </div>
             </div>
           ))}
@@ -322,17 +322,17 @@ export default function ProposalPage() {
 
       {/* Terms on offer */}
       <Card>
-        <h2 className="mb-3 text-sm font-semibold text-slate-900">Proposed terms</h2>
+        <h2 className="mb-3 text-sm font-semibold text-foreground">Proposed terms</h2>
         <dl className="grid gap-3 sm:grid-cols-2">
           <div>
-            <dt className="text-xs text-slate-500">Term</dt>
-            <dd className="text-sm text-slate-900">
+            <dt className="text-xs text-muted-foreground">Term</dt>
+            <dd className="text-sm text-foreground">
               {TERM_LABELS[proposal.term] || titleCase(proposal.term)}
             </dd>
           </div>
           <div>
-            <dt className="text-xs text-slate-500">Billing</dt>
-            <dd className="text-sm text-slate-900">
+            <dt className="text-xs text-muted-foreground">Billing</dt>
+            <dd className="text-sm text-foreground">
               {BILLING_METHOD_LABELS[proposal.billingMethod]}
               {proposal.billingMethod === "invoiced" && proposal.netTerms
                 ? ` — ${INVOICE_CYCLE_LABELS[(proposal.invoiceCycle || "monthly") as InvoiceCycle]}, ${
@@ -342,7 +342,7 @@ export default function ProposalPage() {
             </dd>
           </div>
         </dl>
-        <p className="mt-4 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+        <p className="mt-4 rounded-lg bg-brand-50 px-3 py-2 text-xs text-muted-foreground">
           This proposal is an agreement in principle — nothing to sign here, and no payment details
           requested. If you accept, we'll send the service agreement pre-filled with exactly what's
           above.
@@ -351,8 +351,8 @@ export default function ProposalPage() {
 
       {/* Why us */}
       <Card>
-        <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-900">
-          <RiShieldCheckLine className="h-4 w-4 text-violet-600" />
+        <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
+          <RiShieldCheckLine className="h-4 w-4 text-primary" />
           What's included
         </h2>
         <div className="space-y-3">
@@ -360,8 +360,8 @@ export default function ProposalPage() {
             <div key={item.title} className="flex gap-2.5">
               <RiCheckLine className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
               <div>
-                <p className="text-sm font-medium text-slate-900">{item.title}</p>
-                <p className="text-xs leading-relaxed text-slate-600">{item.detail}</p>
+                <p className="text-sm font-medium text-foreground">{item.title}</p>
+                <p className="text-xs leading-relaxed text-muted-foreground">{item.detail}</p>
               </div>
             </div>
           ))}
@@ -371,7 +371,7 @@ export default function ProposalPage() {
       {/* The only two actions on this page */}
       {mode === "review" && (
         <Card className="space-y-3">
-          <p className="text-sm font-semibold text-slate-900">Ready to move forward?</p>
+          <p className="text-sm font-semibold text-foreground">Ready to move forward?</p>
           <div className="flex flex-col gap-2 sm:flex-row">
             <Button className="flex-1" onClick={() => setMode("accept")}>
               <RiCheckLine className="mr-1.5 h-4 w-4" />
@@ -388,8 +388,8 @@ export default function ProposalPage() {
       {mode === "accept" && (
         <Card className="space-y-4">
           <div>
-            <p className="text-sm font-semibold text-slate-900">Accept this proposal</p>
-            <p className="mt-1 text-xs text-slate-600">
+            <p className="text-sm font-semibold text-foreground">Accept this proposal</p>
+            <p className="mt-1 text-xs text-muted-foreground">
               This records your agreement in principle. The service agreement follows for signature.
             </p>
           </div>
@@ -423,11 +423,11 @@ export default function ProposalPage() {
                     className={`rounded-lg border px-3 py-2.5 text-left transition ${
                       billingChoice === m
                         ? "border-violet-500 bg-violet-50"
-                        : "border-slate-200 hover:border-slate-300"
+                        : "border-[color:var(--hairline)] hover:border-primary/30"
                     }`}
                   >
-                    <p className="text-sm font-medium text-slate-900">{BILLING_METHOD_LABELS[m]}</p>
-                    <p className="text-xs text-slate-600">
+                    <p className="text-sm font-medium text-foreground">{BILLING_METHOD_LABELS[m]}</p>
+                    <p className="text-xs text-muted-foreground">
                       {m === "invoiced"
                         ? "We invoice your billing contact on Net terms."
                         : "Card or bank account on file, charged automatically."}
@@ -438,7 +438,7 @@ export default function ProposalPage() {
             </div>
           )}
 
-          <div className="rounded-lg border border-slate-200 p-3">
+          <div className="rounded-lg border border-[color:var(--hairline)] p-3">
             <label className="flex cursor-pointer items-start gap-2.5">
               <input
                 type="checkbox"
@@ -446,7 +446,7 @@ export default function ProposalPage() {
                 onChange={(e) => setDifferentSigner(e.target.checked)}
                 className="mt-0.5 h-4 w-4 rounded border-slate-300"
               />
-              <span className="text-sm text-slate-700">
+              <span className="text-sm text-foreground/80">
                 Someone else signs our contracts
               </span>
             </label>
@@ -489,8 +489,8 @@ export default function ProposalPage() {
       {mode === "changes" && (
         <Card className="space-y-4">
           <div>
-            <p className="text-sm font-semibold text-slate-900">What would you like changed?</p>
-            <p className="mt-1 text-xs text-slate-600">
+            <p className="text-sm font-semibold text-foreground">What would you like changed?</p>
+            <p className="mt-1 text-xs text-muted-foreground">
               This goes straight to your account manager. We'll send a revised proposal — the current
               version stays on file.
             </p>
@@ -529,7 +529,7 @@ export default function ProposalPage() {
         </Card>
       )}
 
-      <p className="pb-4 text-center text-xs text-slate-400">
+      <p className="pb-4 text-center text-xs text-muted-foreground">
         NovaraCleaning LLC · Questions? Reply to the email this link came from.
       </p>
     </Shell>

@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BrandAtmosphere } from "@/components/brand/atmosphere";
 import { supabase } from "@/integrations/supabase/client";
 
 const TIP_PRESETS = [500, 1000, 2000, 3000, 5000];
@@ -112,7 +113,7 @@ export default function TipInvite({ token }: { token: string }) {
     return (
       <Shell>
         <div className="text-center py-16">
-          <RiLoader4Line className="w-8 h-8 animate-spin text-violet-500 mx-auto" />
+          <RiLoader4Line className="w-8 h-8 animate-spin text-primary mx-auto" />
         </div>
       </Shell>
     );
@@ -122,18 +123,18 @@ export default function TipInvite({ token }: { token: string }) {
     const expired = meta?.error === "expired";
     return (
       <Shell>
-        <div className="rounded-3xl bg-white shadow-xl shadow-violet-100 ring-1 ring-slate-100 p-8 text-center space-y-3">
+        <div className="rounded-3xl token-card p-8 text-center space-y-3">
           {expired ? (
             <RiTimeLine className="w-10 h-10 text-amber-500 mx-auto" />
           ) : (
             <RiErrorWarningLine className="w-10 h-10 text-amber-500 mx-auto" />
           )}
-          <h1 className="text-xl font-bold text-slate-900">
+          <h1 className="text-xl font-bold text-foreground">
             {expired ? "This link has expired" : "Link not found"}
           </h1>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-muted-foreground">
             Need help tipping your crew? Email{" "}
-            <a className="text-violet-600 underline" href="mailto:hello@novaracleaning.com">
+            <a className="text-primary underline" href="mailto:hello@novaracleaning.com">
               hello@novaracleaning.com
             </a>
             .
@@ -148,13 +149,13 @@ export default function TipInvite({ token }: { token: string }) {
 
   return (
     <Shell>
-      <div className="rounded-3xl bg-white shadow-xl shadow-violet-100 ring-1 ring-slate-100 p-6 sm:p-8 space-y-6">
+      <div className="rounded-3xl token-card p-6 sm:p-8 space-y-6">
         <div className="text-center space-y-2">
-          <div className="w-14 h-14 rounded-2xl bg-violet-100 flex items-center justify-center mx-auto">
-            <RiHeart3Fill className="w-8 h-8 text-violet-600" />
+          <div className="w-14 h-14 rounded-2xl bg-brand-50 flex items-center justify-center mx-auto">
+            <RiHeart3Fill className="w-8 h-8 text-primary" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-900">Hi {firstName} — tip your {crewLabel}</h1>
-          <p className="text-sm text-slate-600 max-w-md mx-auto">
+          <h1 className="text-2xl font-bold text-foreground">Hi {firstName} — tip your {crewLabel}</h1>
+          <p className="text-sm text-muted-foreground max-w-md mx-auto">
             100% of your tip goes to{" "}
             {crew.length > 1
               ? "your cleaning crew, split equally unless you pick someone"
@@ -162,7 +163,7 @@ export default function TipInvite({ token }: { token: string }) {
             . Novara takes nothing.
           </p>
           {(meta.bookingRef || meta.serviceDate || meta.city) && (
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-muted-foreground">
               {[meta.bookingRef, meta.serviceLabel, meta.serviceDate, meta.city].filter(Boolean).join(" · ")}
             </p>
           )}
@@ -177,10 +178,10 @@ export default function TipInvite({ token }: { token: string }) {
                 setTipAmount(cents);
                 setCustomTip("");
               }}
-              className={`rounded-xl border-2 py-3 font-bold text-lg transition-colors ${
+              className={`choice-chip py-3 font-bold text-lg ${
                 tipAmount === cents
-                  ? "border-violet-600 bg-violet-50 text-violet-700"
-                  : "border-slate-200 text-slate-700 hover:border-violet-300"
+                  ? "choice-chip-active"
+                  : ""
               }`}
             >
               ${cents / 100}
@@ -214,8 +215,8 @@ export default function TipInvite({ token }: { token: string }) {
                 onClick={() => setDirectedCleanerId("")}
                 className={`rounded-full border px-3 py-1.5 text-sm ${
                   !directedCleanerId
-                    ? "border-violet-600 bg-violet-50 text-violet-700 font-semibold"
-                    : "border-slate-200 text-slate-600"
+                    ? "choice-chip-active border-primary/50"
+                    : "border-border text-muted-foreground"
                 }`}
               >
                 Split across the crew
@@ -227,8 +228,8 @@ export default function TipInvite({ token }: { token: string }) {
                   onClick={() => setDirectedCleanerId(c.id)}
                   className={`rounded-full border px-3 py-1.5 text-sm ${
                     directedCleanerId === c.id
-                      ? "border-violet-600 bg-violet-50 text-violet-700 font-semibold"
-                      : "border-slate-200 text-slate-600"
+                      ? "choice-chip-active border-primary/50"
+                      : "border-border text-muted-foreground"
                   }`}
                 >
                   {c.name}
@@ -251,8 +252,9 @@ export default function TipInvite({ token }: { token: string }) {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-brand-50 to-background flex items-center justify-center p-6">
-      <div className="w-full max-w-md">{children}</div>
+    <div className="relative min-h-screen bg-background flex items-center justify-center p-6">
+      <BrandAtmosphere />
+      <div className="relative z-10 w-full max-w-md">{children}</div>
     </div>
   );
 }

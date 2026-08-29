@@ -635,7 +635,7 @@ export default function BookingSuccess() {
   if (isValidating || isVerifyingPayment) {
     return (
       <div className="min-h-screen bg-gradient-hero px-3 md:px-4 py-8 md:py-12 flex items-center justify-center">
-        <Card variant="outlined" className="max-w-md w-full shadow-card">
+        <Card className="max-w-md w-full">
           <CardContent className="pt-8 pb-8 text-center space-y-4">
             <RiLoader4Line className="w-12 h-12 text-primary animate-spin mx-auto" />
             <h2 className="text-xl font-bold">
@@ -912,7 +912,7 @@ export default function BookingSuccess() {
                   <Button
                     onClick={handleOpenPortal}
                     disabled={isOpeningPortal}
-                    className="w-full h-12 text-sm md:text-base bg-gradient-primary shadow-elegant"
+                    className="w-full h-12 text-sm md:text-base"
                   >
                     <RiSettings3Line className="w-4 h-4 mr-2" />
                     {isOpeningPortal ? 'Opening...' : 'Open Customer Portal'}
@@ -940,7 +940,7 @@ export default function BookingSuccess() {
                     </div>
                     <Button
                       onClick={() => router.push('/auth')}
-                      className="w-full h-12 text-sm md:text-base bg-gradient-primary shadow-elegant"
+                      className="w-full h-12 text-sm md:text-base"
                     >
                       <RiUserAddLine className="w-4 h-4 mr-2" />
                       Create Account
@@ -1001,7 +1001,7 @@ export default function BookingSuccess() {
               {/* Desktop Button */}
               <Button
                 size="lg"
-                className="hidden md:flex mx-auto h-14 px-8 text-base font-semibold bg-gradient-primary shadow-neon"
+                className="hidden md:flex mx-auto h-14 px-8 text-base font-semibold"
                 onClick={handleReturnHome}
               >
                 <RiHomeLine className="mr-2 w-5 h-5" />
@@ -1016,7 +1016,7 @@ export default function BookingSuccess() {
       <div className="fixed bottom-0 left-0 right-0 md:hidden bg-background border-t border-border shadow-xl z-50 p-4 animate-slide-up">
         <Button
           size="lg"
-          className="w-full h-14 text-base font-semibold bg-gradient-primary shadow-neon"
+          className="w-full h-14 text-base font-semibold"
           onClick={handleReturnHome}
         >
           <RiHomeLine className="mr-2 w-5 h-5" />

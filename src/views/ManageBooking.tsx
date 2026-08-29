@@ -313,7 +313,7 @@ export default function ManageBooking() {
 
                   <Button
                     type="submit"
-                    className="w-full h-11 bg-gradient-primary"
+                    className="w-full h-11"
                     disabled={isSearching}
                   >
                     {isSearching ? (

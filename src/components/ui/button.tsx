@@ -12,17 +12,17 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "bg-gradient-primary text-white shadow-[0_4px_14px_-3px_rgba(92,15,254,0.45)] hover:shadow-[0_8px_22px_-4px_rgba(92,15,254,0.55)] hover:-translate-y-px active:translate-y-0 active:shadow-[0_2px_8px_-3px_rgba(92,15,254,0.4)]",
+          "btn-coss btn-trail border border-white/20 bg-gradient-primary text-white shadow-[0_4px_14px_-3px_rgba(92,15,254,0.45)] hover:shadow-[0_8px_22px_-4px_rgba(92,15,254,0.55)] active:shadow-[0_2px_8px_-3px_rgba(92,15,254,0.4)]",
         destructive:
-          "bg-destructive text-destructive-foreground shadow-[0_4px_14px_-3px_hsl(0_84%_60%/0.45)] hover:shadow-[0_8px_22px_-4px_hsl(0_84%_60%/0.55)] hover:-translate-y-px active:translate-y-0",
+          "btn-coss btn-trail border border-white/20 bg-destructive text-destructive-foreground shadow-[0_4px_14px_-3px_hsl(0_84%_60%/0.45)] hover:shadow-[0_8px_22px_-4px_hsl(0_84%_60%/0.55)]",
         outline:
-          "border border-border bg-background shadow-sm hover:bg-brand-50 hover:border-primary/40 hover:text-primary active:bg-brand-100",
+          "btn-coss border border-border bg-background shadow-sm hover:bg-brand-50 hover:border-primary/40 hover:text-primary active:bg-brand-100",
         secondary:
-          "bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/70 active:bg-secondary/80",
+          "btn-coss border border-transparent bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/70 active:bg-secondary/80",
         ghost: "hover:bg-brand-50 hover:text-foreground",
         link: "text-primary underline-offset-4 hover:underline hover:text-primary-hover",
         success:
-          "bg-success text-white shadow-[0_4px_14px_-3px_hsl(142_76%_32%/0.45)] hover:shadow-[0_8px_22px_-4px_hsl(142_76%_32%/0.55)] hover:-translate-y-px active:translate-y-0",
+          "btn-coss btn-trail border border-white/20 bg-success text-white shadow-[0_4px_14px_-3px_hsl(142_76%_32%/0.45)] hover:shadow-[0_8px_22px_-4px_hsl(142_76%_32%/0.55)]",
       },
       size: {
         default: "h-10 px-5 py-2",
