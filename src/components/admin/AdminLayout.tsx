@@ -43,6 +43,7 @@ import {
   RiFileList3Line,
   RiPriceTag3Line,
   RiRefreshLine,
+  RiMailSendLine,
 } from "@remixicon/react";
 import { ReactNode, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
@@ -104,6 +105,12 @@ const NAV_ITEMS: NavItem[] = [
     url: "/admin/csr",
     icon: RiFileEditLine,
     description: "VA booking submission",
+  },
+  {
+    title: "Proposals",
+    url: "/admin/proposals",
+    icon: RiMailSendLine,
+    description: "STR · commercial · office walkthrough quotes",
   },
   {
     title: "Quotes",

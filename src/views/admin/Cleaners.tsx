@@ -95,6 +95,7 @@ interface CleanerRow {
   status: string | null;
   approved: boolean | null;
   available_for_bookings: boolean | null;
+  walkthrough_eligible?: boolean | null;
   home_zip: string | null;
   state: string | null;
   pay_tier: string | null;
@@ -202,7 +203,7 @@ export default function AdminCleaners() {
     const { data, error } = await supabase
       .from("cleaners")
       .select(
-        "id,user_id,first_name,last_name,email,phone,status,approved,available_for_bookings,home_zip,state,pay_tier,pay_percentage,completed_bookings,total_bookings,acceptance_rate,on_time_rate,average_rating,weighted_score,workload_score,novara_score,quality_score,overall_score,scores_computed_at,constraints,jobs_assigned_last_7d,onboarding_complete,phone_verified,ob_payouts_setup,ob_agreement_signed,ob_agreement_signed_at,payouts_enabled,stripe_account_id,home_address,home_city,home_zip,service_zip_codes,max_travel_miles,preferred_work_days,skillset,ghl_synced_at,ghl_sync_error,created_at,activated_at,rehire_status,termination_reason,terminated_at",
+        "id,user_id,first_name,last_name,email,phone,status,approved,available_for_bookings,walkthrough_eligible,home_zip,state,pay_tier,pay_percentage,completed_bookings,total_bookings,acceptance_rate,on_time_rate,average_rating,weighted_score,workload_score,novara_score,quality_score,overall_score,scores_computed_at,constraints,jobs_assigned_last_7d,onboarding_complete,phone_verified,ob_payouts_setup,ob_agreement_signed,ob_agreement_signed_at,payouts_enabled,stripe_account_id,home_address,home_city,home_zip,service_zip_codes,max_travel_miles,preferred_work_days,skillset,ghl_synced_at,ghl_sync_error,created_at,activated_at,rehire_status,termination_reason,terminated_at",
       )
       .order("created_at", { ascending: false })
       .limit(500);
@@ -1674,15 +1675,17 @@ function ActionsBlock({
     Boolean(cleaner.available_for_bookings),
   );
   const [approved, setApproved] = useState(Boolean(cleaner.approved));
+  const [walkthroughEligible, setWalkthroughEligible] = useState(Boolean(cleaner.walkthrough_eligible));
   const [skipCompliance, setSkipCompliance] = useState(false);
 
   useEffect(() => {
     setStatusDraft((cleaner.status || "pending").toLowerCase());
     setAvailableForBookings(Boolean(cleaner.available_for_bookings));
     setApproved(Boolean(cleaner.approved));
+    setWalkthroughEligible(Boolean(cleaner.walkthrough_eligible));
     setStatusReason("");
     setSkipCompliance(false);
-  }, [cleaner.id, cleaner.status, cleaner.available_for_bookings, cleaner.approved]);
+  }, [cleaner.id, cleaner.status, cleaner.available_for_bookings, cleaner.approved, cleaner.walkthrough_eligible]);
 
   const applyStatus = () => {
     if (statusDraft === s) {
@@ -1811,6 +1814,31 @@ function ActionsBlock({
               className="rounded border-slate-300"
             />
             <span className="text-slate-700">Available for bookings</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={walkthroughEligible}
+              onChange={(e) => {
+                const next = e.target.checked;
+                setWalkthroughEligible(next);
+                void (async () => {
+                  const { error } = await supabase.functions.invoke("admin-update-cleaner", {
+                    body: { cleanerId: cleaner.id, fields: { walkthrough_eligible: next } },
+                  });
+                  if (error) {
+                    setWalkthroughEligible(!next);
+                    toast.error(error.message);
+                  } else {
+                    toast.success(next ? "Flagged walkthrough-eligible" : "Removed walkthrough eligibility");
+                    onRefresh();
+                  }
+                })();
+              }}
+              disabled={actioning}
+              className="rounded border-slate-300"
+            />
+            <span className="text-slate-700">Walkthrough eligible</span>
           </label>
           <label className="flex items-center gap-2 cursor-pointer">
             <input

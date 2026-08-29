@@ -71,7 +71,7 @@ serve(async (req) => {
     const { data: upcoming } = await admin
       .from("commercial_walkthroughs")
       .select("id, business_site_id, scheduled_at, conducted_by, conductor_phone, conductor_email, " +
-              "access_contact_name, access_contact_phone, site_address, client_access_confirmed")
+              "access_contact_name, access_contact_phone, site_address, client_access_confirmed, assignment_token")
       .eq("status", "scheduled")
       .is("reminder_sent_at", null)
       .not("scheduled_at", "is", null)
@@ -92,14 +92,18 @@ serve(async (req) => {
 
       // The person walking the building.
       if (wt.conductor_phone) {
+        const tokenLink = wt.assignment_token
+          ? ` Checklist: https://contractor.novaracleaning.com/cleaner/walkthrough/${wt.assignment_token}`
+          : "";
         await sendSms(admin, {
           toPhone: String(wt.conductor_phone),
           message:
             `Novara: walkthrough reminder — ${label}, ${when}. ${wt.site_address || ""}. ` +
             `Access contact: ${wt.access_contact_name || "not named"}` +
             `${wt.access_contact_phone ? ` ${wt.access_contact_phone}` : ""}. ` +
-            `Bring the findings form — confirmed sqft, condition, counts, window, equipment, and photos are all required.`,
-          type: "walkthrough_reminder",
+            `Bring the findings form — confirmed sqft, condition, counts, window, equipment, and photos are all required.` +
+            tokenLink,
+          type: "reminder",
         }).catch(() => false);
       }
 

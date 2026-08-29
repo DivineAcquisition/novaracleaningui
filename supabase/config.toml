@@ -425,6 +425,10 @@ verify_jwt = false
 [functions.qc-drive-mirror]
 verify_jwt = false
 
+# Tokenized walkthrough findings → per-site dated Drive folder (best-effort).
+[functions.walkthrough-drive-mirror]
+verify_jwt = false
+
 [functions.qc-retention-purge]
 verify_jwt = false
 

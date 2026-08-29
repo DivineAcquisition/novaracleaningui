@@ -45,6 +45,7 @@ async function ensureAdminOrVa(admin: SB, req: Request): Promise<string> {
 
 const TEXT_FIELDS = ["first_name", "last_name", "email", "phone", "home_address", "home_city", "state", "home_zip"] as const;
 const ARRAY_FIELDS = ["service_zip_codes", "preferred_work_days", "skillset"] as const;
+const BOOL_FIELDS = ["walkthrough_eligible"] as const;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -78,6 +79,9 @@ serve(async (req) => {
           : String(fields[f] ?? "").split(",").map((x) => x.trim()).filter(Boolean);
         patch[f] = arr;
       }
+    }
+    for (const f of BOOL_FIELDS) {
+      if (f in fields) patch[f] = Boolean(fields[f]);
     }
     if ("max_travel_miles" in fields) {
       const n = parseInt(String(fields.max_travel_miles ?? ""), 10);

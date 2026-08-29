@@ -318,7 +318,18 @@ export default function CommercialHub() {
             {showAirtableConsole && <PartnerAccounts />}
           </div>
         )}
-        {tab === "walkthroughs" && <CommercialWalkthroughs />}
+        {tab === "walkthroughs" && (
+          <div className="space-y-3">
+            <p className="text-xs text-slate-500 rounded-lg border border-violet-100 bg-violet-50/60 px-3 py-2">
+              New STR / commercial / office quote requests start in{" "}
+              <a href="/admin/proposals" className="font-semibold text-violet-800 underline-offset-2 hover:underline">
+                Proposals
+              </a>
+              {" "}— that tab is the front door. This board is the pipeline after a request exists (schedule → findings → firm price).
+            </p>
+            <CommercialWalkthroughs />
+          </div>
+        )}
         {tab === "send" && <CommercialProposalSend initialAccountId={accountFromUrl} />}
         {tab === "pipeline" && <CommercialProposals />}
         {tab === "book" && <PartnershipBooking />}
