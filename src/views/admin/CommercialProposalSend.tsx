@@ -128,8 +128,12 @@ function dollarsToCents(raw: string): number | null {
 
 export default function CommercialProposalSend({
   initialAccountId = "",
+  inProposalsHub = false,
+  walkthroughsHref,
 }: {
   initialAccountId?: string;
+  inProposalsHub?: boolean;
+  walkthroughsHref?: string;
 }) {
   const [deals, setDeals] = useState<Deal[]>([]);
   const [loadingList, setLoadingList] = useState(true);
@@ -419,7 +423,7 @@ export default function CommercialProposalSend({
       <header className="mb-6">
         <div className="flex items-center gap-2 mb-1.5">
           <span className="text-[10px] font-bold tracking-[0.12em] uppercase text-violet-700/80 bg-violet-50 border border-violet-200/70 rounded-full px-2 py-0.5">
-            Workspace · Commercial
+            Workspace · {inProposalsHub ? "Proposals" : "Commercial"}
           </span>
         </div>
         <h2 className="font-jakarta text-[22px] leading-tight font-bold tracking-tight text-slate-900">
@@ -428,7 +432,7 @@ export default function CommercialProposalSend({
         <p className="text-sm text-slate-500 mt-1 max-w-2xl">
           Same motion as Internal Booking: pick the account, confirm the priced sites, set terms, send a
           tokenized link. The client can accept or request changes — nothing to sign and no payment
-          details on that page.
+          details on that page. Request intake, onsite docs, and this send live together on Proposals.
         </p>
       </header>
 
@@ -515,7 +519,7 @@ export default function CommercialProposalSend({
                           ))}
                         </ul>
                         <a
-                          href={commercialTab("walkthroughs")}
+                          href={walkthroughsHref || commercialTab("walkthroughs")}
                           className="inline-flex items-center gap-1 mt-2 font-semibold underline"
                         >
                           Open walkthroughs

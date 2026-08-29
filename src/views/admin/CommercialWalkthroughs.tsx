@@ -47,6 +47,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { commercialEquipmentItems, commercialEquipmentLabel } from "@/lib/cleaner-supplies";
 import { formatCents, type CommercialQuote } from "@/lib/commercial-pricing";
+import { walkthroughStaffPath } from "@/lib/proposal-request";
 import { cn } from "@/lib/utils";
 
 const PHOTO_BUCKET = "cleaner-job-photos";
@@ -543,6 +544,16 @@ function WalkthroughSheet({ id, onClose, reload }: {
 
         <div className="mt-4 space-y-4">
           <StageStrip stage={stage} />
+
+          {wt.assignment_token ? (
+            <a
+              href={walkthroughStaffPath(String(wt.assignment_token))}
+              className="inline-flex items-center gap-1.5 text-sm font-semibold text-violet-700 hover:underline"
+            >
+              Open onsite documentation
+              <span className="text-[11px] font-normal text-slate-500">same token the walkthrough agent has — VA/admin can add to it</span>
+            </a>
+          ) : null}
 
           {stage === "excluded" ? (
             <div className="rounded-lg border-2 border-rose-300 bg-rose-50/60 p-3 space-y-1">

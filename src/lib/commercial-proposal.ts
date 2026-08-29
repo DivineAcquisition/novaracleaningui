@@ -168,7 +168,20 @@ export const TERM_OPTIONS: Array<{ id: "month_to_month" | "annual"; label: strin
 /** Canonical Commercial hub — old /admin/partner bookmarks redirect here. */
 export const COMMERCIAL_HUB_PATH = "/admin/commercial";
 
+/** Dedicated Proposals tab — intake, onsite docs, send, and pipeline. */
+export const PROPOSALS_HUB_PATH = "/admin/proposals";
+
+export function proposalsHubTab(tab: string, extra?: Record<string, string>): string {
+  const params = new URLSearchParams({ tab, ...(extra || {}) });
+  return `${PROPOSALS_HUB_PATH}?${params.toString()}`;
+}
+
 export function commercialTab(tab: string, extra?: Record<string, string>): string {
+  // Send and pipeline live on the dedicated Proposals tab so VA and admin
+  // work the same quote path. Old Commercial ?tab=send|pipeline links follow.
+  if (tab === "send" || tab === "pipeline") {
+    return proposalsHubTab(tab, extra);
+  }
   const params = new URLSearchParams({ tab, ...(extra || {}) });
   return `${COMMERCIAL_HUB_PATH}?${params.toString()}`;
 }

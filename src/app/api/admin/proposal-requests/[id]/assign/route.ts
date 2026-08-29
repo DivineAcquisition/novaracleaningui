@@ -11,10 +11,10 @@ import { requireAdmin, AdminAuthError } from "@/lib/admin-auth";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import {
   loadProposalSettings,
-  mintAssignmentToken,
   sendProposalEmail,
   sendProposalSms,
   tokenExpiryIso,
+  tokenForWalkthrough,
 } from "@/lib/proposal-request-server";
 import {
   computeWalkthroughPayCents,
@@ -207,7 +207,12 @@ export async function POST(
   for (const site of targets as Array<Record<string, any>>) {
     const wtId = site.walkthrough_id as string | null;
     if (!wtId) continue;
-    const token = mintAssignmentToken();
+    const { data: existingWt } = await supabase
+      .from("commercial_walkthroughs")
+      .select("assignment_token")
+      .eq("id", wtId)
+      .maybeSingle();
+    const token = tokenForWalkthrough((existingWt as { assignment_token?: string } | null)?.assignment_token);
     const address = [site.address, site.city, site.state, site.zip_code].filter(Boolean).join(", ") || site.nickname;
     addresses.push(address);
 

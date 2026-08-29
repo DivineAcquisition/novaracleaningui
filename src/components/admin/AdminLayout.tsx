@@ -110,7 +110,7 @@ const NAV_ITEMS: NavItem[] = [
     title: "Proposals",
     url: "/admin/proposals",
     icon: RiMailSendLine,
-    description: "STR · commercial · office walkthrough quotes",
+    description: "Requests · onsite docs · send · pipeline",
   },
   {
     title: "Quotes",

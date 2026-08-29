@@ -22,6 +22,7 @@ export const proposalApi = {
   get: (id: string) => call(`/api/admin/proposal-requests/${id}`, "GET"),
   create: (body: unknown) => call("/api/admin/proposal-requests", "POST", body),
   cancel: (id: string, reason?: string) => call(`/api/admin/proposal-requests/${id}`, "PATCH", { action: "cancel", reason }),
+  resendDocs: (id: string) => call(`/api/admin/proposal-requests/${id}`, "PATCH", { action: "resend_docs" }),
   candidates: (id: string) => call(`/api/admin/proposal-requests/${id}/assign`, "GET"),
   assign: (id: string, body: unknown) => call(`/api/admin/proposal-requests/${id}/assign`, "POST", body),
   checklists: () => call("/api/admin/proposal-checklists", "GET"),

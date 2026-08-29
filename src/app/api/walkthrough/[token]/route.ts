@@ -4,9 +4,10 @@
 
 import { NextResponse } from "next/server";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
+import { AdminAuthError, requireAdmin } from "@/lib/admin-auth";
 import { loadCommercialConfigServer } from "@/lib/commercial-pricing-server";
 import { computeCommercialQuote, windowHoursBetween } from "@/lib/commercial-pricing";
-import { loadProposalChecklists } from "@/lib/proposal-request-server";
+import { loadProposalChecklists, refreshProposalRequestStatus } from "@/lib/proposal-request-server";
 import {
   exclusionFromAnswers,
   mapAnswersToConduct,
@@ -25,6 +26,15 @@ const EXCLUSION_CODES = WALKTHROUGH_EXCLUSION_CODES;
 function jsonError(e: unknown, fallback: string, status = 500) {
   const message = e instanceof Error && e.message.trim() ? e.message : fallback;
   return NextResponse.json({ error: message }, { status });
+}
+
+async function tryStaff(req: Request) {
+  try {
+    return await requireAdmin(req);
+  } catch (e) {
+    if (e instanceof AdminAuthError && e.status === 500) throw e;
+    return null;
+  }
 }
 
 function clock(v: unknown): string | null {
@@ -80,13 +90,16 @@ export async function GET(
     const { supabase, wt, error } = await resolveToken(params.token);
     if (error && !wt) return NextResponse.json({ error }, { status: 404 });
     if (!wt || !supabase) return NextResponse.json({ error: error || "Not found" }, { status: 404 });
-    if (error && !wt.token_submitted_at) return NextResponse.json({ error }, { status: 410 });
+    const staff = await tryStaff(_req);
+    if (error && !wt.token_submitted_at && !staff) return NextResponse.json({ error }, { status: 410 });
 
     const ctx = await loadContext(supabase, wt);
     return NextResponse.json({
       ok: true,
-      expired: Boolean(error),
+      expired: Boolean(error) && !staff,
+      staffAccess: Boolean(staff),
       submitted: Boolean(wt.token_submitted_at),
+      editable: String(wt.status) !== "cancelled",
       status: wt.status,
       walkthroughId: wt.id,
       propertyType: ctx.type,
@@ -123,9 +136,10 @@ export async function PATCH(
   try {
     const { supabase, wt, error } = await resolveToken(params.token);
     if (!wt || !supabase) return NextResponse.json({ error: error || "Not found" }, { status: 404 });
-    if (error) return NextResponse.json({ error }, { status: 410 });
-    if (wt.token_submitted_at || ["conducted", "priced", "excluded", "cancelled"].includes(String(wt.status))) {
-      return NextResponse.json({ ok: true, submitted: true });
+    const staff = await tryStaff(req);
+    if (error && !staff) return NextResponse.json({ error }, { status: 410 });
+    if (String(wt.status) === "cancelled") {
+      return NextResponse.json({ error: "This walkthrough was cancelled." }, { status: 409 });
     }
 
     let body: Record<string, unknown>;
@@ -144,7 +158,7 @@ export async function PATCH(
     }
     const { error: upErr } = await supabase.from("commercial_walkthroughs").update(patch).eq("id", wt.id);
     if (upErr) return NextResponse.json({ error: upErr.message }, { status: 400 });
-    return NextResponse.json({ ok: true, savedAt: patch.updated_at });
+    return NextResponse.json({ ok: true, savedAt: patch.updated_at, submitted: Boolean(wt.token_submitted_at) });
   } catch (e) {
     return jsonError(e, "Could not save.");
   }
@@ -157,8 +171,11 @@ export async function POST(
   try {
     const { supabase, wt, error } = await resolveToken(params.token);
     if (!wt || !supabase) return NextResponse.json({ error: error || "Not found" }, { status: 404 });
-    if (error) return NextResponse.json({ error }, { status: 410 });
-    if (wt.token_submitted_at) return NextResponse.json({ ok: true, alreadySubmitted: true, status: wt.status });
+    const staff = await tryStaff(req);
+    if (error && !staff) return NextResponse.json({ error }, { status: 410 });
+    if (String(wt.status) === "cancelled") {
+      return NextResponse.json({ error: "This walkthrough was cancelled." }, { status: 409 });
+    }
 
     let body: Record<string, unknown>;
     try {
@@ -174,6 +191,28 @@ export async function POST(
     };
     if (Array.isArray(body.photos)) answers.photos = body.photos;
     else if (Array.isArray(wt.photos) && wt.photos.length) answers.photos = wt.photos;
+
+    const alreadyInPipeline = Boolean(wt.token_submitted_at)
+      || ["conducted", "priced", "excluded"].includes(String(wt.status));
+    if (alreadyInPipeline) {
+      await supabase.from("commercial_walkthroughs").update({
+        checklist_answers: answers,
+        photos: Array.isArray(answers.photos) ? answers.photos : wt.photos,
+        findings_extra: {
+          ...(typeof wt.findings_extra === "object" && wt.findings_extra ? wt.findings_extra : {}),
+          raw_answers: answers,
+          staff_additions: Boolean(staff),
+        },
+        updated_at: new Date().toISOString(),
+      }).eq("id", wt.id);
+      await attachPdfAndDrive(supabase, { ...wt, photos: answers.photos }, ctx, answers, String(wt.status) === "excluded");
+      return NextResponse.json({
+        ok: true,
+        alreadySubmitted: true,
+        status: wt.status,
+        appended: true,
+      });
+    }
 
     const items = ctx.checklist.all;
     const missing = missingRequired(items, answers);
@@ -261,12 +300,7 @@ async function applyExclusion(
     updated_at: now,
   }).eq("id", wt.business_site_id);
 
-  if (wt.proposal_request_id) {
-    await supabase.from("proposal_requests").update({
-      status: "excluded",
-      updated_at: now,
-    }).eq("id", wt.proposal_request_id);
-  }
+  await refreshProposalRequestStatus(supabase, wt.proposal_request_id);
 
   await supabase.from("events").insert({
     event_type: "walkthrough.excluded",
@@ -363,12 +397,7 @@ async function applyConduct(
   const { error } = await supabase.from("commercial_walkthroughs").update(patch).eq("id", wt.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
-  if (wt.proposal_request_id) {
-    await supabase.from("proposal_requests").update({
-      status: "walkthrough_conducted",
-      updated_at: new Date().toISOString(),
-    }).eq("id", wt.proposal_request_id);
-  }
+  await refreshProposalRequestStatus(supabase, wt.proposal_request_id);
 
   const siteName = ctx.site?.nickname || "site";
   const stated = Number(wt.client_stated_sqft) || 0;

@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   RiCalendarCheckLine,
+  RiExternalLinkLine,
+  RiFileCopyLine,
   RiLoader4Line,
   RiMailSendLine,
   RiSearch2Line,
@@ -16,7 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { PROPOSAL_STATUS_LABELS, type ProposalRequestStatus } from "@/lib/proposal-request";
+import { PROPOSAL_STATUS_LABELS, walkthroughLink, walkthroughStaffPath, type ProposalRequestStatus } from "@/lib/proposal-request";
 import { proposalApi } from "@/lib/proposal-request-api";
 
 interface SiteRow {
@@ -28,6 +30,9 @@ interface SiteRow {
   zip_code?: string | null;
   walkthrough_id?: string | null;
   client_stated_sqft?: number | null;
+  assignment_token?: string | null;
+  walkthrough_status?: string | null;
+  pdf_url?: string | null;
 }
 
 interface RequestRow {
@@ -43,6 +48,7 @@ interface RequestRow {
   created_at: string;
   scheduled_at?: string | null;
   assigned_cleaner_id?: string | null;
+  business_account_id?: string | null;
   sites: SiteRow[];
 }
 
@@ -73,10 +79,12 @@ export default function ProposalRequestQueue({
   rows,
   loading,
   onRefresh,
+  onSend,
 }: {
   rows: RequestRow[];
   loading: boolean;
   onRefresh: () => void;
+  onSend?: (accountId: string) => void;
 }) {
   const [filter, setFilter] = useState("pending_assign");
   const [search, setSearch] = useState("");
@@ -97,11 +105,12 @@ export default function ProposalRequestQueue({
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
         {[
           ["pending_assign", "Pending assign"],
           ["walkthrough_scheduled", "Scheduled"],
           ["walkthrough_conducted", "Conducted"],
+          ["firm_price_set", "Firm price"],
           ["excluded", "Excluded"],
         ].map(([id, label]) => (
           <button
@@ -159,7 +168,12 @@ export default function ProposalRequestQueue({
         </div>
       )}
 
-      <AssignSheet row={open} onClose={() => setOpen(null)} onDone={() => { setOpen(null); onRefresh(); }} />
+      <AssignSheet
+        row={open}
+        onClose={() => setOpen(null)}
+        onDone={() => { setOpen(null); onRefresh(); }}
+        onSend={onSend}
+      />
     </div>
   );
 }
@@ -168,16 +182,19 @@ function AssignSheet({
   row,
   onClose,
   onDone,
+  onSend,
 }: {
   row: RequestRow | null;
   onClose: () => void;
   onDone: () => void;
+  onSend?: (accountId: string) => void;
 }) {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(false);
   const [cleanerId, setCleanerId] = useState("");
   const [scheduledAt, setScheduledAt] = useState("");
   const [busy, setBusy] = useState(false);
+  const [resending, setResending] = useState(false);
 
   const load = async (id: string) => {
     setLoading(true);
@@ -203,6 +220,32 @@ function AssignSheet({
   }, [row?.id]);
 
   const picked = candidates.find((c) => c.id === cleanerId);
+
+  const copy = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`${label} copied`);
+    } catch {
+      toast.error("Could not copy");
+    }
+  };
+
+  const resend = async () => {
+    if (!row) return;
+    setResending(true);
+    try {
+      const out = await proposalApi.resendDocs(row.id);
+      toast.success(
+        out.agentTexted || out.agentEmailed
+          ? "Documentation link sent to the walkthrough agent (email and SMS)."
+          : "Link is ready — assign an agent to send it, or open it from this sheet.",
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not resend");
+    } finally {
+      setResending(false);
+    }
+  };
 
   const assign = async () => {
     if (!row || !cleanerId || !scheduledAt) {
@@ -293,15 +336,57 @@ function AssignSheet({
 
             {row.status !== "pending_assign" && (
               <p className="text-sm text-slate-600">
-                Status is {PROPOSAL_STATUS_LABELS[row.status]}. Continue in Commercial → Deals → Walkthroughs for findings, firm price, and the proposal.
+                Status is {PROPOSAL_STATUS_LABELS[row.status]}. Onsite documentation is the same tokenized document the agent uses — VA and admin can add to it from here.
               </p>
             )}
 
-            {row.status === "walkthrough_conducted" && (
-              <Button variant="outline" className="w-full" asChild>
-                <a href="/admin/commercial?tab=walkthroughs">
-                  <RiMailSendLine className="w-4 h-4 mr-1.5" /> Open walkthrough pipeline
-                </a>
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-slate-700">Onsite documentation</p>
+              {(row.sites || []).map((s) => {
+                const token = s.assignment_token;
+                if (!token) {
+                  return (
+                    <p key={s.id} className="text-xs text-amber-700">
+                      {[s.nickname, s.address].filter(Boolean).join(" · ") || "Site"} — token not minted yet.
+                    </p>
+                  );
+                }
+                const office = walkthroughStaffPath(token);
+                const agent = walkthroughLink(token);
+                return (
+                  <div key={s.id} className="rounded-lg border border-slate-200 p-2 space-y-1.5">
+                    <p className="text-xs font-medium text-slate-800">
+                      {[s.nickname, s.address, s.city].filter(Boolean).join(" · ")}
+                      {s.walkthrough_status ? ` · ${s.walkthrough_status}` : ""}
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      <Button size="sm" variant="outline" className="h-8" asChild>
+                        <a href={office}>
+                          <RiExternalLinkLine className="w-3.5 h-3.5 mr-1" /> Open (VA / admin)
+                        </a>
+                      </Button>
+                      <Button size="sm" variant="outline" className="h-8" onClick={() => void copy(agent, "Agent link")}>
+                        <RiFileCopyLine className="w-3.5 h-3.5 mr-1" /> Copy agent link
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+              <Button variant="outline" className="w-full" disabled={resending} onClick={() => void resend()}>
+                {resending ? <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" /> : <RiMailSendLine className="w-4 h-4 mr-1.5" />}
+                {row.assigned_cleaner_id ? "Resend docs to walkthrough agent" : "Prepare agent link"}
+              </Button>
+            </div>
+
+            {row.business_account_id && (row.status === "walkthrough_conducted" || row.status === "firm_price_set") && (
+              <Button
+                className="w-full"
+                onClick={() => {
+                  onSend?.(row.business_account_id!);
+                  onClose();
+                }}
+              >
+                <RiMailSendLine className="w-4 h-4 mr-1.5" /> Send proposal
               </Button>
             )}
           </div>

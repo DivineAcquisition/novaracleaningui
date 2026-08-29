@@ -47,6 +47,8 @@ async function prepareForUpload(file: File): Promise<{ blob: Blob; ext: string; 
 interface FormPayload {
   submitted: boolean;
   expired?: boolean;
+  staffAccess?: boolean;
+  editable?: boolean;
   status: string;
   walkthroughId: string;
   propertyType: PropertyTypeDef;
@@ -60,7 +62,16 @@ interface FormPayload {
   cleaner: { name: string } | null;
 }
 
-export default function WalkthroughIntakeForm() {
+async function walkthroughFetch(token: string, init: RequestInit = {}): Promise<Response> {
+  const { data } = await supabase.auth.getSession();
+  const access = data.session?.access_token;
+  const headers = new Headers(init.headers);
+  if (!headers.has("Content-Type") && init.body) headers.set("Content-Type", "application/json");
+  if (access) headers.set("Authorization", `Bearer ${access}`);
+  return fetch(`/api/walkthrough/${token}`, { ...init, headers });
+}
+
+export default function WalkthroughIntakeForm({ staff = false }: { staff?: boolean }) {
   const params = useParams<{ token: string }>();
   const token = String(params?.token || "");
   const [info, setInfo] = useState<FormPayload | null>(null);
@@ -76,7 +87,7 @@ export default function WalkthroughIntakeForm() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/walkthrough/${token}`);
+      const res = await walkthroughFetch(token);
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data?.ok === false) throw new Error(data?.error || "Link not valid");
       setInfo(data as FormPayload);
@@ -95,9 +106,8 @@ export default function WalkthroughIntakeForm() {
   const persist = useCallback(async (nextAnswers: Record<string, unknown>, nextPhotos: string[]) => {
     setSaveState("saving");
     try {
-      const res = await fetch(`/api/walkthrough/${token}`, {
+      const res = await walkthroughFetch(token, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ answers: nextAnswers, photos: nextPhotos }),
       });
       const data = await res.json().catch(() => ({}));
@@ -151,15 +161,21 @@ export default function WalkthroughIntakeForm() {
     if (!info) return;
     setSubmitting(true);
     try {
-      const res = await fetch(`/api/walkthrough/${token}`, {
+      const res = await walkthroughFetch(token, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ answers: { ...answers, photos }, photos }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || "Submit failed");
       setDone(data.excluded ? "excluded" : "conducted");
-      toast.success(data.excluded ? "Exclusion recorded — pricing stopped." : "Walkthrough submitted. Findings are in the pricing pipeline.");
+      setInfo((prev) => prev ? { ...prev, submitted: true, status: data.status || prev.status } : prev);
+      toast.success(
+        data.excluded
+          ? "Exclusion recorded — pricing stopped."
+          : data.appended
+            ? "Additions saved on the same document. PDF refreshed."
+            : "Walkthrough submitted. You can still add photos or notes on this document.",
+      );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Submit failed");
     } finally {
@@ -176,7 +192,7 @@ export default function WalkthroughIntakeForm() {
   }
   if (loadErr || !info) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+      <div className={cn("flex items-center justify-center p-6", staff ? "py-16" : "min-h-screen bg-slate-50")}>
         <div className="max-w-md text-center space-y-2">
           <p className="font-bold text-slate-900">This link isn't valid</p>
           <p className="text-sm text-slate-500">{loadErr || "Ask dispatch to resend the walkthrough assignment."}</p>
@@ -185,43 +201,34 @@ export default function WalkthroughIntakeForm() {
     );
   }
 
-  if (done) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-        <SEO title="Walkthrough submitted" />
-        <div className="max-w-md text-center space-y-3">
-          <div className={cn("mx-auto w-12 h-12 rounded-full flex items-center justify-center", done === "excluded" ? "bg-rose-100 text-rose-700" : "bg-emerald-100 text-emerald-700")}>
-            {done === "excluded" ? <RiShieldCheckLine className="w-6 h-6" /> : <RiCheckLine className="w-6 h-6" />}
-          </div>
-          <h1 className="text-xl font-bold text-slate-900">
-            {done === "excluded" ? "Exclusion recorded" : "Walkthrough submitted"}
-          </h1>
-          <p className="text-sm text-slate-500">
-            {done === "excluded"
-              ? "Pricing has stopped. This routes to existing exclusion handling — Novara does not price or service excluded conditions."
-              : "Findings are in the pipeline. Admin will set the firm price from what you captured — no re-entry."}
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   const universal = info.checklist.universal.filter((i) => i.kind !== "media");
   const typeItems = info.checklist.typeSpecific;
+  const inPipeline = Boolean(done || info.submitted);
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-24">
+    <div className={cn(staff ? "pb-16" : "min-h-screen bg-slate-50 pb-24")}>
       <SEO title={`${info.propertyType.shortLabel} walkthrough`} />
-      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200">
-        <div className="max-w-xl mx-auto px-4 h-14 flex items-center justify-between">
-          <img src="/novara-logo.png" alt="Novara Cleaning" className="h-7" />
-          <span className="text-[11px] font-semibold text-slate-500">
-            {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved ✓" : saveState === "error" ? "Save failed" : "Auto-saves"}
-          </span>
-        </div>
-      </header>
+      {!staff && (
+        <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200">
+          <div className="max-w-xl mx-auto px-4 h-14 flex items-center justify-between">
+            <img src="/novara-logo.png" alt="Novara Cleaning" className="h-7" />
+            <span className="text-[11px] font-semibold text-slate-500">
+              {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved ✓" : saveState === "error" ? "Save failed" : "Auto-saves"}
+            </span>
+          </div>
+        </header>
+      )}
 
       <main className="max-w-xl mx-auto px-4 py-4 space-y-4">
+        {staff && (
+          <div className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-900">
+            Office copy of the tokenized onsite document. The walkthrough agent uses this same checklist — additions you make land here too.
+            <span className="block mt-1 text-violet-700/80">
+              {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved ✓" : "Auto-saves as you go"}
+            </span>
+          </div>
+        )}
+
         <div className="rounded-2xl text-white p-4" style={{ background: "linear-gradient(135deg,#5C0FFE,#6810FE)" }}>
           <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-white/80">{info.propertyType.label}</p>
           <p className="text-lg font-bold mt-1">{info.site.nickname}</p>
@@ -236,6 +243,20 @@ export default function WalkthroughIntakeForm() {
             <p className="text-[11px] text-white/70 mt-1">Access: {info.access.name}{info.access.phone ? ` · ${info.access.phone}` : ""}</p>
           )}
         </div>
+
+        {inPipeline && (
+          <div className={cn(
+            "rounded-xl border px-3 py-2 text-sm flex items-start gap-2",
+            done === "excluded" ? "border-rose-200 bg-rose-50 text-rose-900" : "border-emerald-200 bg-emerald-50 text-emerald-900",
+          )}>
+            {done === "excluded" ? <RiShieldCheckLine className="w-4 h-4 mt-0.5 shrink-0" /> : <RiCheckLine className="w-4 h-4 mt-0.5 shrink-0" />}
+            <p>
+              {done === "excluded"
+                ? "Exclusion is recorded and pricing is stopped. You can still add photos or notes on this document."
+                : "Findings are in the pipeline. Same document — add photos, notes, or checklist detail without re-entering."}
+            </p>
+          </div>
+        )}
 
         <section className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
           <h2 className="text-sm font-bold text-slate-900">Universal findings</h2>
@@ -274,7 +295,7 @@ export default function WalkthroughIntakeForm() {
 
         <Button className="w-full h-11" disabled={submitting} onClick={() => void submit()}>
           {submitting ? <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" /> : <RiCheckLine className="w-4 h-4 mr-1.5" />}
-          Submit walkthrough
+          {inPipeline ? "Save additions" : "Submit walkthrough"}
         </Button>
         <p className="text-[11px] text-slate-400 text-center">
           If you find mold past threshold, active infestation, biohazard, or a structural hazard, mark it on the exclusion check. That stops pricing.

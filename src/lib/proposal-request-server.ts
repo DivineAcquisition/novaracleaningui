@@ -8,6 +8,7 @@ import { randomBytes } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   computeWalkthroughPayCents,
+  DEFAULT_PROPOSAL_SETTINGS,
   emailToHtml,
   interpolateTemplate,
   mergeChecklists,
@@ -80,6 +81,49 @@ export function tokenExpiryIso(ttlHours: number): string {
   return new Date(Date.now() + Math.max(24, ttlHours) * 3600_000).toISOString();
 }
 
+/** Keep an existing token so VA/admin and the agent share one document. */
+export function tokenForWalkthrough(existing?: string | null): string {
+  const token = String(existing || "").trim();
+  return token.length >= 12 ? token : mintAssignmentToken();
+}
+
+export async function refreshProposalRequestStatus(supabase: SB, requestId: string | null | undefined): Promise<void> {
+  if (!requestId) return;
+  const { data: req } = await supabase
+    .from("proposal_requests")
+    .select("id, status")
+    .eq("id", requestId)
+    .maybeSingle();
+  if (!req || String((req as { status: string }).status) === "cancelled") return;
+
+  const { data: wts } = await supabase
+    .from("commercial_walkthroughs")
+    .select("status")
+    .eq("proposal_request_id", requestId);
+  if (!wts?.length) return;
+
+  const st = (wts as Array<{ status: string }>).map((w) => w.status);
+  const closed = (s: string) => s === "priced" || s === "excluded" || s === "cancelled";
+  let next = String((req as { status: string }).status);
+  if (st.every((s) => s === "excluded" || s === "cancelled") && st.some((s) => s === "excluded")) {
+    next = "excluded";
+  } else if (st.some((s) => s === "priced") && st.every(closed)) {
+    next = "firm_price_set";
+  } else if (st.some((s) => s === "conducted" || s === "priced")) {
+    next = "walkthrough_conducted";
+  } else if (st.some((s) => s === "scheduled")) {
+    next = "walkthrough_scheduled";
+  } else {
+    next = "pending_assign";
+  }
+  if (next !== (req as { status: string }).status) {
+    await supabase.from("proposal_requests").update({
+      status: next,
+      updated_at: new Date().toISOString(),
+    }).eq("id", requestId);
+  }
+}
+
 const s = (v: unknown, max = 300) => String(v ?? "").trim().slice(0, max);
 const n = (v: unknown): number | null => {
   const num = Number(v);
@@ -115,6 +159,7 @@ export interface CreateProposalInput {
   sites: IntakeSite[];
   actorName?: string;
   actorId?: string | null;
+  tokenTtlHours?: number;
 }
 
 function siteLine(site: IntakeSite): string {
@@ -253,6 +298,8 @@ export async function createProposalRequest(
     return { ok: false, error: reqErr?.message || "Could not create the proposal request.", status: 400 };
   }
   const requestId = (request as { id: string }).id;
+  const ttlHours = input.tokenTtlHours ?? DEFAULT_PROPOSAL_SETTINGS.tokenTtlHours;
+  const tokenExpires = tokenExpiryIso(ttlHours);
 
   const createdSites: Array<Record<string, unknown>> = [];
   for (let i = 0; i < sites.length; i++) {
@@ -304,21 +351,27 @@ export async function createProposalRequest(
         proposal_request_id: requestId,
         property_type_key: type.key,
         notes: s(input.notes, 2000),
+        assignment_token: mintAssignmentToken(),
+        token_expires_at: tokenExpires,
       })
-      .select("id")
+      .select("id, assignment_token")
       .maybeSingle();
     if (wtErr) {
       if (/commercial_walkthroughs_one_open/.test(wtErr.message)) {
         const { data: open } = await supabase
           .from("commercial_walkthroughs")
-          .select("id")
+          .select("id, assignment_token")
           .eq("business_site_id", siteId)
           .in("status", ["requested", "scheduled", "conducted"])
           .maybeSingle();
         if (open?.id) {
+          const existingToken = String((open as { assignment_token?: string }).assignment_token || "");
+          const token = tokenForWalkthrough(existingToken);
           await supabase.from("commercial_walkthroughs").update({
             proposal_request_id: requestId,
             property_type_key: type.key,
+            assignment_token: token,
+            token_expires_at: tokenExpires,
           }).eq("id", open.id);
           await supabase.from("proposal_request_sites").insert({
             proposal_request_id: requestId,
@@ -332,7 +385,12 @@ export async function createProposalRequest(
             business_site_id: siteId,
             walkthrough_id: open.id,
           });
-          createdSites.push({ ...site, business_site_id: siteId, walkthrough_id: open.id });
+          createdSites.push({
+            ...site,
+            business_site_id: siteId,
+            walkthrough_id: open.id,
+            assignment_token: token,
+          });
           continue;
         }
       }
@@ -351,7 +409,12 @@ export async function createProposalRequest(
       business_site_id: siteId,
       walkthrough_id: (wt as { id: string } | null)?.id ?? null,
     });
-    createdSites.push({ ...site, business_site_id: siteId, walkthrough_id: (wt as { id?: string } | null)?.id });
+    createdSites.push({
+      ...site,
+      business_site_id: siteId,
+      walkthrough_id: (wt as { id?: string } | null)?.id,
+      assignment_token: (wt as { assignment_token?: string } | null)?.assignment_token,
+    });
   }
 
   await supabase.from("events").insert({
@@ -362,7 +425,7 @@ export async function createProposalRequest(
       `${company ? ` · ${company}` : ""} · ${email}` +
       `${firstAddress ? ` · ${firstAddress}` : ""}` +
       `${sites.length > 1 ? ` · ${sites.length} sites` : ""}` +
-      ` · Pending — assigning walkthrough agent. Not a booking.`,
+      ` · Pending — assigning walkthrough agent. Onsite documentation tokenized. Not a booking.`,
     data: {
       proposal_request_id: requestId,
       business_account_id: accountId,

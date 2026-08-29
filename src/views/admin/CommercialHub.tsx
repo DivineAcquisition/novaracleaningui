@@ -7,17 +7,18 @@
 // row. They are grouped into five workspaces:
 //
 //   Home        — Overview, Accounts
-//   Deals       — Walkthroughs, Send proposal, Pipeline
+//   Deals       — Walkthroughs (findings → firm price). Send and pipeline
+//                 live on the dedicated Proposals tab so VA and admin share
+//                 one quote path.
 //   Jobs        — Book job, Recurring
 //   Compliance  — COI (client certs + Novara's own)
 //   STR         — turnovers / hosts
 //
 // Deep links still use ?tab=overview|accounts|walkthroughs|send|pipeline|
 // book|recurring|compliance|str. Old Partnerships Hub aliases keep working.
-// Send proposal stays a first-class screen inside Deals — it is the Internal
-// Booking analogue, not a sheet.
+// ?tab=send and ?tab=pipeline redirect to /admin/proposals.
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -37,6 +38,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { proposalsHubTab } from "@/lib/commercial-proposal";
 import PartnerAccounts from "@/views/admin/PartnerAccounts";
 import PartnerAdmin from "@/views/admin/PartnerAdmin";
 import PartnershipsOverview from "@/views/admin/PartnershipsOverview";
@@ -44,8 +46,6 @@ import PartnershipAccounts from "@/views/admin/PartnershipAccounts";
 import PartnershipBooking from "@/views/admin/PartnershipBooking";
 import PartnerRecurringSchedules from "@/views/admin/PartnerRecurringSchedules";
 import CommercialWalkthroughs from "@/views/admin/CommercialWalkthroughs";
-import CommercialProposals from "@/views/admin/CommercialProposals";
-import CommercialProposalSend from "@/views/admin/CommercialProposalSend";
 import CoiCompliance from "@/views/admin/CoiCompliance";
 import { syncPartners, syncContractors } from "@/lib/partner-admin-api";
 
@@ -109,7 +109,7 @@ const WORKSPACES: Array<{
   {
     id: "deals",
     label: "Deals",
-    description: "Walkthrough → proposal → agreement → billing.",
+    description: "Walkthrough findings and firm price. Sending lives on Proposals.",
     tabs: ["walkthroughs", "send", "pipeline"],
     fallback: "pipeline",
   },
@@ -166,14 +166,31 @@ export default function CommercialHub() {
   const setTab = useCallback(
     (next: string) => {
       const mapped = TAB_ALIASES[next] || next;
+      if (mapped === "send") {
+        const account = searchParams?.get("account") || "";
+        router.replace(proposalsHubTab("send", account ? { account } : undefined), { scroll: false });
+        return;
+      }
+      if (mapped === "pipeline") {
+        router.replace(proposalsHubTab("pipeline"), { scroll: false });
+        return;
+      }
       const params = new URLSearchParams(searchParams?.toString() || "");
       params.set("tab", mapped);
-      if (mapped !== "send") params.delete("account");
+      params.delete("account");
       const qs = params.toString();
       router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
     },
     [pathname, router, searchParams],
   );
+
+  useEffect(() => {
+    if (tab === "send") {
+      router.replace(proposalsHubTab("send", accountFromUrl ? { account: accountFromUrl } : undefined));
+    } else if (tab === "pipeline") {
+      router.replace(proposalsHubTab("pipeline"));
+    }
+  }, [tab, accountFromUrl, router]);
 
   const handleSync = async () => {
     setSyncing(true);
@@ -321,17 +338,21 @@ export default function CommercialHub() {
         {tab === "walkthroughs" && (
           <div className="space-y-3">
             <p className="text-xs text-slate-500 rounded-lg border border-violet-100 bg-violet-50/60 px-3 py-2">
-              New STR / commercial / office quote requests start in{" "}
+              New STR / commercial / office quote requests, tokenized onsite docs, and sending live in{" "}
               <a href="/admin/proposals" className="font-semibold text-violet-800 underline-offset-2 hover:underline">
                 Proposals
               </a>
-              {" "}— that tab is the front door. This board is the pipeline after a request exists (schedule → findings → firm price).
+              . This board is findings → firm price. VA and admin open the same walkthrough document the agent uses.
             </p>
             <CommercialWalkthroughs />
           </div>
         )}
-        {tab === "send" && <CommercialProposalSend initialAccountId={accountFromUrl} />}
-        {tab === "pipeline" && <CommercialProposals />}
+        {tab === "send" && (
+          <p className="text-sm text-slate-500 py-8 text-center">Opening Proposals → Send…</p>
+        )}
+        {tab === "pipeline" && (
+          <p className="text-sm text-slate-500 py-8 text-center">Opening Proposals → Pipeline…</p>
+        )}
         {tab === "book" && <PartnershipBooking />}
         {tab === "recurring" && <PartnerRecurringSchedules />}
         {tab === "compliance" && <CoiCompliance />}

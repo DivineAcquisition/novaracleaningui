@@ -976,6 +976,11 @@ export function walkthroughLink(token: string): string {
   return `https://contractor.novaracleaning.com/cleaner/walkthrough/${token}`;
 }
 
+/** Authenticated office copy of the same tokenized onsite document. */
+export function walkthroughStaffPath(token: string): string {
+  return `/admin/proposals/doc/${encodeURIComponent(token)}`;
+}
+
 export function formatWhen(iso: string): { date: string; time: string; label: string } {
   const d = new Date(iso);
   const date = d.toLocaleDateString("en-US", {

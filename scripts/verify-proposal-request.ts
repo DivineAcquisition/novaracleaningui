@@ -25,6 +25,7 @@ import {
   slugTypeKey,
   walkthroughChecklistFor,
   walkthroughLink,
+  walkthroughStaffPath,
 } from "../src/lib/proposal-request";
 
 let failures = 0;
@@ -117,6 +118,7 @@ const body = interpolateTemplate(DEFAULT_PROPOSAL_SETTINGS.pendingEmailBody, {
 check("pending email names the requester and address", body.includes("Hi Alex") && body.includes("12 Harbor St"), true);
 check("pending email frames the walkthrough as accurate pricing", /accurate pricing|on-site walkthrough|surprise/i.test(body), true);
 check("tokenized link lives on the contractor host", walkthroughLink("abc"), "https://contractor.novaracleaning.com/cleaner/walkthrough/abc");
+check("office copy of the same doc is under Proposals", walkthroughStaffPath("abc"), "/admin/proposals/doc/abc");
 check("email HTML does not execute tags from the body", emailToHtml("Hi <script>").includes("&lt;script&gt;"), true);
 check("settings merge keeps unknown keys from wiping templates", mergeProposalSettings({ walkthroughPayCents: 9000 }).pendingEmailSubject, DEFAULT_PROPOSAL_SETTINGS.pendingEmailSubject);
 

@@ -33,6 +33,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin, AdminAuthError } from "@/lib/admin-auth";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import { loadCommercialConfigServer } from "@/lib/commercial-pricing-server";
+import { refreshProposalRequestStatus } from "@/lib/proposal-request-server";
 import {
   computeCommercialQuote,
   recommendCrewSize,
@@ -409,6 +410,8 @@ export async function POST(req: Request): Promise<NextResponse> {
       },
     });
 
+    await refreshProposalRequestStatus(supabase, wt.proposal_request_id);
+
     return NextResponse.json({ ok: true, anchor: quote });
   }
 
@@ -476,6 +479,8 @@ export async function POST(req: Request): Promise<NextResponse> {
         qc_issue_id: (issue as { id?: string } | null)?.id ?? null,
       },
     });
+
+    await refreshProposalRequestStatus(supabase, wt.proposal_request_id);
 
     return NextResponse.json({ ok: true, qcIssueId: (issue as { id?: string } | null)?.id ?? null });
   }
@@ -579,6 +584,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     const { data: pricingState } = await supabase.rpc("commercial_site_pricing_state", {
       p_site_id: wt.business_site_id,
     });
+    await refreshProposalRequestStatus(supabase, wt.proposal_request_id);
     return NextResponse.json({ ok: true, pricingState: pricingState || null });
   }
 
@@ -589,6 +595,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       updated_at: new Date().toISOString(),
     }).eq("id", id);
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    await refreshProposalRequestStatus(supabase, wt.proposal_request_id);
     return NextResponse.json({ ok: true });
   }
 

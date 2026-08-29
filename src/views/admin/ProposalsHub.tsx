@@ -5,22 +5,32 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   RiFileEditLine,
   RiFileList3Line,
+  RiFileTextLine,
   RiLoader4Line,
   RiMailSendLine,
+  RiRulerLine,
   RiSettings3Line,
+  RiUserStarLine,
 } from "@remixicon/react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { DEFAULT_CHECKLISTS, DEFAULT_PROPOSAL_SETTINGS, type ProposalChecklists, type ProposalRequestSettings } from "@/lib/proposal-request";
 import { proposalApi } from "@/lib/proposal-request-api";
+import { proposalsHubTab } from "@/lib/commercial-proposal";
 import ProposalRequestIntake from "@/views/admin/ProposalRequestIntake";
 import ProposalRequestQueue from "@/views/admin/ProposalRequestQueue";
 import ProposalChecklistEditor from "@/views/admin/ProposalChecklistEditor";
 import ProposalRequestSettingsView from "@/views/admin/ProposalRequestSettings";
+import CommercialWalkthroughs from "@/views/admin/CommercialWalkthroughs";
+import CommercialProposalSend from "@/views/admin/CommercialProposalSend";
+import CommercialProposals from "@/views/admin/CommercialProposals";
 
 const TABS = [
   { id: "new", label: "New request", icon: RiFileEditLine },
-  { id: "queue", label: "Queue", icon: RiMailSendLine },
+  { id: "queue", label: "Queue", icon: RiUserStarLine },
+  { id: "price", label: "Firm price", icon: RiRulerLine },
+  { id: "send", label: "Send", icon: RiMailSendLine },
+  { id: "pipeline", label: "Pipeline", icon: RiFileTextLine },
   { id: "checklists", label: "Checklists", icon: RiFileList3Line },
   { id: "settings", label: "Settings", icon: RiSettings3Line },
 ] as const;
@@ -32,15 +42,23 @@ export default function ProposalsHub() {
   const searchParams = useSearchParams();
   const raw = searchParams?.get("tab") || "new";
   const tab: Tab = TABS.some((t) => t.id === raw) ? (raw as Tab) : "new";
+  const accountFromUrl = searchParams?.get("account") || "";
 
   const [catalog, setCatalog] = useState<ProposalChecklists>(DEFAULT_CHECKLISTS);
   const [settings, setSettings] = useState<ProposalRequestSettings>(DEFAULT_PROPOSAL_SETTINGS);
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const setTab = (next: Tab) => {
+  const setTab = (next: Tab, extra?: Record<string, string>) => {
     const params = new URLSearchParams(searchParams?.toString() || "");
     params.set("tab", next);
+    if (next !== "send") params.delete("account");
+    if (extra) {
+      for (const [k, v] of Object.entries(extra)) {
+        if (v) params.set(k, v);
+        else params.delete(k);
+      }
+    }
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
@@ -64,6 +82,8 @@ export default function ProposalsHub() {
 
   useEffect(() => { void load(); }, [load]);
 
+  const catalogTabs = tab === "new" || tab === "queue" || tab === "checklists" || tab === "settings";
+
   return (
     <div className="max-w-[1240px] mx-auto px-1 sm:px-4 py-2 space-y-4">
       <div>
@@ -76,7 +96,7 @@ export default function ProposalsHub() {
           </span>
         </div>
         <p className="text-sm text-muted-foreground">
-          Quote requests that need an on-site walkthrough. Separate from Internal Booking — submitting here never creates a job.
+          Request → tokenized onsite docs → firm price → send. Separate from Internal Booking — a request never creates a job.
         </p>
       </div>
 
@@ -101,14 +121,29 @@ export default function ProposalsHub() {
         })}
       </div>
 
-      {loading && tab !== "new" ? (
+      {loading && catalogTabs && tab !== "new" ? (
         <p className="text-sm text-slate-500 flex items-center gap-2 py-8 justify-center">
           <RiLoader4Line className="w-4 h-4 animate-spin" /> Loading…
         </p>
       ) : tab === "new" ? (
         <ProposalRequestIntake catalog={catalog} onCreated={() => { void load(); setTab("queue"); }} />
       ) : tab === "queue" ? (
-        <ProposalRequestQueue rows={rows} loading={loading} onRefresh={() => void load()} />
+        <ProposalRequestQueue
+          rows={rows}
+          loading={loading}
+          onRefresh={() => void load()}
+          onSend={(accountId) => setTab("send", { account: accountId })}
+        />
+      ) : tab === "price" ? (
+        <CommercialWalkthroughs />
+      ) : tab === "send" ? (
+        <CommercialProposalSend
+          initialAccountId={accountFromUrl}
+          inProposalsHub
+          walkthroughsHref={proposalsHubTab("price")}
+        />
+      ) : tab === "pipeline" ? (
+        <CommercialProposals />
       ) : tab === "checklists" ? (
         <ProposalChecklistEditor catalog={catalog} onSaved={setCatalog} />
       ) : (

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireAdmin, AdminAuthError } from "@/lib/admin-auth";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
-import { PROPOSAL_STATUS_LABELS } from "@/lib/proposal-request";
+import { PROPOSAL_STATUS_LABELS, formatWhen, walkthroughLink } from "@/lib/proposal-request";
+import { loadProposalSettings, sendProposalEmail, sendProposalSms } from "@/lib/proposal-request-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -80,6 +81,63 @@ export async function PATCH(
 
   const supabase = getAdminSupabase();
   const action = String(body.action || "");
+  if (action === "resend_docs") {
+    const settings = await loadProposalSettings(supabase);
+    const { data: existing } = await supabase
+      .from("proposal_requests")
+      .select("*")
+      .eq("id", params.id)
+      .maybeSingle();
+    if (!existing) return NextResponse.json({ error: "Proposal request not found." }, { status: 404 });
+    const reqRow = existing as Record<string, any>;
+    const { data: sites } = await supabase
+      .from("proposal_request_sites")
+      .select("*")
+      .eq("proposal_request_id", params.id)
+      .order("sort_order", { ascending: true });
+    const wtIds = (sites || []).map((s: { walkthrough_id?: string | null }) => s.walkthrough_id).filter(Boolean) as string[];
+    const { data: walkthroughs } = wtIds.length
+      ? await supabase.from("commercial_walkthroughs").select("id, assignment_token, site_address").in("id", wtIds)
+      : { data: [] as Array<Record<string, unknown>> };
+    const links = (walkthroughs || [])
+      .map((w: Record<string, any>) => w.assignment_token ? walkthroughLink(String(w.assignment_token)) : null)
+      .filter(Boolean) as string[];
+    if (!links.length) {
+      return NextResponse.json({ error: "Onsite documentation has not been tokenized yet." }, { status: 400 });
+    }
+
+    let agentEmailed = false;
+    let agentTexted = false;
+    if (reqRow.assigned_cleaner_id) {
+      const { data: cleaner } = await supabase
+        .from("cleaners")
+        .select("first_name, last_name, email, phone")
+        .eq("id", reqRow.assigned_cleaner_id)
+        .maybeSingle();
+      const c = (cleaner || {}) as Record<string, any>;
+      const agentName = [c.first_name, c.last_name].filter(Boolean).join(" ") || "Walkthrough agent";
+      const when = reqRow.scheduled_at
+        ? formatWhen(String(reqRow.scheduled_at))
+        : { date: "", time: "", label: "the scheduled visit" };
+      const address = (sites || [])
+        .map((s: Record<string, any>) => [s.address, s.city, s.state].filter(Boolean).join(", ") || s.nickname)
+        .filter(Boolean)
+        .join("; ") || "the property";
+      const mail = await sendProposalEmail(supabase, {
+        to: String(c.email || ""),
+        subject: settings.agentEmailSubject,
+        body: settings.agentEmailBody + (links.length > 1 ? `\n\nAll site links:\n${links.join("\n")}` : ""),
+        vars: { agentName, address, date: when.date, time: when.time, link: links[0] },
+      });
+      agentEmailed = mail.ok;
+      const sms =
+        `Novara: walkthrough docs for ${address}. Open the checklist (auto-saves; office can add too): ${links[0]}`;
+      agentTexted = await sendProposalSms(supabase, c.phone, sms);
+    }
+
+    return NextResponse.json({ ok: true, links, agentEmailed, agentTexted });
+  }
+
   if (action !== "cancel") {
     return NextResponse.json({ error: "Unknown action." }, { status: 400 });
   }
