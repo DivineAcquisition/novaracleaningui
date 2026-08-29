@@ -25,7 +25,7 @@ export default function CommercialSuccess() {
       <SEO title="Request received — Novara Cleaning Partnerships" description="Your partnership request has been received. Our team will reach out with next steps." />
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-slate-200">
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center">
-          <img src="/novara-logo.png" alt="Novara Cleaning" className="h-8" />
+          <img src="/novara-email-logo.png" alt="Novara Cleaning" className="h-[22px] w-auto" />
         </div>
       </header>
       <main className="max-w-2xl mx-auto px-4 py-12 text-center space-y-8">
