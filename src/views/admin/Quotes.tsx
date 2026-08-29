@@ -26,6 +26,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
+import { publicChecklistUrl } from "@/lib/checklists";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -122,13 +123,8 @@ function fullName(q: VaQuote) {
   return `${q.first_name || ""} ${q.last_name || ""}`.trim() || q.email;
 }
 
-function checklistViewUrl(serviceType: string) {
-  const base = "https://try.novaracleaning.com/checklist";
-  const lower = (serviceType || "").toLowerCase().replace(/[\s_-]/g, "");
-  if (lower.includes("move") || lower.includes("inout")) return `${base}/move-in-out`;
-  if (lower === "deep" || lower === "combo") return `${base}/deep-clean`;
-  if (lower.includes("member") || lower.includes("recur")) return `${base}/recurring`;
-  return `${base}/standard-clean`;
+function checklistViewUrl(serviceType: string, scopeLevel?: string | null) {
+  return publicChecklistUrl(serviceType, scopeLevel);
 }
 
 function statusBadge(status: string) {

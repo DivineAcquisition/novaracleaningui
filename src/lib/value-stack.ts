@@ -48,15 +48,4 @@ export const CHECKOUT_PREMIUM_FEATURES = [
 
 export const CHECKLIST_INDEX_PATH = "/checklist";
 
-/** Map booking service type → public checklist slug. */
-export function checklistPathForServiceType(serviceType?: string | null): string {
-  const t = String(serviceType || "").toLowerCase();
-  if (t === "deep" || t === "combo") return "/checklist/deep-clean";
-  if (t === "moveinout" || t === "move-in-out" || t === "move_in_out") {
-    return "/checklist/move-in-out";
-  }
-  if (t === "membership" || t === "weekly" || t === "biweekly" || t === "monthly" || t === "recurring") {
-    return "/checklist/recurring";
-  }
-  return "/checklist/standard-clean";
-}
+export { checklistPathForServiceType } from "@/lib/checklists";

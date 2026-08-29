@@ -14,6 +14,7 @@ import {
   confirmationSmsBalanceTail,
   remainingDueAfterUpfrontCents,
 } from "../_shared/booking-balance.ts";
+import { publicChecklistUrl } from "../_shared/public-checklist-url.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -26,14 +27,8 @@ function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 }
 
-function checklistLink(serviceType: string | null | undefined): string {
-  const base = "https://try.novaracleaning.com/checklist";
-  switch ((serviceType || "").toLowerCase()) {
-    case "standard": return `${base}/standard-clean`;
-    case "deep": case "combo": return `${base}/deep-clean`;
-    case "moveinout": case "move_in_out": case "move-in-out": return `${base}/move-in-out`;
-    default: return base;
-  }
+function checklistLink(serviceType: string | null | undefined, scopeLevel?: string | null): string {
+  return publicChecklistUrl(serviceType, scopeLevel);
 }
 
 /**
@@ -79,7 +74,7 @@ serve(async (req) => {
     const fullDiscount = Number(b.full_payment_discount || 0);
     // Never treat preauth/deposit as "paid in full" — use real remaining.
     const balanceAfterDeposit = remainingDueAfterUpfrontCents(b);
-    const cl = checklistLink(b.service_type);
+    const cl = checklistLink(b.service_type, b.scope_level);
 
     const callEmail = (type: string, data: Record<string, unknown>) =>
       fetch(`${url}/functions/v1/send-booking-email`, {

@@ -43,6 +43,8 @@ import {
   type ProposalSite,
   type ValueStackItem,
 } from "@/lib/commercial-proposal";
+import { CommercialScopePreview } from "@/components/checklists/CommercialScopePreview";
+import { uniqueScopeKeysFromSites } from "@/lib/commercial-checklists";
 
 interface Payload {
   ok: true;
@@ -364,6 +366,19 @@ export default function ProposalPage() {
                 <p className="text-xs leading-relaxed text-muted-foreground">{item.detail}</p>
               </div>
             </div>
+          ))}
+        </div>
+      </Card>
+
+      <Card>
+        <h2 className="mb-1 text-sm font-semibold text-foreground">Scope checklist</h2>
+        <p className="mb-3 text-xs text-muted-foreground">
+          The crew works this list on every visit at the scope priced above. Large sites add photo
+          zones at dispatch.
+        </p>
+        <div className="space-y-3">
+          {uniqueScopeKeysFromSites(sites).map((scope) => (
+            <CommercialScopePreview key={scope} kind={scope} compact />
           ))}
         </div>
       </Card>

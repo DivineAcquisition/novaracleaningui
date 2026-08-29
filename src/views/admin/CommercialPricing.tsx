@@ -50,6 +50,9 @@ import {
   formatCents,
   type CommercialSettings,
 } from "@/lib/commercial-pricing";
+import Link from "next/link";
+import { CommercialScopePreview } from "@/components/checklists/CommercialScopePreview";
+import { parseCommercialScope } from "@/lib/commercial-checklists";
 
 interface FacilityRow {
   id: string;
@@ -287,6 +290,11 @@ export default function CommercialPricing() {
         <p className="text-xs text-slate-500">
           The multiplier prices the depth. Square feet per cleaner-hour is how fast one cleaner covers ground at that
           depth — it&apos;s what sizes the crew against the service window, so a change here moves recommended crews.
+          The checklist under each level is the published customer list — same items the crew works.{" "}
+          <Link href="/admin/commercial?tab=checklists" className="text-violet-700 font-medium hover:underline">
+            Open the Checklists workspace
+          </Link>
+          .
         </p>
         <div className="space-y-2">
           {scopes.map((s) => (
@@ -299,6 +307,15 @@ export default function CommercialPricing() {
                 { name: "summary", label: "Summary", value: s.summary || "", width: "flex-1 min-w-[200px]" },
               ]}
               badge={<Badge variant="outline" className="font-mono text-[10px]">{s.key}</Badge>}
+            />
+          ))}
+        </div>
+        <div className="grid lg:grid-cols-3 gap-3 pt-1">
+          {scopes.map((s) => (
+            <CommercialScopePreview
+              key={s.id}
+              kind={parseCommercialScope(s.key)}
+              compact
             />
           ))}
         </div>

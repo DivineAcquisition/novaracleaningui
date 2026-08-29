@@ -10,7 +10,7 @@ import {
   type ChecklistSlug,
 } from "@/lib/checklists";
 
-// Pre-render the four known checklist routes at build time.
+// Pre-render known checklist routes at build time (homes + commercial).
 export function generateStaticParams() {
   return CHECKLIST_SLUGS.map((slug) => ({ slug }));
 }

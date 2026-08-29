@@ -69,6 +69,24 @@ const ACCENT_STYLES: Record<
     chip: "bg-violet-100/70 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200",
     ring: "ring-violet-200/60 dark:ring-violet-900/40",
   },
+  slate: {
+    pill: "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-900/40 dark:text-slate-300 dark:border-slate-800",
+    sectionIcon: "text-slate-600 dark:text-slate-300",
+    sectionIconBg: "bg-slate-100 dark:bg-slate-900/40",
+    heroBg: "from-slate-50 via-white to-white dark:from-slate-950/30 dark:via-background dark:to-background",
+    cta: "bg-slate-800 hover:bg-slate-900 text-white",
+    chip: "bg-slate-100 text-slate-800 dark:bg-slate-800/60 dark:text-slate-200",
+    ring: "ring-slate-200/70 dark:ring-slate-800/50",
+  },
+  teal: {
+    pill: "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/30 dark:text-teal-300 dark:border-teal-900",
+    sectionIcon: "text-teal-600 dark:text-teal-400",
+    sectionIconBg: "bg-teal-50 dark:bg-teal-950/30",
+    heroBg: "from-teal-50 via-white to-white dark:from-teal-950/20 dark:via-background dark:to-background",
+    cta: "bg-teal-600 hover:bg-teal-700 text-white",
+    chip: "bg-teal-100/70 text-teal-800 dark:bg-teal-900/40 dark:text-teal-200",
+    ring: "ring-teal-200/60 dark:ring-teal-900/40",
+  },
   amber: {
     pill: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-900",
     sectionIcon: "text-amber-600 dark:text-amber-400",
@@ -85,7 +103,7 @@ export default function ChecklistView({ checklist }: ChecklistViewProps) {
   const a = ACCENT_STYLES[checklist.accent];
 
   const otherChecklists = CHECKLIST_SLUGS
-    .filter((s) => s !== checklist.slug)
+    .filter((s) => s !== checklist.slug && CHECKLISTS[s].family === checklist.family)
     .map((s) => CHECKLISTS[s]);
 
   return (
@@ -113,7 +131,7 @@ export default function ChecklistView({ checklist }: ChecklistViewProps) {
             className={cn("rounded-lg shadow-sm", a.cta)}
           >
             <Link href={checklist.bookingHref}>
-              Book this clean
+              {checklist.family === "commercial" ? "Request a quote" : "Book this clean"}
               <RiArrowRightLine className="w-4 h-4 ml-1.5" />
             </Link>
           </Button>
@@ -129,7 +147,7 @@ export default function ChecklistView({ checklist }: ChecklistViewProps) {
               className={cn("px-3 py-1 text-xs font-medium border", a.pill)}
             >
               <RiSparklingLine className="w-3.5 h-3.5 mr-1.5" />
-              Service checklist
+              {checklist.family === "commercial" ? "Commercial checklist" : "Service checklist"}
             </Badge>
             <h1 className="text-3xl md:text-5xl font-bold font-jakarta tracking-tight">
               {checklist.name}
@@ -291,11 +309,14 @@ export default function ChecklistView({ checklist }: ChecklistViewProps) {
         {/* CTA */}
         <div className="mt-12 text-center max-w-2xl mx-auto space-y-4">
           <h3 className="text-xl md:text-2xl font-bold font-jakarta tracking-tight">
-            Ready to book your {checklist.name.toLowerCase()}?
+            {checklist.family === "commercial"
+              ? `Ready to scope a ${checklist.name.toLowerCase()}?`
+              : `Ready to book your ${checklist.name.toLowerCase()}?`}
           </h3>
           <p className="text-sm text-muted-foreground">
-            Transparent pricing, professional cleaners, 100% satisfaction
-            guarantee. Most homes can be scheduled within 48 hours.
+            {checklist.family === "commercial"
+              ? "Tell us about the site and we'll follow up with a walkthrough or a firm price — the crew works this exact list."
+              : "Transparent pricing, professional cleaners, 100% satisfaction guarantee. Most homes can be scheduled within 48 hours."}
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center pt-1">
             <Button
@@ -304,7 +325,7 @@ export default function ChecklistView({ checklist }: ChecklistViewProps) {
               className={cn("rounded-lg shadow-sm", a.cta)}
             >
               <Link href={checklist.bookingHref}>
-                Book this clean
+                {checklist.family === "commercial" ? "Request a commercial quote" : "Book this clean"}
                 <RiArrowRightLine className="w-4 h-4 ml-1.5" />
               </Link>
             </Button>
@@ -333,10 +354,10 @@ export default function ChecklistView({ checklist }: ChecklistViewProps) {
         {/* Other checklists */}
         <div className="mt-16 border-t border-border/60 pt-10">
           <h3 className="text-lg font-bold font-jakarta tracking-tight mb-1">
-            Compare other services
+            {checklist.family === "commercial" ? "Compare other commercial scopes" : "Compare other services"}
           </h3>
           <p className="text-sm text-muted-foreground mb-5">
-            Each checklist lists every line item we'll touch — no surprises.
+            Each checklist lists every line item we&apos;ll touch — no surprises.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {otherChecklists.map((other) => {

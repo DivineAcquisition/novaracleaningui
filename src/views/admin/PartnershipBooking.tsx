@@ -50,6 +50,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useCommercialQuote } from "@/hooks/use-commercial-quote";
 import { formatCents, windowHoursBetween } from "@/lib/commercial-pricing";
 import { cn } from "@/lib/utils";
+import {
+  CommercialScopePreview,
+  commercialKindFromBooking,
+} from "@/components/checklists/CommercialScopePreview";
 
 type BookingType = "commercial" | "office" | "str_turnover";
 
@@ -705,6 +709,16 @@ export default function PartnershipBooking() {
                   )}
                 </div>
               )}
+
+              <div>
+                <p className="text-xs font-semibold text-slate-600 mb-2">
+                  Crew checklist for this scope — same list as the public page
+                </p>
+                <CommercialScopePreview
+                  kind={commercialKindFromBooking(type, scopeLevel)}
+                  compact
+                />
+              </div>
             </CardContent></Card>
           )}
 

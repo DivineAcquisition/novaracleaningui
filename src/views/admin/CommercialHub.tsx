@@ -10,12 +10,12 @@
 //   Deals       — Walkthroughs (findings → firm price). Send and pipeline
 //                 live on the dedicated Proposals tab so VA and admin share
 //                 one quote path.
-//   Jobs        — Book job, Recurring
+//   Jobs        — Book job, Recurring, Checklists
 //   Compliance  — COI (client certs + Novara's own)
 //   STR         — turnovers / hosts
 //
 // Deep links still use ?tab=overview|accounts|walkthroughs|send|pipeline|
-// book|recurring|compliance|str. Old Partnerships Hub aliases keep working.
+// book|recurring|checklists|compliance|str. Old Partnerships Hub aliases keep working.
 // ?tab=send and ?tab=pipeline redirect to /admin/proposals.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -46,6 +46,7 @@ import PartnershipAccounts from "@/views/admin/PartnershipAccounts";
 import PartnershipBooking from "@/views/admin/PartnershipBooking";
 import PartnerRecurringSchedules from "@/views/admin/PartnerRecurringSchedules";
 import CommercialWalkthroughs from "@/views/admin/CommercialWalkthroughs";
+import CommercialChecklists from "@/views/admin/CommercialChecklists";
 import CoiCompliance from "@/views/admin/CoiCompliance";
 import { syncPartners, syncContractors } from "@/lib/partner-admin-api";
 
@@ -57,6 +58,7 @@ const VALID_TABS = [
   "pipeline",
   "book",
   "recurring",
+  "checklists",
   "compliance",
   "str",
 ] as const;
@@ -88,6 +90,7 @@ const SCREENS: Record<
   pipeline: { label: "Pipeline", icon: RiFileTextLine },
   book: { label: "Book job", icon: RiCalendarCheckLine },
   recurring: { label: "Recurring", icon: RiRefreshLine },
+  checklists: { label: "Checklists", icon: RiFileTextLine },
   compliance: { label: "Compliance", icon: RiShieldCheckLine },
   str: { label: "STR", icon: RiBuilding2Line },
 };
@@ -116,8 +119,8 @@ const WORKSPACES: Array<{
   {
     id: "jobs",
     label: "Jobs",
-    description: "One-off commercial jobs and recurring schedules.",
-    tabs: ["book", "recurring"],
+    description: "One-off commercial jobs, recurring schedules, and published checklists.",
+    tabs: ["book", "recurring", "checklists"],
     fallback: "book",
   },
   {
@@ -144,6 +147,7 @@ const TAB_WORKSPACE: Record<Tab, WorkspaceId> = {
   pipeline: "deals",
   book: "jobs",
   recurring: "jobs",
+  checklists: "jobs",
   compliance: "compliance",
   str: "str",
 };
@@ -355,6 +359,7 @@ export default function CommercialHub() {
         )}
         {tab === "book" && <PartnershipBooking />}
         {tab === "recurring" && <PartnerRecurringSchedules />}
+        {tab === "checklists" && <CommercialChecklists />}
         {tab === "compliance" && <CoiCompliance />}
         {tab === "str" && <PartnerAdmin />}
       </div>

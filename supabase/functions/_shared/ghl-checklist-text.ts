@@ -231,12 +231,160 @@ TEMPLATES.recurring = {
   ],
 };
 
+const COMMERCIAL_ARRIVAL = {
+  title: "ARRIVAL & SETUP",
+  items: [
+    "Check in per site access instructions (badge / code / contact)",
+    "Notify the required contact on arrival (if specified)",
+    "Confirm the alarm is disarmed per the security notes before starting",
+    "Walk the site and note anything already damaged or blocked",
+  ],
+};
+const COMMERCIAL_DOCS = {
+  title: "DOCUMENTATION",
+  items: [
+    "Take BEFORE photos of all areas in scope",
+    "Take AFTER photos of every area cleaned",
+  ],
+};
+const COMMERCIAL_CLOSE = {
+  title: "CLOSE-OUT",
+  items: [
+    "Complete any deep tasks scheduled for this visit (per scope)",
+    "Return all furniture and equipment to where you found it",
+    "Secure the site per lock-up procedure (doors, alarm, lights)",
+    "Notify the required contact on departure (if specified)",
+  ],
+};
+
+TEMPLATES.commercial_light = {
+  name: "Commercial Light",
+  tagline: "Trash, floors, restrooms — the nightly refresh",
+  meta: { estimatedTime: "Sized to square footage and window", frequency: "Nightly or several times a week" },
+  sections: [
+    COMMERCIAL_ARRIVAL,
+    {
+      title: "LIGHT SCOPE",
+      items: [
+        "Sweep and vacuum all floors in scope",
+        "Empty all trash and recycling; replace liners; take to designated disposal",
+        "Restrooms: disinfect toilets, sinks, counters, mirrors; restock supplies",
+        "Spot-clean visible spills and marks",
+      ],
+    },
+    COMMERCIAL_DOCS,
+    COMMERCIAL_CLOSE,
+  ],
+  notIncludedHeading: "Not included — upgrade to Standard for:",
+  notIncluded: [
+    "Mop all hard floors",
+    "Break room / kitchenette: counters, sink, appliance exteriors, tables",
+    "Individual offices and rooms: surfaces wiped, trash pulled, floors done",
+    "Wipe and disinfect touch points (handles, switches, rails)",
+  ],
+};
+
+TEMPLATES.commercial_standard = {
+  name: "Commercial Standard",
+  tagline: "Light plus mopping, rooms, and touch-point disinfection",
+  meta: { estimatedTime: "Sized to square footage and window", frequency: "Weekly, several times a week, or nightly" },
+  sections: [
+    COMMERCIAL_ARRIVAL,
+    {
+      title: "STANDARD SCOPE",
+      items: [
+        "Sweep and vacuum all floors in scope",
+        "Empty all trash and recycling; replace liners; take to designated disposal",
+        "Restrooms: disinfect toilets, sinks, counters, mirrors; restock supplies",
+        "Spot-clean visible spills and marks",
+        "Mop all hard floors",
+        "Break room / kitchenette: counters, sink, appliance exteriors, tables",
+        "Individual offices and rooms: surfaces wiped, trash pulled, floors done",
+        "Wipe and disinfect touch points (handles, switches, rails)",
+      ],
+    },
+    COMMERCIAL_DOCS,
+    COMMERCIAL_CLOSE,
+  ],
+  notIncludedHeading: "Not included — upgrade to Detailed for:",
+  notIncluded: [
+    "Scrub floors — grout lines, edges, and corners, not just the open middle",
+    "High-touch sanitization pass: shared equipment, phones, rails, dispensers",
+    "Detail dusting: ledges, sills, vents, fixtures, tops of partitions",
+    "Interior glass and entry doors, streak-free",
+  ],
+};
+
+TEMPLATES.commercial = TEMPLATES.commercial_standard;
+
+TEMPLATES.commercial_detailed = {
+  name: "Commercial Detailed",
+  tagline: "Standard plus scrubbing, sanitization, dusting, and glass",
+  meta: { estimatedTime: "Longer window or a larger crew than Standard", frequency: "Periodic rotation or standing high-spec scope" },
+  sections: [
+    COMMERCIAL_ARRIVAL,
+    {
+      title: "DETAILED SCOPE",
+      items: [
+        ...TEMPLATES.commercial_standard.sections[1].items,
+        "Scrub floors — grout lines, edges, and corners, not just the open middle",
+        "High-touch sanitization pass: shared equipment, phones, rails, dispensers",
+        "Detail dusting: ledges, sills, vents, fixtures, tops of partitions",
+        "Interior glass and entry doors, streak-free",
+      ],
+    },
+    COMMERCIAL_DOCS,
+    COMMERCIAL_CLOSE,
+  ],
+  notIncludedHeading: "Not included — available as add-ons:",
+  notIncluded: [
+    "Exterior windows",
+    "Carpet extraction or floor refinishing",
+    "Kitchen hood / grease-trap work",
+    "Moving inventory or warehouse racking",
+  ],
+};
+
+TEMPLATES.office = {
+  name: "Office Clean (After-Hours)",
+  tagline: "Standard commercial scope plus desk, conference, and lock-up rules",
+  meta: { estimatedTime: "Sized to square footage and after-hours window", frequency: "Nightly, several times a week, or weekly" },
+  sections: [
+    ...TEMPLATES.commercial_standard.sections.slice(0, 2),
+    {
+      title: "OFFICE RULES",
+      items: [
+        "Respect the desk policy — do NOT move or touch papers/electronics unless scope says otherwise",
+        "Clean around workstations: wipe desks per policy, sanitize phones/shared equipment only if in scope",
+        "Conference rooms: tables, chairs, glass, whiteboard trays (do not erase boards)",
+        "Handle sensitive areas exactly per instructions (server rooms, exec offices)",
+      ],
+    },
+    COMMERCIAL_DOCS,
+    COMMERCIAL_CLOSE,
+    {
+      title: "AFTER-HOURS CLOSE-OUT",
+      items: [
+        "Turn off lights per building instructions",
+        "Set the alarm and lock up exactly per the security notes",
+        "Badge out / check out with security if required",
+      ],
+    },
+  ],
+  notIncludedHeading: TEMPLATES.commercial_standard.notIncludedHeading,
+  notIncluded: TEMPLATES.commercial_standard.notIncluded,
+};
+
 function normalizeServiceType(serviceType: string | null | undefined): string {
   const s = String(serviceType || "standard").toLowerCase().replace(/-/g, "_");
   if (s === "moveinout" || s === "move_in_out" || s === "move-in-out") return "move_in_out";
   if (s === "recurring" || s === "membership") return "recurring";
   if (s === "deep") return "deep";
   if (s === "combo") return "deep";
+  if (s === "office") return "office";
+  if (s === "commercial_light" || s === "light") return "commercial_light";
+  if (s === "commercial_detailed" || s === "detailed") return "commercial_detailed";
+  if (s === "commercial" || s === "commercial_standard") return "commercial_standard";
   return "standard";
 }
 
