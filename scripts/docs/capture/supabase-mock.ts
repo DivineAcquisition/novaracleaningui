@@ -223,6 +223,8 @@ const TABLES: Record<string, unknown[]> = {
   business_accounts: demo.businessAccounts,
   va_onboarding: demo.vaOnboarding,
   leads: [],
+  va_quotes: demo.vaQuotes,
+  custom_quotes: demo.customQuotes,
   job_assignments: [],
   availability: [],
   availability_slots: [],

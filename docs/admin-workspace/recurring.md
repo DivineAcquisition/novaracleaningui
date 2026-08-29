@@ -76,9 +76,10 @@ Two differences, both real:
 - **Weekly at 3,001 sq ft and above** — the live configuration says **not offered**; the
   older list still carries prices.
 
-The table above is the live configuration, which is what quotes use. If you try to sell a
-weekly plan on a home over 3,000 sq ft, the booking screen will refuse with *"This plan
-frequency is not offered for this home size — quote a custom plan."* That is not a bug.
+The rates published in this guide are the live configuration, which is what quotes use. If
+you try to sell a weekly plan on a home over 3,000 sq ft, the booking screen will refuse with
+*"This plan frequency is not offered for this home size — quote a custom plan."* That is not
+a bug.
 :::
 
 ## Working a member

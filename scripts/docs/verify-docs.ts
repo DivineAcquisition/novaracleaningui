@@ -143,6 +143,18 @@ function main() {
     }
   }
 
+  // Images on disk that no longer belong to any shot — left behind when a
+  // shot is renamed or dropped. Harmless but they accumulate, and a stale
+  // image sitting next to current ones invites someone to use it.
+  const knownFiles = new Set(manifest.shots.map((s) => s.file).filter(Boolean) as string[]);
+  if (existsSync(SHOTS_DIR)) {
+    for (const file of readdirSync(SHOTS_DIR).filter((f) => f.endsWith(".png"))) {
+      if (!knownFiles.has(file)) {
+        warnings.push(`${file} is on disk but belongs to no shot — delete it or add the shot back`);
+      }
+    }
+  }
+
   for (const shot of manifest.shots) {
     if (!slugs.has(shot.doc)) {
       problems.push(`screenshot "${shot.id}" is filed against guide "${shot.doc}", which does not exist`);

@@ -58,15 +58,15 @@ needs a custom quote, and you should flag it rather than guess.
 
 :::drift Two base price tables are on file, and the system knows it
 The pricing configuration currently holds **two** base price tables — the "Training Guide"
-table (the one above) and an older "later sqft model" with different, generally lower
-numbers. The system is set to quote from the Training Guide table, and it is flagged as
-**not reconciled**, which is why the Pricing screen shows a banner about it.
+table (the one published in this guide) and an older "later sqft model" with different,
+generally lower numbers. The system is set to quote from the Training Guide table, and it is
+flagged as **not reconciled**, which is why the Pricing screen shows a banner about it.
 
 Nothing is broken and nothing is being mis-quoted: quotes come from the Training Guide
 table. But the discrepancy is real, it is unresolved, and an admin needs to confirm which
 table is authoritative and clear the flag. Until then, if you see a price in an older
-document that doesn't match the table above, that is probably why. **The table above is
-what customers are actually charged.**
+document that doesn't match, that is probably why. **The Training Guide table is what
+customers are actually charged.**
 :::
 
 ### Condition
@@ -311,9 +311,10 @@ match in two places:
 - **Weekly at 3,001 sq ft and above** — the live configuration says **not offered**; the
   older list still carries prices ($899, $1,039, $1,159, $1,279).
 
-The table above is the live configuration, which is what the quoting screen actually uses.
-The older list is a fallback that only comes into play if the live configuration can't be
-read. Someone should reconcile the two; until then, quote the table above.
+The membership rates published in this guide are the live configuration, which is what the
+quoting screen actually uses. The older list is a fallback that only comes into play if the
+live configuration can't be read. Someone should reconcile the two; until then, quote the
+live figures.
 :::
 
 ## How far you can move a price

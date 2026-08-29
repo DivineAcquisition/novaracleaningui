@@ -36,6 +36,14 @@ export interface Shot {
    * reader wants the quote rail, not the whole booking form around it.
    */
   clipSelector?: string;
+  /**
+   * Container every callout is searched within unless it sets its own
+   * `within`. Defaults to `main`, which keeps text matching out of the
+   * sidebar — its one-line descriptions repeat words from the screens they
+   * link to ("Zones · demand-reactive" contains "active"), so an unscoped
+   * search for a filter button lands on the wrong element.
+   */
+  defaultWithin?: string | null;
   /** Viewport height override for tall screens. */
   height?: number;
 }
@@ -70,6 +78,9 @@ export const SHOTS: Shot[] = [
     caption: "The workspace sidebar. Which entries you see depends on your role.",
     url: "/admin/dashboard",
     waitForText: "Workspace",
+    // This shot is documenting the sidebar itself, so it must not be scoped
+    // to the content area like every other shot.
+    defaultWithin: "aside",
     callouts: [
       { text: "Workspace", label: "Section list" },
       { text: "Bookings", nth: 0, label: "Bookings" },
@@ -240,7 +251,7 @@ export const SHOTS: Shot[] = [
     callouts: [
       { text: "Contractors", nth: 0, label: "Section switch" },
       { selector: "input[placeholder*='Search by name']", label: "Search" },
-      { text: "Active", nth: 0, label: "Status filters" },
+      { text: "Active", exact: true, nth: 0, label: "Status filters" },
       { text: "+ Add cleaner", label: "Add a contractor" },
     ],
     fullPage: true,
@@ -265,11 +276,13 @@ export const SHOTS: Shot[] = [
     caption: "Operations pulls four screens into one: at-risk work, dispatch, map and sync.",
     url: "/admin/operations",
     waitForText: "Needs attention",
+    // The page header repeats all four tab names in its subtitle, so match on
+    // the tab row itself rather than on the words.
     callouts: [
-      { text: "Needs attention", nth: 0, label: "Needs attention" },
-      { text: "Dispatch", nth: 0, label: "Dispatch" },
-      { text: "Map", nth: 0, label: "Map" },
-      { text: "Sync health", nth: 0, label: "Sync health" },
+      { selector: "[role='tab']", nth: 0, label: "Needs attention — jobs at risk right now" },
+      { selector: "[role='tab']", nth: 1, label: "Dispatch — getting cleaners onto jobs" },
+      { selector: "[role='tab']", nth: 2, label: "Map — coverage and demand" },
+      { selector: "[role='tab']", nth: 3, label: "Sync health — why a record might be missing" },
     ],
     fullPage: true,
   },
@@ -342,9 +355,10 @@ export const SHOTS: Shot[] = [
     caption: "Saved quotes and website quote requests.",
     url: "/admin/quotes",
     waitForText: "Quotes",
+    // The header breadcrumb repeats the tab names, so target the tab row.
     callouts: [
-      { text: "Saved quotes", label: "Quotes saved from internal booking" },
-      { text: "Website requests", label: "Requests from the website" },
+      { selector: "[role='tab']", nth: 0, label: "Quotes saved from internal booking" },
+      { selector: "[role='tab']", nth: 1, label: "Requests from the website" },
       { text: "New quote / book", label: "Start a new quote" },
     ],
     fullPage: true,

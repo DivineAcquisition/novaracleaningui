@@ -721,6 +721,71 @@ export const vaOnboarding = [
   },
 ];
 
+// ─── Saved quotes ──────────────────────────────────────────────────────────
+
+export const vaQuotes = [
+  {
+    id: "vq000000-0000-4000-8000-000000000001",
+    first_name: "Nina",
+    last_name: "Okonkwo",
+    email: "nina.okonkwo@example.test",
+    phone: "+15555550147",
+    address: "82 Bellhaven Row",
+    city: "Silver Spring",
+    state: "MD",
+    zip_code: "20910",
+    service_type: "standard",
+    home_size_id: "1501_2000",
+    home_size: "1,501 – 2,000 sq ft",
+    base_price_cents: 29875,
+    estimate_cents: 29875,
+    quoted_price_cents: 29875,
+    preferred_date: iso(6),
+    status: "draft",
+    csr_name: "Ops Assistant",
+    team_notes: "Wants a Saturday if we can do it. Two cats.",
+    locked_until: ts(1),
+    created_at: ts(-1),
+  },
+  {
+    id: "vq000000-0000-4000-8000-000000000002",
+    first_name: "Bradley",
+    last_name: "Nwosu",
+    email: "bradley.nwosu@example.test",
+    phone: "+15555550158",
+    address: "1907 Kestrel Bend",
+    city: "Frederick",
+    state: "MD",
+    zip_code: "21701",
+    service_type: "deep",
+    home_size_id: "2001_2500",
+    home_size: "2,001 – 2,500 sq ft",
+    base_price_cents: 47138,
+    estimate_cents: 47138,
+    quoted_price_cents: 47138,
+    preferred_date: iso(9),
+    status: "converted",
+    csr_name: "Sales Assistant",
+    team_notes: "",
+    locked_until: ts(-2),
+    created_at: ts(-4),
+  },
+];
+
+export const customQuotes = [
+  {
+    id: "cq000000-0000-4000-8000-000000000001",
+    name: "Odette Laurent",
+    email: "odette.laurent@example.test",
+    phone: "+15555550169",
+    address: "440 Windmere Close, Rockville, MD 20850",
+    square_feet: 5400,
+    status: "pending",
+    notes: "Large house, asked about every-other-week.",
+    created_at: ts(-2),
+  },
+];
+
 // ─── Commercial / proposals ────────────────────────────────────────────────
 
 export const businessAccounts = [
