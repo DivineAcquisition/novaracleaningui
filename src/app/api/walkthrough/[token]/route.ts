@@ -33,8 +33,10 @@ function clock(v: unknown): string | null {
 }
 
 async function resolveToken(token: string) {
+  if (!token || token.length < 12) {
+    return { supabase: null, wt: null as Record<string, any> | null, error: "This walkthrough link is not valid." };
+  }
   const supabase = getAdminSupabase();
-  if (!token || token.length < 12) return { supabase, wt: null as Record<string, any> | null, error: "Invalid link." };
   const { data } = await supabase
     .from("commercial_walkthroughs")
     .select("*")
@@ -77,7 +79,7 @@ export async function GET(
   try {
     const { supabase, wt, error } = await resolveToken(params.token);
     if (error && !wt) return NextResponse.json({ error }, { status: 404 });
-    if (!wt) return NextResponse.json({ error: error || "Not found" }, { status: 404 });
+    if (!wt || !supabase) return NextResponse.json({ error: error || "Not found" }, { status: 404 });
     if (error && !wt.token_submitted_at) return NextResponse.json({ error }, { status: 410 });
 
     const ctx = await loadContext(supabase, wt);
@@ -120,7 +122,7 @@ export async function PATCH(
 ): Promise<NextResponse> {
   try {
     const { supabase, wt, error } = await resolveToken(params.token);
-    if (!wt) return NextResponse.json({ error: error || "Not found" }, { status: 404 });
+    if (!wt || !supabase) return NextResponse.json({ error: error || "Not found" }, { status: 404 });
     if (error) return NextResponse.json({ error }, { status: 410 });
     if (wt.token_submitted_at || ["conducted", "priced", "excluded", "cancelled"].includes(String(wt.status))) {
       return NextResponse.json({ ok: true, submitted: true });
@@ -154,7 +156,7 @@ export async function POST(
 ): Promise<NextResponse> {
   try {
     const { supabase, wt, error } = await resolveToken(params.token);
-    if (!wt) return NextResponse.json({ error: error || "Not found" }, { status: 404 });
+    if (!wt || !supabase) return NextResponse.json({ error: error || "Not found" }, { status: 404 });
     if (error) return NextResponse.json({ error }, { status: 410 });
     if (wt.token_submitted_at) return NextResponse.json({ ok: true, alreadySubmitted: true, status: wt.status });
 
