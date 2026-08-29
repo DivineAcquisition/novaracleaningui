@@ -14,10 +14,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  RiArrowLeftLine,
   RiArrowRightLine,
   RiCalendarLine,
-  RiLoader4Line,
   RiMapPinLine,
   RiMoneyDollarCircleLine,
   RiNotification3Line,
@@ -37,6 +35,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+
 import { RecleanBadge, RecleanContractorNote, notesLookLikeReclean } from "@/components/reclean/RecleanCallout";
 
 interface OfferRow {
@@ -118,43 +117,22 @@ export default function JobOffersList() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
-        <div className="container max-w-2xl mx-auto px-4 py-3 flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => router.push("/cleaner/dashboard")}
-            className="-ml-2"
-          >
-            <RiArrowLeftLine className="w-4 h-4 mr-1.5" />
-            Dashboard
-          </Button>
-          <div className="flex items-center gap-2 ml-2">
-            <RiNotification3Line className="w-4 h-4 text-emerald-700" />
-            <h1 className="font-jakarta text-base font-bold text-slate-900 tracking-tight">
-              Active job offers
-            </h1>
-          </div>
-        </div>
-      </header>
-
-      <div className="container max-w-2xl mx-auto px-4 py-6 space-y-3">
+    <div className="mx-auto max-w-2xl space-y-3">
         {loading ? (
           <>
             <Skeleton className="h-32 w-full rounded-2xl" />
             <Skeleton className="h-32 w-full rounded-2xl" />
           </>
         ) : offers.length === 0 ? (
-          <Card className="border-dashed border-2 border-slate-200">
+          <Card className="border-dashed border-2">
             <CardContent className="py-12 text-center">
-              <div className="mx-auto w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center mb-3">
-                <RiNotification3Line className="w-6 h-6 text-slate-400" />
+              <div className="mx-auto w-12 h-12 rounded-2xl bg-brand-50 flex items-center justify-center mb-3">
+                <RiNotification3Line className="w-6 h-6 text-primary" />
               </div>
-              <p className="font-semibold text-slate-900">
+              <p className="font-heading font-semibold">
                 No active offers right now
               </p>
-              <p className="text-sm text-slate-500 mt-1">
+              <p className="text-sm text-muted-foreground mt-1">
                 You&apos;ll get a text + push notification the moment a new
                 job opens up in your area.
               </p>
@@ -266,7 +244,6 @@ export default function JobOffersList() {
             );
           })
         )}
-      </div>
     </div>
   );
 }

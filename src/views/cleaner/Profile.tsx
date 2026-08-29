@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  RiArrowLeftLine,
   RiBankCardLine,
   RiCameraLine,
   RiChat3Line,
@@ -214,7 +213,7 @@ export default function CleanerProfile() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="flex items-center justify-center py-24">
         <RiLoader4Line className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
@@ -243,7 +242,7 @@ export default function CleanerProfile() {
 
   if (!profile) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="flex items-center justify-center py-24">
         <p>Profile not found</p>
       </div>
     );
@@ -252,18 +251,7 @@ export default function CleanerProfile() {
   const stripeConnected = profile.stripe_account_id && profile.payouts_enabled;
 
   return (
-    <div className="min-h-screen bg-background py-4 px-3 sm:py-6 sm:px-4">
-      <div className="container max-w-lg mx-auto">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => router.push("/cleaner/dashboard")}
-          className="mb-3"
-        >
-          <RiArrowLeftLine className="mr-1 h-4 w-4" />
-          Dashboard
-        </Button>
-
+    <div className="mx-auto max-w-lg">
         <Card>
           <CardHeader className="pb-3 pt-4 px-4">
             <CardTitle className="text-lg">Profile Settings</CardTitle>
@@ -508,7 +496,6 @@ export default function CleanerProfile() {
             </Button>
           </CardContent>
         </Card>
-      </div>
     </div>
   );
 }

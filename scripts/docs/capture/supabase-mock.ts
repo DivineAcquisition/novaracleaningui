@@ -380,6 +380,8 @@ const FUNCTIONS: Record<string, (body: any) => unknown> = {
       ? { cleaners: demo.cleaners }
       : body?.action === "suggest_cleaners"
         ? { suggestions: demo.cleaners.slice(0, 2) }
+        : body?.action === "preview_pay"
+          ? { shares: (body?.cleanerIds || []).map((id: string) => ({ cleanerId: id, shareCents: 4500 })) }
         : { ok: true },
   "admin-cleaner-jobs": () => ({ offers: [], jobs: [] }),
   "cleaner-scores-admin": (body) =>

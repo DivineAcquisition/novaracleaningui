@@ -21,7 +21,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   RiAlertLine,
-  RiArrowLeftLine,
   RiBookOpenLine,
   RiCheckboxCircleLine,
   RiCheckLine,
@@ -55,8 +54,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { resolveCleanerAuth, isBlockedCleanerStatus } from "@/lib/cleaner-auth";
-
-const logo = "/novara-logo.png";
 
 interface TrainingConfig {
   url: string | null;
@@ -348,7 +345,7 @@ export default function CleanerTrainingPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/10 flex items-center justify-center">
+      <div className="flex items-center justify-center py-24">
         <div className="text-center space-y-4">
           <RiLoader4Line className="w-10 h-10 animate-spin text-primary mx-auto" />
           <p className="text-muted-foreground text-sm">Loading training portal…</p>
@@ -362,41 +359,10 @@ export default function CleanerTrainingPage() {
   const allComplete = completedCount === MODULES.length;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/10">
+    <div className="mx-auto max-w-3xl space-y-6">
       <SEO title="Cleaner Training Portal" noindex />
 
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border/40">
-        <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => router.push("/cleaner/ob-portal")}
-            className="gap-2 -ml-2"
-          >
-            <RiArrowLeftLine className="w-4 h-4" />
-            <span className="hidden sm:inline">Back to checklist</span>
-            <span className="sm:hidden">Back</span>
-          </Button>
-          <div className="flex items-center gap-2 min-w-0">
-            <img src={logo} alt="Novara" className="w-7 h-7 rounded-lg" />
-            <div className="truncate">
-              <span className="text-sm font-bold font-jakarta truncate">
-                Training <span className="text-primary">Portal</span>
-              </span>
-              <p className="text-[10px] text-muted-foreground leading-none truncate">
-                Contractor Onboarding
-              </p>
-            </div>
-          </div>
-          <Badge variant="secondary" className="text-[10px] hidden sm:flex">
-            <RiGraduationCapLine className="w-3 h-3 mr-1" />
-            {progressPercent}% complete
-          </Badge>
-        </div>
-      </header>
-
-      <main className="max-w-3xl mx-auto px-4 py-6 space-y-6">
+      <main className="space-y-6">
         {/* Hero */}
         <section className="text-center space-y-3">
           <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto">

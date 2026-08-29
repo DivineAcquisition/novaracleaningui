@@ -15,8 +15,8 @@ import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import {
-  RiLoader4Line, RiMapPinLine, RiTimeLine, RiKey2Line, RiHome4Line,
-  RiCheckboxCircleLine, RiCameraLine, RiArrowLeftLine, RiInformationLine,
+  RiLoader4Line, RiMapPinLine, RiTimeLine, RiKey2Line,
+  RiCheckboxCircleLine, RiCameraLine, RiInformationLine,
   RiCheckLine, RiPlayCircleLine,
 } from "@remixicon/react";
 
@@ -88,23 +88,17 @@ export default function TurnoverJobs() {
   }, [cleanerId, loadJobs]);
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center"><RiLoader4Line className="w-8 h-8 animate-spin text-primary" /></div>;
+    return <div className="flex items-center justify-center py-24"><RiLoader4Line className="w-8 h-8 animate-spin text-primary" /></div>;
   }
 
   const active = jobs.filter((j) => j.status !== "completed");
   const done = jobs.filter((j) => j.status === "completed");
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="mx-auto max-w-2xl space-y-6">
       <SEO title="My Turnovers" noindex />
-      <header className="bg-white border-b sticky top-0 z-10">
-        <div className="max-w-2xl mx-auto px-4 h-14 flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={() => router.push("/cleaner/dashboard")}><RiArrowLeftLine className="w-4 h-4" /></Button>
-          <div className="flex items-center gap-2 font-bold"><RiHome4Line className="w-5 h-5" style={{ color: "#5C0FFE" }} /> Turnovers</div>
-        </div>
-      </header>
 
-      <main className="max-w-2xl mx-auto px-4 py-6 space-y-6">
+      <main className="space-y-6">
         <section className="space-y-3">
           <h2 className="text-lg font-bold">Assigned to you</h2>
           {active.length === 0 && <p className="text-sm text-muted-foreground">No active turnovers right now. We'll text you when one is assigned.</p>}

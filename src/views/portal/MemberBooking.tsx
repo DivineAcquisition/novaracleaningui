@@ -389,7 +389,7 @@ export default function MemberBooking() {
 
   if (creditsLoading || !user) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="flex items-center justify-center py-24">
         <div className="text-center animate-fade-in">
           <RiLoader4Line className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
           <p className="text-sm text-muted-foreground">
@@ -417,37 +417,32 @@ export default function MemberBooking() {
   const progressPercent = ((currentStep + 1) / STEPS.length) * 100;
 
   return (
-    <div className="min-h-screen bg-background pb-24 md:pb-8">
+    <div className="mx-auto max-w-4xl pb-24 md:pb-8">
       <SEO title="Book with Credit" description="Use your membership credit to book a cleaning. Choose your address, schedule, and preferred cleaner." noindex />
-      {/* Header */}
-      <div className="bg-background border-b border-border/50 sticky top-0 z-10">
-        <div className="container max-w-4xl mx-auto px-4">
-          <div className="flex items-center justify-between h-14">
-            <Button variant="ghost" size="sm" onClick={handleBack} className="-ml-2">
-              <RiArrowLeftLine className="w-4 h-4 mr-1.5" />
-              {currentStep === 0 ? 'Account' : 'Back'}
-            </Button>
-            <Badge className="bg-primary/10 text-primary border-primary/20 rounded-lg px-3 py-1">
-              <RiTicketLine className="w-3.5 h-3.5 mr-1.5" />
-              <span className="font-semibold text-xs">
-                {payMode
-                  ? 'Extra clean'
-                  : `${credits?.credits_remaining} Credit${credits?.credits_remaining !== 1 ? 's' : ''}`}
-              </span>
-            </Badge>
-          </div>
-          {/* Progress bar */}
-          <div className="h-0.5 -mx-4 bg-muted">
-            <div
-              className="h-full transition-all duration-500 ease-out"
-              style={{ width: `${progressPercent}%`, background: 'var(--gradient-primary)' }}
-            />
-          </div>
+      <div className="panel rounded-2xl mb-6 overflow-hidden">
+        <div className="flex items-center justify-between h-14 px-4">
+          <Button variant="ghost" size="sm" onClick={handleBack} className="-ml-2">
+            <RiArrowLeftLine className="w-4 h-4 mr-1.5" />
+            {currentStep === 0 ? "Account" : "Back"}
+          </Button>
+          <Badge className="bg-primary/10 text-primary border-primary/20 rounded-lg px-3 py-1">
+            <RiTicketLine className="w-3.5 h-3.5 mr-1.5" />
+            <span className="font-semibold text-xs">
+              {payMode
+                ? "Extra clean"
+                : `${credits?.credits_remaining} Credit${credits?.credits_remaining !== 1 ? "s" : ""}`}
+            </span>
+          </Badge>
+        </div>
+        <div className="h-0.5 bg-muted">
+          <div
+            className="h-full transition-all duration-500 ease-out"
+            style={{ width: `${progressPercent}%`, background: "var(--gradient-primary)" }}
+          />
         </div>
       </div>
 
-      {/* Steps indicator */}
-      <div className="container max-w-4xl mx-auto px-4 py-6">
+      <div>
         <div className="flex items-center justify-between mb-8">
           {STEPS.map((step, index) => {
             const StepIcon = step.icon;

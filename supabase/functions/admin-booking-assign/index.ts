@@ -6,7 +6,14 @@
 //
 // Body (assign):
 //   { bookingId, cleanerIds: string[], mode?: "replace" | "add", notify?: boolean,
-//     bufferOverrideReason?: string }
+//     bufferOverrideReason?: string,
+//     payoutCentsByCleaner?: Record<cleanerId, number> }
+//   payoutCentsByCleaner locks each cleaner's dashboard pay
+//   (job_assignments.estimated_pay_cents + bookings.cleaner_payout_cents for
+//   the lead). Omitted cleaners keep the compute_crew_pay formula.
+//
+// Body (preview):
+//   { action: "preview_pay", bookingId, cleanerIds: string[] }
 //
 // Body (suggest):
 //   { action: "suggest_cleaners", bookingId, limit?: number }
@@ -83,6 +90,19 @@ function json(payload: unknown, status = 200) {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
     status,
   });
+}
+
+/** Admin-entered dollars from the assign popup, in cents. Empty/invalid = no override. */
+function parsePayoutOverrides(raw: unknown): Map<string, number> {
+  const map = new Map<string, number>();
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return map;
+  for (const [id, val] of Object.entries(raw as Record<string, unknown>)) {
+    const cid = String(id || "").trim();
+    const n = typeof val === "number" ? val : Number(val);
+    if (!cid || !Number.isFinite(n) || n < 0) continue;
+    map.set(cid, Math.round(n));
+  }
+  return map;
 }
 
 // Returns the acting user's id, or null for a trusted server-to-server call.
@@ -335,6 +355,28 @@ serve(async (req) => {
       });
     }
 
+    if (action === "preview_pay") {
+      const previewIds = (Array.isArray(body?.cleanerIds) ? body.cleanerIds : [])
+        .map((id: unknown) => String(id).trim())
+        .filter(Boolean)
+        .slice(0, 12);
+      if (previewIds.length === 0) return json({ error: "cleanerIds required" }, 400);
+      const jobValueCents = jobValueForPay(booking);
+      const shares = await computeCrewPay(admin, jobValueCents, previewIds);
+      return json({
+        success: true,
+        bookingId,
+        jobValueCents,
+        shares: shares.map((s) => ({
+          cleanerId: s.cleanerId,
+          shareCents: s.shareCents,
+          ratePercent: s.ratePercent,
+          crewSize: s.crewSize,
+          payTier: s.payTier,
+        })),
+      });
+    }
+
     const cleanerIds = (Array.isArray(body?.cleanerIds) ? body.cleanerIds : [])
       .map((id: unknown) => String(id).trim())
       .filter(Boolean)
@@ -519,12 +561,17 @@ serve(async (req) => {
     const jobValueCents = jobValueForPay(booking);
     const shares = await computeCrewPay(admin, jobValueCents, cleanerIds);
     const shareByCleaner = new Map(shares.map((s) => [s.cleanerId, s]));
+    const payoutOverrides = parsePayoutOverrides(body?.payoutCentsByCleaner);
+    const lockedPayByCleaner = new Map<string, number>();
 
     const now = new Date().toISOString();
     for (let i = 0; i < cleanerIds.length; i++) {
       const cid = cleanerIds[i];
       const role = i === 0 ? "Lead" : "Support";
       const share = shareByCleaner.get(cid);
+      const override = payoutOverrides.get(cid);
+      const payCents = override != null ? override : (share?.shareCents ?? null);
+      if (payCents != null) lockedPayByCleaner.set(cid, payCents);
       const { error: upsertErr } = await admin.from("job_assignments").upsert(
         {
           job_id: jobId,
@@ -533,7 +580,7 @@ serve(async (req) => {
           status: "Confirmed",
           accepted_at: now,
           responded_at: now,
-          estimated_pay_cents: share?.shareCents ?? null,
+          estimated_pay_cents: payCents,
           pay_percentage_snapshot: share?.ratePercent ?? null,
           crew_size_snapshot: share?.crewSize ?? cleanerIds.length,
           reliability_neutral: Boolean(booking.is_reclean),
@@ -558,7 +605,7 @@ serve(async (req) => {
           rate_before: priorRate?.pay_percentage_snapshot ?? null,
           rate_after: share.ratePercent,
           pay_before_cents: prior,
-          pay_after_cents: share.shareCents,
+          pay_after_cents: payCents,
         }).then(() => undefined, () => undefined);
       }
     }
@@ -581,6 +628,7 @@ serve(async (req) => {
     }
 
     const leadId = cleanerIds[0];
+    const leadPayCents = lockedPayByCleaner.get(leadId) ?? null;
     await admin
       .from("bookings")
       .update({
@@ -588,6 +636,7 @@ serve(async (req) => {
         assigned_at: now,
         status: booking.status === "confirmed" ? "assigned" : booking.status,
         num_cleaners_assigned: cleanerIds.length,
+        ...(leadPayCents != null ? { cleaner_payout_cents: leadPayCents } : {}),
       })
       .eq("id", bookingId);
 
@@ -632,7 +681,7 @@ serve(async (req) => {
         try {
         const notifyResult = await notifyCleanerOfAssignment(admin, booking, c, {
           role,
-          estimatedPayCents: shareByCleaner.get(c.id)?.shareCents,
+          estimatedPayCents: lockedPayByCleaner.get(c.id) ?? shareByCleaner.get(c.id)?.shareCents,
           crewCleanerIds: cleanerIds,
         });
         let ghlTaskId: string | null = null;

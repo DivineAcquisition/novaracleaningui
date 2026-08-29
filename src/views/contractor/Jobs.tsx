@@ -57,10 +57,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { SEO } from "@/components/SEO";
+import { PublicPortalChrome } from "@/components/chrome/PublicPortalChrome";
+import { Panel } from "@/components/ui/panel";
 import SuspensionBanner from "@/components/cleaner/SuspensionBanner";
+import { BRAND } from "@/lib/brand";
 import { parseServiceDate } from "@/lib/service-date";
-
-const logo = "/novara-logo.png";
 
 interface JobPay {
   actualCents: number | null;
@@ -757,40 +758,33 @@ export default function ContractorJobs() {
     .toUpperCase();
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-50">
+    <PublicPortalChrome
+      badge="Contractor"
+      action={
+        searched ? (
+          <Button variant="ghost" size="sm" onClick={handleReset}>
+            <RiArrowLeftLine className="w-4 h-4 mr-1" /> New search
+          </Button>
+        ) : undefined
+      }
+    >
       <SEO title="Contractor Job Portal" description="Look up and manage your assigned cleaning jobs. Check in, complete jobs, and view your history." />
-
-      <header className="border-b border-border/40 bg-white/80 backdrop-blur-xl sticky top-0 z-50">
-        <div className="container max-w-3xl mx-auto px-4 h-14 flex items-center justify-between">
-          <a href="/" className="flex items-center gap-2.5">
-            <img src={logo} alt="Novara" className="w-8 h-8 rounded-xl shadow-sm" />
-            <div>
-              <span className="font-bold text-sm block leading-tight tracking-tight">Novara</span>
-              <span className="text-[9px] text-muted-foreground uppercase tracking-[0.18em]">Contractor Portal</span>
-            </div>
-          </a>
-          {searched && (
-            <Button variant="ghost" size="sm" onClick={handleReset}>
-              <RiArrowLeftLine className="w-4 h-4 mr-1" /> New Search
-            </Button>
-          )}
-        </div>
-      </header>
-
-      <div className="container max-w-3xl mx-auto px-4 py-8 md:py-12">
+      <div>
         {!searched ? (
           <div className="max-w-md mx-auto space-y-8 animate-fade-in">
             <div className="text-center space-y-2">
-              <div className="mx-auto w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg mb-4 bg-gradient-to-br from-violet-600 to-purple-500">
+              <div
+                className="mx-auto w-16 h-16 rounded-2xl flex items-center justify-center shadow-[0_12px_28px_-12px_rgba(92,15,254,0.55)] mb-4"
+                style={{ background: BRAND.gradient }}
+              >
                 <RiSearchLine className="w-8 h-8 text-white" />
               </div>
-              <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Contractor Job Portal</h1>
+              <h1 className="font-heading text-2xl md:text-3xl font-bold tracking-tight">Contractor job portal</h1>
               <p className="text-muted-foreground text-sm">Look up your jobs to check in, mark complete, or view history</p>
             </div>
 
-            <Card className="shadow-xl shadow-violet-100/60 border-0 rounded-2xl">
-              <CardContent className="p-6">
-                <form onSubmit={handleSearch} className="space-y-5">
+            <Panel className="p-6">
+              <form onSubmit={handleSearch} className="space-y-5">
                   <Tabs value={lookupType} onValueChange={(v) => setLookupType(v as "email" | "phone")}>
                     <TabsList className="grid w-full grid-cols-2 mb-4">
                       <TabsTrigger value="email" className="text-sm">
@@ -819,12 +813,11 @@ export default function ContractorJobs() {
                       </div>
                     </TabsContent>
                   </Tabs>
-                  <Button type="submit" className="w-full h-11 bg-gradient-to-r from-violet-600 to-purple-500 hover:from-violet-700 hover:to-purple-600 text-white font-semibold shadow-md" disabled={isSearching}>
-                    {isSearching ? (<><RiLoader4Line className="mr-2 w-4 h-4 animate-spin" />Searching...</>) : (<><RiSearchLine className="mr-2 w-4 h-4" />Find My Jobs</>)}
+                  <Button type="submit" className="w-full h-11" disabled={isSearching}>
+                    {isSearching ? (<><RiLoader4Line className="mr-2 w-4 h-4 animate-spin" />Searching...</>) : (<><RiSearchLine className="mr-2 w-4 h-4" />Find my jobs</>)}
                   </Button>
                 </form>
-              </CardContent>
-            </Card>
+            </Panel>
 
             <p className="text-center text-xs text-muted-foreground">
               Need help? <a href="tel:+18447352070" className="text-primary hover:underline">Call (844) 735-2070</a>
@@ -845,7 +838,7 @@ export default function ContractorJobs() {
             <SuspensionBanner status={cleanerStatus} suspendedUntil={suspendedUntil} />
 
             {/* ── Hero: identity + real earnings from the pay ledgers ── */}
-            <div className="rounded-3xl bg-gradient-to-br from-violet-700 via-violet-600 to-purple-500 p-5 md:p-6 text-white shadow-xl shadow-violet-200/60">
+            <div className="rounded-3xl p-5 md:p-6 text-white shadow-[0_18px_40px_-18px_rgba(92,15,254,0.55)]" style={{ background: BRAND.gradient }}>
               <div className="flex items-center gap-3.5">
                 <div className="w-12 h-12 rounded-2xl bg-white/15 ring-1 ring-white/25 flex items-center justify-center font-bold text-lg">
                   {initials || <RiVipCrownLine className="w-6 h-6" />}
@@ -922,7 +915,7 @@ export default function ContractorJobs() {
 
             {/* ── New job OFFERS — missed the SMS? They're here too. ── */}
             {offers.length > 0 && (
-              <section className="rounded-3xl bg-gradient-to-br from-blue-600 to-indigo-600 p-4 text-white shadow-lg space-y-2.5">
+              <section className="rounded-3xl p-4 text-white shadow-[0_18px_40px_-18px_rgba(92,15,254,0.55)] space-y-2.5" style={{ background: BRAND.gradient }}>
                 <div className="flex items-center justify-between px-1">
                   <h2 className="text-[11px] font-bold uppercase tracking-[0.16em]">
                     🔔 New job offer{offers.length === 1 ? "" : "s"} — respond before they expire
@@ -936,7 +929,7 @@ export default function ContractorJobs() {
                         {titleCase(o.serviceType)}
                         {o.city ? ` · ${o.city}${o.state ? `, ${o.state}` : ""}` : ""}
                       </p>
-                      <p className="text-[11px] text-blue-100">
+                      <p className="text-[11px] text-white/80">
                         {o.serviceDate ? format(new Date(`${String(o.serviceDate).slice(0, 10)}T12:00:00`), "EEE, MMM d") : "Date TBD"}
                         {o.timeSlot ? ` · ${o.timeSlot}` : ""}
                         {o.estimatedPayCents != null ? ` · est. ${money(o.estimatedPayCents)}` : ""}
@@ -945,7 +938,7 @@ export default function ContractorJobs() {
                     </div>
                     <Button
                       size="sm"
-                      className="h-9 shrink-0 bg-white text-blue-700 hover:bg-blue-50 font-bold rounded-xl"
+                      className="h-9 shrink-0 bg-white text-primary hover:bg-brand-50 font-bold rounded-xl"
                       onClick={() => window.open(`/cleaner/job-offer/${o.token}`, "_blank")}
                     >
                       Review & respond
@@ -998,7 +991,7 @@ export default function ContractorJobs() {
               <section className="space-y-3">
                 <div className="flex items-center gap-2 px-1">
                   <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-[0.16em]">Upcoming & Active</h2>
-                  <span className="text-[11px] font-semibold text-violet-700 bg-violet-100 rounded-full px-2 py-0.5">{upcomingJobs.length}</span>
+                  <span className="text-[11px] font-semibold text-primary bg-brand-100 rounded-full px-2 py-0.5">{upcomingJobs.length}</span>
                 </div>
                 {upcomingJobs.map((job) => {
                   const sc = getStatusConfig(job.status);
@@ -1006,14 +999,14 @@ export default function ContractorJobs() {
                   const loading = actionLoading === job.id;
                   return (
                     <Card key={job.id} className={cn(
-                      "rounded-2xl border-border/50 shadow-sm hover:shadow-lg hover:shadow-violet-100/50 transition-all",
+                      "rounded-2xl border-border/50 shadow-sm hover:shadow-lg hover:shadow-brand-100/60 transition-all",
                       isActive && "ring-2 ring-amber-300/70 bg-amber-50/20",
                     )}>
                       <CardContent className="p-4 md:p-5 space-y-3.5">
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex items-center gap-3 min-w-0">
-                            <div className="text-center min-w-[52px] py-2 px-2.5 rounded-2xl bg-gradient-to-b from-violet-50 to-purple-50 border border-violet-100">
-                              <p className="text-[10px] uppercase tracking-wider font-bold text-violet-600">{format(parseServiceDate(job.serviceDate), "MMM")}</p>
+                            <div className="text-center min-w-[52px] py-2 px-2.5 rounded-2xl bg-gradient-to-b from-brand-50 to-brand-100/60 border border-brand-100">
+                              <p className="text-[10px] uppercase tracking-wider font-bold text-primary">{format(parseServiceDate(job.serviceDate), "MMM")}</p>
                               <p className="text-xl font-extrabold leading-tight text-slate-900">{format(parseServiceDate(job.serviceDate), "d")}</p>
                             </div>
                             <div className="min-w-0">
@@ -1051,7 +1044,7 @@ export default function ContractorJobs() {
                           rel="noreferrer"
                           className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors text-xs group"
                         >
-                          <RiMapPinLine className="w-3.5 h-3.5 text-violet-600 flex-shrink-0" />
+                          <RiMapPinLine className="w-3.5 h-3.5 text-primary flex-shrink-0" />
                           <span className="truncate">{[job.address, job.city, job.state].filter(Boolean).join(", ")}</span>
                           <RiExternalLinkLine className="w-3 h-3 text-muted-foreground ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
                         </a>
@@ -1066,7 +1059,7 @@ export default function ContractorJobs() {
                               Mark job complete
                             </Button>
                           ) : (
-                            <Button className="w-full h-11 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white font-semibold shadow-md" onClick={() => handleCheckIn(job)} disabled={loading}>
+                            <Button className="w-full h-11 font-semibold" onClick={() => handleCheckIn(job)} disabled={loading}>
                               {loading ? <RiLoader4Line className="w-4 h-4 animate-spin mr-1.5" /> : <RiPlayCircleLine className="w-4 h-4 mr-1.5" />}
                               Check in
                             </Button>
@@ -1082,7 +1075,7 @@ export default function ContractorJobs() {
                             <Button
                               variant="outline"
                               size="sm"
-                              className="h-9 text-xs rounded-xl border-violet-200 text-violet-700"
+                              className="h-9 text-xs rounded-xl border-primary/20 text-primary"
                               onClick={() => window.open(`/cleaner/job-checklist/${job.qcToken}`, "_blank")}
                             >
                               <RiCheckboxCircleLine className="w-3.5 h-3.5 mr-1" />Checklist
@@ -1349,7 +1342,7 @@ export default function ContractorJobs() {
           })()}
         </DialogContent>
       </Dialog>
-    </div>
+    </PublicPortalChrome>
   );
 }
 
