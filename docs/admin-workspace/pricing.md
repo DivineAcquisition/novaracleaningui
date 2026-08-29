@@ -126,6 +126,12 @@ Two things stay true even when it is switched on: **members are exempt** — the
 is what they bought — and **focused cleans are exempt**, because they already sit close to
 the minimum.
 
+You can check the current state yourself on the Demand tab — the two switches at the top are
+the master switch and shadow mode, and the badges in the page header say **Reactive: off**
+and **Shadow: on**.
+
+@screenshot pricing-demand
+
 ### The ceiling and the floor
 
 Two guardrails sit at the end of the calculation.

@@ -27,7 +27,7 @@ export const dynamic = "force-dynamic";
 
 export default async function DocsLayout({ children }: { children: React.ReactNode }) {
   const access = await getDocsAccess();
-  if (!access.allowed) return <SignedOut reason={access.reason} />;
+  if (!access.allowed) return <SignedOut reason={access.reason ?? "signed_out"} />;
 
   const docs = getAllDocs().map((d) => ({
     slug: d.slug,

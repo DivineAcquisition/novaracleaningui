@@ -10,7 +10,7 @@ export default async function DocsIndex() {
   // Repeated deliberately — see the note in [slug]/page.tsx. A layout that
   // returns early does not stop its page from rendering into the response.
   const access = await getDocsAccess();
-  if (!access.allowed) return <SignedOut reason={access.reason} />;
+  if (!access.allowed) return <SignedOut reason={access.reason ?? "signed_out"} />;
 
   const docs = getAllDocs();
   const pricing = getPricingExamples();
@@ -54,6 +54,18 @@ export default async function DocsIndex() {
           </p>
         )}
       </div>
+
+      <Link
+        href="/docs/discrepancies"
+        className="mb-8 block rounded-xl border border-[color:var(--hairline)] border-l-[3px] border-l-[hsl(280,70%,50%)] bg-[hsl(280,70%,50%,0.06)] p-4 transition-colors hover:bg-[hsl(280,70%,50%,0.1)]"
+      >
+        <p className="font-semibold text-foreground">Known discrepancies →</p>
+        <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+          Places where an older document, a label on a screen, or a legacy part of the system
+          disagrees with what the code actually does. Collected in one list so they can be
+          worked through rather than rediscovered one confused conversation at a time.
+        </p>
+      </Link>
 
       <ul className="space-y-3">
         {docs.map((doc) => (

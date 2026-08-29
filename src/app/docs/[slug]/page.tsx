@@ -23,7 +23,7 @@ export default async function DocPage({ params }: { params: { slug: string } }) 
   // early still emits the page's HTML into the response. The guide text has
   // to be gated where it is produced.
   const access = await getDocsAccess();
-  if (!access.allowed) return <SignedOut reason={access.reason} />;
+  if (!access.allowed) return <SignedOut reason={access.reason ?? "signed_out"} />;
 
   const doc = getDoc(params.slug);
   if (!doc) notFound();

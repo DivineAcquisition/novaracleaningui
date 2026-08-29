@@ -89,6 +89,15 @@ function parseFrontMatter(raw: string): { data: Record<string, string>; body: st
   return { data, body };
 }
 
+/**
+ * Which markdown files are published guides. README.md is the maintainer's
+ * runbook and underscore-prefixed files are data — neither is VA-facing, and
+ * both would otherwise show up in the sidebar.
+ */
+export function isGuideFile(name: string): boolean {
+  return name.endsWith(".md") && !name.startsWith("_") && name !== "README.md";
+}
+
 export function slugify(text: string): string {
   return text
     .toLowerCase()
@@ -120,7 +129,7 @@ export function getAllDocs(): Doc[] {
   if (!existsSync(DOCS_DIR)) return [];
 
   const docs = readdirSync(DOCS_DIR)
-    .filter((f) => f.endsWith(".md") && !f.startsWith("_"))
+    .filter(isGuideFile)
     .map((file) => {
       const raw = readFileSync(join(DOCS_DIR, file), "utf8");
       const { data, body } = parseFrontMatter(raw);

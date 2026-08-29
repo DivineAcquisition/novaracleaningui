@@ -21,9 +21,21 @@ export interface DocsViewer {
   userId: string;
 }
 
-export type DocsAccess =
-  | { allowed: true; viewer: DocsViewer }
-  | { allowed: false; reason: "signed_out" | "wrong_domain" | "no_role" };
+export type DocsDenialReason = "signed_out" | "wrong_domain" | "no_role";
+
+/**
+ * Deliberately a flat shape rather than a discriminated union: this project
+ * compiles with `strictNullChecks` disabled, where narrowing on
+ * `if (!access.allowed)` does not work, and a type that only looks safe is
+ * worse than one that reads plainly.
+ */
+export interface DocsAccess {
+  allowed: boolean;
+  viewer: DocsViewer | null;
+  reason: DocsDenialReason | null;
+}
+
+const deny = (reason: DocsDenialReason): DocsAccess => ({ allowed: false, viewer: null, reason });
 
 export async function getDocsAccess(): Promise<DocsAccess> {
   const supabase = createSupabaseServerClient();
@@ -35,17 +47,15 @@ export async function getDocsAccess(): Promise<DocsAccess> {
     error,
   } = await supabase.auth.getUser();
 
-  if (error || !user) return { allowed: false, reason: "signed_out" };
+  if (error || !user) return deny("signed_out");
 
   const email = String(user.email || "").trim().toLowerCase();
-  if (!email.endsWith("@novaracleaning.com")) {
-    return { allowed: false, reason: "wrong_domain" };
-  }
+  if (!email.endsWith("@novaracleaning.com")) return deny("wrong_domain");
 
   const { data: isAdminOrVa, error: roleError } = await (supabase.rpc as any)("is_admin_or_va", {
     _uid: user.id,
   });
-  if (roleError || isAdminOrVa !== true) return { allowed: false, reason: "no_role" };
+  if (roleError || isAdminOrVa !== true) return deny("no_role");
 
-  return { allowed: true, viewer: { email, userId: user.id } };
+  return { allowed: true, viewer: { email, userId: user.id }, reason: null };
 }

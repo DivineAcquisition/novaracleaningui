@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { RiLockLine } from "@remixicon/react";
 
+import type { DocsDenialReason } from "@/lib/docs/auth";
+
 // Shown instead of any documentation content when the reader has not passed
 // the admin gate. It deliberately says nothing about what the guides contain
 // beyond the fact that they are internal.
@@ -20,7 +22,7 @@ const MESSAGES: Record<string, { title: string; body: string }> = {
   },
 };
 
-export function SignedOut({ reason }: { reason: "signed_out" | "wrong_domain" | "no_role" }) {
+export function SignedOut({ reason }: { reason: DocsDenialReason }) {
   const { title, body } = MESSAGES[reason] ?? MESSAGES.signed_out;
 
   return (

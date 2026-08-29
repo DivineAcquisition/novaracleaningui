@@ -27,7 +27,9 @@
     "proposals:verify": "tsx scripts/verify-proposal-request.ts",
     "docs:pricing": "tsx scripts/docs/pricing-examples.ts",
     "docs:capture": "tsx scripts/docs/capture-screenshots.ts",
-    "docs:verify": "tsx scripts/docs/verify-docs.ts"
+    "docs:verify": "tsx scripts/docs/verify-docs.ts",
+    "docs:export": "tsx scripts/docs/export-knowledge.ts",
+    "docs:preview": "tsx scripts/docs/preview.ts"
   },
   "dependencies": {
     "@capacitor/android": "^7.4.4",
