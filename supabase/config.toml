@@ -444,6 +444,11 @@ verify_jwt = false
 [functions.qc-reclean]
 verify_jwt = false
 
+# Monthly checklist feedback aggregation — pg_cron invoked, x-cron-secret
+# checked inside. Writes signal and insight rows only; never checklist content.
+[functions.checklist-feedback-aggregate]
+verify_jwt = false
+
 # Commercial/office partner portal — logged-in partner JWT enforced inside.
 [functions.partner-commercial-portal]
 verify_jwt = false

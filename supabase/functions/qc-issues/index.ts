@@ -372,6 +372,34 @@ serve(async (req) => {
     const { data: issue } = await admin.from("qc_issues").select("*").eq("id", issueId).maybeSingle();
     if (!issue) return json({ ok: false, error: "Issue not found." }, 404);
 
+    // Tag which checklist items this case relates to. Optional by design —
+    // a scheduling complaint has no checklist item, and forcing a tag would
+    // manufacture signal against whichever item was nearest.
+    if (action === "tag_checklist_items") {
+      const raw = Array.isArray(body?.checklistItemIds) ? body.checklistItemIds : [];
+      const ids = Array.from(
+        new Set(raw.map((v: unknown) => String(v).trim()).filter(Boolean)),
+      ).slice(0, 60);
+
+      const { error: upErr } = await admin
+        .from("qc_issues")
+        .update({ checklist_item_ids: ids, updated_at: nowIso })
+        .eq("id", issueId);
+      if (upErr) throw upErr;
+
+      await admin.from("qc_issue_events").insert({
+        issue_id: issueId,
+        action: "note",
+        note: ids.length
+          ? `Tagged ${ids.length} checklist item(s) on this case.`
+          : "Cleared checklist item tags on this case.",
+        actor_id: actor.id,
+        actor_name: actor.name,
+        data: { checklist_item_ids: ids },
+      });
+      return json({ ok: true, checklistItemIds: ids });
+    }
+
     if (action === "update_status") {
       const toStatus = String(body?.status || "");
       if (!STATUSES.includes(toStatus)) return json({ ok: false, error: "Invalid status." }, 400);

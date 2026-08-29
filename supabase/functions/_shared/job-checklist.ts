@@ -24,6 +24,47 @@ import {
 
 export const CONTRACTOR_PORTAL_BASE = "https://contractor.novaracleaning.com";
 
+/**
+ * The checklist exactly as issued to this crew, pinned onto the job row.
+ *
+ * Checklist content changes over time now — the feedback loop rewords items
+ * from real outcomes. Re-resolving today's content for a job performed in
+ * March would show a reviewer a list the crew was never given, which is
+ * exactly the wrong answer in a dispute. So the sections are snapshotted at
+ * issue time and historical review reads the snapshot.
+ *
+ * The positional progress key ("<section>:<item>") is unchanged — shifting it
+ * under an in-flight crew would lose their progress — and item_id_map carries
+ * the stable ids alongside it so the same completion is countable as signal.
+ */
+// deno-lint-ignore no-explicit-any
+function pinnedVersion(checklist: { key: string; name: string; sections: any[] }) {
+  const sections = checklist.sections.map((s, si) => ({
+    title: s.title,
+    items: s.items,
+    itemIds: Array.isArray(s.itemIds) ? s.itemIds : null,
+    photoRequired: Boolean(s.photoRequired),
+    zoneName: s.zoneName ?? null,
+    keys: s.items.map((_: string, ii: number) => `${si}:${ii}`),
+  }));
+  const itemIdMap: Record<string, string> = {};
+  sections.forEach((section, si) => {
+    if (!section.itemIds) return;
+    section.itemIds.forEach((id: string, ii: number) => {
+      if (id) itemIdMap[`${si}:${ii}`] = id;
+    });
+  });
+  return {
+    snapshot: {
+      key: checklist.key,
+      name: checklist.name,
+      pinned_at: new Date().toISOString(),
+      sections,
+    },
+    itemIdMap,
+  };
+}
+
 export function checklistUrlForToken(token: string): string {
   return `${CONTRACTOR_PORTAL_BASE}/cleaner/job-checklist/${token}`;
 }
@@ -120,9 +161,9 @@ export async function ensureJobChecklist(
           if (settingsRow?.value) focusedSettings = mergeFocusedSameDaySettings(settingsRow.value);
         } catch (_) { /* defaults */ }
       }
-      const totalItems = countChecklistItems(
-        getContractorChecklist(checklistKey, focusedAreas, focusedSettings, commercialOpts),
-      );
+      const resolved = getContractorChecklist(checklistKey, focusedAreas, focusedSettings, commercialOpts);
+      const totalItems = countChecklistItems(resolved);
+      const pinned = pinnedVersion(resolved);
       await supabase.from("job_checklists").update({
         service_type: checklistKey,
         booking_id: booking?.id || args.bookingId || null,
@@ -132,6 +173,11 @@ export async function ensureJobChecklist(
         progress_pct: 0,
         started_at: null,
         section_meta: {},
+        // Re-issued because the booking changed type — the crew gets a new
+        // list, so the pin moves with it.
+        checklist_key: checklistKey,
+        sections_snapshot: pinned.snapshot,
+        item_id_map: pinned.itemIdMap,
       }).eq("id", existing.id);
     }
     return { id: existing.id, token: existing.token };
@@ -148,9 +194,9 @@ export async function ensureJobChecklist(
       if (settingsRow?.value) focusedSettings = mergeFocusedSameDaySettings(settingsRow.value);
     } catch (_) { /* defaults */ }
   }
-  const totalItems = countChecklistItems(
-    getContractorChecklist(checklistKey, focusedAreas, focusedSettings, commercialOpts),
-  );
+  const resolved = getContractorChecklist(checklistKey, focusedAreas, focusedSettings, commercialOpts);
+  const totalItems = countChecklistItems(resolved);
+  const pinned = pinnedVersion(resolved);
 
   const { data: created, error } = await supabase
     .from("job_checklists")
@@ -161,6 +207,9 @@ export async function ensureJobChecklist(
       token: randomToken(),
       total_items: totalItems,
       section_meta: {},
+      checklist_key: checklistKey,
+      sections_snapshot: pinned.snapshot,
+      item_id_map: pinned.itemIdMap,
     })
     .select("id, token")
     .maybeSingle();
