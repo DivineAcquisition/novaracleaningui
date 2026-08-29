@@ -95,7 +95,7 @@ export default function TurnoverJobs() {
   const done = jobs.filter((j) => j.status === "completed");
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-background">
       <SEO title="My Turnovers" noindex />
       <header className="bg-white border-b sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-4 h-14 flex items-center gap-2">

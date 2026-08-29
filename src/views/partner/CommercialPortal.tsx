@@ -138,14 +138,14 @@ export default function CommercialPortal() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 p-6 max-w-4xl mx-auto space-y-4">
+      <div className="min-h-screen bg-background p-6 max-w-4xl mx-auto space-y-4">
         {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-28 w-full" />)}
       </div>
     );
   }
   if (!account) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
         <Card className="max-w-md"><CardContent className="p-8 text-center space-y-3">
           <RiErrorWarningLine className="w-10 h-10 text-amber-500 mx-auto" />
           <p className="font-bold text-slate-900">No account found</p>
@@ -156,7 +156,7 @@ export default function CommercialPortal() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-slate-200">
         <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
           <img src="/novara-logo.png" alt="Novara Cleaning" className="h-8" />

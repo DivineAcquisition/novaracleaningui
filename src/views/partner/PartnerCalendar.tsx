@@ -200,7 +200,7 @@ export default function PartnerCalendar() {
   const hasPriced = priced.length > 0;
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-28">
+    <div className="min-h-screen bg-background pb-28">
       <SEO title="Turnover Calendar" noindex />
       <header className="bg-white border-b sticky top-0 z-20">
         <div className="max-w-4xl mx-auto px-3 sm:px-4 h-14 flex items-center gap-2">

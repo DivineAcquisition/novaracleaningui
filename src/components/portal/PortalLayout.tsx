@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useMembershipCredits } from "@/hooks/use-membership-credits";
+import { BrandAtmosphere } from "@/components/brand/atmosphere";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -207,9 +208,10 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
   ];
 
   return (
-    <div className="min-h-screen bg-background flex">
+    <div className="relative min-h-screen bg-background flex">
+      <BrandAtmosphere />
       {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex lg:w-[260px] lg:flex-col border-r border-border/50 bg-card/50 flex-shrink-0 sticky top-0 h-screen">
+      <aside className="relative z-10 hidden lg:flex lg:w-[260px] lg:flex-col border-r border-border bg-card/80 backdrop-blur-xl flex-shrink-0 sticky top-0 h-screen">
         <SidebarContent
           navItems={navItems}
           pathname={pathname}
@@ -221,7 +223,7 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="relative z-10 flex-1 flex flex-col min-w-0">
         {/* Mobile Header */}
         <header className="lg:hidden sticky top-0 z-40 border-b border-border/50 bg-background/80 backdrop-blur-xl">
           <div className="flex items-center justify-between px-4 h-14">

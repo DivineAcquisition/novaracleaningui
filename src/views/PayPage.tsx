@@ -328,7 +328,7 @@ export default function PayPage() {
   // ── Render states ────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 p-4 max-w-md mx-auto space-y-4">
+      <div className="min-h-screen bg-background p-4 max-w-md mx-auto space-y-4">
         <Skeleton className="h-28 w-full rounded-2xl" />
         <Skeleton className="h-64 w-full rounded-2xl" />
       </div>
@@ -337,7 +337,7 @@ export default function PayPage() {
 
   if (loadErr || !summary) {
     return (
-      <div className="min-h-screen bg-slate-50 p-4 max-w-md mx-auto">
+      <div className="min-h-screen bg-background p-4 max-w-md mx-auto">
         <SEO title="Payment link" noindex />
         <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-900 mt-8">
           <p className="font-semibold flex items-center gap-1.5">
@@ -356,7 +356,7 @@ export default function PayPage() {
   const paid = paidNow || summary.paid;
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-16">
+    <div className="min-h-screen bg-background pb-16">
       <SEO title="Pay your deposit to confirm — Novara Cleaning" noindex />
       <div className="max-w-md mx-auto p-4 space-y-4">
         {/* Booking summary */}

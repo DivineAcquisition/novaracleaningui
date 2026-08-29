@@ -182,7 +182,7 @@ export default function PartnerWeeklySchedule() {
   if (loading) return <div className="min-h-screen flex items-center justify-center"><RiLoader4Line className="w-8 h-8 animate-spin text-primary" /></div>;
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-28">
+    <div className="min-h-screen bg-background pb-28">
       <SEO title="Weekly Schedule" noindex />
       <header className="bg-white border-b sticky top-0 z-10">
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center gap-2">

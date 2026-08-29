@@ -591,7 +591,7 @@ function Dashboard() {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-background">
       <SEO title="Host Dashboard" noindex />
       {/* Premium gradient header */}
       <header className="sticky top-0 z-20 text-white" style={{ background: "linear-gradient(120deg,#5C0FFE 0%,#7A3BFF 55%,#9F7BFF 100%)" }}>

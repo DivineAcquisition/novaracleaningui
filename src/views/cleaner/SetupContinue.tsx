@@ -32,7 +32,7 @@ type LoadState =
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-8">
+    <div className="min-h-screen bg-background px-4 py-8">
       <div className="mx-auto w-full max-w-lg space-y-4">
         <div className="text-center">
           <p className="text-sm font-semibold tracking-tight text-slate-900">Novara Cleaning</p>

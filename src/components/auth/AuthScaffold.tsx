@@ -11,13 +11,13 @@
 // This module is presentation-only. Each page keeps its own auth logic and
 // just composes <AuthScaffold> + <AuthCard> around its form.
 
-import * as React from "react";
+import { ShineBorder } from "@/components/magicui/shine-border";
 
 // Brand tokens — purple used as a scalpel, not a flood.
 export const AUTH_GRADIENT = "linear-gradient(135deg,#5C0FFE 0%,#8F7BFD 100%)";
 export const AUTH_INPUT_CLS =
-  "h-11 pl-10 bg-white border-slate-200 text-slate-900 placeholder:text-slate-400 " +
-  "focus-visible:border-[#8F7BFD] focus-visible:ring-2 focus-visible:ring-[#8F7BFD]/30";
+  "h-11 pl-10 bg-background border-border text-foreground placeholder:text-muted-foreground " +
+  "focus-visible:border-primary focus-visible:ring-4 focus-visible:ring-primary/15";
 
 const LOGO_SRC = "/novara-email-logo.png";
 
@@ -158,7 +158,7 @@ export function AuthScaffold({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen w-full bg-[#FAFAFC] lg:grid lg:grid-cols-[1.05fr_1fr]">
+    <div className="min-h-screen w-full bg-background lg:grid lg:grid-cols-[1.05fr_1fr]">
       <BrandPanel headline={headline} subline={subline} features={features} stats={stats} />
       <div className="relative flex min-h-screen items-center justify-center px-5 py-12 sm:px-10">
         <div
@@ -169,7 +169,7 @@ export function AuthScaffold({
         <div className="relative w-full max-w-[400px] space-y-8">
           <div className="flex flex-col items-center gap-2 lg:hidden">
             <img src={LOGO_SRC} alt="Novara Cleaning" className="h-7 w-auto" />
-            <span className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-400">{eyebrow}</span>
+            <span className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground">{eyebrow}</span>
           </div>
           {children}
         </div>
@@ -181,8 +181,9 @@ export function AuthScaffold({
 /** The clean glass form card that sits on the right surface. */
 export function AuthCard({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={`rounded-2xl border border-slate-200/70 bg-white p-7 shadow-[0_1px_3px_rgba(16,24,40,0.06),0_18px_50px_-20px_rgba(79,56,255,0.25)] ${className}`}>
-      {children}
+    <div className={`relative overflow-hidden rounded-2xl border border-border/70 bg-card p-7 shadow-[0_1px_3px_rgba(16,24,40,0.06),0_18px_50px_-20px_rgba(92,15,254,0.28)] ${className}`}>
+      <ShineBorder borderWidth={1.5} duration={12} />
+      <div className="relative z-10">{children}</div>
     </div>
   );
 }

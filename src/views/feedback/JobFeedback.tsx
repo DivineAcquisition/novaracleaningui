@@ -625,7 +625,7 @@ export default function JobFeedbackPage({ token }: { token: string }) {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-violet-50 to-white py-10 px-4">
+    <div className="min-h-screen bg-gradient-to-b from-brand-50 to-background py-10 px-4">
       <div className="max-w-md mx-auto space-y-6">
         {children}
         <p className="text-center text-xs text-slate-400">Novara Cleaning · novaracleaning.com</p>

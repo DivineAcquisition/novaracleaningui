@@ -32,9 +32,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatPhoneNumber } from "@/lib/input-formatters";
 import { SEO } from "@/components/SEO";
+import { BRAND } from "@/lib/brand";
 import { cn } from "@/lib/utils";
 
-const PURPLE_GRADIENT = "linear-gradient(135deg,#5C0FFE 0%,#8F7BFD 100%)";
+const PURPLE_GRADIENT = BRAND.gradient;
 
 type PartnerType = "commercial" | "office" | "str";
 
@@ -134,11 +135,11 @@ export default function CommercialIntake() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-background">
       <SEO title="Partner with Novara Cleaning — Commercial, Office & STR" description="Commercial cleaning contracts, office cleaning, and Airbnb/STR turnover partnerships in the Baltimore area. Tell us what you need and our team will reach out." />
 
       {/* ─── Sticky header + progress (residential-funnel language) ────── */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-slate-200">
+      <header className="sticky top-0 z-40 bg-background/95 backdrop-blur-xl border-b border-border hairline-glow">
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between">
           <img src="/novara-logo.png" alt="Novara Cleaning" className="h-8" />
           <span className="text-xs font-semibold text-slate-500">Step {step + 1} of 3</span>

@@ -268,7 +268,7 @@ function Report({ token, sessionEmail }: { token?: string; sessionEmail: string 
   };
 
   return (
-    <div className="min-h-screen bg-[#FAFAFC]">
+    <div className="min-h-screen bg-background">
       <SEO title="End of Day Report" noindex />
       <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/85 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-3xl items-center gap-3 px-4 sm:px-6">

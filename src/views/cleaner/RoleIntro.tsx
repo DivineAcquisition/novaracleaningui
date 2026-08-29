@@ -72,7 +72,7 @@ const EXPECTATIONS = [
 
 export default function CleanerRoleIntro() {
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-background">
       <SEO
         title="The Cleaner Role"
         description="Learn what it's like to clean with Novara Cleaning as an independent contractor — flexible jobs, revenue-share pay, and the supplies you'll need to get started."

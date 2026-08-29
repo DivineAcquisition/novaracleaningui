@@ -48,14 +48,15 @@ import { ReactNode, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
+import { BrandAtmosphere } from "@/components/brand/atmosphere";
 import { Button } from "@/components/ui/button";
+import { BRAND } from "@/lib/brand";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { useAdminRole } from "@/hooks/use-admin-role";
 
-// Brand ramp — matches the auth surfaces so the whole product reads as one
-// design language (purple as a precise accent on a clean light shell).
-const RAMP = "linear-gradient(135deg,#5C0FFE 0%,#8F7BFD 100%)";
+// Brand ramp — Novara purple as a precise accent on a clean Coss-style shell.
+const RAMP = BRAND.gradient;
 
 interface NavItem {
   title: string;
@@ -203,9 +204,10 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const active = NAV_ITEMS.find((n) => isNavActive(pathname, n.url));
 
   return (
-    <div className="min-h-screen flex w-full bg-slate-50 text-slate-900 font-sans">
+    <div className="relative min-h-screen flex w-full bg-background text-foreground font-sans">
+      <BrandAtmosphere />
       {/* ─── Desktop sidebar ─────────────────────────────────────────── */}
-      <aside className="hidden lg:flex w-64 flex-col border-r border-slate-200 bg-white shrink-0">
+      <aside className="relative z-10 hidden lg:flex w-64 flex-col border-r border-border bg-card/80 backdrop-blur-xl shrink-0">
         <SidebarBrand />
         <SidebarNav pathname={pathname} items={navItems} />
         <SidebarFooter user={user} onSignOut={handleSignOut} />
@@ -214,23 +216,23 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       {/* ─── Mobile slide-over ───────────────────────────────────────── */}
       {mobileOpen && (
         <div
-          className="lg:hidden fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm"
+          className="lg:hidden fixed inset-0 z-40 bg-foreground/30 backdrop-blur-sm"
           onClick={() => setMobileOpen(false)}
         />
       )}
       <aside
         className={cn(
-          "lg:hidden fixed inset-y-0 left-0 z-50 w-72 flex-col bg-white border-r border-slate-200 transition-transform",
+          "lg:hidden fixed inset-y-0 left-0 z-50 w-72 flex-col bg-card border-r border-border transition-transform",
           mobileOpen ? "translate-x-0 flex" : "-translate-x-full flex",
         )}
       >
-        <div className="flex items-center justify-between p-4 border-b border-slate-200">
+        <div className="flex items-center justify-between p-4 border-b border-border">
           <SidebarBrand compact />
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setMobileOpen(false)}
-            className="text-slate-500"
+            className="text-muted-foreground"
           >
             <RiCloseLine className="w-5 h-5" />
           </Button>
@@ -240,12 +242,12 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       </aside>
 
       {/* ─── Main column ─────────────────────────────────────────────── */}
-      <main className="flex-1 flex flex-col min-w-0">
-        <header className="h-14 flex items-center gap-3 px-4 sm:px-6 border-b border-slate-200 bg-white/80 backdrop-blur sticky top-0 z-30">
+      <main className="relative z-10 flex-1 flex flex-col min-w-0">
+        <header className="h-14 flex items-center gap-3 px-4 sm:px-6 border-b border-border bg-background/80 backdrop-blur-xl sticky top-0 z-30 hairline-glow">
           <Button
             variant="ghost"
             size="sm"
-            className="lg:hidden text-slate-700"
+            className="lg:hidden text-foreground"
             onClick={() => setMobileOpen(true)}
           >
             <RiMenuLine className="w-5 h-5" />
@@ -253,24 +255,24 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-2 min-w-0">
             {active ? (
               <>
-                <span className="w-7 h-7 rounded-lg text-[#5C0FFE] inline-flex items-center justify-center shrink-0" style={{ background: "rgba(92,15,254,0.10)" }}>
+                <span className="w-7 h-7 rounded-lg text-primary inline-flex items-center justify-center shrink-0 bg-brand-50">
                   <active.icon className="w-4 h-4" />
                 </span>
-                <h1 className="font-jakarta text-sm font-semibold text-slate-900 truncate tracking-tight">
+                <h1 className="font-heading text-sm font-semibold text-foreground truncate tracking-tight">
                   {active.title}
                 </h1>
-                <span className="hidden sm:inline text-xs text-slate-500 truncate">
+                <span className="hidden sm:inline text-xs text-muted-foreground truncate">
                   · {active.description}
                 </span>
               </>
             ) : (
-              <h1 className="font-jakarta text-sm font-semibold text-slate-900">
+              <h1 className="font-heading text-sm font-semibold text-foreground">
                 Admin
               </h1>
             )}
           </div>
-          <div className="ml-auto flex items-center gap-3 text-xs text-slate-500">
-            <span className="hidden md:inline truncate max-w-[200px] tabular-nums">
+          <div className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="hidden md:inline truncate max-w-[200px] font-mono tabular-nums">
               {user?.email}
             </span>
           </div>
@@ -287,7 +289,7 @@ function SidebarBrand({ compact = false }: { compact?: boolean }) {
   return (
     <div
       className={cn(
-        "relative flex items-center gap-2 overflow-hidden px-5 py-5 border-b border-slate-200",
+        "relative flex items-center gap-2 overflow-hidden px-5 py-5 border-b border-border",
         compact && "border-0 py-0",
       )}
     >
@@ -299,7 +301,7 @@ function SidebarBrand({ compact = false }: { compact?: boolean }) {
         />
       )}
       <img src="/novara-email-logo.png" alt="Novara" className="relative h-[22px] w-auto" />
-      <span className="relative rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#5C0FFE]" style={{ background: "rgba(92,15,254,0.10)" }}>
+      <span className="relative rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-primary bg-brand-50">
         Admin
       </span>
     </div>
@@ -309,7 +311,7 @@ function SidebarBrand({ compact = false }: { compact?: boolean }) {
 function SidebarNav({ pathname, items }: { pathname: string | null; items: NavItem[] }) {
   return (
     <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
-      <p className="px-3 pb-2 text-[10px] uppercase tracking-[0.1em] text-slate-400 font-bold">
+      <p className="px-3 pb-2 text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-semibold">
         Workspace
       </p>
       {items.map((item) => {
@@ -321,8 +323,8 @@ function SidebarNav({ pathname, items }: { pathname: string | null; items: NavIt
             className={cn(
               "group relative flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-150 text-sm",
               isActive
-                ? "bg-[#5C0FFE]/[0.07] text-[#5C0FFE] font-semibold"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/70",
+                ? "bg-brand-50 text-primary font-semibold"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/70",
             )}
           >
             {isActive && (
@@ -333,7 +335,7 @@ function SidebarNav({ pathname, items }: { pathname: string | null; items: NavIt
                 "w-8 h-8 rounded-md flex items-center justify-center transition-all",
                 isActive
                   ? "text-white shadow-[0_2px_6px_-1px_rgba(92,15,254,0.5)]"
-                  : "bg-slate-100 text-slate-500 group-hover:bg-slate-200 group-hover:text-slate-700",
+                  : "bg-muted text-muted-foreground group-hover:bg-brand-50 group-hover:text-primary",
               )}
               style={isActive ? { background: RAMP } : undefined}
             >
@@ -345,8 +347,8 @@ function SidebarNav({ pathname, items }: { pathname: string | null; items: NavIt
                 className={cn(
                   "text-[11px] leading-tight truncate",
                   isActive
-                    ? "text-[#5C0FFE]/70"
-                    : "text-slate-400 group-hover:text-slate-500",
+                    ? "text-primary/70"
+                    : "text-muted-foreground/80 group-hover:text-muted-foreground",
                 )}
               >
                 {item.description}
@@ -367,19 +369,19 @@ function SidebarFooter({
   onSignOut: () => void;
 }) {
   return (
-    <div className="border-t border-slate-200 p-3 space-y-2">
-      <div className="px-3 py-2 rounded-lg bg-slate-50">
-        <p className="text-[10px] uppercase tracking-wide text-slate-500 font-bold">
+    <div className="border-t border-border p-3 space-y-2">
+      <div className="px-3 py-2 rounded-lg surface-sunken">
+        <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-bold">
           Signed in
         </p>
-        <p className="text-sm text-slate-900 font-medium truncate">
+        <p className="text-sm text-foreground font-medium truncate">
           {user?.email || "—"}
         </p>
       </div>
       <Button
         variant="outline"
         size="sm"
-        className="w-full justify-start gap-2 text-slate-700 border-slate-200 hover:bg-slate-100 hover:text-slate-900"
+        className="w-full justify-start gap-2"
         onClick={onSignOut}
       >
         <RiLogoutBoxRLine className="w-4 h-4" />

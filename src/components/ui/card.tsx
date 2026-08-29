@@ -10,7 +10,7 @@ const cardVariants = cva(
   {
     variants: {
       variant: {
-        default: "border border-border/60 shadow-sm",
+        default: "panel panel-hover",
         outlined: "border border-border/50 shadow-card",
       },
     },
@@ -40,7 +40,7 @@ CardHeader.displayName = "CardHeader";
 
 const CardTitle = React.forwardRef<HTMLParagraphElement, React.HTMLAttributes<HTMLHeadingElement>>(
   ({ className, ...props }, ref) => (
-    <h3 ref={ref} className={cn("text-2xl font-semibold leading-none tracking-tight font-jakarta", className)} {...props} />
+    <h3 ref={ref} className={cn("text-2xl font-semibold leading-none tracking-tight font-heading", className)} {...props} />
   ),
 );
 CardTitle.displayName = "CardTitle";

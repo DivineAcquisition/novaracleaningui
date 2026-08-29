@@ -348,32 +348,32 @@ function KpiTile({
   tone: "emerald" | "amber" | "slate";
 }) {
   const toneStyles = {
-    emerald: "bg-violet-50 text-violet-700",
+    emerald: "bg-brand-50 text-primary",
     amber: "bg-amber-50 text-amber-700",
-    slate: "bg-slate-100 text-slate-700",
+    slate: "bg-muted text-muted-foreground",
   }[tone];
   return (
-    <Card className="border-slate-200">
+    <Card className="panel panel-hover">
       <CardContent className="p-4 sm:p-5">
         <div className="flex items-center gap-3">
           <span className={cn("w-10 h-10 rounded-lg flex items-center justify-center", toneStyles)}>
             <Icon className="w-5 h-5" />
           </span>
           <div className="min-w-0">
-            <p className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">
+            <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground font-semibold">
               {label}
             </p>
             {loading ? (
               <Skeleton className="h-7 w-16 mt-1" />
             ) : (
-              <p className="text-xl font-bold text-slate-900 truncate">
+              <p className="text-xl font-heading font-bold text-foreground truncate">
                 {value ?? "0"}
               </p>
             )}
           </div>
         </div>
         {footer && (
-          <p className="text-[11px] text-slate-500 mt-3 truncate">{footer}</p>
+          <p className="text-[11px] text-muted-foreground mt-3 truncate">{footer}</p>
         )}
       </CardContent>
     </Card>

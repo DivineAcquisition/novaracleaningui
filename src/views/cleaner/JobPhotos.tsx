@@ -241,7 +241,7 @@ export default function CleanerJobPhotosPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 p-4 max-w-md mx-auto space-y-4">
+      <div className="min-h-screen bg-background p-4 max-w-md mx-auto space-y-4">
         <Skeleton className="h-24 w-full rounded-2xl" />
         <Skeleton className="h-40 w-full rounded-2xl" />
         <Skeleton className="h-40 w-full rounded-2xl" />
@@ -251,7 +251,7 @@ export default function CleanerJobPhotosPage() {
 
   if (loadErr || !info) {
     return (
-      <div className="min-h-screen bg-slate-50 p-4 max-w-md mx-auto">
+      <div className="min-h-screen bg-background p-4 max-w-md mx-auto">
         <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-900">
           <p className="font-semibold">This upload link isn't valid anymore.</p>
           <p className="text-xs mt-1">
@@ -280,7 +280,7 @@ export default function CleanerJobPhotosPage() {
 
   if (!submitted && alreadyDoneForPhase && !forceForm) {
     return (
-      <div className="min-h-screen bg-slate-50 p-4 max-w-md mx-auto">
+      <div className="min-h-screen bg-background p-4 max-w-md mx-auto">
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-center">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-emerald-600 text-white mb-3">
             <RiCheckLine className="w-6 h-6" />
@@ -307,7 +307,7 @@ export default function CleanerJobPhotosPage() {
 
   if (submitted) {
     return (
-      <div className="min-h-screen bg-slate-50 p-4 max-w-md mx-auto">
+      <div className="min-h-screen bg-background p-4 max-w-md mx-auto">
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-center">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-emerald-600 text-white mb-3">
             <RiCheckLine className="w-6 h-6" />
@@ -336,7 +336,7 @@ export default function CleanerJobPhotosPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-32">
+    <div className="min-h-screen bg-background pb-32">
       <div className="max-w-md mx-auto p-4 space-y-4">
         <header className="rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-500 p-5 text-white shadow-md">
           <div className="flex items-center gap-2">

@@ -13,6 +13,8 @@ import {
   HiringShell,
   HIRING_GRADIENT,
 } from "@/components/hiring/HiringChrome";
+import { Particles } from "@/components/magicui/particles";
+import { BRAND } from "@/lib/brand";
 import { HiringApplyForm } from "@/components/hiring/HiringApplyForm";
 
 export default function HiringHome() {
@@ -30,6 +32,13 @@ export default function HiringHome() {
 
       {/* Hero — brand-first, one composition */}
       <section className="relative overflow-hidden">
+        <Particles
+          className="absolute inset-0 z-0"
+          quantity={36}
+          color={BRAND.primary}
+          ease={80}
+          size={0.45}
+        />
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0"
@@ -45,11 +54,11 @@ export default function HiringHome() {
           className="nv-hire-drift pointer-events-none absolute -right-24 top-8 h-72 w-72 rounded-full bg-[#8F7BFD]/15 blur-3xl"
         />
         <div className="relative mx-auto max-w-6xl px-5 pb-16 pt-14 sm:px-6 sm:pb-20 sm:pt-20">
-          <p className="nv-hire-rise text-[11px] font-semibold uppercase tracking-[0.18em] text-[#5C0FFE]">
+          <p className="nv-hire-rise text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
             Now hiring
           </p>
-          <h1 className="nv-hire-rise nv-hire-rise-d1 mt-4 font-jakarta text-[2.35rem] font-extrabold leading-[1.05] tracking-tight text-slate-900 sm:text-5xl md:text-[3.4rem]">
-            Novara<span className="text-[#5C0FFE]">Cleaning</span>
+          <h1 className="nv-hire-rise nv-hire-rise-d1 mt-4 font-heading text-[2.35rem] font-extrabold leading-[1.05] tracking-tight text-foreground sm:text-5xl md:text-[3.4rem]">
+            Novara<span className="text-primary">Cleaning</span>
           </h1>
           <p className="nv-hire-rise nv-hire-rise-d2 mt-4 max-w-xl text-lg font-medium text-slate-700 sm:text-xl">
             Build a flexible cleaning business with us.

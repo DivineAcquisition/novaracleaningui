@@ -83,7 +83,7 @@ export default function AdSpendForm({ token }: { token: string }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#FAFAFC] flex items-center justify-center text-sm text-slate-500">
+      <div className="min-h-screen bg-background flex items-center justify-center text-sm text-slate-500">
         Loading this month’s ad spend form…
       </div>
     );
@@ -91,14 +91,14 @@ export default function AdSpendForm({ token }: { token: string }) {
 
   if (!boot?.ok) {
     return (
-      <div className="min-h-screen bg-[#FAFAFC] flex items-center justify-center p-6">
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
         <Card className="max-w-md p-6 text-sm text-slate-600">{boot?.error || "This link is invalid."}</Card>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#FAFAFC]">
+    <div className="min-h-screen bg-background">
       <div className="bg-gradient-to-br from-[#5C0FFE] to-[#8F7BFD] text-white px-5 py-8">
         <div className="max-w-2xl mx-auto">
           <p className="text-[11px] uppercase tracking-[0.14em] font-semibold text-white/80">Novara Cleaning</p>

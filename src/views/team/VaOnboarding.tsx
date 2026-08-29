@@ -206,7 +206,7 @@ export default function VaOnboarding() {
 
   if (resuming) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <RiLoader4Line className="w-8 h-8 animate-spin text-violet-600" />
       </div>
     );

@@ -7,21 +7,19 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-semibold tracking-tight transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
-        // Clean, modern gradient with a soft colored elevation and a subtle
-        // lift on hover (no chunky skeuomorphic stack).
         default:
-          "bg-gradient-primary text-white shadow-[0_4px_14px_-3px_hsl(259_99%_53%/0.45)] hover:shadow-[0_8px_22px_-4px_hsl(259_99%_53%/0.55)] hover:-translate-y-px active:translate-y-0 active:shadow-[0_2px_8px_-3px_hsl(259_99%_53%/0.4)]",
+          "bg-gradient-primary text-white shadow-[0_4px_14px_-3px_rgba(92,15,254,0.45)] hover:shadow-[0_8px_22px_-4px_rgba(92,15,254,0.55)] hover:-translate-y-px active:translate-y-0 active:shadow-[0_2px_8px_-3px_rgba(92,15,254,0.4)]",
         destructive:
           "bg-destructive text-destructive-foreground shadow-[0_4px_14px_-3px_hsl(0_84%_60%/0.45)] hover:shadow-[0_8px_22px_-4px_hsl(0_84%_60%/0.55)] hover:-translate-y-px active:translate-y-0",
         outline:
-          "border border-border bg-background shadow-sm hover:bg-accent/30 hover:border-primary/40 hover:text-primary active:bg-accent/40",
+          "border border-border bg-background shadow-sm hover:bg-brand-50 hover:border-primary/40 hover:text-primary active:bg-brand-100",
         secondary:
           "bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/70 active:bg-secondary/80",
-        ghost: "hover:bg-accent/50 hover:text-foreground",
+        ghost: "hover:bg-brand-50 hover:text-foreground",
         link: "text-primary underline-offset-4 hover:underline hover:text-primary-hover",
         success:
           "bg-success text-white shadow-[0_4px_14px_-3px_hsl(142_76%_32%/0.45)] hover:shadow-[0_8px_22px_-4px_hsl(142_76%_32%/0.55)] hover:-translate-y-px active:translate-y-0",

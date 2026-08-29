@@ -236,7 +236,7 @@ export default function CleanerJobOfferPage() {
   const isExpired = expiresAt != null && expiresAt < now && outcome == null;
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-background">
       <div
         className="border-b border-emerald-200 bg-gradient-to-br from-emerald-50 to-white"
         style={{
@@ -473,7 +473,7 @@ export default function CleanerJobOfferPage() {
 
 function CenterShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-slate-50 flex items-start justify-center p-4">
+    <div className="min-h-screen bg-background flex items-start justify-center p-4">
       <div className="w-full max-w-2xl space-y-4 mt-6">{children}</div>
     </div>
   );

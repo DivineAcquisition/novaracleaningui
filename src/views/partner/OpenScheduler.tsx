@@ -151,7 +151,7 @@ export default function OpenScheduler({ token }: { token: string }) {
   if (sent) {
     const okInvoices = sent.filter((s) => !s.error);
     return (
-      <div className="min-h-screen bg-slate-50">
+      <div className="min-h-screen bg-background">
         <Hero hostName={hostName} weekStart={weekStart} />
         <div className="max-w-2xl mx-auto px-4 mt-4">
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm text-center">
@@ -188,7 +188,7 @@ export default function OpenScheduler({ token }: { token: string }) {
 
   // ── Main scheduler ──────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-slate-50 pb-40">
+    <div className="min-h-screen bg-background pb-40">
       <Hero hostName={hostName} weekStart={weekStart} />
 
       <div className="max-w-2xl mx-auto px-4 mt-4 space-y-4">

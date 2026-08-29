@@ -29,13 +29,22 @@ import { useBooking } from "@/contexts/BookingContext";
 import { supabase } from "@/integrations/supabase/client";
 import { formatPhoneNumber } from "@/lib/input-formatters";
 import { RotatingSubheadline } from "@/components/booking/RotatingSubheadline";
+import { AnimatedShinyText } from "@/components/magicui/animated-shiny-text";
+import { BlurFade } from "@/components/magicui/blur-fade";
+import { BorderBeam } from "@/components/magicui/border-beam";
+import { MagicCard } from "@/components/magicui/magic-card";
+import { Marquee } from "@/components/magicui/marquee";
+import { NumberTicker } from "@/components/magicui/number-ticker";
+import { Particles } from "@/components/magicui/particles";
+import { ShineBorder } from "@/components/magicui/shine-border";
+import { BRAND } from "@/lib/brand";
 const logo = "/novara-logo.png";
 
 const TRUST_STATS = [
-  { label: "Homes Cleaned", value: "1,200+", icon: RiCheckboxCircleLine },
-  { label: "5-Star Reviews", value: "500+", icon: RiStarLine },
-  { label: "Repeat Customers", value: "92%", icon: RiGroupLine },
-  { label: "On-Time Rate", value: "99%", icon: RiTimeLine },
+  { label: "Homes Cleaned", value: 1200, suffix: "+", icon: RiCheckboxCircleLine },
+  { label: "5-Star Reviews", value: 500, suffix: "+", icon: RiStarLine },
+  { label: "Repeat Customers", value: 92, suffix: "%", icon: RiGroupLine },
+  { label: "On-Time Rate", value: 99, suffix: "%", icon: RiTimeLine },
 ];
 
 const HOW_IT_WORKS = [
@@ -181,7 +190,7 @@ const Index = () => {
         canonical="https://novaracleaning.com"
       />
       {/* Navigation */}
-      <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-xl">
+      <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-xl hairline-glow">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img
@@ -189,7 +198,7 @@ const Index = () => {
               alt="Novara Cleaning"
               className="w-9 h-9 rounded-xl"
             />
-            <span className="text-lg font-bold tracking-tight font-jakarta">
+            <span className="text-lg font-bold tracking-tight font-heading">
               Novara<span className="text-primary">Cleaning</span>
             </span>
           </div>
@@ -215,33 +224,40 @@ const Index = () => {
 
       {/* Hero Section */}
       <section className="relative overflow-hidden">
-        {/* Gradient background */}
+        <Particles
+          className="absolute inset-0 z-0"
+          quantity={48}
+          color={BRAND.primary}
+          ease={80}
+          size={0.5}
+        />
         <div className="absolute inset-0 bg-gradient-to-b from-primary/[0.03] via-background to-background" />
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-primary/[0.04] rounded-full blur-3xl" />
 
         <div className="relative container mx-auto px-4 pt-16 pb-20 md:pt-24 md:pb-28">
           <div className="max-w-3xl mx-auto text-center space-y-8">
-            {/* Trust badge */}
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-primary/20 bg-primary/[0.04] backdrop-blur-sm">
-              <RiShieldLine className="w-4 h-4 text-primary" />
-              <span className="text-sm font-medium text-primary">
-                Google Guaranteed & Fully Insured
-              </span>
-            </div>
+            <BlurFade delay={0.04} inView>
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-primary/20 bg-primary/[0.04] backdrop-blur-sm">
+                <RiShieldLine className="w-4 h-4 text-primary" />
+                <AnimatedShinyText className="mx-0 max-w-none text-sm font-medium text-primary">
+                  Google Guaranteed & Fully Insured
+                </AnimatedShinyText>
+              </div>
+            </BlurFade>
 
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight font-jakarta leading-[1.1]">
-              Stop Spending Your
-              <br />
-              <span className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-                One Day Off
-              </span>{" "}
-              Cleaning.
-            </h1>
+            <BlurFade delay={0.1} inView>
+              <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight font-heading leading-[1.1]">
+                Stop Spending Your
+                <br />
+                <span className="text-gradient">
+                  One Day Off
+                </span>{" "}
+                Cleaning.
+              </h1>
+            </BlurFade>
 
-            {/* New-customer 50% off sub-headline directly under the hero
-                H1, in our purple brand gradient. */}
-            <p className="text-xl md:text-2xl lg:text-3xl font-bold font-jakarta">
-              <span className="bg-gradient-primary bg-clip-text text-transparent">
+            <p className="text-xl md:text-2xl lg:text-3xl font-bold font-heading">
+              <span className="text-gradient">
                 25% Off
               </span>{" "}
               Your First Cleaning
@@ -257,8 +273,9 @@ const Index = () => {
             <RotatingSubheadline />
 
             {/* Booking Card */}
-            <Card className="max-w-md mx-auto border border-border/60 shadow-xl bg-card/80 backdrop-blur-sm">
-              <CardContent className="p-6 md:p-8">
+            <Card className="relative max-w-md mx-auto overflow-hidden panel">
+              <ShineBorder borderWidth={1.5} duration={14} />
+              <CardContent className="relative z-10 p-6 md:p-8">
                 {/* ZIP Code Form */}
                 <div
                   className={`transition-all duration-500 ease-out ${
@@ -444,14 +461,17 @@ const Index = () => {
       <section className="border-y border-border/40 bg-muted/30">
         <div className="container mx-auto px-4 py-10 md:py-14">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8">
-            {TRUST_STATS.map((stat) => (
-              <div key={stat.label} className="text-center space-y-2">
-                <stat.icon className="w-6 h-6 text-primary mx-auto" />
-                <p className="text-2xl md:text-3xl font-extrabold font-jakarta text-foreground">
-                  {stat.value}
-                </p>
-                <p className="text-sm text-muted-foreground">{stat.label}</p>
-              </div>
+            {TRUST_STATS.map((stat, i) => (
+              <BlurFade key={stat.label} delay={0.04 * i} inView>
+                <div className="text-center space-y-2">
+                  <stat.icon className="w-6 h-6 text-primary mx-auto" />
+                  <p className="text-2xl md:text-3xl font-extrabold font-heading text-foreground">
+                    <NumberTicker value={stat.value} />
+                    {stat.suffix}
+                  </p>
+                  <p className="text-sm text-muted-foreground">{stat.label}</p>
+                </div>
+              </BlurFade>
             ))}
           </div>
         </div>
@@ -467,7 +487,7 @@ const Index = () => {
             >
               How It Works
             </Badge>
-            <h2 className="text-3xl md:text-4xl font-bold font-jakarta">
+            <h2 className="text-3xl md:text-4xl font-bold font-heading">
               Book in Under 2 Minutes
             </h2>
             <p className="text-muted-foreground mt-3 text-lg">
@@ -476,28 +496,29 @@ const Index = () => {
           </div>
 
           <div className="grid md:grid-cols-3 gap-6 md:gap-8">
-            {HOW_IT_WORKS.map((item) => (
-              <Card
-                key={item.step}
-                className="relative border border-border/50 bg-card/50 backdrop-blur-sm hover:border-primary/30 transition-all duration-300 hover:shadow-lg group"
-              >
-                <CardContent className="p-6 text-center space-y-4">
-                  <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/[0.08] group-hover:bg-primary/[0.12] transition-colors">
-                    <item.icon className="w-7 h-7 text-primary" />
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-xs font-bold text-primary uppercase tracking-wider">
-                      Step {item.step}
-                    </p>
-                    <h3 className="text-lg font-bold font-jakarta">
-                      {item.title}
-                    </h3>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      {item.description}
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
+            {HOW_IT_WORKS.map((item, i) => (
+              <BlurFade key={item.step} delay={0.08 * i} inView>
+                <Card className="relative overflow-hidden panel-hover group">
+                  <MagicCard className="rounded-2xl">
+                    <CardContent className="relative z-10 p-6 text-center space-y-4">
+                      <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/[0.08] group-hover:bg-primary/[0.12] transition-colors">
+                        <item.icon className="w-7 h-7 text-primary" />
+                      </div>
+                      <div className="space-y-2">
+                        <p className="text-xs font-bold text-primary uppercase tracking-wider">
+                          Step {item.step}
+                        </p>
+                        <h3 className="text-lg font-bold font-heading">
+                          {item.title}
+                        </h3>
+                        <p className="text-sm text-muted-foreground leading-relaxed">
+                          {item.description}
+                        </p>
+                      </div>
+                    </CardContent>
+                  </MagicCard>
+                </Card>
+              </BlurFade>
             ))}
           </div>
         </div>
@@ -514,7 +535,7 @@ const Index = () => {
               >
                 Why Novara
               </Badge>
-              <h2 className="text-3xl md:text-4xl font-bold font-jakarta">
+              <h2 className="text-3xl md:text-4xl font-bold font-heading">
                 The Premium Standard
               </h2>
               <p className="text-muted-foreground mt-3 text-lg">
@@ -595,38 +616,40 @@ const Index = () => {
             >
               Testimonials
             </Badge>
-            <h2 className="text-3xl md:text-4xl font-bold font-jakarta">
+            <h2 className="text-3xl md:text-4xl font-bold font-heading">
               Loved by Homeowners
             </h2>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-5">
-            {TESTIMONIALS.map((testimonial) => (
-              <Card
-                key={testimonial.name}
-                className="border border-border/50 bg-card/80 backdrop-blur-sm"
-              >
-                <CardContent className="p-5 space-y-4">
-                  <div className="flex gap-0.5">
-                    {Array.from({ length: testimonial.rating }).map((_, i) => (
-                      <RiStarLine
-                        key={i}
-                        className="w-4 h-4 fill-amber-400 text-amber-400"
-                      />
-                    ))}
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-relaxed italic">
-                    "{testimonial.text}"
-                  </p>
-                  <div>
-                    <p className="text-sm font-semibold">{testimonial.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {testimonial.location}
+          <div className="relative overflow-hidden">
+            <Marquee pauseOnHover className="[--duration:42s]">
+              {TESTIMONIALS.map((testimonial) => (
+                <Card
+                  key={testimonial.name}
+                  className="w-[280px] shrink-0"
+                >
+                  <CardContent className="p-5 space-y-4">
+                    <div className="flex gap-0.5">
+                      {Array.from({ length: testimonial.rating }).map((_, i) => (
+                        <RiStarLine
+                          key={i}
+                          className="w-4 h-4 fill-amber-400 text-amber-400"
+                        />
+                      ))}
+                    </div>
+                    <p className="text-sm text-muted-foreground leading-relaxed italic">
+                      "{testimonial.text}"
                     </p>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                    <div>
+                      <p className="text-sm font-semibold">{testimonial.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {testimonial.location}
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </Marquee>
           </div>
         </div>
       </section>
@@ -635,8 +658,9 @@ const Index = () => {
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.06] to-accent/[0.04]" />
         <div className="relative container mx-auto px-4 py-16 md:py-24">
-          <div className="max-w-2xl mx-auto text-center space-y-6">
-            <h2 className="text-3xl md:text-4xl font-bold font-jakarta">
+          <div className="relative max-w-2xl mx-auto overflow-hidden rounded-3xl panel p-10 sm:p-12 text-center space-y-6">
+            <BorderBeam size={120} duration={8} />
+            <h2 className="text-3xl md:text-4xl font-bold font-heading">
               Ready for a Spotless Home?
             </h2>
             <p className="text-lg text-muted-foreground">
@@ -673,7 +697,7 @@ const Index = () => {
                     alt="Novara Cleaning"
                     className="w-8 h-8 rounded-lg"
                   />
-                  <span className="text-base font-bold font-jakarta">
+                  <span className="text-base font-bold font-heading">
                     Novara<span className="text-primary">Cleaning</span>
                   </span>
                 </div>

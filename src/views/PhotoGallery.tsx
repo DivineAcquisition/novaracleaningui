@@ -88,7 +88,7 @@ export default function PhotoGalleryPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 p-4 max-w-3xl mx-auto space-y-4">
+      <div className="min-h-screen bg-background p-4 max-w-3xl mx-auto space-y-4">
         <Skeleton className="h-28 w-full rounded-2xl" />
         <Skeleton className="h-56 w-full rounded-2xl" />
         <Skeleton className="h-56 w-full rounded-2xl" />
@@ -98,7 +98,7 @@ export default function PhotoGalleryPage() {
 
   if (loadErr || !data) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <SEO title="Photo gallery" description="View your cleaning before & after photos." noindex />
         <div className="max-w-md w-full rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm">
           <div className="mx-auto mb-3 inline-flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
@@ -123,7 +123,7 @@ export default function PhotoGalleryPage() {
   const totalPhotos = data.beforePhotos.length + data.afterPhotos.length;
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-16">
+    <div className="min-h-screen bg-background pb-16">
       <SEO title="Your cleaning photos" description="Before & after photos from your Novara clean." noindex />
 
       <header className="bg-gradient-to-br from-emerald-600 to-teal-500 text-white">

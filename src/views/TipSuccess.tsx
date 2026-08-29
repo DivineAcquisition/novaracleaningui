@@ -40,7 +40,7 @@ export default function TipSuccess() {
   }, [sessionId]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-violet-50 to-white flex items-center justify-center p-6">
+    <div className="min-h-screen bg-gradient-to-b from-brand-50 to-background flex items-center justify-center p-6">
       <div className="max-w-md w-full rounded-3xl bg-white shadow-xl shadow-violet-100 ring-1 ring-slate-100 p-8 text-center space-y-4">
         {state === "working" && (
           <>

@@ -42,7 +42,7 @@ export default function PartnerTurnoverSuccess() {
   }, [sessionId]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#EDE9FE] to-white flex items-center justify-center px-4">
+    <div className="min-h-screen bg-gradient-to-br from-brand-50 to-background flex items-center justify-center px-4">
       <SEO title="Turnover Confirmed" noindex />
       <Card className="w-full max-w-md shadow-xl border-0">
         <div className="h-1.5 w-full" style={{ background: "linear-gradient(90deg,#5C0FFE,#8F7BFD)" }} />

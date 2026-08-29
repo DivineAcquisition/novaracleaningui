@@ -462,7 +462,7 @@ function ActionRow({
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-background">
       <div className="max-w-xl mx-auto px-4 py-5 space-y-4">{children}</div>
     </div>
   );
