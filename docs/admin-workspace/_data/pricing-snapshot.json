@@ -1,0 +1,200 @@
+{
+  "_readme": "Live pricing configuration read from the NovaraCleaning Supabase project. This is a verbatim snapshot, not a hand-written copy — every worked example in the admin workspace guides is computed from this file by `npm run docs:pricing`, which runs the real src/lib/dynamic-pricing.ts engine. Refresh it (see scripts/docs/refresh-pricing-snapshot.md) whenever the guides are re-verified.",
+  "captured_at": "2026-08-29T18:14:56.977692+00:00",
+  "project_ref": "sxdraeptzuamsgjcvfeg",
+  "config_version": 3,
+  "config": {
+    "bands": {
+      "0_999": { "hours": 2, "label": "0 – 999 sq ft", "crew_size": 1 },
+      "1000_1500": { "hours": 2.5, "label": "1,000 – 1,500 sq ft", "crew_size": 1 },
+      "1501_2000": { "hours": 3, "label": "1,501 – 2,000 sq ft", "crew_size": 1 },
+      "2001_2500": { "hours": 3.5, "label": "2,001 – 2,500 sq ft", "crew_size": 1 },
+      "2501_3000": { "hours": 4, "label": "2,501 – 3,000 sq ft", "crew_size": 2 },
+      "3001_3500": { "hours": 4.5, "label": "3,001 – 3,500 sq ft", "crew_size": 2 },
+      "3501_4000": { "hours": 5, "label": "3,501 – 4,000 sq ft", "crew_size": 2 },
+      "4001_4500": { "hours": 5.5, "label": "4,001 – 4,500 sq ft", "crew_size": 2 },
+      "4501_5000": { "hours": 6, "label": "4,501 – 5,000 sq ft", "crew_size": 2 },
+      "5000_plus": { "hours": 0, "label": "5,000+ sq ft", "crew_size": 2 }
+    },
+    "demand": {
+      "inputs": {
+        "lead_time": { "weight": 0.06, "enabled": true },
+        "peak_period": { "weight": 0.05, "enabled": true },
+        "zone_capacity": { "weight": 0.04, "enabled": true },
+        "capacity_utilization": { "weight": 0.1, "enabled": true }
+      },
+      "enabled": false,
+      "shadow_mode": true,
+      "peak_periods": [
+        { "days": [0, 6], "type": "weekday", "label": "Weekend demand", "pressure": 0.6 },
+        { "type": "month_end", "label": "Month-end move-out season", "from_day": 25, "pressure": 0.5 }
+      ],
+      "max_multiplier": 1.25,
+      "min_multiplier": 0.9,
+      "max_delta_per_hour": 0.05,
+      "lead_time_long_days": 21,
+      "lead_time_short_days": 2
+    },
+    "guardrails": {
+      "floor_cents": {},
+      "max_total_uplift": 1.35,
+      "quote_lock_hours": 48,
+      "override_band_percent": 10,
+      "min_effective_hourly_cents": 2200
+    },
+    "membership": {
+      "prices_cents": {
+        "0_999": { "weekly": 35900, "monthly": 12900, "biweekly": 19900 },
+        "1000_1500": { "weekly": 44900, "monthly": 15900, "biweekly": 24900 },
+        "1501_2000": { "weekly": 56900, "monthly": 19900, "biweekly": 31900 },
+        "2001_2500": { "weekly": 65900, "monthly": 23900, "biweekly": 36900 },
+        "2501_3000": { "weekly": 79900, "monthly": 27900, "biweekly": 44900 },
+        "3001_3500": { "weekly": null, "monthly": 31900, "biweekly": 49900 },
+        "3501_4000": { "weekly": null, "monthly": 36900, "biweekly": 57900 },
+        "4001_4500": { "weekly": null, "monthly": 40900, "biweekly": 64900 },
+        "4501_5000": { "weekly": null, "monthly": 45900, "biweekly": 71900 }
+      },
+      "demand_exempt": true,
+      "first_month_deep_clean_fee_cents": 7500
+    },
+    "surcharges": {
+      "_source": "FALLBACK ONLY — overlaid from app_settings.focused_same_day_settings.same_day_upcharge_dollars",
+      "same_day_cents": 5000
+    },
+    "base_tables": {
+      "reconciled": false,
+      "authoritative": "training_guide",
+      "training_guide": {
+        "0_999": { "deep": 22500, "standard": 15000, "moveInOut": 30000 },
+        "1000_1500": { "deep": 28400, "standard": 18900, "moveInOut": 37800 },
+        "1501_2000": { "deep": 35900, "standard": 23900, "moveInOut": 47800 },
+        "2001_2500": { "deep": 41900, "standard": 27900, "moveInOut": 55800 },
+        "2501_3000": { "deep": 50900, "standard": 33900, "moveInOut": 67800 },
+        "3001_3500": { "deep": 56900, "standard": 37900, "moveInOut": 75800 },
+        "3501_4000": { "deep": 65900, "standard": 43900, "moveInOut": 87800 },
+        "4001_4500": { "deep": 73400, "standard": 48900, "moveInOut": 97800 },
+        "4501_5000": { "deep": 80900, "standard": 53900, "moveInOut": 107800 },
+        "5000_plus": { "deep": 0, "standard": 0, "moveInOut": 0 }
+      },
+      "later_sqft_model": {
+        "0_999": { "deep": 20500, "standard": 13500 },
+        "1000_1500": { "deep": 27500, "standard": 17000 },
+        "1501_2000": { "deep": 32500, "standard": 20500 },
+        "2001_2500": { "deep": 37500, "standard": 24000 },
+        "2501_3000": { "deep": 44500, "standard": 29000 },
+        "3001_3500": { "deep": 51500, "standard": 34500 }
+      }
+    },
+    "add_ons_cents": {
+      "oven": 3000,
+      "patio": 3500,
+      "walls": 4000,
+      "blinds": 3000,
+      "dishes": 2000,
+      "fridge": 3000,
+      "garage": 5000,
+      "closets": 3000,
+      "laundry": 3500,
+      "petHair": 3500,
+      "windows": 4000,
+      "basement": 7500,
+      "cabinets": 3500,
+      "microwave": 1000,
+      "trashHaul": 7500,
+      "baseboards": 3500,
+      "dishwasher": 1500,
+      "ceilingFans": 1500,
+      "changeLinens": 1500,
+      "cateringEvent": 8500,
+      "deepBathroomDetail": 4500
+    },
+    "focused_clean": {
+      "areas": [
+        { "id": "bathroom", "label": "Bathroom", "quantity": false, "price_cents": 6500 },
+        { "id": "kitchen", "label": "Kitchen", "quantity": false, "price_cents": 6500 },
+        { "id": "living", "label": "Living / common area", "quantity": false, "price_cents": 6500 },
+        { "id": "other", "label": "Other single area", "quantity": false, "price_cents": 6500 },
+        { "id": "bedroom", "label": "Bedroom", "quantity": true, "price_cents": 5000 }
+      ],
+      "_source": "FALLBACK ONLY — focused rates, the minimum, the bundle discount and the same-day fee are overlaid at load time from app_settings.focused_same_day_settings so those numbers live in one place.",
+      "minimum_cents": 6500,
+      "demand_enabled": false,
+      "bundle_discount_percent": 0
+    },
+    "override_reasons": [
+      { "code": "price_match", "label": "Competitor price match" },
+      { "code": "repeat_customer", "label": "Repeat customer goodwill" },
+      { "code": "service_recovery", "label": "Service recovery / prior issue" },
+      { "code": "scope_clarified", "label": "Scope clarified on call" },
+      { "code": "promo_honored", "label": "Advertised promo honored" },
+      { "code": "other", "label": "Other (note required)" }
+    ],
+    "condition_multipliers": { "heavy": 1.6, "light": 1, "standard": 1.25 },
+    "move_in_out_free_add_ons": ["fridge", "oven"]
+  },
+  "zones": [
+    {
+      "id": "0323217e-c2a8-4e3e-9508-3d6e8d15c888",
+      "code": "A",
+      "name": "Zone A — Premium",
+      "status": "active",
+      "is_default": false,
+      "multiplier": 1.15,
+      "description": "Bethesda, Potomac, Chevy Chase, Rockville, Silver Spring, Takoma Park, DC NW (Georgetown, AU Park, Dupont/West End), Arlington, McLean, Great Falls, Vienna, Falls Church, Alexandria Old Town",
+      "travel_minutes": 20,
+      "min_job_value_cents": null
+    },
+    {
+      "id": "070f9b09-ca2b-4a9f-8fac-0ee8936f8d32",
+      "code": "B",
+      "name": "Zone B — Standard",
+      "status": "active",
+      "is_default": true,
+      "multiplier": 1,
+      "description": "Rest of Montgomery County, Prince George's County, Columbia, Ellicott City, Elkridge, Laurel, Bowie, College Park, rest of DC, Fairfax County, Loudoun (Ashburn/Leesburg/Reston/Herndon), Alexandria",
+      "travel_minutes": 35,
+      "min_job_value_cents": null
+    },
+    {
+      "id": "0d67f218-142f-4cb0-a51f-f7043d1c52ab",
+      "code": "C",
+      "name": "Zone C — Outer",
+      "status": "active",
+      "is_default": false,
+      "multiplier": 0.9,
+      "description": "Frederick, Hagerstown, Annapolis, Glen Burnie, Severna Park, Pasadena, Baltimore city and suburbs, Eastern Shore, Southern Maryland, Western Maryland, Prince William County, Manassas, outer Loudoun",
+      "travel_minutes": 55,
+      "min_job_value_cents": null
+    }
+  ],
+  "zip_zone_counts": [
+    { "code": "A", "mapped_zips": 77 },
+    { "code": "B", "mapped_zips": 511 },
+    { "code": "C", "mapped_zips": 484 }
+  ],
+  "cleaner_pay_rates": [
+    { "pay_tier": "elite", "rate_percent": 47, "max_crew_size": 1, "min_crew_size": 1 },
+    { "pay_tier": "elite", "rate_percent": 50, "max_crew_size": null, "min_crew_size": 2 },
+    { "pay_tier": "foundation", "rate_percent": 37, "max_crew_size": 1, "min_crew_size": 1 },
+    { "pay_tier": "foundation", "rate_percent": 40, "max_crew_size": null, "min_crew_size": 2 },
+    { "pay_tier": "proven", "rate_percent": 41, "max_crew_size": 1, "min_crew_size": 1 },
+    { "pay_tier": "proven", "rate_percent": 45, "max_crew_size": null, "min_crew_size": 2 }
+  ],
+  "focused_same_day_settings": {
+    "areas": [
+      { "id": "bathroom", "label": "Bathroom", "price": 65, "quantity": false },
+      { "id": "kitchen", "label": "Kitchen", "price": 65, "quantity": false },
+      { "id": "living", "label": "Living / common area", "price": 65, "quantity": false },
+      { "id": "other", "label": "Other single area", "price": 65, "quantity": false },
+      { "id": "bedroom", "label": "Bedroom", "price": 50, "quantity": true }
+    ],
+    "timezone": "America/New_York",
+    "minimum_dollars": 65,
+    "same_day_cutoff": "14:00",
+    "condition_multipliers": { "heavy": 1.25, "light": 0.9, "normal": 1, "severe": 1.5 },
+    "same_day_upcharge_dollars": 50,
+    "sourcing_deadline_minutes": 120,
+    "same_day_upcharge_in_pay_basis": true,
+    "multi_area_bundle_discount_percent": 0
+  }
+}
