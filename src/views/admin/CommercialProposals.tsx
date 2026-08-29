@@ -165,6 +165,8 @@ interface Detail {
   agreements: AgreementRow[];
   billing: Record<string, any> | null;
   coiDeliveries: Array<Record<string, any>>;
+  onboarding: Record<string, any> | null;
+  onboardingSubmissions: Array<Record<string, any>>;
 }
 
 const STAGE_CHIP: Record<PipelineStage, string> = {
@@ -480,6 +482,14 @@ function DealSheet({
                 />
               </div>
             </div>
+
+            {/* ── Onboarding: the one link the client actually gets ────────── */}
+            <OnboardingPanel
+              detail={detail}
+              busy={busy}
+              run={run}
+              accountId={deal.account_id}
+            />
 
             {/* Why a proposal can't go out */}
             {readiness && !readiness.can_propose && (
@@ -1001,6 +1011,233 @@ function BillingBlock({
         {busy === "billing" ? <RiLoader4Line className="mr-1.5 h-4 w-4 animate-spin" /> : <RiEdit2Line className="mr-1.5 h-4 w-4" />}
         Record billing
       </Button>
+    </div>
+  );
+}
+
+// ─── Onboarding session panel ──────────────────────────────────────────────
+//
+// The billing decision and the one link the client is sent. This is the
+// approval gate: there is no way to generate the link without choosing
+// Invoice or Auto-Pay first, because the client's session presents whichever
+// was chosen and never asks them.
+
+function OnboardingPanel({
+  detail,
+  busy,
+  run,
+  accountId,
+}: {
+  detail: Detail;
+  busy: string | null;
+  run: (label: string, body: Record<string, unknown>, success: string) => Promise<unknown>;
+  accountId: string;
+}) {
+  const session = detail.onboarding;
+  const account = detail.account || {};
+  const pending = (detail.onboardingSubmissions || []).filter((s) => s.status === "pending");
+
+  const [method, setMethod] = useState<"auto_pay" | "invoiced" | "">(
+    (account.preferred_billing_method as "auto_pay" | "invoiced") || "",
+  );
+  const [to, setTo] = useState<string>(String(account.email || ""));
+
+  const live = session && session.status === "active";
+
+  const stepLabel: Record<string, string> = {
+    pricing: "reviewing the pricing",
+    agreement: "signing the agreement",
+    billing: "setting up billing",
+    portal: "creating their portal login",
+    paused: "waiting on a revised proposal",
+    done: "finished",
+  };
+
+  return (
+    <div className="rounded-lg border border-violet-200 bg-violet-50/40 p-3">
+      <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-violet-700">
+        <RiMailSendLine className="h-3.5 w-3.5" />
+        Client onboarding
+      </p>
+
+      {!live && (
+        <>
+          <p className="mt-1 text-xs text-slate-700">
+            One link takes them through pricing, signature, billing and their portal login. Choose
+            how this account will be billed — they are not asked, so this has to be decided here.
+          </p>
+
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {(
+              [
+                { id: "invoiced", label: "Invoice", sub: "Confirm contact + Net terms. No card." },
+                { id: "auto_pay", label: "Auto-Pay", sub: "Card or ACH saved. Never charged at setup." },
+              ] as const
+            ).map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => setMethod(opt.id)}
+                className={`rounded-lg border p-2.5 text-left transition-colors ${
+                  method === opt.id
+                    ? "border-violet-500 bg-white ring-1 ring-violet-300"
+                    : "border-slate-200 bg-white hover:border-slate-300"
+                }`}
+              >
+                <p className="text-xs font-semibold text-slate-900">{opt.label}</p>
+                <p className="mt-0.5 text-[11px] leading-snug text-slate-500">{opt.sub}</p>
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-2">
+            <Input
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              placeholder="Send to…"
+              className="h-8 text-xs"
+            />
+          </div>
+
+          <Button
+            size="sm"
+            className="mt-3"
+            disabled={busy !== null || !method || !to.includes("@")}
+            onClick={() =>
+              void run(
+                "startob",
+                { action: "start_onboarding", accountId, billingMethod: method, recipientEmail: to },
+                "Onboarding link sent.",
+              )
+            }
+          >
+            {busy === "startob" ? (
+              <RiLoader4Line className="mr-1.5 h-4 w-4 animate-spin" />
+            ) : (
+              <RiMailSendLine className="mr-1.5 h-4 w-4" />
+            )}
+            {method ? "Approve & send onboarding link" : "Choose a billing method first"}
+          </Button>
+        </>
+      )}
+
+      {live && (
+        <>
+          <p className="mt-1 text-xs text-slate-700">
+            Sent to {String(session.recipient_email || "—")} ·{" "}
+            {BILLING_METHOD_LABELS[session.billing_method as "auto_pay" | "invoiced"]} ·{" "}
+            {session.complete
+              ? "finished"
+              : `currently ${stepLabel[String(session.current_step)] || String(session.current_step)}`}
+          </p>
+
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {(session.steps as Array<{ key: string; label: string; done: boolean }> | null)?.map((st) => (
+              <span
+                key={st.key}
+                className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                  st.done ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-500"
+                }`}
+              >
+                {st.done ? "✓ " : ""}
+                {st.label}
+              </span>
+            ))}
+          </div>
+
+          {session.stalled && (
+            <p className="mt-2 rounded bg-amber-100 px-2 py-1.5 text-[11px] text-amber-900">
+              Idle {Math.round(Number(session.idle_hours || 0))} hours. A nudge resends the same
+              link — they keep their progress.
+            </p>
+          )}
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy !== null}
+              onClick={() =>
+                void run(
+                  "resendob",
+                  { action: "resend_onboarding", sessionId: session.id },
+                  "Reminder sent.",
+                )
+              }
+            >
+              {busy === "resendob" ? (
+                <RiLoader4Line className="mr-1.5 h-4 w-4 animate-spin" />
+              ) : (
+                <RiMailSendLine className="mr-1.5 h-4 w-4" />
+              )}
+              Nudge
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={busy !== null}
+              onClick={() =>
+                void run(
+                  "cancelob",
+                  { action: "cancel_onboarding", sessionId: session.id },
+                  "Onboarding link retired.",
+                )
+              }
+            >
+              Retire link
+            </Button>
+          </div>
+        </>
+      )}
+
+      {pending.length > 0 && (
+        <div className="mt-3 rounded-lg border border-amber-200 bg-white p-2.5">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-amber-700">
+            {pending.length} thing{pending.length === 1 ? "" : "s"} the client sent
+          </p>
+          <ul className="mt-1.5 space-y-1.5">
+            {pending.map((sub) => (
+              <li key={String(sub.id)} className="flex items-start justify-between gap-2">
+                <span className="text-[11px] leading-snug text-slate-700">
+                  {sub.kind === "site_request" ? (
+                    <>
+                      Wants a site added: <strong>{String(sub.site_address || sub.site_nickname)}</strong>
+                      <span className="block text-slate-500">
+                        Needs its own walkthrough — nothing was priced.
+                      </span>
+                    </>
+                  ) : sub.kind === "document" ? (
+                    <>Uploaded <strong>{String(sub.document_name)}</strong></>
+                  ) : (
+                    String(sub.note || "Note")
+                  )}
+                </span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 shrink-0 px-2 text-[11px]"
+                  disabled={busy !== null}
+                  onClick={() =>
+                    void run(
+                      `rev${sub.id}`,
+                      { action: "review_submission", submissionId: sub.id, status: "reviewed" },
+                      "Marked reviewed.",
+                    )
+                  }
+                >
+                  Mark reviewed
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {account.portal_user_id && (
+        <p className="mt-2 text-[11px] text-slate-500">
+          Portal login active since {shortDate(String(account.portal_created_at || ""))}.
+        </p>
+      )}
     </div>
   );
 }

@@ -65,7 +65,7 @@ serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
   );
 
-  const result = { expired: 0, reminded: 0, stalled: 0, coiWarnings: 0 };
+  const result = { expired: 0, reminded: 0, stalled: 0, coiWarnings: 0, onboardingStalled: 0 };
 
   try {
     // ── 1. Expire ────────────────────────────────────────────────────────
@@ -201,6 +201,61 @@ serve(async (req) => {
         },
       });
       result.stalled += 1;
+    }
+
+    // ── 3b. Onboarding sessions that went quiet ──────────────────────────
+    // A client part-way through setup who stops is invisible otherwise: the
+    // deal stage still reads "proposal sent" or "billing pending" and nobody
+    // knows they opened the link, signed, and then stalled on the billing
+    // contact. The view does the window arithmetic; this only reports.
+    const { data: idleSessions } = await admin
+      .from("commercial_onboarding_sessions_v1")
+      .select(
+        "id, business_account_id, business_name, current_step, idle_hours, " +
+          "recipient_email, billing_method, stalled",
+      )
+      .eq("stalled", true)
+      .limit(200);
+
+    for (const raw of idleSessions || []) {
+      const d = raw as unknown as Record<string, unknown>;
+
+      // One alert per session per three days, same dedupe as above.
+      const { count } = await admin
+        .from("events")
+        .select("id", { count: "exact", head: true })
+        .eq("event_type", "commercial.onboarding.stalled")
+        .contains("data", { session_id: d.id })
+        .gte("created_at", new Date(Date.now() - 3 * 86_400_000).toISOString());
+      if ((count || 0) > 0) continue;
+
+      const step = String(d.current_step || "pricing");
+      const stepLabel =
+        step === "pricing"
+          ? "reviewing the pricing"
+          : step === "agreement"
+            ? "signing the agreement"
+            : step === "billing"
+              ? "setting up billing"
+              : step === "portal"
+                ? "creating their portal login"
+                : step;
+
+      await admin.from("events").insert({
+        event_type: "commercial.onboarding.stalled",
+        source: "commercial-proposal-sweep",
+        summary:
+          `${String(d.business_name)} has been stuck on ${stepLabel} for ` +
+          `${Math.round(Number(d.idle_hours || 0))} hours. Nudge ${String(d.recipient_email || "the signer")}.`,
+        data: {
+          session_id: d.id,
+          account_id: d.business_account_id,
+          current_step: step,
+          idle_hours: d.idle_hours,
+          billing_method: d.billing_method,
+        },
+      });
+      result.onboardingStalled += 1;
     }
 
     // ── 4. Our own certificate ───────────────────────────────────────────
