@@ -32,6 +32,16 @@ import { updateSession } from "@/integrations/supabase/middleware";
 // hiring.novaracleaning.com — public careers site (open roles + apply).
 // Owned paths: /hiring/*. DNS points here; Framer is no longer the front door.
 //
+// docs.novaracleaning.com — internal workspace guides ("how the tool works").
+//                    UNLIKE commercial.* and partners.*, this host is NOT
+//                    public: it carries pricing formulas, the cleaner-pay
+//                    floor, override bands and every hard stop in the admin
+//                    workspace. Access is gated server-side by the same
+//                    admin/VA check the workspace uses (see
+//                    src/lib/docs/auth.ts), and this file adds defence in
+//                    depth: a noindex header on every response and a
+//                    Disallow-all robots.txt served only for this host.
+//
 // Apex novaracleaning.com / www.* are treated as `try` (marketing root).
 // localhost / *.lovableproject.com / *.vercel.app / preview hosts skip
 // enforcement so dev/preview keep working on a single origin.
@@ -49,6 +59,7 @@ const HOSTS = {
   commercial: "commercial.novaracleaning.com",
   eod: "eod.novaracleaning.com",
   hiring: "hiring.novaracleaning.com",
+  docs: "docs.novaracleaning.com",
 } as const;
 
 type SubdomainKey = keyof typeof HOSTS;
@@ -151,6 +162,10 @@ const ROUTE_OWNER: Array<[string, SubdomainKey]> = [
 
   // Public careers site (hiring.novaracleaning.com).
   ["/hiring", "hiring"],
+
+  // Internal workspace guides (docs.novaracleaning.com). Admin/VA sign-in
+  // required; the route itself enforces that before rendering anything.
+  ["/docs", "docs"],
 ];
 
 const DEFAULT_LANDING: Record<SubdomainKey, string> = {
@@ -163,6 +178,7 @@ const DEFAULT_LANDING: Record<SubdomainKey, string> = {
   commercial: "/commercial",
   eod: "/eod",
   hiring: "/hiring",
+  docs: "/docs",
 };
 
 // Paths that ALL subdomains may serve (framework / static / crawler files).
@@ -213,6 +229,7 @@ function subdomainOf(hostname: string): SubdomainKey | null {
   if (h.startsWith("team.")) return "team";
   if (h.startsWith("eod.")) return "eod";
   if (h.startsWith("hiring.")) return "hiring";
+  if (h.startsWith("docs.")) return "docs";
   return null;
 }
 
@@ -236,6 +253,28 @@ export async function middleware(request: NextRequest) {
   const response = await updateSession(request);
   const hostname = (request.headers.get("host") || "").toLowerCase();
   const pathname = request.nextUrl.pathname;
+
+  // ─── docs.* is never indexed ─────────────────────────────────────────
+  //
+  // Handled before the global allowlist because /robots.txt is on that list,
+  // and this host needs its own answer. The guides are already gated by an
+  // admin sign-in; these two are defence in depth, so that a crawler which
+  // somehow reached an authenticated response still has explicit
+  // instructions not to keep it, and so a misconfigured page-level
+  // `robots` export can't quietly re-expose the host.
+  const isDocsHost = hostname.startsWith("docs.");
+  if (isDocsHost && pathname === "/robots.txt") {
+    return new NextResponse("User-agent: *\nDisallow: /\n", {
+      status: 200,
+      headers: {
+        "content-type": "text/plain",
+        "x-robots-tag": "noindex, nofollow",
+      },
+    });
+  }
+  if (isDocsHost) {
+    response.headers.set("x-robots-tag", "noindex, nofollow, noarchive, noimageindex");
+  }
 
   // Skip everything for global allowlist paths (api, _next, etc).
   if (GLOBAL_ALLOWLIST.some((p) => pathname === p || pathname.startsWith(p + "/"))) {
