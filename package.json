@@ -24,7 +24,12 @@
     "checklists:pdf": "tsx scripts/build-checklist-pdf.ts",
     "reclean:verify": "deno run --allow-read scripts/verify-reclean.deno.ts",
     "reclean:verify:node": "tsx scripts/verify-reclean.deno.ts",
-    "proposals:verify": "tsx scripts/verify-proposal-request.ts"
+    "proposals:verify": "tsx scripts/verify-proposal-request.ts",
+    "docs:pricing": "tsx scripts/docs/pricing-examples.ts",
+    "docs:capture": "tsx scripts/docs/capture-screenshots.ts",
+    "docs:verify": "tsx scripts/docs/verify-docs.ts",
+    "docs:export": "tsx scripts/docs/export-knowledge.ts",
+    "docs:preview": "tsx scripts/docs/preview.ts"
   },
   "dependencies": {
     "@capacitor/android": "^7.4.4",
@@ -87,6 +92,7 @@
     "html2canvas": "^1.4.1",
     "input-otp": "^1.4.2",
     "lucide-react": "^1.35.0",
+    "marked": "^15.0.12",
     "motion": "^13.1.1",
     "next": "^14.2.20",
     "next-themes": "^0.3.0",
@@ -116,6 +122,7 @@
     "esbuild": "^0.25.10",
     "eslint": "^8.57.0",
     "eslint-config-next": "^14.2.20",
+    "playwright": "^1.62.1",
     "postcss": "^8.5.6",
     "supabase": "^2.110.0",
     "tailwindcss": "^3.4.17",
