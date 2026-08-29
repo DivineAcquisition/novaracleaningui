@@ -42,6 +42,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { buildCommercialAgreementBase64 } from "@/lib/commercial-agreement-pdf";
+import { CommercialScopePreview } from "@/components/checklists/CommercialScopePreview";
+import { uniqueScopeKeysFromSites } from "@/lib/commercial-checklists";
 import {
   INVOICE_CYCLE_LABELS,
   NET_TERMS_LABELS,
@@ -409,6 +411,19 @@ export default function CommercialAgreementSign() {
           <p className="text-base font-semibold text-primary">
             {money(agreement.totalPerVisitCents)}
           </p>
+        </div>
+      </Card>
+
+      <Card>
+        <h2 className="mb-1 text-sm font-semibold text-foreground">Scope checklist</h2>
+        <p className="mb-3 text-xs text-muted-foreground">
+          Every visit is documented against this list. It matches the public commercial checklists
+          and the crew&apos;s job page.
+        </p>
+        <div className="space-y-3">
+          {uniqueScopeKeysFromSites(sites).map((scope) => (
+            <CommercialScopePreview key={scope} kind={scope} compact />
+          ))}
         </div>
       </Card>
 

@@ -7,8 +7,8 @@
 // ids used for the progress map stored on job_checklists.items.
 //
 // If a checklist line changes, update BOTH this file and
-// src/lib/checklists.ts so the customer promise and the crew execution
-// list stay in lock-step.
+// src/lib/checklists.ts / src/lib/commercial-checklists.ts so the
+// customer promise and the crew execution list stay in lock-step.
 
 import {
   focusedChecklistSections,

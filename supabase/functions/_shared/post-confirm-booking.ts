@@ -38,6 +38,7 @@ import {
   DEFAULT_PAY_PERCENTAGE,
   getEstimatedHours,
 } from "./payout-utils.ts";
+import { publicChecklistUrl } from "./public-checklist-url.ts";
 
 const log = (step: string, details?: unknown) => {
   const tail = details ? ` - ${JSON.stringify(details)}` : "";
@@ -69,27 +70,13 @@ export interface PostConfirmOptions {
 }
 
 /**
- * Map a service type to its public checklist URL. Falls back to the
- * checklist index for membership/other unknowns.
+ * Map a service type (and commercial scope) to its public checklist URL.
  */
-export function checklistLinkForServiceType(serviceType: string | null | undefined): string {
-  const base = "https://try.novaracleaning.com/checklist";
-  switch ((serviceType || "").toLowerCase()) {
-    case "standard":
-      return `${base}/standard-clean`;
-    case "deep":
-      return `${base}/deep-clean`;
-    case "combo":
-      // Combo = initial Deep + follow-up Standard. Send the Deep
-      // checklist since visit 1 is what they'll see first.
-      return `${base}/deep-clean`;
-    case "moveinout":
-    case "move_in_out":
-    case "move-in-out":
-      return `${base}/move-in-out`;
-    default:
-      return base;
-  }
+export function checklistLinkForServiceType(
+  serviceType: string | null | undefined,
+  scopeLevel?: string | null,
+): string {
+  return publicChecklistUrl(serviceType, scopeLevel);
 }
 
 /**
@@ -258,7 +245,11 @@ async function sendConfirmationEmails(
   }
 
   const checklistLink =
-    opts.checklistLink || checklistLinkForServiceType(booking.service_type as string);
+    opts.checklistLink ||
+    checklistLinkForServiceType(
+      booking.service_type as string,
+      (booking as { scope_level?: string | null }).scope_level,
+    );
 
   const totalCents = Number(booking.total_estimate_cents || 0);
   const finalCents = Number(booking.final_charge_cents || 0);

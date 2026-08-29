@@ -181,6 +181,9 @@ export default function CommercialIntake() {
               ))}
             </div>
             <p className="text-center text-xs text-slate-400">
+              See exactly what&apos;s included —{" "}
+              <a href="https://try.novaracleaning.com/checklist/commercial-standard" className="text-violet-600 font-semibold hover:underline">commercial checklists</a>
+              {" · "}
               Looking for home cleaning instead?{" "}
               <a href="https://try.novaracleaning.com/book/zip" className="text-violet-600 font-semibold hover:underline">Book residential</a>
             </p>

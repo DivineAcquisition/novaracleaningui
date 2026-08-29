@@ -25,6 +25,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { Resend } from "https://esm.sh/resend@4.0.0";
 import { sendSms } from "../_shared/sms.ts";
+import { publicChecklistUrl } from "../_shared/public-checklist-url.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -33,18 +34,8 @@ const corsHeaders = {
 };
 
 /** Public customer-facing checklist page for a given service type. */
-function checklistViewUrl(serviceType: string): string {
-  const base = "https://try.novaracleaning.com/checklist";
-  const kind = resolveChecklistType(serviceType);
-  switch (kind) {
-    case "deep":
-    case "combo":
-      return `${base}/deep-clean`;
-    case "moveinout":
-      return `${base}/move-in-out`;
-    default:
-      return `${base}/standard-clean`;
-  }
+function checklistViewUrl(serviceType: string, scopeLevel?: string | null): string {
+  return publicChecklistUrl(serviceType, scopeLevel);
 }
 
 // ─── SERVICE-TYPE-AWARE CHECKLIST DATA ───────────────────────────────
@@ -327,13 +318,259 @@ const CHECKLIST_BY_TYPE: Record<string, ChecklistContent> = {
       "Hand wash wood blinds or shutters",
     ],
   },
+
+  commerciallight: {
+    subject: "Your Commercial Light checklist — what's included ✨",
+    heading: "Commercial Light Checklist",
+    intro:
+      "A Light commercial visit keeps a maintained facility presentable: floors swept and vacuumed, trash pulled, restrooms reset, and visible spills spot-cleaned. Standard adds mopping, rooms, and touch-point disinfection.",
+    emailKind: "commercial_light_checklist",
+    sections: [
+      {
+        title: "Arrival & setup",
+        items: [
+          "Check in per site access instructions (badge / code / contact)",
+          "Notify the required contact on arrival (if specified)",
+          "Confirm the alarm is disarmed per the security notes before starting",
+          "Walk the site and note anything already damaged or blocked",
+        ],
+      },
+      {
+        title: "Light scope — every area in this job",
+        items: [
+          "Sweep and vacuum all floors in scope",
+          "Empty all trash and recycling; replace liners; take to designated disposal",
+          "Restrooms: disinfect toilets, sinks, counters, mirrors; restock supplies",
+          "Spot-clean visible spills and marks",
+        ],
+      },
+      {
+        title: "Documentation",
+        items: [
+          "Take BEFORE photos of all areas in scope",
+          "Take AFTER photos of every area cleaned",
+        ],
+      },
+      {
+        title: "Close-out",
+        items: [
+          "Complete any deep tasks scheduled for this visit (per scope)",
+          "Return all furniture and equipment to where you found it",
+          "Secure the site per lock-up procedure (doors, alarm, lights)",
+          "Notify the required contact on departure (if specified)",
+        ],
+      },
+    ],
+    extras: [
+      "Catering / event cleanup",
+      "Deep bathroom detail (per restroom)",
+      "Interior window wash beyond entry glass",
+      "After-hours or weekend premium window",
+      "Floor machine / scrubber pass",
+    ],
+  },
+
+  commercialstandard: {
+    subject: "Your Commercial Standard checklist — what's included ✨",
+    heading: "Commercial Standard Checklist",
+    intro:
+      "Standard is the default commercial visit. It includes everything in Light, then mops hard floors, resets the break room, wipes individual offices and rooms, and disinfects handles, switches, and rails.",
+    emailKind: "commercial_standard_checklist",
+    sections: [
+      {
+        title: "Arrival & setup",
+        items: [
+          "Check in per site access instructions (badge / code / contact)",
+          "Notify the required contact on arrival (if specified)",
+          "Confirm the alarm is disarmed per the security notes before starting",
+          "Walk the site and note anything already damaged or blocked",
+        ],
+      },
+      {
+        title: "Standard scope — every area in this job",
+        items: [
+          "Sweep and vacuum all floors in scope",
+          "Empty all trash and recycling; replace liners; take to designated disposal",
+          "Restrooms: disinfect toilets, sinks, counters, mirrors; restock supplies",
+          "Spot-clean visible spills and marks",
+          "Mop all hard floors",
+          "Break room / kitchenette: counters, sink, appliance exteriors, tables",
+          "Individual offices and rooms: surfaces wiped, trash pulled, floors done",
+          "Wipe and disinfect touch points (handles, switches, rails)",
+        ],
+      },
+      {
+        title: "Documentation",
+        items: [
+          "Take BEFORE photos of all areas in scope",
+          "Take AFTER photos of every area cleaned",
+        ],
+      },
+      {
+        title: "Close-out",
+        items: [
+          "Complete any deep tasks scheduled for this visit (per scope)",
+          "Return all furniture and equipment to where you found it",
+          "Secure the site per lock-up procedure (doors, alarm, lights)",
+          "Notify the required contact on departure (if specified)",
+        ],
+      },
+    ],
+    extras: [
+      "Catering / event cleanup",
+      "Deep bathroom detail (per restroom)",
+      "Interior window wash beyond entry glass",
+      "After-hours or weekend premium window",
+      "Floor machine / scrubber pass",
+    ],
+  },
+
+  commercialdetailed: {
+    subject: "Your Commercial Detailed checklist — full scope included ✨",
+    heading: "Commercial Detailed Checklist",
+    intro:
+      "Detailed is the reset pass: everything in Standard, then floor edges and grout, a high-touch sanitization of shared equipment, detail dusting of ledges and vents, and streak-free interior glass.",
+    emailKind: "commercial_detailed_checklist",
+    sections: [
+      {
+        title: "Arrival & setup",
+        items: [
+          "Check in per site access instructions (badge / code / contact)",
+          "Notify the required contact on arrival (if specified)",
+          "Confirm the alarm is disarmed per the security notes before starting",
+          "Walk the site and note anything already damaged or blocked",
+        ],
+      },
+      {
+        title: "Detailed scope — every area in this job",
+        items: [
+          "Sweep and vacuum all floors in scope",
+          "Empty all trash and recycling; replace liners; take to designated disposal",
+          "Restrooms: disinfect toilets, sinks, counters, mirrors; restock supplies",
+          "Spot-clean visible spills and marks",
+          "Mop all hard floors",
+          "Break room / kitchenette: counters, sink, appliance exteriors, tables",
+          "Individual offices and rooms: surfaces wiped, trash pulled, floors done",
+          "Wipe and disinfect touch points (handles, switches, rails)",
+          "Scrub floors — grout lines, edges, and corners, not just the open middle",
+          "High-touch sanitization pass: shared equipment, phones, rails, dispensers",
+          "Detail dusting: ledges, sills, vents, fixtures, tops of partitions",
+          "Interior glass and entry doors, streak-free",
+        ],
+      },
+      {
+        title: "Documentation",
+        items: [
+          "Take BEFORE photos of all areas in scope",
+          "Take AFTER photos of every area cleaned",
+        ],
+      },
+      {
+        title: "Close-out",
+        items: [
+          "Complete any deep tasks scheduled for this visit (per scope)",
+          "Return all furniture and equipment to where you found it",
+          "Secure the site per lock-up procedure (doors, alarm, lights)",
+          "Notify the required contact on departure (if specified)",
+        ],
+      },
+    ],
+    extras: [
+      "Catering / event cleanup",
+      "Deep bathroom detail (per restroom)",
+      "Interior window wash beyond entry glass",
+      "After-hours or weekend premium window",
+      "Floor machine / scrubber pass",
+    ],
+  },
+
+  office: {
+    subject: "Your Office Clean checklist — after-hours scope ✨",
+    heading: "Office Clean (After-Hours) Checklist",
+    intro:
+      "Office visits run the Commercial Standard list, then add desk, conference, and lock-up rules so the workspace is usable the next morning.",
+    emailKind: "office_checklist",
+    sections: [
+      {
+        title: "Arrival & setup",
+        items: [
+          "Check in per site access instructions (badge / code / contact)",
+          "Notify the required contact on arrival (if specified)",
+          "Confirm the alarm is disarmed per the security notes before starting",
+          "Walk the site and note anything already damaged or blocked",
+        ],
+      },
+      {
+        title: "Standard scope — every area in this job",
+        items: [
+          "Sweep and vacuum all floors in scope",
+          "Empty all trash and recycling; replace liners; take to designated disposal",
+          "Restrooms: disinfect toilets, sinks, counters, mirrors; restock supplies",
+          "Spot-clean visible spills and marks",
+          "Mop all hard floors",
+          "Break room / kitchenette: counters, sink, appliance exteriors, tables",
+          "Individual offices and rooms: surfaces wiped, trash pulled, floors done",
+          "Wipe and disinfect touch points (handles, switches, rails)",
+        ],
+      },
+      {
+        title: "Office rules",
+        items: [
+          "Respect the desk policy — do NOT move or touch papers/electronics unless scope says otherwise",
+          "Clean around workstations: wipe desks per policy, sanitize phones/shared equipment only if in scope",
+          "Conference rooms: tables, chairs, glass, whiteboard trays (do not erase boards)",
+          "Handle sensitive areas exactly per instructions (server rooms, exec offices)",
+        ],
+      },
+      {
+        title: "Documentation",
+        items: [
+          "Take BEFORE photos of all areas in scope",
+          "Take AFTER photos of every area cleaned",
+        ],
+      },
+      {
+        title: "Close-out",
+        items: [
+          "Complete any deep tasks scheduled for this visit (per scope)",
+          "Return all furniture and equipment to where you found it",
+          "Secure the site per lock-up procedure (doors, alarm, lights)",
+          "Notify the required contact on departure (if specified)",
+        ],
+      },
+      {
+        title: "After-hours close-out",
+        items: [
+          "Turn off lights per building instructions",
+          "Set the alarm and lock up exactly per the security notes",
+          "Badge out / check out with security if required",
+        ],
+      },
+    ],
+    extras: [
+      "Catering / event cleanup",
+      "Deep bathroom detail (per restroom)",
+      "Interior window wash beyond entry glass",
+      "After-hours or weekend premium window",
+      "Floor machine / scrubber pass",
+    ],
+  },
 };
 
-function resolveChecklistType(serviceType: string): string {
+function resolveChecklistType(serviceType: string, scopeLevel?: string | null): string {
   const lower = (serviceType || "").toLowerCase().replace(/[\s_-]/g, "");
   if (lower.includes("move") || lower.includes("inout")) return "moveinout";
   if (lower === "deep") return "deep";
   if (lower === "combo") return "combo";
+  if (lower.includes("office")) return "office";
+  if (lower.includes("commercial") || lower === "light" || lower === "detailed") {
+    const scope = String(scopeLevel || lower.replace("commercial", "") || "standard").toLowerCase();
+    if (scope.includes("light")) return "commerciallight";
+    if (scope.includes("detailed")) return "commercialdetailed";
+    if (lower === "light") return "commerciallight";
+    if (lower === "detailed") return "commercialdetailed";
+    return "commercialstandard";
+  }
   return "standard";
 }
 
@@ -474,6 +711,7 @@ serve(async (req) => {
       phone: directPhone,
       firstName: directFirstName,
       serviceType: directServiceType,
+      scopeLevel: directScopeLevel,
       sendEmail: wantEmail = true,
       sendSms: wantSms = false,
       force = false,
@@ -483,6 +721,7 @@ serve(async (req) => {
       phone?: string;
       firstName?: string;
       serviceType?: string;
+      scopeLevel?: string;
       /** Email the full checklist HTML (default true). */
       sendEmail?: boolean;
       /** Text the public customer checklist page link (default false). */
@@ -502,6 +741,7 @@ serve(async (req) => {
     let phone = directPhone || "";
     let firstName = directFirstName || "";
     let serviceType = (directServiceType || "standard").toLowerCase();
+    let scopeLevel = (directScopeLevel || "").toLowerCase() || null;
     let bookingNumber: number | null = null;
     let serviceDate: string | null = null;
     let timeSlot: string | null = null;
@@ -512,7 +752,7 @@ serve(async (req) => {
       const { data: booking, error: bookingError } = await supabase
         .from("bookings")
         .select(
-          "id, booking_number, email, phone, first_name, service_type, service_date, time_slot, address, city, state, zip_code",
+          "id, booking_number, email, phone, first_name, service_type, scope_level, service_date, time_slot, address, city, state, zip_code",
         )
         .eq("id", bookingId)
         .maybeSingle();
@@ -524,6 +764,7 @@ serve(async (req) => {
         phone = phone || booking.phone || "";
         firstName = firstName || booking.first_name || "";
         serviceType = (booking.service_type || serviceType || "standard").toLowerCase();
+        scopeLevel = (booking.scope_level || scopeLevel || "").toLowerCase() || scopeLevel;
         bookingNumber = booking.booking_number ?? null;
         serviceDate = booking.service_date
           ? new Date(booking.service_date + "T00:00:00").toLocaleDateString("en-US", {
@@ -563,9 +804,9 @@ serve(async (req) => {
     }
 
     // Resolve service-type-aware checklist content
-    const checklistType = resolveChecklistType(serviceType);
+    const checklistType = resolveChecklistType(serviceType, scopeLevel);
     const content = CHECKLIST_BY_TYPE[checklistType] ?? CHECKLIST_BY_TYPE.standard;
-    const viewUrl = checklistViewUrl(serviceType);
+    const viewUrl = checklistViewUrl(serviceType, scopeLevel);
 
     // Idempotency: skip if we already sent this checklist kind for this booking.
     // Admin "force" resends bypass this (Quotes / CSR tooling).

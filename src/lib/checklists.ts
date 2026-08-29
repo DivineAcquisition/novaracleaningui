@@ -1,22 +1,38 @@
 // ─── Cleaning service checklists ──────────────────────────────────────
 //
-// Source of truth for the four /checklist/* pages. Each entry mirrors
-// the official PDF checklist the customer would receive after booking,
-// so what's published online and what cleaners actually execute match
-// to the line item.
+// Source of truth for the /checklist/* pages. Each residential entry
+// mirrors the official PDF the customer receives after booking. Commercial
+// Light / Standard / Detailed (+ office) live in commercial-checklists.ts
+// and stay in lock-step with the crew list in contractor-checklists.ts.
 //
 // Edits here flow to:
 //   • /checklist/[slug] pages
 //   • Booking flow upsells (Offer.tsx links into these)
+//   • Commercial hub / proposal / agreement previews
 //   • Cleaner training material (Training.tsx pulls from this map)
 //
 // If a checklist line changes, update both the SOP doc and this file.
+
+import {
+  COMMERCIAL_ADD_ONS,
+  COMMERCIAL_DETAILED_EXTRAS,
+  COMMERCIAL_STANDARD_EXTRAS,
+  commercialChecklistPath,
+  commercialChecklistSections,
+  commercialChecklistSlug,
+} from "@/lib/commercial-checklists";
+
+export type ChecklistFamily = "residential" | "commercial";
 
 export type ChecklistSlug =
   | "standard-clean"
   | "deep-clean"
   | "move-in-out"
-  | "recurring";
+  | "recurring"
+  | "commercial-light"
+  | "commercial-standard"
+  | "commercial-detailed"
+  | "office";
 
 export interface ChecklistSection {
   /** Heading shown on the card. */
@@ -27,13 +43,14 @@ export interface ChecklistSection {
 
 export interface Checklist {
   slug: ChecklistSlug;
+  family: ChecklistFamily;
   name: string;
   /** Short subtitle right under the H1. */
   tagline: string;
   /** Full pitch paragraph at the top of the page. */
   description: string;
   /** Color accent for the page (Tailwind palette segment). */
-  accent: "emerald" | "blue" | "purple" | "amber";
+  accent: "emerald" | "blue" | "purple" | "amber" | "slate" | "teal";
   /** Three header pills. */
   meta: {
     estimatedTime: string;
@@ -41,7 +58,7 @@ export interface Checklist {
     frequency: string;
   };
   /** Service-type ID this checklist maps to in the booking flow. */
-  bookingServiceType: "standard" | "deep" | "moveInOut" | "membership";
+  bookingServiceType: "standard" | "deep" | "moveInOut" | "membership" | "commercial" | "office";
   /** Optional ?serviceType= override when linking into /book/offer. */
   bookingHref: string;
   /** Kitchen / Bathrooms / All Rooms / etc. */
@@ -60,6 +77,7 @@ export interface Checklist {
 export const CHECKLISTS: Record<ChecklistSlug, Checklist> = {
   "standard-clean": {
     slug: "standard-clean",
+    family: "residential",
     name: "Standard Clean",
     tagline: "Regular upkeep — keep your home looking its best",
     description:
@@ -144,6 +162,7 @@ export const CHECKLISTS: Record<ChecklistSlug, Checklist> = {
 
   "deep-clean": {
     slug: "deep-clean",
+    family: "residential",
     name: "Deep Clean",
     tagline: "The reset your home needs — recommended for first cleans",
     description:
@@ -229,6 +248,7 @@ export const CHECKLISTS: Record<ChecklistSlug, Checklist> = {
 
   "move-in-out": {
     slug: "move-in-out",
+    family: "residential",
     name: "Move In / Move Out Clean",
     tagline: "Empty home service — ready for the next chapter",
     description:
@@ -308,6 +328,7 @@ export const CHECKLISTS: Record<ChecklistSlug, Checklist> = {
 
   "recurring": {
     slug: "recurring",
+    family: "residential",
     name: "Recurring Clean",
     tagline: "Weekly • Biweekly • Monthly — consistent care for your home",
     description:
@@ -389,15 +410,177 @@ export const CHECKLISTS: Record<ChecklistSlug, Checklist> = {
     recommendedNextSlug: "deep-clean",
     recommendedNextLabel: "Schedule your baseline Deep Clean",
   },
+
+  "commercial-light": {
+    slug: "commercial-light",
+    family: "commercial",
+    name: "Commercial Light",
+    tagline: "Trash, floors, restrooms — the nightly refresh",
+    description:
+      "Our Light commercial visit keeps a maintained facility presentable between deeper service. Crews sweep and vacuum, pull trash, reset restrooms, and spot-clean what is visible. If the site needs mopping, break-room work, or individual rooms wiped, step up to Standard.",
+    accent: "slate",
+    meta: {
+      estimatedTime: "Sized to your square footage and window",
+      bestFor: "Maintained offices, retail floors, and common areas",
+      frequency: "Nightly or several times a week",
+    },
+    bookingServiceType: "commercial",
+    bookingHref: "/commercial",
+    sections: commercialChecklistSections("light"),
+    notIncludedHeading: "Not included — upgrade to Standard for:",
+    notIncluded: [...COMMERCIAL_STANDARD_EXTRAS],
+    addOns: COMMERCIAL_ADD_ONS,
+    recommendedNextSlug: "commercial-standard",
+    recommendedNextLabel: "See Standard commercial scope",
+  },
+
+  "commercial-standard": {
+    slug: "commercial-standard",
+    family: "commercial",
+    name: "Commercial Standard",
+    tagline: "Light plus mopping, rooms, and touch-point disinfection",
+    description:
+      "Standard is the default commercial visit. It includes everything in Light, then mops hard floors, resets the break room, wipes individual offices and rooms, and disinfects handles, switches, and rails. Detailed adds scrubbing, high-touch sanitization, and glass.",
+    accent: "teal",
+    meta: {
+      estimatedTime: "Sized to your square footage and window",
+      bestFor: "Offices, medical waiting rooms, gyms, and most contracted sites",
+      frequency: "Weekly, several times a week, or nightly",
+    },
+    bookingServiceType: "commercial",
+    bookingHref: "/commercial",
+    sections: commercialChecklistSections("standard"),
+    notIncludedHeading: "Not included — upgrade to Detailed for:",
+    notIncluded: [...COMMERCIAL_DETAILED_EXTRAS],
+    addOns: COMMERCIAL_ADD_ONS,
+    recommendedNextSlug: "commercial-detailed",
+    recommendedNextLabel: "See Detailed commercial scope",
+  },
+
+  "commercial-detailed": {
+    slug: "commercial-detailed",
+    family: "commercial",
+    name: "Commercial Detailed",
+    tagline: "Standard plus scrubbing, sanitization, dusting, and glass",
+    description:
+      "Detailed is the reset pass: everything in Standard, then floor edges and grout, a high-touch sanitization of shared equipment, detail dusting of ledges and vents, and streak-free interior glass. Large sites are documented zone by zone so one photo pair never stands in for the whole building.",
+    accent: "purple",
+    meta: {
+      estimatedTime: "Longer window or a larger crew than Standard",
+      bestFor: "First visits, seasonal resets, medical, and high-touch facilities",
+      frequency: "Periodic rotation, or standing scope on high-spec sites",
+    },
+    bookingServiceType: "commercial",
+    bookingHref: "/commercial",
+    sections: commercialChecklistSections("detailed"),
+    notIncludedHeading: "Not included — available as add-ons:",
+    notIncluded: [
+      "Exterior windows",
+      "Carpet extraction or floor refinishing",
+      "Kitchen hood / grease-trap work",
+      "Moving inventory or warehouse racking",
+    ],
+    addOns: COMMERCIAL_ADD_ONS,
+    recommendedNextSlug: "office",
+    recommendedNextLabel: "See the office after-hours list",
+  },
+
+  "office": {
+    slug: "office",
+    family: "commercial",
+    name: "Office Clean (After-Hours)",
+    tagline: "Standard commercial scope plus desk, conference, and lock-up rules",
+    description:
+      "Office visits run the Commercial Standard list, then add the rules that keep a workspace usable the next morning: papers and electronics stay put, conference rooms are reset without erasing boards, and lights, alarm, and badge-out follow the building's after-hours procedure. Light or Detailed depth can still be priced on the same site.",
+    accent: "amber",
+    meta: {
+      estimatedTime: "Sized to your square footage and after-hours window",
+      bestFor: "Offices and workspaces cleaned around the team's hours",
+      frequency: "Nightly, several times a week, or weekly",
+    },
+    bookingServiceType: "office",
+    bookingHref: "/commercial",
+    sections: commercialChecklistSections("office"),
+    notIncludedHeading: "Not included — upgrade to Detailed for:",
+    notIncluded: [...COMMERCIAL_DETAILED_EXTRAS],
+    addOns: COMMERCIAL_ADD_ONS,
+    recommendedNextSlug: "commercial-standard",
+    recommendedNextLabel: "Compare Standard commercial scope",
+  },
 };
 
-export const CHECKLIST_SLUGS: ChecklistSlug[] = [
+export const RESIDENTIAL_CHECKLIST_SLUGS: ChecklistSlug[] = [
   "standard-clean",
   "deep-clean",
   "move-in-out",
   "recurring",
 ];
 
+export const COMMERCIAL_CHECKLIST_SLUGS: ChecklistSlug[] = [
+  "commercial-light",
+  "commercial-standard",
+  "commercial-detailed",
+  "office",
+];
+
+export const CHECKLIST_SLUGS: ChecklistSlug[] = [
+  ...RESIDENTIAL_CHECKLIST_SLUGS,
+  ...COMMERCIAL_CHECKLIST_SLUGS,
+];
+
 export function getChecklist(slug: string): Checklist | undefined {
   return (CHECKLISTS as Record<string, Checklist>)[slug];
 }
+
+export function slugsForFamily(family: ChecklistFamily): ChecklistSlug[] {
+  return CHECKLIST_SLUGS.filter((slug) => CHECKLISTS[slug].family === family);
+}
+
+/**
+ * Public /checklist path for a booking service type (and commercial scope).
+ * Unknown residential types fall back to Standard Clean.
+ */
+export function checklistPathForServiceType(
+  serviceType?: string | null,
+  scopeLevel?: string | null,
+): string {
+  const t = String(serviceType || "").toLowerCase().replace(/[\s-]/g, "_");
+  if (t === "office") return "/checklist/office";
+  if (
+    t === "commercial" ||
+    t === "commercial_light" ||
+    t === "commercial_standard" ||
+    t === "commercial_detailed" ||
+    t === "light" ||
+    t === "detailed"
+  ) {
+    return commercialChecklistPath(serviceType, scopeLevel);
+  }
+  if (t === "deep" || t === "combo") return "/checklist/deep-clean";
+  if (t === "moveinout" || t === "move_in_out") return "/checklist/move-in-out";
+  if (
+    t === "membership" ||
+    t === "weekly" ||
+    t === "biweekly" ||
+    t === "monthly" ||
+    t === "recurring"
+  ) {
+    return "/checklist/recurring";
+  }
+  if (t === "turnover" || t === "str_turnover" || t === "str") {
+    return "/checklist";
+  }
+  return "/checklist/standard-clean";
+}
+
+export const TRY_CHECKLIST_ORIGIN = "https://try.novaracleaning.com";
+
+export function publicChecklistUrl(
+  serviceType?: string | null,
+  scopeLevel?: string | null,
+): string {
+  return `${TRY_CHECKLIST_ORIGIN}${checklistPathForServiceType(serviceType, scopeLevel)}`;
+}
+
+export { commercialChecklistSlug, commercialChecklistPath };
+

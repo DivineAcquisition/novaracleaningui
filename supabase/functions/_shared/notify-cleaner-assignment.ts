@@ -10,17 +10,10 @@ import { formatServiceDate, formatTimeSlot } from "./sms.ts";
 import { ensureAssignmentChecklistAccess } from "./job-checklist.ts";
 import { computeCrewPay, shareFor } from "./crew-pay.ts";
 import { jobValueForPay } from "./reclean.ts";
+import { publicChecklistUrl as publishedChecklistUrl } from "./public-checklist-url.ts";
 
-const CHECKLIST_BY_SERVICE: Record<string, string> = {
-  standard: "https://try.novaracleaning.com/checklist/standard-clean",
-  deep: "https://try.novaracleaning.com/checklist/deep-clean",
-  move_in_out: "https://try.novaracleaning.com/checklist/move-in-out",
-  recurring: "https://try.novaracleaning.com/checklist/recurring",
-};
-
-function publicChecklistUrl(serviceType: string | null): string {
-  const key = String(serviceType || "standard").toLowerCase().replace(/-/g, "_");
-  return CHECKLIST_BY_SERVICE[key] || CHECKLIST_BY_SERVICE.standard;
+function publicChecklistUrl(serviceType: string | null, scopeLevel?: string | null): string {
+  return publishedChecklistUrl(serviceType, scopeLevel);
 }
 
 export async function notifyCleanerOfAssignment(
@@ -63,7 +56,7 @@ export async function notifyCleanerOfAssignment(
 
   // Dedicated contractor checklist link (falls back to the public
   // checklist when the booking has no job/assignment for this cleaner).
-  let checklistLink = publicChecklistUrl(booking.service_type);
+  let checklistLink = publicChecklistUrl(booking.service_type, booking.scope_level);
   if (booking.job_id) {
     try {
       const access = await ensureAssignmentChecklistAccess(supabase, {
