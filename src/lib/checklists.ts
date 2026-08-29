@@ -39,6 +39,12 @@ export interface ChecklistSection {
   title: string;
   /** Each line item — a single short sentence, no leading bullet. */
   items: string[];
+  /**
+   * Stable catalog IDs, index-aligned with `items`. Present on commercial and
+   * office sections, which are built from the addressable catalog; residential
+   * lists are still literal until they are migrated onto it.
+   */
+  itemIds?: string[];
 }
 
 export interface Checklist {
@@ -415,9 +421,9 @@ export const CHECKLISTS: Record<ChecklistSlug, Checklist> = {
     slug: "commercial-light",
     family: "commercial",
     name: "Commercial Light",
-    tagline: "Trash, floors, restrooms — the nightly refresh",
+    tagline: "Trash, floors, restrooms, entry glass, high-touch — the nightly refresh",
     description:
-      "Our Light commercial visit keeps a maintained facility presentable between deeper service. Crews sweep and vacuum, pull trash, reset restrooms, and spot-clean what is visible. If the site needs mopping, break-room work, or individual rooms wiped, step up to Standard.",
+      "Our Light commercial visit keeps a maintained facility presentable between deeper service. Crews sweep and vacuum, pull trash, service restrooms, spot-clean entry glass, and wipe high-touch surfaces. If the site needs mopping, break-room work, or individual rooms cleaned, step up to Standard.",
     accent: "slate",
     meta: {
       estimatedTime: "Sized to your square footage and window",
@@ -438,9 +444,9 @@ export const CHECKLISTS: Record<ChecklistSlug, Checklist> = {
     slug: "commercial-standard",
     family: "commercial",
     name: "Commercial Standard",
-    tagline: "Light plus mopping, rooms, and touch-point disinfection",
+    tagline: "Light plus mopping, break room, rooms, and consumables",
     description:
-      "Standard is the default commercial visit. It includes everything in Light, then mops hard floors, resets the break room, wipes individual offices and rooms, and disinfects handles, switches, and rails. Detailed adds scrubbing, high-touch sanitization, and glass.",
+      "Standard is the default commercial visit. It includes everything in Light, then mops hard floors, cleans the break room, covers individual offices and rooms per the site's room count, dusts common areas, and restocks consumables to par. Detailed adds grout scrubbing, a sanitization pass, high dusting, and glass.",
     accent: "teal",
     meta: {
       estimatedTime: "Sized to your square footage and window",
@@ -461,9 +467,9 @@ export const CHECKLISTS: Record<ChecklistSlug, Checklist> = {
     slug: "commercial-detailed",
     family: "commercial",
     name: "Commercial Detailed",
-    tagline: "Standard plus scrubbing, sanitization, dusting, and glass",
+    tagline: "Standard plus grout, sanitization, high dusting, glass, and floor care",
     description:
-      "Detailed is the reset pass: everything in Standard, then floor edges and grout, a high-touch sanitization of shared equipment, detail dusting of ledges and vents, and streak-free interior glass. Large sites are documented zone by zone so one photo pair never stands in for the whole building.",
+      "Detailed is the reset pass: everything in Standard, then restroom tile and grout scrubbed, a high-touch sanitization pass beyond the daily wipe-down, vents and light fixtures dusted, interior glass and partitions cleaned, baseboards detailed, and deep floor care matched to the floor type found at walkthrough. Large sites are documented zone by zone so one photo pair never stands in for the whole building.",
     accent: "purple",
     meta: {
       estimatedTime: "Longer window or a larger crew than Standard",
@@ -482,26 +488,26 @@ export const CHECKLISTS: Record<ChecklistSlug, Checklist> = {
     ],
     addOns: COMMERCIAL_ADD_ONS,
     recommendedNextSlug: "office",
-    recommendedNextLabel: "See the office after-hours list",
+    recommendedNextLabel: "See the office frequency list",
   },
 
   "office": {
     slug: "office",
     family: "commercial",
-    name: "Office Clean (After-Hours)",
-    tagline: "Standard commercial scope plus desk, conference, and lock-up rules",
+    name: "Office Clean",
+    tagline: "Organized by frequency — daily, weekly, and monthly work",
     description:
-      "Office visits run the Commercial Standard list, then add the rules that keep a workspace usable the next morning: papers and electronics stay put, conference rooms are reset without erasing boards, and lights, alarm, and badge-out follow the building's after-hours procedure. Light or Detailed depth can still be priced on the same site.",
+      "Office cleaning is contracted the way it is actually performed: a daily list every scheduled visit, a weekly list that goes deeper on floors, glass, and restrooms, and a monthly rotation for windows, carpet extraction, and vents. Your site's desk policy and restricted areas are confirmed at walkthrough and override the generic list every visit.",
     accent: "amber",
     meta: {
-      estimatedTime: "Sized to your square footage and after-hours window",
+      estimatedTime: "Sized to your square footage and service window",
       bestFor: "Offices and workspaces cleaned around the team's hours",
-      frequency: "Nightly, several times a week, or weekly",
+      frequency: "Daily list every visit · weekly and monthly rotations",
     },
     bookingServiceType: "office",
     bookingHref: "/commercial",
     sections: commercialChecklistSections("office"),
-    notIncludedHeading: "Not included — upgrade to Detailed for:",
+    notIncludedHeading: "Depth is priced separately — Detailed adds:",
     notIncluded: [...COMMERCIAL_DETAILED_EXTRAS],
     addOns: COMMERCIAL_ADD_ONS,
     recommendedNextSlug: "commercial-standard",

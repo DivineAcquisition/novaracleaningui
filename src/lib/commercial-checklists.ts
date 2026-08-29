@@ -1,12 +1,26 @@
 // ─── Commercial / office customer checklists ─────────────────────────────
 //
-// Customer-facing Light / Standard / Detailed (+ office extras). Item lists
-// stay in lock-step with supabase/functions/_shared/contractor-checklists.ts
-// so the public promise, the admin preview, and the crew list describe the
-// same job. Zone-specific photo sections are job-sized at dispatch and are
-// not part of these published templates.
+// Presentation layer over the addressable catalog in checklist-catalog.ts.
+// Content is Edition 1.0 of docs/standard-cleaning-checklists.md; the catalog
+// owns the wording and the stable item IDs, this file owns how a scope level
+// is assembled and labeled for a customer or an admin.
 //
-// Each scope is the one before it PLUS more — same rule the price uses.
+// Cumulative by construction: Light ⊂ Standard ⊂ Detailed. Because membership
+// lives on the item, a Detailed checklist renders the Light items themselves
+// rather than a copy of them, so a signal against `commercial.light.restrooms`
+// is one item's signal no matter which scope the job was priced at.
+//
+// Zone-specific photo sections are job-sized at dispatch (a 30,000 sqft site
+// documents zone by zone) and are deliberately not part of the published
+// template.
+
+import {
+  catalogSectionsFor,
+  catalogItemsFor,
+  type CatalogItem,
+  type CatalogSection,
+  type ChecklistCatalogKey,
+} from "@/lib/checklist-catalog";
 
 export type CommercialScopeKey = "light" | "standard" | "detailed";
 
@@ -15,81 +29,9 @@ export type CommercialChecklistKind = CommercialScopeKey | "office";
 export interface CommercialChecklistSection {
   title: string;
   items: string[];
+  /** Stable catalog IDs, index-aligned with `items`. */
+  itemIds: string[];
 }
-
-export const COMMERCIAL_ARRIVAL: CommercialChecklistSection = {
-  title: "Arrival & setup",
-  items: [
-    "Check in per site access instructions (badge / code / contact)",
-    "Notify the required contact on arrival (if specified)",
-    "Confirm the alarm is disarmed per the security notes before starting",
-    "Walk the site and note anything already damaged or blocked",
-  ],
-};
-
-export const COMMERCIAL_LIGHT_ITEMS = [
-  "Sweep and vacuum all floors in scope",
-  "Empty all trash and recycling; replace liners; take to designated disposal",
-  "Restrooms: disinfect toilets, sinks, counters, mirrors; restock supplies",
-  "Spot-clean visible spills and marks",
-];
-
-export const COMMERCIAL_STANDARD_EXTRAS = [
-  "Mop all hard floors",
-  "Break room / kitchenette: counters, sink, appliance exteriors, tables",
-  "Individual offices and rooms: surfaces wiped, trash pulled, floors done",
-  "Wipe and disinfect touch points (handles, switches, rails)",
-];
-
-export const COMMERCIAL_DETAILED_EXTRAS = [
-  "Scrub floors — grout lines, edges, and corners, not just the open middle",
-  "High-touch sanitization pass: shared equipment, phones, rails, dispensers",
-  "Detail dusting: ledges, sills, vents, fixtures, tops of partitions",
-  "Interior glass and entry doors, streak-free",
-];
-
-export const COMMERCIAL_DOCUMENTATION: CommercialChecklistSection = {
-  title: "Documentation",
-  items: [
-    "Take BEFORE photos of all areas in scope",
-    "Take AFTER photos of every area cleaned",
-  ],
-};
-
-export const COMMERCIAL_CLOSEOUT: CommercialChecklistSection = {
-  title: "Close-out",
-  items: [
-    "Complete any deep tasks scheduled for this visit (per scope)",
-    "Return all furniture and equipment to where you found it",
-    "Secure the site per lock-up procedure (doors, alarm, lights)",
-    "Notify the required contact on departure (if specified)",
-  ],
-};
-
-export const OFFICE_RULES: CommercialChecklistSection = {
-  title: "Office rules",
-  items: [
-    "Respect the desk policy — do NOT move or touch papers/electronics unless scope says otherwise",
-    "Clean around workstations: wipe desks per policy, sanitize phones/shared equipment only if in scope",
-    "Conference rooms: tables, chairs, glass, whiteboard trays (do not erase boards)",
-    "Handle sensitive areas exactly per instructions (server rooms, exec offices)",
-  ],
-};
-
-export const OFFICE_AFTER_HOURS: CommercialChecklistSection = {
-  title: "After-hours close-out",
-  items: [
-    "Turn off lights per building instructions",
-    "Set the alarm and lock up exactly per the security notes",
-    "Badge out / check out with security if required",
-  ],
-};
-
-export const COMMERCIAL_SCOPE_ITEMS: Record<CommercialScopeKey, string[]> = {
-  light: COMMERCIAL_LIGHT_ITEMS,
-  standard: [...COMMERCIAL_LIGHT_ITEMS, ...COMMERCIAL_STANDARD_EXTRAS],
-  detailed: [...COMMERCIAL_LIGHT_ITEMS, ...COMMERCIAL_STANDARD_EXTRAS, ...COMMERCIAL_DETAILED_EXTRAS],
-};
 
 export const COMMERCIAL_SCOPE_LABEL: Record<CommercialScopeKey, string> = {
   light: "Light",
@@ -97,13 +39,41 @@ export const COMMERCIAL_SCOPE_LABEL: Record<CommercialScopeKey, string> = {
   detailed: "Detailed",
 };
 
+const SCOPE_CATALOG_KEY: Record<CommercialScopeKey, ChecklistCatalogKey> = {
+  light: "commercial_light",
+  standard: "commercial_standard",
+  detailed: "commercial_detailed",
+};
+
+export function catalogKeyForKind(kind: CommercialChecklistKind): ChecklistCatalogKey {
+  return kind === "office" ? "office" : SCOPE_CATALOG_KEY[kind];
+}
+
+function toSection(section: CatalogSection): CommercialChecklistSection {
+  return {
+    title: section.title,
+    items: section.items.map((i) => i.text),
+    itemIds: section.items.map((i) => i.id),
+  };
+}
+
 export const COMMERCIAL_ADD_ONS = [
   "Catering / event cleanup",
   "Deep bathroom detail (per restroom)",
   "Interior window wash beyond entry glass",
   "After-hours or weekend premium window",
-  "Floor machine / scrubber pass",
+  "Carpet extraction / floor machine pass",
 ];
+
+/** Items a Light visit does not include — the Standard upgrade prompt. */
+export const COMMERCIAL_STANDARD_EXTRAS: string[] = catalogItemsFor("commercial_standard")
+  .filter((i) => !i.checklists.includes("commercial_light"))
+  .map((i) => i.text);
+
+/** Items a Standard visit does not include — the Detailed upgrade prompt. */
+export const COMMERCIAL_DETAILED_EXTRAS: string[] = catalogItemsFor("commercial_detailed")
+  .filter((i) => !i.checklists.includes("commercial_standard"))
+  .map((i) => i.text);
 
 export function parseCommercialScope(
   raw: string | null | undefined,
@@ -121,36 +91,42 @@ export function isCommercialChecklistKind(
 }
 
 /**
- * Customer / admin layout for one visit: a scope depth, plus office extras
- * when the job is after-hours office work. Mirrors the crew builder.
+ * The list for one visit: the scope depth, or the office frequency checklist
+ * when the job is office work. Mirrors what the crew works on site.
  */
 export function commercialChecklistSectionsForJob(
   scope: CommercialScopeKey,
   office = false,
 ): CommercialChecklistSection[] {
-  const label = COMMERCIAL_SCOPE_LABEL[scope];
-  const sections: CommercialChecklistSection[] = [
-    COMMERCIAL_ARRIVAL,
-    { title: `${label} scope — every area in this job`, items: [...COMMERCIAL_SCOPE_ITEMS[scope]] },
-  ];
-  if (office) sections.push(OFFICE_RULES);
-  sections.push(COMMERCIAL_DOCUMENTATION);
-  sections.push(COMMERCIAL_CLOSEOUT);
-  if (office) sections.push(OFFICE_AFTER_HOURS);
-  return sections;
+  if (office) {
+    // An office site is contracted by frequency, and its scope depth still
+    // decides how deep each visit goes — so office jobs carry both.
+    return [
+      ...catalogSectionsFor("office").map(toSection),
+      ...catalogSectionsFor(SCOPE_CATALOG_KEY[scope])
+        .filter((s) => s.area !== "Universal rules")
+        .map((s) => toSection({
+          ...s,
+          title: `${COMMERCIAL_SCOPE_LABEL[scope]} scope — depth for this site`,
+        })),
+      ...catalogSectionsFor(SCOPE_CATALOG_KEY[scope])
+        .filter((s) => s.area === "Universal rules")
+        .map(toSection),
+    ];
+  }
+  return catalogSectionsFor(SCOPE_CATALOG_KEY[scope]).map(toSection);
 }
 
-/**
- * Published template pages. Office is Standard depth plus the office-only
- * rules; Light / Detailed office jobs still use those scope pages plus
- * the office extras at dispatch.
- */
+/** Published template pages. */
 export function commercialChecklistSections(
   kind: CommercialChecklistKind,
 ): CommercialChecklistSection[] {
-  const office = kind === "office";
-  const scope: CommercialScopeKey = office ? "standard" : kind;
-  return commercialChecklistSectionsForJob(scope, office);
+  if (kind === "office") return catalogSectionsFor("office").map(toSection);
+  return catalogSectionsFor(SCOPE_CATALOG_KEY[kind]).map(toSection);
+}
+
+export function commercialChecklistItems(kind: CommercialChecklistKind): CatalogItem[] {
+  return catalogItemsFor(catalogKeyForKind(kind));
 }
 
 export function normalizeCommercialScopeKey(
@@ -201,8 +177,9 @@ export function commercialChecklistUrl(
   return `${TRY_CHECKLIST_ORIGIN}${commercialChecklistPath(serviceType, scopeLevel)}`;
 }
 
-/** Side-by-side Light / Standard / Detailed — same idea as the home comparison. */
+/** Side-by-side Light / Standard / Detailed, built from catalog membership. */
 export type CommercialComparisonRow = {
+  itemId: string;
   label: string;
   light: boolean;
   standard: boolean;
@@ -214,37 +191,23 @@ export type CommercialComparisonGroup = {
   rows: CommercialComparisonRow[];
 };
 
+function comparisonRows(area: string): CommercialComparisonRow[] {
+  return catalogItemsFor("commercial_detailed")
+    .filter((i) => i.area === area)
+    .map((i) => ({
+      itemId: i.id,
+      label: i.text,
+      light: i.checklists.includes("commercial_light"),
+      standard: i.checklists.includes("commercial_standard"),
+      detailed: i.checklists.includes("commercial_detailed"),
+    }));
+}
+
 export const COMMERCIAL_COMPARISON: CommercialComparisonGroup[] = [
-  {
-    title: "Every visit",
-    rows: [
-      { label: "Check-in, contact notify, alarm confirm, site walk", light: true, standard: true, detailed: true },
-      { label: "Sweep and vacuum floors in scope", light: true, standard: true, detailed: true },
-      { label: "Trash and recycling pulled; liners replaced", light: true, standard: true, detailed: true },
-      { label: "Restrooms disinfected and restocked", light: true, standard: true, detailed: true },
-      { label: "Spot-clean visible spills and marks", light: true, standard: true, detailed: true },
-      { label: "Before and after photos of areas in scope", light: true, standard: true, detailed: true },
-      { label: "Lock-up, lights, and departure notify", light: true, standard: true, detailed: true },
-    ],
-  },
-  {
-    title: "Standard adds",
-    rows: [
-      { label: "Mop all hard floors", light: false, standard: true, detailed: true },
-      { label: "Break room / kitchenette (counters, sink, appliance exteriors)", light: false, standard: true, detailed: true },
-      { label: "Individual offices and rooms wiped and floored", light: false, standard: true, detailed: true },
-      { label: "Touch-point disinfection (handles, switches, rails)", light: false, standard: true, detailed: true },
-    ],
-  },
-  {
-    title: "Detailed adds",
-    rows: [
-      { label: "Floor scrub — grout, edges, and corners", light: false, standard: false, detailed: true },
-      { label: "High-touch sanitization of shared equipment", light: false, standard: false, detailed: true },
-      { label: "Detail dusting: ledges, sills, vents, partition tops", light: false, standard: false, detailed: true },
-      { label: "Interior glass and entry doors, streak-free", light: false, standard: false, detailed: true },
-    ],
-  },
+  { title: "Every visit", rows: comparisonRows("Light scope") },
+  { title: "Standard adds", rows: comparisonRows("Standard scope") },
+  { title: "Detailed adds", rows: comparisonRows("Detailed scope") },
+  { title: "Universal rules", rows: comparisonRows("Universal rules") },
 ];
 
 /** Distinct scope levels on a proposal/agreement, Light → Detailed order. */
