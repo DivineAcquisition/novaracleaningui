@@ -20,13 +20,14 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
   const { user, signOut } = useAuth();
   const { credits, hasCredits } = useMembershipCredits();
 
-  const userName =
-    user?.user_metadata?.full_name ||
-    user?.email
-      ?.split("@")[0]
-      ?.replace(/[._]/g, " ")
-      .replace(/\b\w/g, (l: string) => l.toUpperCase()) ||
-    "Account";
+  const userName = user
+    ? user.user_metadata?.full_name ||
+      user.email
+        ?.split("@")[0]
+        ?.replace(/[._]/g, " ")
+        .replace(/\b\w/g, (l: string) => l.toUpperCase()) ||
+      user.email
+    : null;
 
   const handleSignOut = async () => {
     await signOut();

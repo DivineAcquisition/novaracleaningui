@@ -36,7 +36,7 @@ export function ContractorLayout({ children }: { children: React.ReactNode }) {
     <WorkspaceShell
       badge="Contractor"
       navItems={navItems}
-      userLabel={user?.email || "Contractor"}
+      userLabel={user?.email || null}
       userSub={user?.email}
       onSignOut={handleSignOut}
     >
