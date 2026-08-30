@@ -11,6 +11,7 @@ import { useMemo, useState } from "react";
 import { RiSearchLine, RiCloseLine, RiMenuLine, RiBookOpenLine } from "@remixicon/react";
 
 import { cn } from "@/lib/utils";
+import { DOCS_HOME, DOCS_SIGN_OUT } from "@/lib/docs/paths";
 
 export interface DocsNavItem {
   slug: string;
@@ -46,7 +47,7 @@ export function DocsShell({
   const nav = (
     <>
       <div className="px-4 pt-5 pb-3">
-        <Link href="/docs" className="flex items-center gap-2">
+        <Link href={DOCS_HOME} className="flex items-center gap-2">
           <img src="/novara-email-logo.png" alt="Novara" className="h-[20px] w-auto" />
           <span className="rounded-md bg-brand-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-primary">
             Guides
@@ -103,6 +104,14 @@ export function DocsShell({
           Signed in
         </p>
         <p className="truncate text-xs text-foreground">{viewerEmail}</p>
+        <form action={DOCS_SIGN_OUT} method="post" className="mt-2">
+          <button
+            type="submit"
+            className="text-[11px] font-medium text-muted-foreground hover:text-foreground hover:underline"
+          >
+            Sign out
+          </button>
+        </form>
       </div>
     </>
   );

@@ -3,14 +3,21 @@ import Link from "next/link";
 import { SignedOut } from "@/components/docs/SignedOut";
 import { getDocsAccess } from "@/lib/docs/auth";
 import { getAllDocs, getPricingExamples } from "@/lib/docs/content";
+import { docsFlash } from "@/lib/docs/flash";
 
 export const dynamic = "force-dynamic";
 
-export default async function DocsIndex() {
+export default async function DocsIndex({
+  searchParams,
+}: {
+  searchParams: { error?: string };
+}) {
   // Repeated deliberately — see the note in [slug]/page.tsx. A layout that
   // returns early does not stop its page from rendering into the response.
   const access = await getDocsAccess();
-  if (!access.allowed) return <SignedOut reason={access.reason ?? "signed_out"} />;
+  if (!access.allowed) {
+    return <SignedOut reason={access.reason ?? "signed_out"} flash={docsFlash(searchParams.error)} />;
+  }
 
   const docs = getAllDocs();
   const pricing = getPricingExamples();

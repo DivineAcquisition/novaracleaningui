@@ -136,10 +136,21 @@ npm run docs:preview -- pricing
 `/docs/*` is served on **docs.novaracleaning.com** and gated by the same admin/VA check the
 workspace uses — a signed-in `@novaracleaning.com` account holding `admin` or `va`.
 
+**Sign in on the docs host itself.** The admin workspace session lives on
+`admin.novaracleaning.com` (and in the browser's localStorage). This site reads a
+**cookie** on `docs.novaracleaning.com`. Those are two different origins and two
+different stores, so signing in on the admin workspace and coming back here cannot
+work. Google OAuth returns to `/docs/auth/callback` so the cookie is set on this
+host. Email/password sign-in on the same page does the same.
+
 The gate is enforced **server-side in every page**, not only in the layout. A Next.js layout
 is not a security boundary: it and its pages render in parallel, so a layout that returns
 early still emits the page's HTML into the response. Gating only there leaked the guide text
 to signed-out requests. If you add a page under `/docs`, gate it in the page.
+
+Supabase Auth must list `https://docs.novaracleaning.com/docs/auth/callback` (and
+`http://localhost:3000/docs/auth/callback` for local) as a redirect URL, or Google
+sign-in on this host will be rejected. Email/password still works without that.
 
 Defence in depth on top of the gate: the middleware serves a `Disallow: /` robots.txt for this
 host and sets `X-Robots-Tag: noindex, nofollow, noarchive, noimageindex` on every response,

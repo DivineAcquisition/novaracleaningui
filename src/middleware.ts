@@ -170,6 +170,8 @@ const ROUTE_OWNER: Array<[string, SubdomainKey]> = [
 
   // Internal workspace guides (docs.novaracleaning.com). Admin/VA sign-in
   // required; the route itself enforces that before rendering anything.
+  // /docs/auth and /docs/auth/callback stay under this prefix so they are
+  // served on the docs host (where the session cookie has to live).
   ["/docs", "docs"],
 ];
 
@@ -198,6 +200,12 @@ const DEFAULT_LANDING: Record<SubdomainKey, string> = {
 //   contractor.novaracleaning.com/cleaner/auth/callback  → cleaner
 //   admin.novaracleaning.com/admin/auth/callback         → admin (has_role gate)
 //   partner.novaracleaning.com/partner/auth/callback     → host portal
+//   docs.novaracleaning.com/docs/auth/callback           → workspace guides
+//
+// Docs cannot reuse the admin callback. Admin sessions live on
+// admin.novaracleaning.com (and in localStorage). The guides are gated
+// on cookies on docs.novaracleaning.com; a round-trip through admin
+// sign-in can never unlock them.
 //
 // (308 preserves the ?code= query and the browser preserves the URL hash, so
 // a callback that somehow lands on the wrong host still completes after the

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { SignedOut } from "@/components/docs/SignedOut";
 import { getDocsAccess } from "@/lib/docs/auth";
 import { getDiscrepancies } from "@/lib/docs/discrepancies";
+import { docsFlash } from "@/lib/docs/flash";
 
 export const dynamic = "force-dynamic";
 
@@ -12,10 +13,16 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false, nocache: true },
 };
 
-export default async function DiscrepanciesPage() {
+export default async function DiscrepanciesPage({
+  searchParams,
+}: {
+  searchParams: { error?: string };
+}) {
   // Gated here as well as in the layout — see the note in [slug]/page.tsx.
   const access = await getDocsAccess();
-  if (!access.allowed) return <SignedOut reason={access.reason ?? "signed_out"} />;
+  if (!access.allowed) {
+    return <SignedOut reason={access.reason ?? "signed_out"} flash={docsFlash(searchParams.error)} />;
+  }
 
   const items = getDiscrepancies();
   const drift = items.filter((i) => i.kind === "drift");

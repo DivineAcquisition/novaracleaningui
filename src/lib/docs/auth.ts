@@ -11,6 +11,12 @@
 // The workspace's client-side ProtectedRoute is not sufficient here: it
 // redirects after the page has already been sent, which for a document means
 // the content reached the browser regardless.
+//
+// The session has to be a COOKIE on docs.novaracleaning.com. The admin
+// portal stores its session in localStorage on admin.novaracleaning.com;
+// neither that host nor that storage is visible here. Sign-in for this
+// gate lives at /docs (and /docs/auth), with the Google callback at
+// /docs/auth/callback.
 
 import "server-only";
 

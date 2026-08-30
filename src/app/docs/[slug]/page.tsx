@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { SignedOut } from "@/components/docs/SignedOut";
 import { getDocsAccess } from "@/lib/docs/auth";
 import { getAllDocs, getDoc } from "@/lib/docs/content";
+import { docsFlash } from "@/lib/docs/flash";
 import { renderDoc } from "@/lib/docs/render";
 
 export const dynamic = "force-dynamic";
@@ -17,13 +18,21 @@ export function generateMetadata({ params }: { params: { slug: string } }): Meta
   };
 }
 
-export default async function DocPage({ params }: { params: { slug: string } }) {
+export default async function DocPage({
+  params,
+  searchParams,
+}: {
+  params: { slug: string };
+  searchParams: { error?: string };
+}) {
   // The gate is repeated here on purpose. A Next.js layout is NOT a security
   // boundary: it and its pages render in parallel, so a layout that returns
   // early still emits the page's HTML into the response. The guide text has
   // to be gated where it is produced.
   const access = await getDocsAccess();
-  if (!access.allowed) return <SignedOut reason={access.reason ?? "signed_out"} />;
+  if (!access.allowed) {
+    return <SignedOut reason={access.reason ?? "signed_out"} flash={docsFlash(searchParams.error)} />;
+  }
 
   const doc = getDoc(params.slug);
   if (!doc) notFound();

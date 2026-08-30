@@ -21,6 +21,8 @@
 import { readFileSync, readdirSync, existsSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 
+import { docsFlash } from "../../src/lib/docs/flash";
+
 /** README.md is the maintainer runbook, not a published guide. */
 function isGuideFile(name: string): boolean {
   return name.endsWith(".md") && !name.startsWith("_") && name !== "README.md";
@@ -65,6 +67,67 @@ function parseFrontMatter(raw: string) {
   return { data, body: raw.slice(end + 4) };
 }
 
+const SRC = join(ROOT, "src");
+
+function readSrc(rel: string): string {
+  const full = join(SRC, rel);
+  if (!existsSync(full)) {
+    problems.push(`missing ${rel}`);
+    return "";
+  }
+  return readFileSync(full, "utf8");
+}
+
+function verifyAccessWiring() {
+  // The guides are gated on cookies on docs.novaracleaning.com. These checks
+  // make the two regressions that locked everyone out loud: sending readers
+  // to the admin host to sign in, and using the localStorage supabase client
+  // which the server gate cannot see.
+  const signedOut = readSrc("components/docs/SignedOut.tsx");
+  if (signedOut.includes("admin.novaracleaning.com/admin/auth")) {
+    problems.push(
+      "SignedOut still sends readers to the admin host to sign in. That cookie never reaches docs.novaracleaning.com.",
+    );
+  }
+  if (!/DocsSignIn/.test(signedOut)) {
+    problems.push("SignedOut must render DocsSignIn so readers can sign in on the docs host.");
+  }
+  if (/sign in there first/i.test(signedOut)) {
+    problems.push("SignedOut still tells people to sign in on admin and come back.");
+  }
+
+  const callback = readSrc("app/docs/auth/callback/route.ts");
+  if (!callback.includes("exchangeCodeForSession")) {
+    problems.push("docs OAuth callback must exchange the code for a cookie session.");
+  }
+  if (!callback.includes("/docs")) {
+    problems.push("docs OAuth callback must stay under /docs so middleware serves it on the docs host.");
+  }
+
+  const browser = readSrc("lib/docs/browser-client.ts");
+  if (!browser.includes("@supabase/ssr") || !browser.includes("createBrowserClient")) {
+    problems.push("docs sign-in must use @supabase/ssr createBrowserClient so the session is a cookie.");
+  }
+
+  const middleware = readSrc("middleware.ts");
+  if (!middleware.includes("docs.novaracleaning.com/docs/auth/callback")) {
+    problems.push("middleware comments must list the docs OAuth callback on the docs host.");
+  }
+
+  for (const reserved of ["auth", "asset", "discrepancies"]) {
+    if (existsSync(join(DOCS_DIR, `${reserved}.md`))) {
+      problems.push(`guide slug "${reserved}" collides with a reserved /docs/${reserved} route`);
+    }
+  }
+
+  if (docsFlash("no_role") !== "no_role" || docsFlash(["wrong_domain"]) !== "wrong_domain") {
+    problems.push("docsFlash must keep known denial reasons");
+  }
+  if (docsFlash("nope") !== null || docsFlash(undefined) !== null) {
+    problems.push("docsFlash must ignore unknown query values");
+  }
+}
+
 function main() {
   if (!existsSync(DOCS_DIR)) {
     console.error(`No docs directory at ${DOCS_DIR}`);
@@ -73,6 +136,8 @@ function main() {
 
   const files = readdirSync(DOCS_DIR).filter(isGuideFile);
   if (files.length === 0) problems.push("No guides found.");
+
+  verifyAccessWiring();
 
   const manifestPath = join(SHOTS_DIR, "manifest.json");
   const manifest: { shots: ShotEntry[] } = existsSync(manifestPath)

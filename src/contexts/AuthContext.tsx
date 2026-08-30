@@ -161,6 +161,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   //  on one subdomain can NEVER land on another portal's dashboard.
   //  The default '/auth/callback' is the customer fallback — the admin
   //  and cleaner views always pass their explicit path.
+  //
+  //  Workspace guides are the exception: they cannot use this client.
+  //  getDocsAccess() reads cookies, and this client persists to
+  //  localStorage. Docs sign-in uses src/lib/docs/browser-client.ts and
+  //  callbacks at /docs/auth/callback on docs.novaracleaning.com.
   const signInWithGoogle = async (redirectPath: string = "/auth/callback") => {
     const safePath = redirectPath.startsWith("/") ? redirectPath : `/${redirectPath}`;
     const redirectUrl = `${window.location.origin}${safePath}`;

@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 
 import "@/styles/docs.css";
 import { DocsShell } from "@/components/docs/DocsShell";
-import { SignedOut } from "@/components/docs/SignedOut";
 import { getDocsAccess } from "@/lib/docs/auth";
 import { getAllDocs } from "@/lib/docs/content";
 
@@ -27,7 +26,11 @@ export const dynamic = "force-dynamic";
 
 export default async function DocsLayout({ children }: { children: React.ReactNode }) {
   const access = await getDocsAccess();
-  if (!access.allowed) return <SignedOut reason={access.reason ?? "signed_out"} />;
+  // When the gate fails, render the page as-is. Pages produce their own
+  // SignedOut (the real security boundary — a layout that skips {children}
+  // still lets the page run). Skipping DocsShell here keeps the sign-in
+  // form off the guides chrome, and lets /docs?error= show the OAuth flash.
+  if (!access.allowed) return <>{children}</>;
 
   const docs = getAllDocs().map((d) => ({
     slug: d.slug,
