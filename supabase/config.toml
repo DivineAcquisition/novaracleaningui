@@ -42,6 +42,9 @@ verify_jwt = false
 [functions.pending-deposit-reminders]
 verify_jwt = false
 
+[functions.admin-reinstate-booking]
+verify_jwt = false
+
 [functions.send-booking-reminder-email]
 verify_jwt = false
 
