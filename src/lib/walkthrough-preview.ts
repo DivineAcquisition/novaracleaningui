@@ -71,6 +71,15 @@ export function walkthroughPreviewPayload(token: string) {
     checklist,
     answers: {},
     photos: [],
+    zonesRequired: site.sqft >= 5000,
+    zoneThresholdSqft: 5000,
+    existingZones: typeKey === "warehouse"
+      ? [
+          { id: "preview-dock", name: "Loading dock", description: "Receiving bays and staging" },
+          { id: "preview-floor", name: "Main warehouse floor", description: "Racking aisles" },
+          { id: "preview-office", name: "Front office", description: "" },
+        ]
+      : [],
     scheduledAt: new Date().toISOString(),
     site: {
       nickname: site.nickname,

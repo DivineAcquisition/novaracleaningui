@@ -87,7 +87,7 @@ export const DEFAULT_COMMERCIAL_SETTINGS: CommercialSettings = {
   max_crew_size: 12,
   default_window_hours: 4,
   default_cleaner_pay_pct: 40,
-  photo_zone_threshold_sqft: 10000,
+  photo_zone_threshold_sqft: 5000,
   photo_zone_sqft: 10000,
   max_photo_zones: 8,
   coi_warning_days: 30,
@@ -432,31 +432,52 @@ export function windowHoursBetween(
 // ─── Documentation zones ───────────────────────────────────────────────────
 
 /**
- * How a facility gets photographed.
+ * Named documentation zones for a site — never invented at booking time.
  *
- * One before/after pair proves nothing about 30,000 square feet, so large
- * sites are documented section by section. A site with named zones on file
- * uses those; otherwise generic zones are derived from square footage so the
- * requirement scales with the building rather than the booking.
+ * The walkthrough conductor (or an admin edit) names the sections. A site
+ * below the zone threshold, or a large site that has not been mapped yet,
+ * returns [] and keeps the existing single before/after pair. Generic
+ * "Zone 1 / Zone 2" labels are not a map.
  */
 export function photoZonesForSite(
   config: CommercialPricingConfig,
-  sqft: number,
+  _sqft: number,
   siteZones?: unknown,
 ): string[] {
-  const named = Array.isArray(siteZones)
-    ? siteZones.map((z) => String(z || "").trim()).filter(Boolean)
-    : [];
-  if (named.length > 0) return named.slice(0, Math.max(1, config.settings.max_photo_zones));
+  const max = Math.max(1, Math.round(Number(config.settings.max_photo_zones) || 8));
+  if (!Array.isArray(siteZones)) return [];
+  const names: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of siteZones) {
+    if (names.length >= max) break;
+    let name = "";
+    if (typeof entry === "string" || typeof entry === "number") {
+      name = String(entry).replace(/\s+/g, " ").trim();
+    } else if (entry && typeof entry === "object") {
+      const o = entry as Record<string, unknown>;
+      name = String(o.name ?? o.label ?? o.title ?? "").replace(/\s+/g, " ").trim();
+    }
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    names.push(name.slice(0, 80));
+  }
+  return names;
+}
 
+/** Whether this square footage is large enough to require a named zone map. */
+export function siteRequiresZones(
+  config: CommercialPricingConfig,
+  sqft: number,
+): boolean {
   const n = Math.max(0, Math.round(Number(sqft) || 0));
-  const threshold = Math.max(0, Number(config.settings.photo_zone_threshold_sqft) || 10000);
-  if (n < threshold) return [];
-
-  const per = Math.max(1000, Number(config.settings.photo_zone_sqft) || 10000);
-  const max = Math.max(2, Math.round(Number(config.settings.max_photo_zones) || 8));
-  const count = Math.min(max, Math.max(2, Math.ceil(n / per)));
-  return Array.from({ length: count }, (_, i) => `Zone ${i + 1}`);
+  const independent = Number(config.settings.photo_zone_threshold_sqft);
+  const walk = Number(config.settings.walkthrough_threshold_sqft);
+  const threshold = Number.isFinite(independent) && independent > 0
+    ? independent
+    : (Number.isFinite(walk) && walk > 0 ? walk : 5000);
+  return n > 0 && n >= threshold;
 }
 
 // ─── Formatting ────────────────────────────────────────────────────────────

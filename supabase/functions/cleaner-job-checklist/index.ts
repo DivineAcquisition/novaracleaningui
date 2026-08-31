@@ -14,6 +14,9 @@
 //   { token, action:'toggle', itemKey, done }    → check/uncheck an item
 //   { token, action:'skip', itemKey, reason }    → skip item with required reason
 //   { token, action:'complete' }                 → mark checklist finished
+//   { token, action:'confirm_zones', zones:[{name,status,note?}] }
+//                                                → Crew Lead close: every named
+//                                                  zone complete|partial|not_done
 //   { token, action:'save_section_photos', sectionIndex, before?, after? }
 //   { token, action:'conditions_found', sectionIndex, note, photos? }
 //   { token, action:'request_scope_addition', note }
@@ -54,6 +57,17 @@ import {
   previewSiteFindingPrice,
   stopFieldReportText,
 } from "../_shared/site-finding.ts";
+import {
+  customerZoneIncompleteMessage,
+  incompleteZoneCompletions,
+  isZoneStatus,
+  parseZoneCompletions,
+  siteZoneNames,
+  zoneCompletionGate,
+  zoneFollowUpNote,
+  type ZoneCompletion,
+} from "../_shared/site-zones.ts";
+import { sendSms } from "../_shared/sms.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -192,10 +206,11 @@ serve(async (req) => {
     let cleaner: { id: string; first_name: string | null; last_name: string | null; pay_percentage: number | null } | null = null;
     let assignmentPct: number | null = null;
     let canWrite = false;
+    let assignmentRole = "";
 
     const { data: assignment } = await supabase
       .from("job_assignments")
-      .select("id, job_id, cleaner_id, status, pay_percentage_snapshot, cleaners(id, first_name, last_name, pay_percentage)")
+      .select("id, job_id, cleaner_id, status, role, pay_percentage_snapshot, cleaners(id, first_name, last_name, pay_percentage)")
       .eq("response_token", token)
       .maybeSingle();
 
@@ -208,6 +223,7 @@ serve(async (req) => {
       const c = Array.isArray(assignment.cleaners) ? assignment.cleaners[0] : assignment.cleaners;
       if (c?.id) cleaner = c;
       assignmentPct = assignment.pay_percentage_snapshot != null ? Number(assignment.pay_percentage_snapshot) : null;
+      assignmentRole = String(assignment.role || "");
       canWrite = true;
     } else {
       const { data: byChecklistToken } = await supabase
@@ -232,7 +248,7 @@ serve(async (req) => {
 
     const { data: booking } = await supabase
       .from("bookings")
-      .select("id, booking_number, first_name, service_date, time_slot, arrival_window, add_ons, access_notes, team_notes, dispatch_notes, service_type, status, focused_areas, is_recurring, membership_plan, booking_channel, scope_level, photo_zones, facility_type, square_footage, hard_deadline")
+      .select("id, booking_number, first_name, phone, email, service_date, time_slot, arrival_window, add_ons, access_notes, team_notes, dispatch_notes, service_type, status, focused_areas, is_recurring, membership_plan, booking_channel, scope_level, photo_zones, facility_type, square_footage, hard_deadline, business_site_id")
       .eq("job_id", jobId)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -266,9 +282,7 @@ serve(async (req) => {
     const checklistKey = checklistRow.completed_at
       ? String(checklistRow.service_type || serviceTypeRaw)
       : contractorChecklistKeyForBooking(booking, serviceTypeRaw);
-    const photoZones: string[] = Array.isArray(booking?.photo_zones)
-      ? booking.photo_zones.map(String).filter(Boolean)
-      : [];
+    const photoZones: string[] = siteZoneNames(booking?.photo_zones);
     const spec = getContractorChecklist(checklistKey, focusedAreas, focusedSettings, {
       scopeLevel: booking?.scope_level || null,
       photoZones,
@@ -323,7 +337,8 @@ serve(async (req) => {
     if (action === "toggle" || action === "skip" || action === "complete"
       || action === "save_section_photos" || action === "conditions_found"
       || action === "request_scope_addition"
-      || action === "report_site_finding" || action === "complete_site_finding") {
+      || action === "report_site_finding" || action === "complete_site_finding"
+      || action === "confirm_zones") {
       if (!canWrite) return json({ ok: false, error: "This link is view-only." }, 403);
     }
 
@@ -603,6 +618,140 @@ serve(async (req) => {
       });
     }
 
+    if (action === "confirm_zones") {
+      if (photoZones.length === 0) {
+        return json({ ok: false, error: "This job isn't documented by zone." }, 400);
+      }
+      const { count: crewCount } = await supabase
+        .from("job_assignments")
+        .select("id", { count: "exact", head: true })
+        .eq("job_id", jobId)
+        .or("status.ilike.confirmed,status.ilike.accepted,status.ilike.assigned,status.ilike.in progress");
+      const crewSize = Math.max(1, crewCount ?? 1);
+      const isLead = crewSize === 1 || /lead/i.test(assignmentRole);
+      if (!isLead) {
+        return json({
+          ok: false,
+          error: "The Crew Lead confirms each zone before the crew leaves. Ask the lead to close this job.",
+        }, 403);
+      }
+      const incoming = Array.isArray(body?.zones) ? body.zones : [];
+      const completions: ZoneCompletion[] = [];
+      for (const name of photoZones) {
+        const row = incoming.find((z: { name?: unknown }) =>
+          String(z?.name || "").trim().toLowerCase() === name.toLowerCase()
+        ) as { status?: unknown; note?: unknown; zoneId?: unknown } | undefined;
+        if (!row || !isZoneStatus(row.status)) {
+          return json({
+            ok: false,
+            error: `Mark ${name} complete, partial, or not done — none can be left blank.`,
+          }, 400);
+        }
+        if ((row.status === "partial" || row.status === "not_done") && !String(row.note || "").trim()) {
+          return json({
+            ok: false,
+            error: `Say what was left in ${name} so the next visit (and the client) know.`,
+          }, 400);
+        }
+        completions.push({
+          zoneId: String(row.zoneId || name),
+          name,
+          status: row.status,
+          note: String(row.note || "").trim().slice(0, 500),
+          by: cleanerName,
+          at: nowIso,
+        });
+      }
+      for (const zone of completions) {
+        if (zone.status !== "complete") continue;
+        const idx = spec.sections.findIndex(
+          (s) => String(s.zoneName || "").trim().toLowerCase() === zone.name.toLowerCase(),
+        );
+        if (idx < 0 || !spec.sections[idx]?.photoRequired) continue;
+        const photos = sectionPhotosOk(sectionMeta, [idx]);
+        if (!photos.ok) {
+          return json({
+            ok: false,
+            error: `${zone.name} needs before and after photos before it can be marked complete.`,
+            missingSections: photos.missing,
+          }, 400);
+        }
+      }
+      const gate = zoneCompletionGate(photoZones, completions);
+      if (!gate.ok) {
+        return json({
+          ok: false,
+          error: `Every zone needs a status. Still unmarked: ${[...gate.missing, ...gate.unmarked].join(", ")}.`,
+          missing: gate.missing,
+        }, 400);
+      }
+      await persistProgress({ ...(checklistRow.items || {}) }, { zone_completion: completions });
+
+      const incomplete = incompleteZoneCompletions(completions);
+      if (incomplete.length && booking?.id) {
+        const nextNote = incomplete.map(zoneFollowUpNote).join("\n");
+        const existingDispatch = String(booking.dispatch_notes || "").trim();
+        await supabase.from("bookings").update({
+          dispatch_notes: [existingDispatch, `ZONE FOLLOW-UP:\n${nextNote}`].filter(Boolean).join("\n\n").slice(0, 4000),
+        }).eq("id", booking.id);
+
+        const customerMessage = customerZoneIncompleteMessage(booking.first_name, completions);
+        for (const zone of incomplete) {
+          await supabase.from("job_zone_followups").insert({
+            booking_id: booking.id,
+            job_id: jobId,
+            business_site_id: booking.business_site_id || null,
+            zone_id: zone.zoneId,
+            zone_name: zone.name,
+            status: zone.status,
+            note: zone.note,
+            customer_message: customerMessage,
+          });
+        }
+        if (booking.phone && customerMessage) {
+          await sendSms({
+            toPhone: booking.phone,
+            message: customerMessage,
+            type: "confirmation",
+          }).catch(() => undefined);
+          await supabase.from("job_zone_followups")
+            .update({ customer_notified_at: nowIso })
+            .eq("booking_id", booking.id)
+            .is("customer_notified_at", null);
+        }
+        if (booking.email && customerMessage) {
+          await supabase.functions.invoke("admin-send-email", {
+            body: {
+              to: booking.email,
+              subject: "Today's visit — a section still needs finishing",
+              html: `<p>${customerMessage.replace(/\n/g, "<br/>")}</p>`,
+            },
+          }).then(() => undefined, () => undefined);
+        }
+        await supabase.from("events").insert({
+          event_type: "job.zone.incomplete",
+          job_id: jobId,
+          booking_id: booking.id,
+          cleaner_id: cleaner?.id || null,
+          source: "cleaner-job-checklist",
+          summary:
+            `${bookingRef} — ${cleanerName} closed with ${incomplete.length} zone${incomplete.length === 1 ? "" : "s"} unfinished: ` +
+            `${incomplete.map((z) => `${z.name} (${z.status})`).join(", ")}. Client told; next visit must finish those sections.`,
+          data: { zones: incomplete, customer_notified: Boolean(booking.phone || booking.email) },
+        }).then(() => undefined, () => undefined);
+      } else {
+        await supabase.from("events").insert({
+          event_type: "job.zone.confirmed",
+          job_id: jobId,
+          booking_id: booking?.id || null,
+          cleaner_id: cleaner?.id || null,
+          source: "cleaner-job-checklist",
+          summary: `${bookingRef} — ${cleanerName} confirmed every zone complete.`,
+          data: { zones: completions },
+        }).then(() => undefined, () => undefined);
+      }
+    }
+
     if (action === "complete") {
       const items: Record<string, unknown> = { ...(checklistRow.items || {}) };
       const { completed, unresolvedKeys, skips } = countResolved(items, totalItems, spec.sections);
@@ -613,13 +762,35 @@ serve(async (req) => {
           unresolvedKeys,
         }, 400);
       }
+      if (photoZones.length) {
+        const completions = parseZoneCompletions(checklistRow.zone_completion);
+        const gate = zoneCompletionGate(photoZones, completions);
+        if (!gate.ok) {
+          const unmarked = [...gate.missing, ...gate.unmarked];
+          return json({
+            ok: false,
+            error: `Every zone must be marked complete, partial, or not-done before this job can close. Still unmarked: ${unmarked.join(", ")}.`,
+            unmarked_zones: unmarked,
+          }, 400);
+        }
+      }
       if (hasPhotoSections) {
-        const photoGate = sectionPhotosOk(sectionMeta, photoSections);
+        let required = photoSections;
+        if (photoZones.length) {
+          const completions = parseZoneCompletions(checklistRow.zone_completion);
+          required = photoSections.filter((i) => {
+            const zone = spec.sections[i]?.zoneName;
+            if (!zone) return true;
+            const row = completions.find((c) => c.name.toLowerCase() === zone.toLowerCase());
+            return !row || row.status === "complete";
+          });
+        }
+        const photoGate = sectionPhotosOk(sectionMeta, required);
         if (!photoGate.ok) {
           const names = photoGate.missing.map((i) => spec.sections[i]?.title || `Area ${i + 1}`).join(", ");
           return json({
             ok: false,
-            error: `Before and after photos are required for every area. Missing: ${names}.`,
+            error: `Before and after photos are required for every completed area. Missing: ${names}.`,
             missingSections: photoGate.missing,
           }, 400);
         }
@@ -743,7 +914,7 @@ serve(async (req) => {
 
     const { data: freshChecklist } = await supabase
       .from("job_checklists")
-      .select("items, total_items, completed_items, progress_pct, started_at, completed_at, last_activity_at, last_activity_by, service_type, section_meta")
+      .select("items, total_items, completed_items, progress_pct, started_at, completed_at, last_activity_at, last_activity_by, service_type, section_meta, zone_completion")
       .eq("id", checklistRow.id)
       .maybeSingle();
 
@@ -781,9 +952,24 @@ serve(async (req) => {
       included: includedAddOns.includes(id) || freeForService(id),
     }));
 
+    const zoneCompletion = parseZoneCompletions(
+      (freshChecklist as { zone_completion?: unknown } | null)?.zone_completion
+        ?? (checklistRow as { zone_completion?: unknown }).zone_completion,
+    );
+    const { count: liveCrewCount } = await supabase
+      .from("job_assignments")
+      .select("id", { count: "exact", head: true })
+      .eq("job_id", jobId)
+      .or("status.ilike.confirmed,status.ilike.accepted,status.ilike.assigned,status.ilike.in progress");
+    const crewSize = Math.max(1, liveCrewCount ?? 1);
+    const isCrewLead = crewSize === 1 || /lead/i.test(assignmentRole);
+
     return json({
       ok: true,
       canWrite,
+      is_crew_lead: isCrewLead,
+      crew_size: crewSize,
+      zone_completion: zoneCompletion,
       job: {
         id: job.id,
         service_type: checklistKey,
@@ -848,6 +1034,7 @@ serve(async (req) => {
           progress: areasComplete,
           photos_complete: photoGate.ok,
           missing_photo_sections: photoGate.missing,
+          completion: zoneCompletion,
         }
         : { enabled: false },
       addons: {

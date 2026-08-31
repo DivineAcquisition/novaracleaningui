@@ -33,6 +33,7 @@ import {
   recleanRequestColumns,
   recleanSourceForIntake,
 } from "../_shared/reclean.ts";
+import { matchNamedZones, siteZoneNames } from "../_shared/site-zones.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -84,12 +85,13 @@ interface BookingLite {
   completed_at?: string | null;
   service_date?: string | null;
   is_reclean?: boolean | null;
+  photo_zones?: unknown;
 }
 
 async function loadBooking(admin: SB, bookingId: string): Promise<BookingLite | null> {
   const { data } = await admin
     .from("bookings")
-    .select("id, job_id, booking_number, first_name, last_name, email, cleaner_id, booking_type, partner_details, completed_at, service_date, is_reclean")
+    .select("id, job_id, booking_number, first_name, last_name, email, cleaner_id, booking_type, partner_details, completed_at, service_date, is_reclean, photo_zones")
     .eq("id", bookingId)
     .maybeSingle();
   return data || null;
@@ -163,6 +165,8 @@ async function createIssue(admin: SB, opts: {
   cleanerName?: string | null;
   details?: Record<string, unknown> | null;
   requestReclean?: boolean;
+  zoneId?: string | null;
+  zoneName?: string | null;
 }) {
   const ref = bookingRef(opts.booking);
   // ALL cleaners on the job get attached; the reporter (field reports) or
@@ -181,6 +185,15 @@ async function createIssue(admin: SB, opts: {
     .eq("booking_id", opts.booking.id)
     .maybeSingle();
 
+  const siteZones = siteZoneNames(opts.booking.photo_zones);
+  const taggedZones = matchNamedZones(
+    [opts.zoneName, opts.zoneId].filter(Boolean),
+    siteZones,
+    opts.zoneName || null,
+  );
+  const zoneName = taggedZones[0] || String(opts.zoneName || "").trim() || null;
+  const zoneId = String(opts.zoneId || "").trim() || zoneName;
+
   const recleanStamp: Record<string, unknown> = {};
   const wantsReclean = !opts.booking.is_reclean && intakeCreatesRecleanRequest({
     issueType: opts.issueType,
@@ -196,7 +209,9 @@ async function createIssue(admin: SB, opts: {
     }), {
       reclean_source: recleanSourceForIntake({ issueType: opts.issueType, reportedVia: opts.reportedVia }),
       reclean_scope: "targeted",
-      reclean_areas_named: namedAreasFromText(opts.description),
+      reclean_areas_named: taggedZones.length
+        ? taggedZones
+        : namedAreasFromText(opts.description),
     });
   }
 
@@ -218,7 +233,12 @@ async function createIssue(admin: SB, opts: {
       status: "open",
       title: opts.title,
       description: opts.description,
-      details: opts.details && typeof opts.details === "object" ? opts.details : {},
+      details: {
+        ...(opts.details && typeof opts.details === "object" ? opts.details : {}),
+        ...(zoneName ? { zone_name: zoneName, zone_id: zoneId } : {}),
+      },
+      zone_id: zoneId,
+      zone_name: zoneName,
       reported_via: opts.reportedVia,
       reported_by: opts.reporterId,
       reported_by_name: opts.reporterName,
@@ -302,7 +322,7 @@ serve(async (req) => {
 
       const { data: booking } = await admin
         .from("bookings")
-        .select("id, job_id, booking_number, first_name, last_name, email, cleaner_id, booking_type, partner_details, completed_at, service_date, is_reclean")
+        .select("id, job_id, booking_number, first_name, last_name, email, cleaner_id, booking_type, partner_details, completed_at, service_date, is_reclean, photo_zones")
         .eq("job_id", assignment.job_id)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -315,19 +335,29 @@ serve(async (req) => {
       // Field reports default HIGH — the stop-and-flag SOP means a cleaner
       // raising a problem on site needs immediate dispatch eyes.
       const severity = SEVERITIES.includes(String(body?.severity)) ? String(body.severity) : "high";
+      const zoneName = String(body?.zoneName || "").trim();
+      const siteZones = siteZoneNames((booking as BookingLite).photo_zones);
+      if (siteZones.length && !matchNamedZones([zoneName], siteZones, zoneName).length) {
+        return json({
+          ok: false,
+          error: `Tag the zone this report is about (${siteZones.join(", ")}).`,
+          photo_zones: siteZones,
+        }, 400);
+      }
 
       const issue = await createIssue(admin, {
         booking: booking as BookingLite,
         issueType,
         severity,
         title: `Field report from ${cleanerName}`,
-        description,
+        description: zoneName ? `[${zoneName}] ${description}` : description,
         reportedVia: "cleaner_field",
         reporterId: null,
         reporterName: cleanerName,
         cleanerId: assignment.cleaner_id || null,
         cleanerName,
         requestReclean: issueType === "reclean",
+        zoneName: zoneName || null,
       });
       return json({ ok: true, issueId: issue.id, issueNumber: issue.issue_number });
     }
@@ -348,6 +378,21 @@ serve(async (req) => {
       const booking = await loadBooking(admin, bookingId);
       if (!booking) return json({ ok: false, error: "Booking not found." }, 404);
 
+      const zoneName = String(body?.zoneName || "").trim();
+      const zoneId = String(body?.zoneId || "").trim();
+      const siteZones = siteZoneNames(booking.photo_zones);
+      if (
+        siteZones.length
+        && ["complaint", "reclean", "quality_flag"].includes(issueType)
+        && !matchNamedZones([zoneName, zoneId], siteZones, zoneName).length
+      ) {
+        return json({
+          ok: false,
+          error: `This site is documented by zone. Tag the zone this case concerns (${siteZones.join(", ")}).`,
+          photo_zones: siteZones,
+        }, 400);
+      }
+
       const issue = await createIssue(admin, {
         booking,
         issueType,
@@ -362,6 +407,8 @@ serve(async (req) => {
           : body?.requestReclean === false
             ? false
             : undefined,
+        zoneName: zoneName || null,
+        zoneId: zoneId || null,
       });
       return json({ ok: true, issue });
     }

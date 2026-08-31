@@ -19,6 +19,8 @@ import { SEO } from "@/components/SEO";
 import { MediaThumb } from "@/components/job-media/MediaThumb";
 import { isVideoFile, videoTooLargeMessage } from "@/lib/job-media";
 import { ChecklistField } from "@/components/proposals/ChecklistField";
+import { ZoneMapEditor } from "@/components/commercial/ZoneMapEditor";
+import { parseSiteZones, type SiteZone } from "@/lib/site-zones";
 import type { ChecklistItem, PropertyTypeDef } from "@/lib/proposal-request";
 import { cn } from "@/lib/utils";
 
@@ -62,6 +64,9 @@ interface FormPayload {
   answers: Record<string, unknown>;
   photos: string[];
   scheduledAt: string | null;
+  zonesRequired?: boolean;
+  zoneThresholdSqft?: number;
+  existingZones?: SiteZone[];
   site: { nickname: string; address: string; clientStatedSqft: number | null };
   access: { name: string | null; phone: string | null };
   account: { name: string; contact: string } | null;
@@ -85,6 +90,8 @@ export default function WalkthroughIntakeForm({ staff = false }: { staff?: boole
   const [loading, setLoading] = useState(true);
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
   const [photos, setPhotos] = useState<string[]>([]);
+  const [zones, setZones] = useState<SiteZone[]>([]);
+  const [photoZoneId, setPhotoZoneId] = useState<string>("");
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -99,6 +106,8 @@ export default function WalkthroughIntakeForm({ staff = false }: { staff?: boole
       setInfo(data as FormPayload);
       setAnswers(data.answers || {});
       setPhotos(Array.isArray(data.photos) ? data.photos : []);
+      const fromAnswers = parseSiteZones((data.answers || {}).zones);
+      setZones(fromAnswers.length ? fromAnswers : parseSiteZones(data.existingZones));
       if (data.submitted) setDone(data.status === "excluded" ? "excluded" : "conducted");
     } catch (e) {
       setLoadErr(e instanceof Error ? e.message : "Could not open this walkthrough");
@@ -109,12 +118,12 @@ export default function WalkthroughIntakeForm({ staff = false }: { staff?: boole
 
   useEffect(() => { void load(); }, [load]);
 
-  const persist = useCallback(async (nextAnswers: Record<string, unknown>, nextPhotos: string[]) => {
+  const persist = useCallback(async (nextAnswers: Record<string, unknown>, nextPhotos: string[], nextZones?: SiteZone[]) => {
     setSaveState("saving");
     try {
       const res = await walkthroughFetch(token, {
         method: "PATCH",
-        body: JSON.stringify({ answers: nextAnswers, photos: nextPhotos }),
+        body: JSON.stringify({ answers: { ...nextAnswers, zones: nextZones ?? zones }, photos: nextPhotos }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || "Save failed");
@@ -123,12 +132,21 @@ export default function WalkthroughIntakeForm({ staff = false }: { staff?: boole
     } catch {
       setSaveState("error");
     }
-  }, [token]);
+  }, [token, zones]);
 
   const setAnswer = (key: string, value: unknown) => {
     setAnswers((prev) => {
-      const next = { ...prev, [key]: value };
-      void persist(next, photos);
+      const next = { ...prev, [key]: value, zones };
+      void persist(next, photos, zones);
+      return next;
+    });
+  };
+
+  const saveZones = (nextZones: SiteZone[]) => {
+    setZones(nextZones);
+    setAnswers((prev) => {
+      const next = { ...prev, zones: nextZones };
+      void persist(next, photos, nextZones);
       return next;
     });
   };
@@ -153,8 +171,13 @@ export default function WalkthroughIntakeForm({ staff = false }: { staff?: boole
       }
       const next = [...photos, ...added];
       setPhotos(next);
-      setAnswers((a) => ({ ...a, photos: next }));
-      await persist({ ...answers, photos: next }, next);
+      const zonePhotos = { ...((answers.zone_photos as Record<string, string[]>) || {}) };
+      if (photoZoneId) {
+        zonePhotos[photoZoneId] = [...(zonePhotos[photoZoneId] || []), ...added];
+      }
+      const nextAnswers = { ...answers, photos: next, zones, zone_photos: zonePhotos };
+      setAnswers(nextAnswers);
+      await persist(nextAnswers, next, zones);
       toast.success(`${added.length} file${added.length === 1 ? "" : "s"} added.`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Upload failed");
@@ -169,7 +192,7 @@ export default function WalkthroughIntakeForm({ staff = false }: { staff?: boole
     try {
       const res = await walkthroughFetch(token, {
         method: "POST",
-        body: JSON.stringify({ answers: { ...answers, photos }, photos }),
+        body: JSON.stringify({ answers: { ...answers, photos, zones }, photos }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || "Submit failed");
@@ -297,11 +320,39 @@ export default function WalkthroughIntakeForm({ staff = false }: { staff?: boole
           </section>
         )}
 
+        {(info.zonesRequired || zones.length > 0) && (
+          <section className="rounded-2xl border border-violet-200 bg-violet-50/40 p-4 space-y-3">
+            <h2 className="text-sm font-bold text-violet-950">Site zones</h2>
+            <p className="text-[11px] text-violet-800">
+              This site is large enough that one photo pair doesn&apos;t prove the visit.
+              Name each physical section now — that map is reused on every future job.
+              {info.zoneThresholdSqft
+                ? ` Required at ${info.zoneThresholdSqft.toLocaleString()} sq ft and above.`
+                : ""}
+            </p>
+            <ZoneMapEditor zones={zones} onChange={saveZones} compact />
+          </section>
+        )}
+
         <section className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
           <h2 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
             <RiCameraLine className="w-4 h-4" /> Photos + video
           </h2>
-          <p className="text-[11px] text-slate-500">Condition photos and a short clip. Uploads to this site's dated Drive folder on submit.</p>
+          <p className="text-[11px] text-slate-500">
+            Condition photos and a short clip. When zones are named, tag each upload to the section it shows.
+          </p>
+          {zones.length > 0 && (
+            <select
+              value={photoZoneId}
+              onChange={(e) => setPhotoZoneId(e.target.value)}
+              className="h-8 text-xs rounded-md border border-slate-200 bg-white px-2"
+            >
+              <option value="">Whole site / not yet zoned</option>
+              {zones.map((z) => (
+                <option key={z.id} value={z.id}>{z.name}</option>
+              ))}
+            </select>
+          )}
           <div className="flex flex-wrap gap-2">
             {photos.map((url) => (
               <MediaThumb key={url} url={url} className="w-20 h-20 rounded-lg overflow-hidden" />

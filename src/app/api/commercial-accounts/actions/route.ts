@@ -20,6 +20,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin, AdminAuthError } from "@/lib/admin-auth";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import { primeAirtablePat } from "@/lib/airtable/sources/prime-pat";
+import { parseSiteZones, serializeSiteZones } from "@/lib/site-zones";
 import { syncCommercialAccount, syncSite } from "@/lib/airtable/mappers";
 import { generateAgreement } from "@/lib/commercial-agreement-server";
 
@@ -56,7 +57,7 @@ interface SiteBody {
   after_hours_access_notes?: string;
   service_window_start?: string;
   service_window_end?: string;
-  photo_zones?: string[];
+  photo_zones?: unknown;
 }
 
 async function secret(key: string): Promise<string> {
@@ -142,9 +143,10 @@ export async function POST(req: Request): Promise<NextResponse> {
         after_hours_access_notes: s(site.after_hours_access_notes, 1000),
         service_window_start: s(site.service_window_start, 8),
         service_window_end: s(site.service_window_end, 8),
-        photo_zones: Array.isArray(site.photo_zones) && site.photo_zones.length
-          ? site.photo_zones.map((z) => String(z).trim()).filter(Boolean).slice(0, 12)
-          : null,
+        photo_zones: (() => {
+          const zones = serializeSiteZones(parseSiteZones(site.photo_zones));
+          return zones.length ? zones : null;
+        })(),
         updated_at: new Date().toISOString(),
       };
       let siteId = site.id ? String(site.id) : null;

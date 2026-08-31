@@ -28,6 +28,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { ZoneMapEditor } from "@/components/commercial/ZoneMapEditor";
+import { parseSiteZones, type SiteZone } from "@/lib/site-zones";
 import { cn } from "@/lib/utils";
 import { commercialTab } from "@/lib/commercial-proposal";
 
@@ -271,7 +273,7 @@ interface SiteRow {
   after_hours_access_notes: string | null;
   service_window_start: string | null;
   service_window_end: string | null;
-  photo_zones: string[] | null;
+  photo_zones: SiteZone[] | null;
   active: boolean;
 }
 
@@ -586,18 +588,17 @@ export function AccountSheet({ account, onClose, reload }: { account: AccountRow
 
                 <div>
                   <Label className="text-[10px] text-slate-500">
-                    Documentation zones (comma separated) — leave blank to derive from square footage
+                    Documentation zones — named at walkthrough, editable here without a re-walk
                   </Label>
-                  <Input
-                    placeholder="Warehouse floor, Dock, Offices, Restrooms"
-                    value={(siteEdit.photo_zones || []).join(", ")}
-                    onChange={(e) => setSiteEdit({
-                      ...siteEdit,
-                      photo_zones: e.target.value.split(",").map((z) => z.trim()).filter(Boolean),
-                    })}
-                    className="h-8 text-xs mt-0.5" />
+                  <div className="mt-1">
+                    <ZoneMapEditor
+                      compact
+                      zones={parseSiteZones(siteEdit.photo_zones)}
+                      onChange={(next) => setSiteEdit({ ...siteEdit, photo_zones: next })}
+                    />
+                  </div>
                   <p className="text-[10px] text-slate-400 mt-0.5">
-                    Before and after photos are captured per zone — one pair proves nothing about a large facility.
+                    Below the zone threshold a site stays on a single before/after pair. Split, merge, rename, or add here for corrections.
                   </p>
                 </div>
 

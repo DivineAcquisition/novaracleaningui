@@ -37,6 +37,8 @@ import {
   updateFile,
   uploadFile,
 } from "../_shared/google-drive.ts";
+import { getContractorChecklist } from "../_shared/contractor-checklists.ts";
+import { labeledZonePhotos, siteZoneNames } from "../_shared/site-zones.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -141,6 +143,7 @@ interface IssueForPacket {
   resolved_by_name: string | null;
   resolved_at: string | null;
   created_at: string;
+  zone_name?: string | null;
 }
 
 /** Complaints / QC issues raised on this job — disclosed in the packet so it
@@ -150,7 +153,7 @@ async function loadIssuesForPacket(supabase: SB, bookingId: string | null): Prom
   try {
     const { data } = await supabase
       .from("qc_issues")
-      .select("issue_number, issue_type, severity, status, title, description, details, reported_via, reported_by_name, resolution_note, resolved_by_name, resolved_at, created_at")
+      .select("issue_number, issue_type, severity, status, title, description, details, reported_via, reported_by_name, resolution_note, resolved_by_name, resolved_at, created_at, zone_name")
       .eq("booking_id", bookingId)
       .order("created_at", { ascending: true })
       .limit(20);
@@ -522,9 +525,23 @@ async function loadAgreementPdf(supabase: SB, bookingId: string, email: string |
 // ─── Snapshot enrichment (checklist + cleaners) ──────────────────────────────
 
 async function enrichSnapshot(supabase: SB, doc: DocRow): Promise<{
-  checklist: { name?: string; progress_pct?: number; completed_items?: number; total_items?: number; completed_at?: string | null; items?: unknown } | null;
+  checklist: {
+    name?: string;
+    progress_pct?: number;
+    completed_items?: number;
+    total_items?: number;
+    completed_at?: string | null;
+    items?: unknown;
+    section_meta?: Record<string, { before?: string[]; after?: string[] }>;
+    zone_completion?: unknown;
+    sections_snapshot?: unknown;
+    item_id_map?: unknown;
+  } | null;
   cleanerNames: string;
   agreementRef: string | null;
+  photoZones?: string[];
+  scopeLevel?: string | null;
+  serviceType?: string | null;
 }> {
   let checklist = null;
   let cleanerNames = doc.cleaner_names || "";
@@ -535,7 +552,7 @@ async function enrichSnapshot(supabase: SB, doc: DocRow): Promise<{
       .from("job_checklists")
       .select(
         "service_type, items, total_items, completed_items, progress_pct, completed_at, " +
-          "sections_snapshot, item_id_map",
+          "sections_snapshot, item_id_map, section_meta, zone_completion",
       )
       .eq("job_id", doc.job_id)
       .maybeSingle();
@@ -554,6 +571,8 @@ async function enrichSnapshot(supabase: SB, doc: DocRow): Promise<{
         // to do, not what the checklist says today.
         sections_snapshot: cl.sections_snapshot || null,
         item_id_map: cl.item_id_map || {},
+        section_meta: cl.section_meta || {},
+        zone_completion: cl.zone_completion || null,
       };
     }
     if (!cleanerNames) {
@@ -584,7 +603,24 @@ async function enrichSnapshot(supabase: SB, doc: DocRow): Promise<{
     if (agr?.id) agreementRef = `Agreement ${String(agr.id).slice(0, 8)} · signed ${String(agr.created_at).slice(0, 10)}`;
   } catch { /* table may not have rows */ }
 
-  return { checklist, cleanerNames, agreementRef };
+  let photoZones: string[] = [];
+  let scopeLevel: string | null = null;
+  let serviceType: string | null = doc.service_type || null;
+
+  if (doc.booking_id) {
+    try {
+      const { data: booking } = await supabase
+        .from("bookings")
+        .select("photo_zones, scope_level, service_type")
+        .eq("id", doc.booking_id)
+        .maybeSingle();
+      photoZones = siteZoneNames(booking?.photo_zones);
+      scopeLevel = booking?.scope_level ? String(booking.scope_level) : null;
+      if (booking?.service_type) serviceType = String(booking.service_type);
+    } catch { /* booking row may lag the doc snapshot */ }
+  }
+
+  return { checklist, cleanerNames, agreementRef, photoZones, scopeLevel, serviceType };
 }
 
 // ─── Completion summary PDF ──────────────────────────────────────────────────
@@ -676,6 +712,10 @@ async function buildSummaryPdf(doc: DocRow, extras: {
     ["Completed at", doc.completed_at ? new Date(doc.completed_at).toUTCString() : "—"],
     ["Photos", `${doc.before_photos.length} before · ${doc.after_photos.length} after`],
   ];
+  const disputed = (extras.issues || []).map((i) => i.zone_name).filter(Boolean) as string[];
+  if (disputed.length) {
+    rows.push(["Zone in dispute", [...new Set(disputed)].join(", ")]);
+  }
   if (extras.agreementRef) rows.push(["Signed agreement", extras.agreementRef]);
   if (extras.checklist) {
     rows.push(["Checklist", `${extras.checklist.completed_items ?? 0}/${extras.checklist.total_items ?? 0} items (${extras.checklist.progress_pct ?? 0}%)`]);
@@ -928,7 +968,13 @@ async function mirrorOne(supabase: SB, token: string, rootFolderId: string, doc:
   let uploaded = 0;
   const failures: string[] = [];
 
-  const uploadSet = async (urls: string[], folderId: string, prefix: string, existing: Set<string>) => {
+  const uploadSet = async (
+    urls: string[],
+    folderId: string,
+    prefix: string,
+    existing: Set<string>,
+    opts: { skipPdf?: boolean; label?: (i: number) => string } = {},
+  ) => {
     for (let i = 0; i < urls.length; i++) {
       const url = urls[i];
       const ext = extFromUrl(url);
@@ -944,8 +990,13 @@ async function mirrorOne(supabase: SB, token: string, rootFolderId: string, doc:
         if (!res.ok) { failures.push(`${name}: fetch ${res.status}`); continue; }
         const bytes = new Uint8Array(await res.arrayBuffer());
         if (bytes.length === 0) { failures.push(`${name}: empty`); continue; }
-        if (needsPdfCopy && !isVideoExt(ext)) {
-          photoBytes.push({ label: `${prefix.toUpperCase()} ${i + 1} — ${doc.booking_ref || ""}`, bytes });
+        if (needsPdfCopy && !isVideoExt(ext) && !opts.skipPdf) {
+          photoBytes.push({
+            label: opts.label
+              ? opts.label(i)
+              : `${prefix.toUpperCase()} ${i + 1} — ${doc.booking_ref || ""}`,
+            bytes,
+          });
           pdfBytesTotal += bytes.length;
         }
         if (needsUpload) {
@@ -960,8 +1011,43 @@ async function mirrorOne(supabase: SB, token: string, rootFolderId: string, doc:
       }
     }
   };
-  await uploadSet(before, beforeFolder, "before", existingBefore);
-  await uploadSet(after, afterFolder, "after", existingAfter);
+  const zoneNames = extras.photoZones || [];
+  const spec = zoneNames.length
+    ? getContractorChecklist(extras.serviceType || doc.service_type, [], undefined, {
+      scopeLevel: extras.scopeLevel,
+      photoZones: zoneNames,
+    })
+    : null;
+  const zoneSeq = spec && extras.checklist?.section_meta
+    ? labeledZonePhotos(extras.checklist.section_meta, spec.sections)
+    : [];
+  const skipGenericPdf = zoneSeq.length > 0;
+
+  await uploadSet(before, beforeFolder, "before", existingBefore, { skipPdf: skipGenericPdf });
+  await uploadSet(after, afterFolder, "after", existingAfter, { skipPdf: skipGenericPdf });
+
+  if (zoneSeq.length) {
+    const byZone = new Map<string, { before: string[]; after: string[] }>();
+    for (const p of zoneSeq) {
+      const row = byZone.get(p.zoneName) || { before: [], after: [] };
+      row[p.kind].push(p.url);
+      byZone.set(p.zoneName, row);
+    }
+    for (const [zoneName, pair] of byZone) {
+      const zFolder = await ensureFolder(token, jobFolder, safeName(zoneName));
+      const zBefore = await ensureFolder(token, zFolder, "before");
+      const zAfter = await ensureFolder(token, zFolder, "after");
+      const existB = await listChildNames(token, zBefore);
+      const existA = await listChildNames(token, zAfter);
+      await uploadSet(pair.before, zBefore, "before", existB, {
+        label: (i) => `${zoneName} BEFORE ${i + 1}`,
+      });
+      await uploadSet(pair.after, zAfter, "after", existA, {
+        label: (i) => `${zoneName} AFTER ${i + 1}`,
+      });
+    }
+  }
+
 
   // Any photo that failed to land in Drive = mirror not complete. Retry later.
   if (failures.length > 0) {

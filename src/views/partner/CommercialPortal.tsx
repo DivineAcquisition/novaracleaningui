@@ -71,6 +71,16 @@ interface SiteRow {
   city: string | null;
   facility_type: string | null;
   sqft: number | null;
+  last_visit?: string | null;
+  zones?: Array<{
+    id: string;
+    name: string;
+    description: string;
+    status: "complete" | "partial" | "not_done" | null;
+    note: string;
+    before: string[];
+    after: string[];
+  }>;
 }
 interface DocRow { label: string; url: string | null; date: string }
 
@@ -225,6 +235,51 @@ export default function CommercialPortal() {
                     {st.facility_type || "—"}{st.sqft ? ` · ${st.sqft.toLocaleString()} sqft` : ""}
                     {st.address ? ` · ${st.address}${st.city ? `, ${st.city}` : ""}` : ""}
                   </p>
+                  {st.last_visit && (
+                    <p className="text-[11px] text-slate-400 mt-1">Last visit {fmtDate(st.last_visit)}</p>
+                  )}
+                  {(st.zones || []).length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-700">
+                        Zone-by-zone
+                      </p>
+                      {st.zones!.map((z) => (
+                        <div key={z.id} className="rounded-lg border border-slate-200 bg-slate-50 p-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs font-semibold text-slate-800">{z.name}</p>
+                            <span className={cn(
+                              "text-[10px] font-semibold uppercase tracking-wide",
+                              z.status === "complete" ? "text-emerald-700"
+                                : z.status === "partial" ? "text-amber-700"
+                                  : z.status === "not_done" ? "text-rose-700"
+                                    : "text-slate-400",
+                            )}>
+                              {z.status === "complete" ? "complete"
+                                : z.status === "partial" ? "partial"
+                                  : z.status === "not_done" ? "not done"
+                                    : "awaiting visit"}
+                            </span>
+                          </div>
+                          {(z.before.length > 0 || z.after.length > 0) && (
+                            <div className="mt-1.5 grid grid-cols-4 gap-1">
+                              {z.before.slice(0, 2).map((u) => (
+                                <a key={u} href={u} target="_blank" rel="noreferrer" className="relative">
+                                  <img src={u} alt={`${z.name} before`} className="h-12 w-full object-cover rounded border border-slate-200" />
+                                  <span className="absolute bottom-0.5 left-0.5 text-[8px] font-bold bg-black/60 text-white px-1 rounded">Before</span>
+                                </a>
+                              ))}
+                              {z.after.slice(0, 2).map((u) => (
+                                <a key={u} href={u} target="_blank" rel="noreferrer" className="relative">
+                                  <img src={u} alt={`${z.name} after`} className="h-12 w-full object-cover rounded border border-slate-200" />
+                                  <span className="absolute bottom-0.5 left-0.5 text-[8px] font-bold bg-black/60 text-white px-1 rounded">After</span>
+                                </a>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent></Card>
               ))}
             </div>

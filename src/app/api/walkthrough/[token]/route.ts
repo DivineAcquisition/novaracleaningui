@@ -7,7 +7,8 @@ import { NextResponse } from "next/server";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import { AdminAuthError, requireAdmin } from "@/lib/admin-auth";
 import { loadCommercialConfigServer } from "@/lib/commercial-pricing-server";
-import { computeCommercialQuote, windowHoursBetween } from "@/lib/commercial-pricing";
+import { computeCommercialQuote, siteRequiresZones, windowHoursBetween } from "@/lib/commercial-pricing";
+import { parseSiteZones, serializeSiteZones } from "@/lib/site-zones";
 import { loadProposalChecklists, refreshProposalRequestStatus } from "@/lib/proposal-request-server";
 import {
   exclusionFromAnswers,
@@ -47,6 +48,12 @@ function clock(v: unknown): string | null {
   return /^\d{2}:\d{2}$/.test(raw) ? raw : null;
 }
 
+function zonesFromAnswers(answers: Record<string, unknown> | null | undefined, fallback?: unknown) {
+  return serializeSiteZones(
+    parseSiteZones(answers?.zones ?? fallback),
+  );
+}
+
 async function resolveToken(token: string) {
   if (!token || token.length < 12) {
     return { supabase: null, wt: null as Record<string, any> | null, error: "This walkthrough link is not valid." };
@@ -72,7 +79,7 @@ async function loadContext(supabase: ReturnType<typeof getAdminSupabase>, wt: Re
   const checklist = walkthroughChecklistFor(catalog, type.key);
   const { data: site } = await supabase
     .from("business_sites")
-    .select("id, nickname, address, city, state, zip_code, business_account_id")
+    .select("id, nickname, address, city, state, zip_code, business_account_id, sqft, photo_zones")
     .eq("id", wt.business_site_id)
     .maybeSingle();
   const { data: account } = site?.business_account_id
@@ -103,6 +110,9 @@ export async function GET(
     if (error && !wt.token_submitted_at && !staff) return NextResponse.json({ error }, { status: 410 });
 
     const ctx = await loadContext(supabase, wt);
+    const config = await loadCommercialConfigServer(supabase);
+    const sqftGuess = Number(wt.sqft) || Number(ctx.site?.sqft) || Number(wt.client_stated_sqft) || 0;
+    const existingZones = parseSiteZones(wt.photo_zones || ctx.site?.photo_zones);
     return NextResponse.json({
       ok: true,
       expired: Boolean(error) && !staff,
@@ -116,6 +126,11 @@ export async function GET(
       answers: wt.checklist_answers || {},
       photos: Array.isArray(wt.photos) ? wt.photos : [],
       scheduledAt: wt.scheduled_at,
+      zonesRequired: siteRequiresZones(config, sqftGuess),
+      zoneThresholdSqft: Number(config.settings.photo_zone_threshold_sqft)
+        || Number(config.settings.walkthrough_threshold_sqft)
+        || 5000,
+      existingZones,
       site: {
         nickname: ctx.site?.nickname || wt.site_address,
         address: [ctx.site?.address, ctx.site?.city, ctx.site?.state, ctx.site?.zip_code].filter(Boolean).join(", ") || wt.site_address,
@@ -164,6 +179,8 @@ export async function PATCH(
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (body.answers && typeof body.answers === "object") {
       patch.checklist_answers = { ...(wt.checklist_answers || {}), ...(body.answers as object) };
+      const zones = zonesFromAnswers(patch.checklist_answers as Record<string, unknown>, wt.photo_zones);
+      if (zones.length) patch.photo_zones = zones;
     }
     if (Array.isArray(body.photos)) {
       patch.photos = body.photos.map((u) => String(u)).filter(Boolean).slice(0, 40);
@@ -215,7 +232,8 @@ export async function POST(
     const alreadyInPipeline = Boolean(wt.token_submitted_at)
       || ["conducted", "priced", "excluded"].includes(String(wt.status));
     if (alreadyInPipeline) {
-      await supabase.from("commercial_walkthroughs").update({
+      const zones = zonesFromAnswers(answers, wt.photo_zones);
+      const alreadyPatch: Record<string, unknown> = {
         checklist_answers: answers,
         photos: Array.isArray(answers.photos) ? answers.photos : wt.photos,
         findings_extra: {
@@ -224,7 +242,15 @@ export async function POST(
           staff_additions: Boolean(staff),
         },
         updated_at: new Date().toISOString(),
-      }).eq("id", wt.id);
+      };
+      if (zones.length) alreadyPatch.photo_zones = zones;
+      await supabase.from("commercial_walkthroughs").update(alreadyPatch).eq("id", wt.id);
+      if (zones.length && ctx.site?.id) {
+        await supabase.from("business_sites").update({
+          photo_zones: zones,
+          updated_at: new Date().toISOString(),
+        }).eq("id", ctx.site.id);
+      }
       await attachPdfAndDrive(supabase, { ...wt, photos: answers.photos }, ctx, answers, String(wt.status) === "excluded");
       return NextResponse.json({
         ok: true,
@@ -345,6 +371,7 @@ async function applyConduct(
   const actorName = ctx.cleaner?.first_name
     ? [ctx.cleaner.first_name, ctx.cleaner.last_name].filter(Boolean).join(" ")
     : wt.conducted_by || "Walkthrough agent";
+  const zones = zonesFromAnswers(answers, wt.photo_zones || ctx.site?.photo_zones);
 
   const patch: Record<string, unknown> = {
     sqft: conduct.confirmedSqft,
@@ -374,6 +401,7 @@ async function applyConduct(
     token_submitted_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     status: "conducted",
+    photo_zones: zones.length ? zones : null,
   };
 
   const merged = { ...wt, ...patch };
@@ -387,6 +415,11 @@ async function applyConduct(
   if (!merged.floor_types) missing.push("floor types");
   if (!merged.service_window_start || !merged.service_window_end) missing.push("service window");
   if (!Array.isArray(merged.photos) || merged.photos.length === 0) missing.push("condition photos");
+
+  const config = await loadCommercialConfigServer(supabase);
+  if (siteRequiresZones(config, Number(merged.sqft) || 0) && zones.length === 0) {
+    missing.push("named zones for this site");
+  }
   if (missing.length) {
     return NextResponse.json({
       error: `A walkthrough isn't complete without every finding the price depends on. Still needed: ${missing.join(", ")}.`,
@@ -394,7 +427,6 @@ async function applyConduct(
     }, { status: 400 });
   }
 
-  const config = await loadCommercialConfigServer(supabase);
   const windowHours = windowHoursBetween(
     merged.service_window_start as string,
     merged.service_window_end as string,
@@ -413,6 +445,13 @@ async function applyConduct(
 
   const { error } = await supabase.from("commercial_walkthroughs").update(patch).eq("id", wt.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+  if (zones.length && ctx.site?.id) {
+    await supabase.from("business_sites").update({
+      photo_zones: zones,
+      updated_at: new Date().toISOString(),
+    }).eq("id", ctx.site.id);
+  }
 
   await refreshProposalRequestStatus(supabase, wt.proposal_request_id);
 

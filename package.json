@@ -33,7 +33,8 @@
     "docs:preview": "tsx scripts/docs/preview.ts",
     "ops-assistant:verify": "tsx scripts/ops-assistant/verify.ts",
     "commercial:verify:sql": "bash scripts/migrations/verify-commercial-onboarding.sh",
-    "commercial:verify:ui": "tsx scripts/commercial/verify-onboarding-ui.ts"
+    "commercial:verify:ui": "tsx scripts/commercial/verify-onboarding-ui.ts",
+    "zones:verify": "tsx scripts/verify-site-zones.ts"
   },
   "dependencies": {
     "@capacitor/android": "^7.4.4",
