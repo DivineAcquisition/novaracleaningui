@@ -745,8 +745,9 @@ function BillingStep({
       <Card>
         <h2 className="text-base font-semibold">Page 3 — Billing Setup</h2>
         <p className="mt-1 text-sm leading-relaxed text-slate-600">
-          Your account is set up for Stripe Pre-Auth. Add a card here — this is a verification hold,
-          not a charge, and the agreement is not complete until the hold is submitted.
+          Your account is set up for Stripe Pre-Auth. Add a card here — this is a Pre-Auth hold
+          (a verification hold), not a charge, and the agreement is not complete until the hold
+          is submitted.
         </p>
         {data.preview ? (
           <button
