@@ -44,6 +44,7 @@ import {
   RiPriceTag3Line,
   RiRefreshLine,
   RiMailSendLine,
+  RiRobot2Line,
 } from "@remixicon/react";
 import { ReactNode, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
@@ -177,6 +178,13 @@ const NAV_ITEMS: NavItem[] = [
     url: "/admin/team",
     icon: RiTeamLine,
     description: "Admins & VA access",
+    adminOnly: true,
+  },
+  {
+    title: "AI Models",
+    url: "/admin/model-control",
+    icon: RiRobot2Line,
+    description: "Model routing by tier · response log",
     adminOnly: true,
   },
 ];

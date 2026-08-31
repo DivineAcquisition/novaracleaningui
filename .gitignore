@@ -26,3 +26,13 @@ out
 *.sw?
 tsconfig.tsbuildinfo
 supabase/.temp/
+
+# Secrets — these belong in the deployment platform's secrets store, never in
+# the repo. API keys (ANTHROPIC_API_KEY, OPENAI_API_KEY, Stripe, Resend…) are
+# read from the environment by NAME at runtime. See .env.example.
+.env
+.env.*
+!.env.example
+*.pem
+secrets.json
+.secrets/

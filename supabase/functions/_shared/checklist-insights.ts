@@ -6,16 +6,17 @@
 //
 // Two differences from the weekly report, both deliberate:
 //
-//   1. Model routing asks for the STRONGEST configured model, not the default
-//      one. This is exactly the analysis where a cheap model's confident-wrong
-//      pattern is expensive — it would send an admin to rewrite a checklist
-//      item that was never the problem.
+//   1. Routing asks the model-control layer for the STRONGEST tier, not the
+//      default one. This is exactly the analysis where a cheap model's
+//      confident-wrong pattern is expensive — it would send an admin to
+//      rewrite a checklist item that was never the problem. If that tier is
+//      unavailable the layer degrades to the fallback tier and records it.
 //   2. quality_miss and scope_confusion are never summed. They point at
 //      different failures: one says the item was skipped or under-specified,
 //      the other says the scope boundary is unclear. Conflating them produces
 //      an insight that recommends the wrong fix.
 
-import { resolveSecret } from "./app-secrets.ts";
+import { callModel, loadModelControl, modelLabel } from "./llm.ts";
 
 // deno-lint-ignore no-explicit-any
 type SB = any;
@@ -55,34 +56,6 @@ export interface ChecklistInsightResult {
   insights: ChecklistInsight[];
   model: string;
   model_version: string;
-}
-
-/**
- * The strongest model the operator has configured, falling back to the
- * standard one. Adding LLM_MODEL_*_STRONG is how an operator opts a
- * heavier model into this analysis without touching the weekly report.
- */
-export async function strongestModel(
-  sb: SB,
-): Promise<{ provider: "openai" | "anthropic"; model: string; apiKey: string; tier: string }> {
-  const providerRaw = ((await resolveSecret(sb, "LLM_PROVIDER")) || "anthropic").toLowerCase();
-  const provider = providerRaw === "openai" ? "openai" : "anthropic";
-  const apiKey = await resolveSecret(sb, provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY");
-  const strong = await resolveSecret(
-    sb,
-    provider === "openai" ? "LLM_MODEL_OPENAI_STRONG" : "LLM_MODEL_ANTHROPIC_STRONG",
-  );
-  const standard = await resolveSecret(
-    sb,
-    provider === "openai" ? "LLM_MODEL_OPENAI" : "LLM_MODEL_ANTHROPIC",
-  );
-  const fallback = provider === "openai" ? "gpt-4o" : "claude-sonnet-4-5";
-  return {
-    provider,
-    model: strong || standard || fallback,
-    apiKey,
-    tier: strong ? "strong" : standard ? "configured" : "default",
-  };
 }
 
 /**
@@ -126,58 +99,6 @@ function citationOk(insight: ChecklistInsight, haystack: string): boolean {
   return nums.length > 0 && nums.every((n) => haystack.includes(n));
 }
 
-async function callOpenAI(apiKey: string, model: string, system: string, user: string) {
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model,
-      temperature: 0.1,
-      response_format: { type: "json_object" },
-      messages: [{ role: "system", content: system }, { role: "user", content: user }],
-    }),
-  });
-  const text = await res.text();
-  if (!res.ok) return { ok: false as const, error: `OpenAI ${res.status}: ${text.slice(0, 300)}` };
-  try {
-    const body = JSON.parse(text);
-    const content = body?.choices?.[0]?.message?.content;
-    if (!content) return { ok: false as const, error: "OpenAI returned no content" };
-    return { ok: true as const, analysis: JSON.parse(content) };
-  } catch {
-    return { ok: false as const, error: "OpenAI content not JSON" };
-  }
-}
-
-async function callAnthropic(apiKey: string, model: string, system: string, user: string) {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: 3000,
-      temperature: 0.1,
-      system,
-      messages: [{ role: "user", content: user }],
-    }),
-  });
-  const text = await res.text();
-  if (!res.ok) return { ok: false as const, error: `Anthropic ${res.status}: ${text.slice(0, 300)}` };
-  try {
-    const body = JSON.parse(text);
-    const content = body?.content?.[0]?.text;
-    if (!content) return { ok: false as const, error: "Anthropic returned no content" };
-    const cleaned = content.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
-    return { ok: true as const, analysis: JSON.parse(cleaned) };
-  } catch {
-    return { ok: false as const, error: "Anthropic content not JSON" };
-  }
-}
-
 export async function generateChecklistInsights(
   sb: SB,
   items: AggregatedItem[],
@@ -205,10 +126,7 @@ export async function generateChecklistInsights(
   }));
   const haystack = JSON.stringify(compact);
 
-  const { provider, model, apiKey, tier } = await strongestModel(sb);
-  if (!apiKey) {
-    return { ...fallback, model: `${fallback.model} (no ${provider} key)` };
-  }
+  const settings = await loadModelControl(sb);
 
   const system = `You write the Checklist Review queue for Novara Cleaning, a cleaning company.
 Each input row is ONE checklist item with the real operational signal it drew this cycle.
@@ -229,17 +147,29 @@ Return JSON: { "insights": [ {item_id, observation, numbers, hypothesis}, ... ] 
   const user = `CYCLE ${opts.cycleLabel}
 ITEMS ${JSON.stringify(compact)}`;
 
-  const llm = provider === "anthropic"
-    ? await callAnthropic(apiKey, model, system, user)
-    : await callOpenAI(apiKey, model, system, user);
+  // Strongest tier: this analysis sends an admin to rewrite a checklist item,
+  // so a confident-wrong reading is expensive. The layer degrades to the
+  // fallback tier on its own if the strongest one is unavailable.
+  const llm = await callModel(sb, {
+    tier: "strongest",
+    surface: "checklist-feedback",
+    system,
+    user,
+    jsonMode: true,
+    settings,
+  });
 
-  if (!llm.ok) {
-    return { ...fallback, model: `${model} failed → ${fallback.model}`, model_version: llm.error.slice(0, 180) };
+  if (!llm.ok || !llm.json) {
+    return {
+      ...fallback,
+      model: `${llm.model} unavailable → ${fallback.model}`,
+      model_version: (llm.error || "model returned unusable content").slice(0, 180),
+    };
   }
 
   const byId = new Map(items.map((i) => [i.item_id, i]));
-  const raw = Array.isArray((llm.analysis as { insights?: unknown[] })?.insights)
-    ? (llm.analysis as { insights: unknown[] }).insights
+  const raw = Array.isArray((llm.json as { insights?: unknown[] })?.insights)
+    ? (llm.json as { insights: unknown[] }).insights
     : [];
 
   const cleaned: ChecklistInsight[] = [];
@@ -267,7 +197,8 @@ ITEMS ${JSON.stringify(compact)}`;
 
   return {
     insights: cleaned.slice(0, opts.maxInsights),
-    model,
-    model_version: `${provider}:${tier}`,
+    // What actually produced this, including a fallback if one happened.
+    model: modelLabel(llm),
+    model_version: `${llm.provider}:${llm.tier}`,
   };
 }
