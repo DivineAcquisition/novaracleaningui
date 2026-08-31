@@ -11,16 +11,15 @@
 // review (shown as "Pending Pricing").
 
 import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
   RiLoader4Line, RiUser3Line, RiMailLine, RiPhoneLine, RiBuilding2Line,
   RiHome4Line, RiAddLine, RiDeleteBinLine, RiArrowRightLine, RiArrowLeftLine,
   RiCheckboxCircleLine, RiShieldCheckLine, RiKey2Line, RiMapPinLine,
-  RiSparklingLine, RiFlashlightFill, RiLockPasswordLine, RiEyeLine, RiEyeOffLine,
+  RiSparklingLine, RiFlashlightFill,
 } from "@remixicon/react";
 
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,7 +27,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { SEO } from "@/components/SEO";
 import { cn } from "@/lib/utils";
 import {
-  ACCESS_TYPES, SERVICE_ZONES, MIN_PASSWORD_LENGTH,
+  ACCESS_TYPES, SERVICE_ZONES,
   type EntityType, type OnboardingPropertyInput, type OnboardingFormPayload,
 } from "@/lib/host-onboarding/types";
 
@@ -60,12 +59,10 @@ function emptyProperty(): OnboardingPropertyInput {
 type Step = 1 | 2 | 3;
 
 export default function HostOnboarding() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const [step, setStep] = useState<Step>(1);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
-  const [accountReady, setAccountReady] = useState(false);
 
   // Step 1 — identity
   const [fullName, setFullName] = useState("");
@@ -80,8 +77,6 @@ export default function HostOnboarding() {
 
   // Step 3 — consent + portal account
   const [consent, setConsent] = useState(false);
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
 
   // Prefill from an admin-generated "spin up onboarding link" (query params).
   useEffect(() => {
@@ -126,10 +121,6 @@ export default function HostOnboarding() {
 
   const submit = async () => {
     if (!consent) { toast.error("Please agree to the Host Partnership Agreement."); return; }
-    if (password.length < MIN_PASSWORD_LENGTH) {
-      toast.error(`Choose a password of at least ${MIN_PASSWORD_LENGTH} characters for your Host Portal.`);
-      return;
-    }
     setSubmitting(true);
     const cleanEmail = email.trim().toLowerCase();
     const payload: OnboardingFormPayload = {
@@ -141,7 +132,6 @@ export default function HostOnboarding() {
       serviceZone: serviceZone || undefined,
       properties,
       consentAgreement: consent,
-      password,
     };
     try {
       const res = await fetch("/api/host-onboarding", {
@@ -152,21 +142,11 @@ export default function HostOnboarding() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Submission failed");
 
-      // Seamless auth: if we just created the portal account, sign the host
-      // straight into their dashboard. If the email already had an account,
-      // sign in with the password they entered (works if it matches), else
-      // land them on the success card to log in manually.
-      if (data?.accountCreated || data?.accountExists) {
-        const { error: signInErr } = await supabase.auth.signInWithPassword({
-          email: cleanEmail,
-          password,
-        });
-        if (!signInErr) {
-          setAccountReady(true);
-          toast.success("Welcome — your Host Portal is ready.");
-          router.push("/partner/dashboard");
-          return;
-        }
+      // Passwordless handoff: the same onboarding token mints a portal session.
+      if (data?.handoffUrl) {
+        toast.success("Welcome — your Host Portal is ready.");
+        window.location.assign(data.handoffUrl as string);
+        return;
       }
       setDone(true);
     } catch (e) {
@@ -188,12 +168,7 @@ export default function HostOnboarding() {
             <span className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-400">Host Onboarding</span>
           </div>
 
-          {accountReady ? (
-            <div className="rounded-2xl border border-slate-200/70 bg-white p-8 text-center shadow-[0_1px_3px_rgba(16,24,40,0.06),0_18px_50px_-20px_rgba(79,56,255,0.25)]">
-              <RiLoader4Line className="mx-auto h-7 w-7 animate-spin text-[#5500FF]" />
-              <p className="mt-4 text-sm text-slate-500">Setting up your Host Portal…</p>
-            </div>
-          ) : done ? (
+          {done ? (
             <SuccessCard email={email} />
           ) : (
             <>
@@ -213,10 +188,6 @@ export default function HostOnboarding() {
                     setConsent={setConsent}
                     propertyCount={properties.length}
                     email={email}
-                    password={password}
-                    setPassword={setPassword}
-                    showPassword={showPassword}
-                    setShowPassword={setShowPassword}
                   />
                 )}
 
@@ -418,17 +389,16 @@ function StepProperties({
 }
 
 function StepConsent({
-  consent, setConsent, propertyCount, email, password, setPassword, showPassword, setShowPassword,
+  consent, setConsent, propertyCount, email,
 }: {
   consent: boolean; setConsent: (v: boolean) => void; propertyCount: number;
-  email: string; password: string; setPassword: (v: string) => void;
-  showPassword: boolean; setShowPassword: (v: boolean) => void;
+  email: string;
 }) {
   return (
     <div className="space-y-4">
       <div className="space-y-1">
         <h1 className="font-jakarta text-2xl font-bold tracking-tight text-slate-900">Almost there</h1>
-        <p className="text-sm text-slate-500">Create your portal access and agree to finish.</p>
+        <p className="text-sm text-slate-500">Agree to finish. You&apos;ll enter the portal without a password.</p>
       </div>
 
       <div className="rounded-xl bg-[#EDE9FE] p-4 text-sm text-slate-700">
@@ -441,31 +411,10 @@ function StepConsent({
         </ol>
       </div>
 
-      {/* Seamless account — one password and they're in. */}
-      <Field label="Create a password for your Host Portal">
-        <div className="relative">
-          <RiLockPasswordLine className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <Input
-            type={showPassword ? "text" : "password"}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
-            autoComplete="new-password"
-            className={cn(INPUT_CLS, "pr-10")}
-          />
-          <button
-            type="button"
-            onClick={() => setShowPassword(!showPassword)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-            aria-label={showPassword ? "Hide password" : "Show password"}
-          >
-            {showPassword ? <RiEyeOffLine className="h-4 w-4" /> : <RiEyeLine className="h-4 w-4" />}
-          </button>
-        </div>
-        <p className="mt-1 text-[11px] text-slate-400">
-          You'll sign in to {email ? <span className="font-medium text-slate-600">{email}</span> : "your email"} to track turnovers and review your agreement.
-        </p>
-      </Field>
+      <p className="text-sm text-slate-500">
+        Later visits use a magic link to {email ? <span className="font-medium text-slate-700">{email}</span> : "your email"}.
+        No password is created.
+      </p>
 
       <label className="flex items-start gap-3 rounded-xl border border-slate-200 p-4">
         <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-0.5 h-4 w-4 accent-[#5500FF]" />

@@ -79,6 +79,7 @@ interface Payload {
   billingProfile: Row | null;
   valueStack: Array<{ title: string; body: string }>;
   portalUrl: string;
+  handoffUrl?: string;
   submissions: Row[];
 }
 
@@ -734,17 +735,14 @@ function PortalStep({
   onPost: (b: Record<string, unknown>) => Promise<Row | null>;
 }) {
   const [email, setEmail] = useState(String(data.account?.email || ""));
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
-
-  const mismatch = confirm.length > 0 && password !== confirm;
-  const ready = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) && password.length >= 8 && !mismatch;
+  const ready = /^[^@\s]+@[^@\s]+\.[^\s@]+$/.test(email);
 
   return (
     <Card>
-      <h2 className="text-base font-semibold">Step 4 — Create your portal login</h2>
+      <h2 className="text-base font-semibold">Open your partner portal</h2>
       <p className="mt-1 text-sm leading-relaxed text-slate-600">
-        Last step. This gives you an account you can sign into from now on.
+        Last step. No password — this session signs you in and takes you to
+        partners.novaracleaning.com.
       </p>
 
       <ul className="mt-3 space-y-1.5 text-sm text-slate-600">
@@ -763,37 +761,23 @@ function PortalStep({
       </ul>
 
       <div className="mt-4 grid gap-3">
-        <Field label="Email you'll sign in with">
+        <Field label="Email you'll sign in with later">
           <input className={inputCls} type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
         </Field>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Password" hint="8+ characters">
-            <input
-              className={inputCls}
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </Field>
-          <Field label="Confirm password">
-            <input
-              className={inputCls}
-              type="password"
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-            />
-          </Field>
-        </div>
-        {mismatch && <p className="text-xs text-rose-600">Those two passwords don&apos;t match.</p>}
       </div>
 
       <button
         disabled={busy || !ready}
-        onClick={() => void onPost({ action: "create_portal", email, password })}
+        onClick={() =>
+          void onPost({ action: "create_portal", email }).then((res) => {
+            const url = (res?.handoffUrl || res?.portalUrl) as string | undefined;
+            if (url) window.location.assign(String(url));
+          })
+        }
         className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
       >
         {busy ? <RiLoader4Line className="h-4 w-4 animate-spin" /> : <RiUserAddLine className="h-4 w-4" />}
-        Create my login
+        Enter the partner portal
       </button>
     </Card>
   );
@@ -815,7 +799,7 @@ function DoneCard({ data }: { data: Payload }) {
             We&apos;ll be in touch to confirm your first service date.
           </p>
           <a
-            href={data.portalUrl}
+            href={data.handoffUrl || data.portalUrl}
             className="mt-4 inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700"
           >
             Open your portal

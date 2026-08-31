@@ -22,6 +22,7 @@ export interface ProvisionResult {
   userId: string | null;
   hostId: string | null;
   propertyIds: string[];
+  handoffUrl?: string;
   error?: string;
 }
 
@@ -122,15 +123,16 @@ export async function provisionHostAccount(
     propertyIds: [],
   };
 
-  if (!payload.password) {
-    // No password supplied → caller chose not to provision an account.
-    return result;
-  }
-
   try {
+    const { data: byEmail } = await admin.from("hosts").select("id, user_id").ilike("email", payload.email).maybeSingle();
+    if (byEmail?.id) {
+      result.hostId = byEmail.id as string;
+      result.userId = (byEmail.user_id as string) || null;
+      result.accountExists = true;
+    }
+
     const created = await admin.auth.admin.createUser({
       email: payload.email,
-      password: payload.password,
       email_confirm: true,
       user_metadata: {
         is_partner_host: true,
@@ -143,21 +145,39 @@ export async function provisionHostAccount(
     if (created.error) {
       if (isDuplicate(created.error.message)) {
         result.accountExists = true;
-        result.userId = await findUserIdByEmail(admin, payload.email);
-      } else {
-        result.error = created.error.message;
-        return result;
+        result.userId = result.userId || (await findUserIdByEmail(admin, payload.email));
       }
     } else {
       result.accountCreated = true;
       result.userId = created.data.user?.id || null;
     }
 
-    if (result.userId) {
+    if (result.userId && !result.hostId) {
       result.hostId = await ensureHost(admin, result.userId, payload);
-      if (result.hostId) {
-        result.propertyIds = await insertProperties(admin, result.hostId, payload);
-      }
+    }
+    if (!result.hostId) {
+      const inserted = await admin
+        .from("hosts")
+        .insert({
+          email: payload.email,
+          name: payload.fullName || null,
+          phone: digits(payload.phone) || null,
+          user_id: result.userId,
+        })
+        .select("id")
+        .single();
+      result.hostId = (inserted.data?.id as string) || null;
+    }
+    if (result.hostId) {
+      result.propertyIds = await insertProperties(admin, result.hostId, payload);
+      const { provisionHostPortalAccess } = await import("@/lib/partner-portal/handoff");
+      const access = await provisionHostPortalAccess({
+        email: payload.email,
+        hostId: result.hostId,
+        displayName: payload.fullName,
+        phone: payload.phone,
+      });
+      result.handoffUrl = access.handoffUrl;
     }
     return result;
   } catch (e) {

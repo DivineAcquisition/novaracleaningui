@@ -103,9 +103,11 @@ serve(async (req) => {
     }
 
     if (action === "lookup") {
+      const kinds = [...(isHost ? ["host"] : []), ...(account ? ["commercial"] : [])];
       return json({
         ok: true,
-        kind: isHost ? "host" : account ? "commercial" : "none",
+        kind: kinds.length === 2 ? "both" : isHost ? "host" : account ? "commercial" : "none",
+        kinds,
       });
     }
 

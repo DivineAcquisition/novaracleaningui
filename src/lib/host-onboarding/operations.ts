@@ -503,11 +503,30 @@ export async function provisionHostPortal(
     session: Row;
     host: Row;
     email: string;
-    password: string;
+    password?: string;
     fullName?: string;
   },
-): Promise<{ ok: boolean; created: boolean; linkedExisting: boolean; userId: string | null; error?: string; portalUrl: string }> {
-  const portal = portalUrl();
+): Promise<{ ok: boolean; created: boolean; linkedExisting: boolean; userId: string | null; error?: string; portalUrl: string; handoffUrl?: string }> {
+  const { provisionHostPortalAccess } = await import("@/lib/partner-portal/handoff");
+  const email = String(input.email || input.session.recipient_email || input.host.email || "").trim().toLowerCase();
+  const access = await provisionHostPortalAccess({
+    email,
+    hostId: String(input.host.id),
+    displayName: input.fullName || (input.host.name as string) || null,
+    phone: (input.host.phone as string) || null,
+    sessionId: String(input.session.id),
+  });
+  const portal = access.handoffUrl || portalUrl();
+  if (!access.ok) {
+    return {
+      ok: false,
+      created: false,
+      linkedExisting: false,
+      userId: null,
+      error: access.error,
+      portalUrl: portalUrl(),
+    };
+  }
   if (input.host.user_id || input.session.portal_user_id) {
     return {
       ok: true,
@@ -515,14 +534,17 @@ export async function provisionHostPortal(
       linkedExisting: true,
       userId: String(input.host.user_id || input.session.portal_user_id),
       portalUrl: portal,
+      handoffUrl: access.handoffUrl,
     };
   }
 
-  const email = input.email.trim().toLowerCase();
+  // Passwordless identity + handoff is enough. Linking an auth.users row is
+  // best-effort for older host.user_id joins — we never set or store a password.
+  let userId: string | null = null;
+  let linkedExisting = false;
   try {
     const created = await supabase.auth.admin.createUser({
       email,
-      password: input.password,
       email_confirm: true,
       user_metadata: {
         is_partner_host: true,
@@ -530,61 +552,41 @@ export async function provisionHostPortal(
         phone: input.host.phone || null,
       },
     });
-
-    let userId: string | null = null;
-    let linkedExisting = false;
     if (created.error) {
-      if (!isDuplicate(created.error.message)) {
-        return { ok: false, created: false, linkedExisting: false, userId: null, error: created.error.message, portalUrl: portal };
-      }
-      linkedExisting = true;
-      userId = await findUserIdByEmail(supabase, email);
-      if (!userId) {
-        return {
-          ok: false,
-          created: false,
-          linkedExisting: true,
-          userId: null,
-          error: "That email already has an account, but we couldn't link it. Reply and we'll finish this.",
-          portalUrl: portal,
-        };
+      if (isDuplicate(created.error.message)) {
+        linkedExisting = true;
+        userId = await findUserIdByEmail(supabase, email);
       }
     } else {
       userId = created.data?.user?.id || null;
     }
-
-    if (!userId) {
-      return { ok: false, created: false, linkedExisting, userId: null, error: "Could not create the login.", portalUrl: portal };
+    if (userId) {
+      await supabase.from("hosts").update({ user_id: userId }).eq("id", input.host.id as string).is("user_id", null);
     }
-
-    await supabase.from("hosts").update({ user_id: userId }).eq("id", input.host.id as string).is("user_id", null);
-    // If user_id was already set by a race, keep the existing one.
-    const { data: fresh } = await supabase.from("hosts").select("user_id").eq("id", input.host.id as string).maybeSingle();
-    const linked = (fresh?.user_id as string) || userId;
-
-    const now = new Date().toISOString();
-    await supabase
-      .from("host_onboarding_sessions")
-      .update({
-        portal_user_id: linked,
-        portal_provisioned_at: now,
-        last_completed_step: "payment",
-        last_activity_at: now,
-        updated_at: now,
-      })
-      .eq("id", input.session.id as string);
-
-    return { ok: true, created: !linkedExisting, linkedExisting, userId: linked, portalUrl: portal };
-  } catch (err) {
-    return {
-      ok: false,
-      created: false,
-      linkedExisting: false,
-      userId: null,
-      error: err instanceof Error ? err.message : String(err),
-      portalUrl: portal,
-    };
+  } catch {
+    /* identity handoff already succeeded */
   }
+
+  const now = new Date().toISOString();
+  await supabase
+    .from("host_onboarding_sessions")
+    .update({
+      portal_user_id: userId,
+      portal_provisioned_at: now,
+      last_completed_step: "payment",
+      last_activity_at: now,
+      updated_at: now,
+    })
+    .eq("id", input.session.id as string);
+
+  return {
+    ok: true,
+    created: !linkedExisting,
+    linkedExisting,
+    userId,
+    portalUrl: portal,
+    handoffUrl: access.handoffUrl,
+  };
 }
 
 export async function markPortalAlreadyLinked(supabase: Admin, session: Row, host: Row): Promise<void> {

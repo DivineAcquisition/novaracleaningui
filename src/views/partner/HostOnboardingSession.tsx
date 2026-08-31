@@ -30,7 +30,6 @@ import {
   formatTurnoverRate,
   type PaymentOptionKey,
 } from "@/lib/host-onboarding/agreement";
-import { MIN_PASSWORD_LENGTH } from "@/lib/host-onboarding/types";
 import type { HostOnboardingProgress } from "@/lib/host-onboarding/progress";
 import type { SnapshotProperty } from "@/lib/host-onboarding/session";
 
@@ -66,6 +65,7 @@ interface Payload {
   additionalRequests: Row[];
   paymentOptions: Array<{ key: PaymentOptionKey; title: string; summary: string; body: string }>;
   portalUrl: string;
+  handoffUrl?: string;
   agreementSignedAt: string | null;
   signerName: string | null;
 }
@@ -623,7 +623,6 @@ function PaymentStep({
   const [option, setOption] = useState<PaymentOptionKey>(
     (data.session.paymentOption as PaymentOptionKey) || data.paymentOptions[0]?.key || "full",
   );
-  const [password, setPassword] = useState("");
   const needsPortal = !data.host.hasPortal;
   const cardReady = data.host.cardOnFile || data.progress.payment_ready;
 
@@ -683,24 +682,14 @@ function PaymentStep({
 
       {cardReady && needsPortal && (
         <Card>
-          <h3 className="text-base font-semibold">Create your portal login</h3>
+          <h3 className="text-base font-semibold">Open your portal</h3>
           <p className="mt-1 text-sm text-slate-500">
-            This opens {data.portalUrl.replace(/^https:\/\//, "")} so you can book turnovers.
+            No password. This signs you in from this same setup session and takes you to the
+            host portal.
           </p>
           <p className="mt-3 text-sm text-slate-600">
             Email: <strong>{data.host.email}</strong>
           </p>
-          <label className="mt-3 block">
-            <span className="text-sm font-medium text-slate-700">Password</span>
-            <input
-              type="password"
-              className={`${inputCls} mt-1`}
-              autoComplete="new-password"
-              placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </label>
           <button
             type="button"
             disabled={busy}
@@ -708,13 +697,16 @@ function PaymentStep({
               void onPost({
                 action: "create_portal",
                 email: data.host.email,
-                password,
                 fullName: data.host.name,
+              }).then((res) => {
+                const url = (res as { handoffUrl?: string; portalUrl?: string } | null)?.handoffUrl
+                  || (res as { portalUrl?: string } | null)?.portalUrl;
+                if (url) window.location.assign(url);
               })
             }
             className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-violet-600 text-sm font-semibold text-white disabled:opacity-60"
           >
-            {busy ? <RiLoader4Line className="h-4 w-4 animate-spin" /> : "Create portal access"}
+            {busy ? <RiLoader4Line className="h-4 w-4 animate-spin" /> : "Enter the host portal"}
           </button>
         </Card>
       )}
@@ -734,12 +726,12 @@ function DoneCard({ data }: { data: Payload }) {
         ready. Open the host portal to book turnovers.
       </p>
       <a
-        href={data.portalUrl}
+        href={data.handoffUrl || data.portalUrl}
         className="mt-5 inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-violet-600 px-5 text-sm font-semibold text-white hover:bg-violet-700"
       >
         Open host portal <RiExternalLinkLine className="h-4 w-4" />
       </a>
-      <p className="mt-3 text-xs text-slate-400">{data.portalUrl}</p>
+      <p className="mt-3 text-xs text-slate-400">You&apos;re already signed in from this setup session.</p>
     </Card>
   );
 }

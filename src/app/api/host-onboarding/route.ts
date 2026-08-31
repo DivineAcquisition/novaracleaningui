@@ -163,10 +163,9 @@ export async function POST(req: Request): Promise<NextResponse> {
   return NextResponse.json({
     ok: true,
     submissionId,
-    // Tells the client whether to auto sign-in (created) or prompt login
-    // (the email already had a portal account).
     accountCreated: provision.accountCreated,
     accountExists: provision.accountExists,
+    handoffUrl: provision.handoffUrl,
     warnings: warnings.length ? warnings : undefined,
   });
 }

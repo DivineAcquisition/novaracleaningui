@@ -53,6 +53,8 @@ export function applyHostOnboardingPreviewAction(action: string, body: Record<st
   message?: string;
   outcome?: string;
   url?: string;
+  handoffUrl?: string;
+  portalUrl?: string;
 } {
   if (action === "sign") {
     previewMem.signed = true;
@@ -89,7 +91,15 @@ export function applyHostOnboardingPreviewAction(action: string, body: Record<st
   }
   if (action === "create_portal") {
     previewMem.portal = true;
-    return { ok: true, status: 200, outcome: "portal_created", message: "Your portal login is ready." };
+    const handoffUrl = "/partner/enter/preview-host";
+    return {
+      ok: true,
+      status: 200,
+      outcome: "portal_created",
+      message: "Your portal is ready — no password needed.",
+      handoffUrl,
+      portalUrl: handoffUrl,
+    };
   }
   return { ok: false, status: 400, message: `Unknown action "${action}".` };
 }
@@ -197,7 +207,8 @@ export function hostOnboardingPreviewPayload(step?: string) {
       requested_address: "400 E Pratt Street, Baltimore, MD",
     })),
     paymentOptions: Object.values(PAYMENT_OPTIONS).filter((o) => o.key !== "pay_after" || payAfter),
-    portalUrl: portalUrl(),
+    portalUrl: previewMem.portal ? "/partner/enter/preview-host" : portalUrl(),
+    handoffUrl: previewMem.portal ? "/partner/enter/preview-host" : undefined,
     agreementSignedAt: previewMem.signed ? new Date().toISOString() : null,
     signerName: previewMem.signed ? "Jordan Hale" : null,
   };
