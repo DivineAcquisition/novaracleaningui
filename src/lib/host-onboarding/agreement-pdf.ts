@@ -13,6 +13,22 @@ import {
 } from "./agreement";
 import type { SnapshotProperty } from "./session";
 
+/**
+ * pdf-lib Helvetica is WinAnsi. A checkbox, emoji, or dash in the agreement
+ * copy must not throw — that would leave the host stuck on Legal.
+ */
+function pdfSafe(value: string): string {
+  return String(value ?? "")
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
+    .replace(/[\u2010-\u2015\u2212]/g, "-")
+    .replace(/\u2026/g, "...")
+    .replace(/[\u2022\u00B7]/g, "-")
+    .replace(/\u00A0/g, " ")
+    .replace(/[\u2610\u2611\u2612\u2713\u2714]/g, "[x]")
+    .replace(/[^\x09\x0A\x0D\x20-\x7E\u00A1-\u00FF]/g, "");
+}
+
 export interface HostAgreementPdfFields {
   signerName: string;
   signerEmail: string;
@@ -57,7 +73,7 @@ export async function buildHostAgreementBase64(fields: HostAgreementPdfFields): 
     opts: { size?: number; f?: typeof font; color?: typeof dark; x?: number; dy?: number } = {},
   ) => {
     const size = opts.size ?? 10;
-    page.drawText(value, {
+    page.drawText(pdfSafe(value), {
       x: opts.x ?? MARGIN,
       y,
       size,
@@ -74,7 +90,7 @@ export async function buildHostAgreementBase64(fields: HostAgreementPdfFields): 
     const size = opts.size ?? 9.5;
     const f = opts.f ?? font;
     const maxWidth = opts.width ?? RIGHT - (opts.x ?? MARGIN);
-    const words = value.split(/\s+/);
+    const words = pdfSafe(value).split(/\s+/);
     let line = "";
     for (const word of words) {
       const candidate = line ? `${line} ${word}` : word;
@@ -114,8 +130,8 @@ export async function buildHostAgreementBase64(fields: HostAgreementPdfFields): 
 
   const field = (label: string, value: string) => {
     room(16);
-    page.drawText(label, { x: MARGIN, y, size: 9, font: bold, color: gray });
-    page.drawText(value || "—", { x: MARGIN + 132, y, size: 10, font, color: dark });
+    page.drawText(pdfSafe(label), { x: MARGIN, y, size: 9, font: bold, color: gray });
+    page.drawText(pdfSafe(value || "-"), { x: MARGIN + 132, y, size: 10, font, color: dark });
     y -= 17;
   };
 
@@ -182,7 +198,7 @@ export async function buildHostAgreementBase64(fields: HostAgreementPdfFields): 
   room(80);
   text("Acknowledged binding provisions", { size: 11, f: bold, dy: 14 });
   for (const ack of BINDING_ACKNOWLEDGMENTS) {
-    wrap(`☑  ${ack.label}. ${ack.text}`, { size: 8.5 });
+    wrap(`[x] ${ack.label}. ${ack.text}`, { size: 8.5 });
     y -= 4;
   }
 

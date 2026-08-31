@@ -315,8 +315,9 @@ function LegalStep({
         signatureDataUrl: signature,
         pdfBase64,
       });
-    } catch {
-      onError("The signed document didn't generate. Please reload and try again.");
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : "Please reload and try again.";
+      onError(`The signed document didn't generate. ${detail}`);
     }
   };
 

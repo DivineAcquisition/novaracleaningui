@@ -200,4 +200,38 @@ if (failures) {
   console.error(`\n${failures} check(s) failed`);
   process.exit(1);
 }
-console.log("\nAll host-onboarding checks passed.");
+
+console.log("\nExecuted agreement PDF:");
+void (async () => {
+  const { buildHostAgreementBase64 } = await import("../src/lib/host-onboarding/agreement-pdf");
+  try {
+    const pdf = await buildHostAgreementBase64({
+      signerName: "Jordan Hale",
+      signerEmail: "jordan@example.com",
+      entityType: "individual",
+      properties: [
+        {
+          property_id: "preview-1",
+          nickname: "Harbor Loft",
+          address: "1200 Light Street, Baltimore, MD 21230",
+          bedrooms: 2,
+          bathrooms: 2,
+          sqft: 1100,
+          turnover_price: 185,
+          linen: true,
+          restock: true,
+          special_notes: null,
+        },
+      ],
+    });
+    check("PDF is a non-empty base64 document", pdf.length > 500, true);
+  } catch (err) {
+    failures++;
+    console.error(`  ✗ PDF generate threw: ${err instanceof Error ? err.message : err}`);
+  }
+  if (failures) {
+    console.error(`\n${failures} check(s) failed`);
+    process.exit(1);
+  }
+  console.log("\nAll host-onboarding checks passed.");
+})();
