@@ -1,14 +1,14 @@
 import { Suspense } from "react";
 import AdminLayout from "@/components/admin/AdminLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
-import AssistantKnowledge from "@/views/admin/AssistantKnowledge";
+import AssistantConsole from "@/views/admin/AssistantConsole";
 
 export default function Page() {
   return (
     <ProtectedRoute requiredRole="admin_strict">
       <AdminLayout>
         <Suspense>
-          <AssistantKnowledge />
+          <AssistantConsole />
         </Suspense>
       </AdminLayout>
     </ProtectedRoute>

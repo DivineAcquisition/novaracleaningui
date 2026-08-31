@@ -8,6 +8,10 @@ import { NextResponse } from "next/server";
 
 import { AdminAuthError } from "@/lib/admin-auth";
 import { groundAnswer, toChatMessage } from "@/lib/ops-assistant/answer";
+import { searchDriveFiles, wantsDriveLookup } from "@/lib/ops-assistant/drive";
+import { looksLikeDontKnow } from "@/lib/ops-assistant/feedback-loop";
+import { financialScopeForRole } from "@/lib/ops-assistant/insight-access";
+import { loadInsightFacts } from "@/lib/ops-assistant/insights";
 import { loadGuideChunks } from "@/lib/ops-assistant/load-knowledge";
 import { loadLiveFacts, wantsLiveData } from "@/lib/ops-assistant/live-data";
 import { loadModelControl, polishAnswer } from "@/lib/ops-assistant/llm";
@@ -104,6 +108,22 @@ export async function POST(req: Request) {
       ];
     }
 
+    // Financial aggregates for a VA never reach a query.
+    const financialScope = financialScopeForRole(message, principal.role);
+    let insightHypotheses: string[] = [];
+    if (financialScope.kind !== "escalation") {
+      const insight = await loadInsightFacts({ supabase: sb, role: principal.role, message });
+      liveFacts = [...liveFacts, ...insight.facts];
+      insightHypotheses = insight.hypotheses;
+    }
+
+    const driveHits =
+      financialScope.kind === "escalation"
+        ? []
+        : wantsDriveLookup(message)
+          ? await searchDriveFiles({ supabase: sb, role: principal.role, message, page })
+          : [];
+
     const grounded = groundAnswer({
       message,
       surface,
@@ -114,6 +134,8 @@ export async function POST(req: Request) {
       articles,
       liveFacts,
       moneyTerms: settings.money_adjacent_intents,
+      insightHypotheses,
+      driveHits,
     });
 
     let threadId: string | null = null;
@@ -138,7 +160,12 @@ export async function POST(req: Request) {
       grounded: grounded.text,
       retrieved: grounded.retrieved,
       history,
-      intent: grounded.moneyAdjacent ? "pricing" : grounded.intent,
+      intent:
+        grounded.intent === "insight" || grounded.moneyAdjacent
+          ? grounded.intent === "insight"
+            ? "insight-analysis"
+            : "pricing"
+          : grounded.intent,
       settings,
     });
 
@@ -161,6 +188,7 @@ export async function POST(req: Request) {
         page,
         escalation: chat.escalation,
         writeRefused: chat.writeRefused,
+        didNotKnow: looksLikeDontKnow(chat.content),
       });
       await logTurn(sb, {
         threadId,

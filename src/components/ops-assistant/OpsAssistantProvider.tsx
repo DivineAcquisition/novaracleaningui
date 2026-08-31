@@ -34,6 +34,7 @@ interface OpsAssistantValue {
   setRecord: (record: PageRecord | null) => void;
   ask: (text: string, entry?: AssistantEntry) => Promise<void>;
   askFromSearch: (text: string) => Promise<void>;
+  rate: (messageId: string, rating: "helpful" | "not_helpful", note?: string) => Promise<void>;
 }
 
 const Ctx = createContext<OpsAssistantValue | null>(null);
@@ -114,6 +115,7 @@ export function OpsAssistantProvider({
         entry,
         escalation: false,
         writeRefused: false,
+        rating: null,
         createdAt: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, optimistic]);
@@ -145,6 +147,30 @@ export function OpsAssistantProvider({
     [page, sending, surface],
   );
 
+  const rate = useCallback(
+    async (messageId: string, rating: "helpful" | "not_helpful", note?: string) => {
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, rating, ratingNote: note || m.ratingNote || null } : m)),
+      );
+      try {
+        const headers = await authHeaders(surface);
+        const res = await fetch("/api/ops-assistant/feedback", {
+          method: "POST",
+          headers,
+          credentials: "include",
+          body: JSON.stringify({ messageId, rating, note: note || "" }),
+        });
+        if (!res.ok) {
+          const data = (await res.json().catch(() => ({}))) as { error?: string };
+          throw new Error(data.error || "Could not save that rating.");
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Could not save that rating.");
+      }
+    },
+    [surface],
+  );
+
   const askFromSearch = useCallback(
     async (text: string) => {
       await ask(text, "search");
@@ -164,8 +190,9 @@ export function OpsAssistantProvider({
       setRecord,
       ask,
       askFromSearch,
+      rate,
     }),
-    [surface, open, messages, sending, error, page, ask, askFromSearch],
+    [surface, open, messages, sending, error, page, ask, askFromSearch, rate],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

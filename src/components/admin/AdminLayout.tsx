@@ -186,7 +186,7 @@ const NAV_ITEMS: NavItem[] = [
     title: "Assistant",
     url: "/admin/assistant",
     icon: RiSparklingLine,
-    description: "Policy & escalation knowledge",
+    description: "Policy · review queue · assistant health",
     adminOnly: true,
   },
 ];

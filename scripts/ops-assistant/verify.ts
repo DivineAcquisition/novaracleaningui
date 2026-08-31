@@ -22,6 +22,23 @@ import { detectEscalation, detectWriteIntent, isMoneyAdjacent, stripRecalledMone
 import { retrieveChunks, screenSlugFromPath } from "../../src/lib/ops-assistant/retrieval";
 import { extractSteps } from "../../src/lib/ops-assistant/walkthrough";
 import { BUILTIN_ARTICLES } from "../../src/lib/ops-assistant/policy-articles";
+import {
+  FINANCIAL_SCOPE_REASON,
+  classifyInsightTopic,
+  financialScopeForRole,
+  isFinancialAggregate,
+} from "../../src/lib/ops-assistant/insight-access";
+import { wantsDriveLookup } from "../../src/lib/ops-assistant/drive";
+import {
+  citationOk,
+  clusterSignals,
+  crossesThreshold,
+  deterministicFeedbackInsight,
+  looksLikeDontKnow,
+  parseFeedbackSettings,
+  type SignalRow,
+} from "../../src/lib/ops-assistant/feedback-loop";
+import { DEFAULT_SYSTEM_PROMPT } from "../../src/lib/ops-assistant/prompt";
 
 const ROOT = resolve(__dirname, "../..");
 const problems: string[] = [];
@@ -82,9 +99,37 @@ function wiring() {
   assert(live.includes("commercial_coi_status"), "COI status must be computed live, not recalled");
 
   const llm = readSrc("lib/ops-assistant/llm.ts");
-  assert(llm.includes("assist-and-draft only"), "model prompt must keep the no-write guardrail");
-  assert(llm.includes("NEVER recalled") || llm.includes("never recalled"), "model prompt must refuse recalled prices");
+  const prompt = readSrc("lib/ops-assistant/prompt.ts");
+  assert(
+    llm.includes("assist-and-draft only") || prompt.includes("assist-and-draft only"),
+    "model prompt must keep the no-write guardrail",
+  );
+  assert(
+    llm.includes("NEVER recalled") || prompt.includes("NEVER recalled") || prompt.includes("never recalled"),
+    "model prompt must refuse recalled prices",
+  );
   assert(llm.includes("ops-assistant"), "model invocations must log the ops-assistant surface");
+  assert(llm.includes("insight-analysis") || llm.includes("feedback-loop") || llm.includes("insight"), "insight answers must route to the strongest configured model");
+
+  const access = readSrc("lib/ops-assistant/insight-access.ts");
+  assert(access.includes("never widen") || access.includes("check with Malik"), "aggregate access must be role-scoped");
+  assert(!/\.insert\(/.test(access), "insight-access must stay a pure gate");
+
+  const insights = readSrc("lib/ops-assistant/insights.ts");
+  assert(insights.includes("weekly_reports"), "insight reads must reuse stored weekly_reports, not a new pipeline");
+  assert(!insights.includes("from(\"stripe") && !insights.includes("collectWeekly"), "must not port the weekly-report collector into Next");
+
+  const drive = readSrc("lib/ops-assistant/drive.ts");
+  assert(drive.includes("job_documentation"), "Drive lookup must reuse job_documentation URLs");
+  assert(!/googleapis\.com\/drive/i.test(drive), "must not mint a new Drive client");
+  assert(drive.includes("role === \"admin\"") || drive.includes('role === "admin"'), "Drive search must hide admin-only files from VAs");
+
+  const panel = readSrc("components/ops-assistant/OpsAssistantPanel.tsx");
+  assert(panel.includes("not_helpful") || panel.includes("ThumbDown"), "panel must expose helpful/not-helpful feedback");
+
+  const consoleView = readSrc("views/admin/AssistantConsole.tsx");
+  assert(consoleView.includes("Review queue") || consoleView.includes("ReviewQueue"), "admin assistant page must include the review queue");
+  assert(consoleView.includes("Health"), "admin assistant page must include Assistant Health");
 }
 
 function knowledgeAndAnswers() {
@@ -276,10 +321,183 @@ function exportMatchesLive() {
   );
 }
 
+function insightDriveAndFeedback() {
+  const pack = loadPack();
+  const emptyPage = { surface: "workspace" as const, path: "/admin/dashboard", docSlug: "dashboard", record: null };
+
+  assert(isFinancialAggregate("what's our profit this month"), "profit this month is a financial aggregate");
+  assert(classifyInsightTopic("what's our current re-clean rate") === "operational", "reclean rate is operational");
+  assert(classifyInsightTopic("which zone had the most bookings this week") === "operational", "zone booking volume is operational");
+  assert(financialScopeForRole("what's our profit this month", "admin").kind === "none", "admins may see company financials");
+  assert(financialScopeForRole("what's our profit this month", "va").kind === "escalation", "VAs must not see company financials");
+  assert(financialScopeForRole("what's our profit this month", "va").reason === FINANCIAL_SCOPE_REASON, "VA financial block uses the Malik escalation");
+  assert(financialScopeForRole("what's our current re-clean rate", "va").kind === "none", "VAs may ask operational reclean rate");
+
+  const vaProfit = groundAnswer({
+    message: "what's our profit this month",
+    surface: "workspace",
+    entry: "chat",
+    role: "va",
+    page: emptyPage,
+    chunks: pack.chunks,
+    liveFacts: [
+      {
+        label: "Revenue collected",
+        value: "$12400.00",
+        source: "weekly_reports.metrics.revenue_collected_cents (stored weekly snapshot, not re-computed)",
+      },
+    ],
+  });
+  assert(vaProfit.escalation, "a VA asking company profit must escalate, not compute");
+  assert(/malik/i.test(vaProfit.text), "VA financial escalation must name Malik");
+  assert(!/12400/.test(vaProfit.text), "VA financial escalation must not leak the computed number");
+
+  const adminProfit = groundAnswer({
+    message: "how's this month's revenue tracking",
+    surface: "workspace",
+    entry: "chat",
+    role: "admin",
+    page: emptyPage,
+    chunks: pack.chunks,
+    liveFacts: [
+      {
+        label: "Revenue collected",
+        value: "$12,400.00 (+8.0% vs prior week)",
+        source: "weekly_reports.metrics.revenue_collected_cents (stored weekly snapshot, not re-computed)",
+      },
+    ],
+    insightHypotheses: [
+      "Revenue collected may be up because of more completed jobs. Worth reviewing; the snapshot does not prove a cause.",
+    ],
+  });
+  assert(!adminProfit.escalation, "an admin asking revenue must get a grounded answer, not an escalation");
+  assert(/12,400/.test(adminProfit.text), "admin revenue answers must cite the stored number");
+  assert(/weekly_reports/.test(adminProfit.text), "admin revenue answers must cite weekly_reports as the source");
+  assert(/\b(may|worth reviewing|unclear)\b/i.test(adminProfit.text), "insight answers must hedge causes");
+
+  assert(wantsDriveLookup("show me the before/after photos from last Tuesday's job at the downtown office"), "job photo questions are Drive lookups");
+  assert(wantsDriveLookup("pull up the signed agreement for this account"), "signed-agreement questions are Drive lookups");
+
+  const photos = groundAnswer({
+    message: "show me the before/after photos from last Tuesday's job at the downtown office",
+    surface: "workspace",
+    entry: "chat",
+    role: "va",
+    page: emptyPage,
+    chunks: pack.chunks,
+    driveHits: [
+      {
+        title: "Job photos — Downtown Office · 2026-08-25",
+        url: "https://drive.google.com/drive/folders/abc",
+        kind: "folder",
+        source: "job_documentation.drive_folder_url",
+        contentsConfirmed: false,
+        contentsNote: "I can't confirm what's inside this file from here — open the link rather than taking my word for the contents.",
+      },
+    ],
+  });
+  assert(
+    photos.actions.some((a) => a.kind === "drive" && a.href.includes("drive.google.com")),
+    "job photo answers must return the stored Drive link",
+  );
+  assert(/can't confirm what's inside/i.test(photos.text), "Drive answers must not guess at unconfirmed photo contents");
+
+  const blockedWeekly = groundAnswer({
+    message: "pull up the weekly report pdf",
+    surface: "workspace",
+    entry: "chat",
+    role: "va",
+    page: emptyPage,
+    chunks: pack.chunks,
+    driveHits: [],
+  });
+  assert(
+    !blockedWeekly.actions.some((a) => /weekly report/i.test(a.label)),
+    "a VA must not be handed the weekly-report Drive file",
+  );
+
+  const settings = parseFeedbackSettings({ min_signal_threshold: 1 });
+  assert(settings.min_signal_threshold >= 2, "settings must not allow a threshold of 1 — one rating is noise");
+
+  const one: SignalRow[] = [
+    {
+      messageId: "m1",
+      question: "what's our reclean rate",
+      answer: "I don't know",
+      rating: "not_helpful",
+      ratingNote: "wrong",
+      escalation: false,
+      didNotKnow: true,
+    },
+  ];
+  const oneCluster = clusterSignals(one);
+  assert(oneCluster.length === 1, "a single not-helpful still clusters");
+  assert(!crossesThreshold(oneCluster[0], 2), "a single isolated not-helpful rating must not surface");
+
+  const several: SignalRow[] = [
+    ...one,
+    {
+      messageId: "m2",
+      question: "what's our reclean rate lately",
+      answer: "I don't have a workspace guide that covers that yet.",
+      rating: "not_helpful",
+      ratingNote: null,
+      escalation: false,
+      didNotKnow: true,
+    },
+    {
+      messageId: "m3",
+      question: "reclean rate this month?",
+      answer: "not sure",
+      rating: "not_helpful",
+      ratingNote: null,
+      escalation: false,
+      didNotKnow: false,
+    },
+  ];
+  const clustered = clusterSignals(several);
+  assert(clustered.length >= 1, "repeated reclean-rate questions must cluster");
+  assert(
+    clustered.some((c) => crossesThreshold(c, 2) && c.notHelpful >= 2),
+    "several not-helpful ratings on one topic must cross the threshold",
+  );
+  const surfaced = clustered.find((c) => crossesThreshold(c, 2))!;
+  const insight = deterministicFeedbackInsight(surfaced);
+  assert(surfaced.examples.length >= 1, "a surfaced pattern must carry supporting question examples");
+  assert(/\d/.test(insight.numbers), "feedback insights must cite counts");
+  assert(/\b(may|worth reviewing|unclear)\b/i.test(insight.hypothesis), "feedback insights must hedge");
+  assert(
+    citationOk(insight, JSON.stringify({ not_helpful: surfaced.notHelpful, dont_know: surfaced.dontKnow })),
+    "every digit in a feedback insight must be traceable to the pulled counts",
+  );
+
+  const unhedged = { ...insight, hypothesis: "The docs are wrong and must be rewritten." };
+  assert(!citationOk(unhedged, insight.numbers), "an unsupported causal claim must not pass the citation gate");
+
+  assert(looksLikeDontKnow("I don't have a workspace guide that covers that yet."), "don't-know detection matches the extractive fallback");
+  assert(DEFAULT_SYSTEM_PROMPT.includes("assist-and-draft only"), "version-0 prompt keeps the no-write guardrail");
+  assert(DEFAULT_SYSTEM_PROMPT.includes("NEVER recalled"), "version-0 prompt keeps live-never-recalled pricing");
+
+  const insightsApi = readSrc("app/api/admin/assistant/insights/route.ts");
+  assert(insightsApi.includes("apply_ops_assistant_prompt_edit"), "prompt edits from the queue must go through the versioned RPC");
+  assert(insightsApi.includes("docs_noted"), "the queue must support a docs-update action that does not rewrite markdown itself");
+  assert(!/update\(.*body/.test(insightsApi) || insightsApi.includes("prompt_edited"), "prompt body only changes on an explicit prompt_edited resolve");
+
+  const mig = join(ROOT, "supabase/migrations/20260831060000_ops_assistant_insights_feedback.sql");
+  assert(existsSync(mig), "feedback-loop migration must exist");
+  if (existsSync(mig)) {
+    const sql = readFileSync(mig, "utf8");
+    assert(sql.includes("min_signal_threshold"), "migration must store the minimum signal threshold");
+    assert(sql.includes("ops_assistant_health"), "migration must create the Assistant Health view");
+    assert(sql.includes("Nothing here edits") || sql.includes("never edits"), "migration comments must say the loop does not auto-edit");
+  }
+}
+
 function main() {
   wiring();
   knowledgeAndAnswers();
   guardrailUnit();
+  insightDriveAndFeedback();
   exportMatchesLive();
 
   if (problems.length) {

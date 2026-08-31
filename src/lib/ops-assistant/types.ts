@@ -70,7 +70,14 @@ export interface Citation {
 export interface NextAction {
   label: string;
   href: string;
-  kind: "workspace" | "docs";
+  kind: "workspace" | "docs" | "drive";
+}
+
+export interface LiveFact {
+  label: string;
+  value: string;
+  /** Where this number/status came from, so it cannot be mistaken for recall. */
+  source: string;
 }
 
 export interface ChatMessage {
@@ -84,6 +91,9 @@ export interface ChatMessage {
   escalation: boolean;
   writeRefused: boolean;
   createdAt: string;
+  rating?: "helpful" | "not_helpful" | null;
+  ratingNote?: string | null;
+  didNotKnow?: boolean;
 }
 
 export interface AskRequest {

@@ -9,6 +9,7 @@
 // fluency layer on top of it. Citations and actions always come from
 // retrieval, never from the model.
 
+import { loadSystemPrompt } from "./prompt";
 import type { Retrieved } from "./types";
 
 export type ModelTier = "default" | "strongest" | "fallback";
@@ -73,6 +74,7 @@ export function mergeModelControl(raw: unknown): ModelControlSettings {
 export function tierForIntent(intent: string | null | undefined, settings: ModelControlSettings): ModelTier {
   const value = String(intent || "").toLowerCase();
   if (!value) return "default";
+  if (/\b(insight|analysis|weekly-report|feedback-loop)\b/.test(value)) return "strongest";
   return settings.money_adjacent_intents.some((i) => value.includes(i)) ? "strongest" : "default";
 }
 
@@ -117,19 +119,8 @@ export interface PolishResult {
   error: string | null;
 }
 
-const SYSTEM = `You are the Novara Ops Assistant. You help VAs and admins use the admin workspace.
-
-HARD RULES
-- You are assist-and-draft only. You never create, send, update, delete, charge, or assign. If asked to do those, refuse and offer to walk them through the click path.
-- Answers about how the software works come from the retrieved documentation chunks. Quote the guide; do not invent a step that is not in the chunks.
-- Cite the source by the guide title ("Per the Bookings guide…"). Do not invent a URL. The client will attach the real links.
-- Pricing and pay figures are NEVER recalled. If the live facts do not include a computed number, say you need the live inputs. Dollar amounts that appear inside a documentation chunk are historical — ignore them.
-- Escalation topics (legal, termination, comps, special rates, deleting a customer) are routed to "confirm with management." Do not give a workaround.
-- When a chunk is marked HARD STOP, quote the condition. Do not paraphrase an override that does not exist.
-- When a chunk is marked KNOWN DISCREPANCY, surface both sides. Do not pick a winner.
-- Permission: if a guide is admin-only and the asker is a VA, tell them so rather than walking them through the screen.
-- You may move between a how-to question and a live-data question in the same conversation. Live facts are labelled; do not mix them up with documentation.
-- Keep answers short. Warm, plain, no corporate filler.`;
+/** @deprecated Use DEFAULT_SYSTEM_PROMPT from ./prompt — kept so verify still finds the guardrail strings. */
+export { DEFAULT_SYSTEM_PROMPT as SYSTEM } from "./prompt";
 
 export function buildUserPrompt(args: {
   question: string;
@@ -171,7 +162,7 @@ async function callAnthropic(
   apiKey: string,
   model: string,
   user: string,
-  opts: { maxTokens: number; timeoutMs: number },
+  opts: { maxTokens: number; timeoutMs: number; system: string },
 ): Promise<{ ok: boolean; text?: string; resolvedModel?: string; error?: string }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs);
@@ -188,7 +179,7 @@ async function callAnthropic(
         model,
         max_tokens: opts.maxTokens,
         temperature: 0.1,
-        system: SYSTEM,
+        system: opts.system,
         messages: [{ role: "user", content: user }],
       }),
     });
@@ -210,7 +201,7 @@ async function callOpenAI(
   apiKey: string,
   model: string,
   user: string,
-  opts: { maxTokens: number; timeoutMs: number },
+  opts: { maxTokens: number; timeoutMs: number; system: string },
 ): Promise<{ ok: boolean; text?: string; resolvedModel?: string; error?: string }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs);
@@ -224,7 +215,7 @@ async function callOpenAI(
         temperature: 0.1,
         max_tokens: opts.maxTokens,
         messages: [
-          { role: "system", content: SYSTEM },
+          { role: "system", content: opts.system },
           { role: "user", content: user },
         ],
       }),
@@ -271,6 +262,7 @@ export async function polishAnswer(args: {
 
   if (!apiKey) return empty(`${provider} API key is not configured`);
 
+  const prompt = await loadSystemPrompt(args.sb);
   const user = buildUserPrompt({
     question: args.question,
     grounded: args.grounded,
@@ -280,18 +272,17 @@ export async function polishAnswer(args: {
 
   const call = provider === "openai" ? callOpenAI : callAnthropic;
   const started = Date.now();
-  let raw = await call(apiKey, settings.tiers[requestedTier], user, {
+  const callOpts = {
     maxTokens: settings.max_tokens,
     timeoutMs: settings.timeout_ms,
-  });
+    system: prompt.body,
+  };
+  let raw = await call(apiKey, settings.tiers[requestedTier], user, callOpts);
   let servedTier = requestedTier;
   let fellBack = false;
 
   if (!raw.ok && requestedTier !== "fallback" && settings.tiers.fallback !== settings.tiers[requestedTier]) {
-    const retry = await call(apiKey, settings.tiers.fallback, user, {
-      maxTokens: settings.max_tokens,
-      timeoutMs: settings.timeout_ms,
-    });
+    const retry = await call(apiKey, settings.tiers.fallback, user, callOpts);
     if (retry.ok) {
       raw = retry;
       servedTier = "fallback";
@@ -334,4 +325,37 @@ export async function polishAnswer(args: {
   }
 
   return result;
+}
+
+/** Strongest-configured-model JSON/text completion for the feedback-loop insights. */
+export async function completeWithConfiguredModel(args: {
+  sb: SB | null;
+  system: string;
+  user: string;
+  intent: string;
+  settings?: ModelControlSettings;
+  maxTokens?: number;
+}): Promise<{ text: string | null; model: string; ok: boolean; error: string | null }> {
+  const settings = args.settings || (await loadModelControl(args.sb));
+  const requestedTier = tierForIntent(args.intent, settings);
+  const provider = settings.provider;
+  const apiKey = await resolveSecret(args.sb, provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY");
+  if (!apiKey) return { text: null, model: settings.tiers[requestedTier], ok: false, error: "no api key" };
+  const call = provider === "openai" ? callOpenAI : callAnthropic;
+  const opts = {
+    maxTokens: args.maxTokens || settings.max_tokens,
+    timeoutMs: settings.timeout_ms,
+    system: args.system,
+  };
+  let raw = await call(apiKey, settings.tiers[requestedTier], args.user, opts);
+  if (!raw.ok && settings.tiers.fallback !== settings.tiers[requestedTier]) {
+    const retry = await call(apiKey, settings.tiers.fallback, args.user, opts);
+    if (retry.ok) raw = retry;
+  }
+  return {
+    text: raw.ok ? raw.text || null : null,
+    model: settings.tiers[requestedTier],
+    ok: Boolean(raw.ok && raw.text),
+    error: raw.ok ? null : raw.error || "Model call failed",
+  };
 }

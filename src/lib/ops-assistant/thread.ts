@@ -57,12 +57,24 @@ function parseJson<T>(v: unknown, fallback: T): T {
 }
 
 export async function loadMessages(sb: SB, threadId: string): Promise<ChatMessage[]> {
-  const { data, error } = await sb
+  const cols =
+    "id, role, content, citations, actions, surface, entry, escalation, write_refused, rating, rating_note, did_not_know, created_at";
+  let { data, error } = await sb
     .from("ops_assistant_messages")
-    .select("id, role, content, citations, actions, surface, entry, escalation, write_refused, created_at")
+    .select(cols)
     .eq("thread_id", threadId)
     .order("created_at", { ascending: true })
     .limit(200);
+  if (error) {
+    const retry = await sb
+      .from("ops_assistant_messages")
+      .select("id, role, content, citations, actions, surface, entry, escalation, write_refused, created_at")
+      .eq("thread_id", threadId)
+      .order("created_at", { ascending: true })
+      .limit(200);
+    data = retry.data;
+    error = retry.error;
+  }
   if (error || !data) return [];
   return (data as Array<Record<string, unknown>>).map((row) => ({
     id: String(row.id),
@@ -74,6 +86,9 @@ export async function loadMessages(sb: SB, threadId: string): Promise<ChatMessag
     entry: row.entry === "search" ? "search" : "chat",
     escalation: Boolean(row.escalation),
     writeRefused: Boolean(row.write_refused),
+    rating: row.rating === "helpful" || row.rating === "not_helpful" ? (row.rating as "helpful" | "not_helpful") : null,
+    ratingNote: row.rating_note ? String(row.rating_note) : null,
+    didNotKnow: Boolean(row.did_not_know),
     createdAt: String(row.created_at || ""),
   }));
 }
@@ -91,6 +106,7 @@ export async function appendMessage(
     page?: unknown;
     escalation?: boolean;
     writeRefused?: boolean;
+    didNotKnow?: boolean;
   },
 ): Promise<ChatMessage> {
   const { data, error } = await sb
@@ -106,8 +122,9 @@ export async function appendMessage(
       page_context: args.page || null,
       escalation: Boolean(args.escalation),
       write_refused: Boolean(args.writeRefused),
+      did_not_know: Boolean(args.didNotKnow),
     })
-    .select("id, role, content, citations, actions, surface, entry, escalation, write_refused, created_at")
+    .select("id, role, content, citations, actions, surface, entry, escalation, write_refused, rating, rating_note, did_not_know, created_at")
     .single();
   if (error) throw error;
   const row = data as Record<string, unknown>;
@@ -121,6 +138,9 @@ export async function appendMessage(
     entry: args.entry,
     escalation: Boolean(row.escalation),
     writeRefused: Boolean(row.write_refused),
+    rating: row.rating === "helpful" || row.rating === "not_helpful" ? (row.rating as "helpful" | "not_helpful") : null,
+    ratingNote: row.rating_note ? String(row.rating_note) : null,
+    didNotKnow: Boolean(row.did_not_know),
     createdAt: String(row.created_at || new Date().toISOString()),
   };
 }

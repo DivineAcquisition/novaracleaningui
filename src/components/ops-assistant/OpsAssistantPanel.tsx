@@ -9,6 +9,8 @@ import {
   RiLoader4Line,
   RiExternalLinkLine,
   RiAlertLine,
+  RiThumbUpLine,
+  RiThumbDownLine,
 } from "@remixicon/react";
 
 import { cn } from "@/lib/utils";
@@ -74,7 +76,7 @@ export function OpsAssistantSearch({
 }
 
 export function OpsAssistantPanel() {
-  const { open, setOpen, messages, sending, error, ask, page, surface } = useOpsAssistant();
+  const { open, setOpen, messages, sending, error, ask, page, surface, rate } = useOpsAssistant();
   const [draft, setDraft] = useState("");
   const endRef = useRef<HTMLDivElement | null>(null);
 
@@ -169,15 +171,63 @@ export function OpsAssistantPanel() {
             )}
             {m.actions.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-1.5">
-                {m.actions.map((a) => (
-                  <Link
-                    key={a.href}
-                    href={a.href}
-                    className="inline-flex items-center rounded-lg border border-primary/20 bg-brand-50 px-2 py-1 text-[11px] font-semibold text-primary hover:bg-brand-100"
-                  >
-                    {a.label}
-                  </Link>
-                ))}
+                {m.actions.map((a) =>
+                  a.kind === "drive" || /^https?:\/\//i.test(a.href) ? (
+                    <a
+                      key={a.href}
+                      href={a.href}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 rounded-lg border border-primary/20 bg-brand-50 px-2 py-1 text-[11px] font-semibold text-primary hover:bg-brand-100"
+                    >
+                      {a.label}
+                      <RiExternalLinkLine className="h-3 w-3" />
+                    </a>
+                  ) : (
+                    <Link
+                      key={a.href}
+                      href={a.href}
+                      className="inline-flex items-center rounded-lg border border-primary/20 bg-brand-50 px-2 py-1 text-[11px] font-semibold text-primary hover:bg-brand-100"
+                    >
+                      {a.label}
+                    </Link>
+                  ),
+                )}
+              </div>
+            )}
+            {m.role === "assistant" && !m.id.startsWith("local-") && (
+              <div className="mt-2 flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => void rate(m.id, "helpful")}
+                  className={cn(
+                    "rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground",
+                    m.rating === "helpful" && "bg-emerald-50 text-emerald-700",
+                  )}
+                  aria-label="Helpful"
+                  aria-pressed={m.rating === "helpful"}
+                >
+                  <RiThumbUpLine className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const note =
+                      typeof window !== "undefined"
+                        ? window.prompt("What was unhelpful? Optional — leave blank if nothing to add.")
+                        : "";
+                    if (note === null) return;
+                    void rate(m.id, "not_helpful", note);
+                  }}
+                  className={cn(
+                    "rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground",
+                    m.rating === "not_helpful" && "bg-rose-50 text-rose-700",
+                  )}
+                  aria-label="Not helpful"
+                  aria-pressed={m.rating === "not_helpful"}
+                >
+                  <RiThumbDownLine className="h-3.5 w-3.5" />
+                </button>
               </div>
             )}
           </article>

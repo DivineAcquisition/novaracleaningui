@@ -4,7 +4,7 @@
 // send, or change anything. VAs do not see commercial / payroll / pricing-
 // config rows even if they guess an id.
 
-import type { LiveFact } from "./answer";
+import type { LiveFact } from "./types";
 import type { AssistantRole, PageContext } from "./types";
 
 type SB = {
