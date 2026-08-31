@@ -106,6 +106,8 @@ export function applyHostOnboardingPreviewAction(action: string, body: Record<st
 
 export function hostOnboardingPreviewPayload(step?: string) {
   if (step === "legal") resetHostOnboardingPreview();
+  // `step` is a jump, not persistent state. The page strips it after the first
+  // POST so a reload does not undo sign / rate decisions.
   if (step === "rates") {
     previewMem.signed = true;
     previewMem.decisions = [];
