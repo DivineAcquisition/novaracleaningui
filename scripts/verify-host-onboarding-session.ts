@@ -14,6 +14,7 @@ import {
   ratesReady,
   sessionIsStalled,
 } from "../src/lib/host-onboarding/progress";
+import { buildHostValues, buildHostPropertyFields } from "../src/lib/docuseal";
 
 let failures = 0;
 function check(name: string, actual: unknown, expected: unknown): void {
@@ -195,6 +196,36 @@ check(
   }),
   false,
 );
+
+if (failures) {
+  console.error(`\n${failures} check(s) failed`);
+  process.exit(1);
+}
+
+console.log("\nDocuSeal host field map:");
+const hostValues = buildHostValues({
+  name: "Jordan Hale",
+  company: "Jordan Hale",
+  email: "jordan@example.com",
+  entityType: "individual",
+});
+check("Host/Entity Name is the signer", hostValues["Host/Entity Name"], "Jordan Hale");
+check("Host Email is filled", hostValues["Host Email"], "jordan@example.com");
+const hostSlots = buildHostPropertyFields([
+  {
+    nickname: "Harbor Loft",
+    address: "1200 Light Street, Baltimore, MD 21230",
+    bedrooms: 2,
+    bathrooms: 2,
+    rate: 185,
+    linen: true,
+    restock: true,
+  },
+]);
+check("three property slots are emitted", hostSlots.filter((f) => f.name === "Property Nickname").length, 3);
+check("first nickname is Harbor Loft", hostSlots.find((f) => f.name === "Property Nickname")?.default_value, "Harbor Loft");
+check("unused slot 2 is N/A", hostSlots.filter((f) => f.name === "Property Nickname")[1]?.default_value, "N/A");
+check("linen radio for slot 1 is Yes", hostSlots.find((f) => f.name === "Linen laundry")?.default_value, "Yes");
 
 if (failures) {
   console.error(`\n${failures} check(s) failed`);

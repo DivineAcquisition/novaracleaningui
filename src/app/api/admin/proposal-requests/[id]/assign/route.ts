@@ -10,6 +10,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin, AdminAuthError } from "@/lib/admin-auth";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import {
+  loadProposalChecklists,
   loadProposalSettings,
   sendProposalEmail,
   sendProposalSms,
@@ -19,6 +20,8 @@ import {
 import {
   computeWalkthroughPayCents,
   formatWhen,
+  propertyTypeByKey,
+  typeRequiresWalkthrough,
   walkthroughLink,
 } from "@/lib/proposal-request";
 
@@ -154,7 +157,10 @@ export async function POST(
   }
 
   const supabase = getAdminSupabase();
-  const settings = await loadProposalSettings(supabase);
+  const [settings, catalog] = await Promise.all([
+    loadProposalSettings(supabase),
+    loadProposalChecklists(supabase),
+  ]);
 
   const { data: request } = await supabase
     .from("proposal_requests")
@@ -162,7 +168,17 @@ export async function POST(
     .eq("id", params.id)
     .maybeSingle();
   if (!request) return NextResponse.json({ error: "Proposal request not found." }, { status: 404 });
-  const reqRow = request as Record<string, any>;
+  const reqRow = request as Record<string, unknown>;
+  const type = propertyTypeByKey(catalog, String(reqRow.property_type_key || ""));
+  if (!typeRequiresWalkthrough(type)) {
+    return NextResponse.json(
+      {
+        error:
+          "STR properties skip the walkthrough. Price bedrooms and bathrooms on the host record, then send host onboarding.",
+      },
+      { status: 400 },
+    );
+  }
 
   const { data: cleaner } = await supabase
     .from("cleaners")

@@ -3,7 +3,7 @@
 // Admin/VA-gated: send a NovaraCleaning agreement for e-signature via DocuSeal.
 // Body: { audience, email, name?, values?, role?, sendEmail?, bookingId?,
 //         hostEmail?, cleanerId? }
-// audience ∈ one_time | membership | str_host | contractor | va_contractor.
+// audience ∈ one_time | membership | str_host | commercial | contractor | va_contractor.
 
 import { NextResponse } from "next/server";
 import { requireAdmin, AdminAuthError } from "@/lib/admin-auth";
@@ -16,8 +16,10 @@ const AUDIENCES: AgreementAudience[] = [
   "one_time",
   "membership",
   "str_host",
+  "commercial",
   "contractor",
   "va_contractor",
+  "va_contractor_hourly",
 ];
 
 export async function POST(req: Request): Promise<NextResponse> {

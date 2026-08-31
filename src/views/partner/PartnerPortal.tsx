@@ -1,6 +1,6 @@
 "use client";
 
-// partners.novaracleaning.com — one portal, type-aware.
+// partner.novaracleaning.com — one portal, type-aware.
 // Passwordless session (onboarding handoff or magic link). Host and commercial
 // stay distinct under one identity. No cleaner/crew contact. No passwords.
 

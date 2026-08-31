@@ -127,7 +127,7 @@ function payload({ step, billingMethod, paused, billingConfigured, portalReady }
     billing: null,
     billingProfile: null,
     valueStack: [],
-    portalUrl: "https://partners.novaracleaning.com",
+    portalUrl: "https://partner.novaracleaning.com",
     submissions: [],
   };
 }

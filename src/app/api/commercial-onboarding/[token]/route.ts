@@ -72,7 +72,7 @@ async function loadContext(supabase: ReturnType<typeof getAdminSupabase>, sessio
       .select(
         "id, business_name, contact_name, email, phone, address, city, state, zip_code, " +
           "stripe_customer_id, requires_coi_on_file, assigned_va_email, preferred_billing_method, " +
-          "portal_user_id",
+          "portal_user_id, account_type",
       )
       .eq("id", session.business_account_id as string)
       .maybeSingle(),

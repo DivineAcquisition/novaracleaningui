@@ -46,7 +46,7 @@ const DEFAULT_SETTINGS = {
   frequency_cap_hours: 4,
   standard_max_attempts: 3,
   urgent_max_attempts: 5,
-  partners_origin: "https://partners.novaracleaning.com",
+  partners_origin: "https://partner.novaracleaning.com",
   senders: {
     partner: { from: "Novara Cleaning <hello@novaracleaning.com>", reply_to: "support@novaracleaning.com" },
     walkthrough_agent: { from: "Novara Ops <ops@novaracleaning.com>", reply_to: "ops@novaracleaning.com" },
@@ -167,7 +167,9 @@ export async function deliverPartnershipRow(
   const attempt = Number(row.attempt_count || 0) + 1;
   const sender = (settings.senders as Record<string, { from: string; reply_to: string }>)[String(row.role)]
     || settings.senders.partner;
-  const origin = String(settings.partners_origin || DEFAULT_SETTINGS.partners_origin).replace(/\/+$/, "");
+  const origin = String(settings.partners_origin || DEFAULT_SETTINGS.partners_origin)
+    .replace(/\/+$/, "")
+    .replace(/^(https?:\/\/)partners\.novaracleaning\.com/i, "$1partner.novaracleaning.com");
   const unsubHeader = row.role === "partner" && row.unsubscribe_token
     ? `${origin}/api/partnership-comms/unsubscribe?t=${encodeURIComponent(String(row.unsubscribe_token))}`
     : null;
@@ -329,8 +331,10 @@ export async function sendPartnership(admin: SB, input: PartnershipSendInput): P
     const reason = rpcErr ? "rpc_unavailable" : String(decisionRaw?.reason || "ok");
     if (action === "queue" && input.attachments?.length) action = "send";
     const unsubToken = mintToken();
-    const origin = String(settings.partners_origin || DEFAULT_SETTINGS.partners_origin);
-    const unsub = `${origin.replace(/\/+$/, "")}/partner/unsubscribe?t=${encodeURIComponent(unsubToken)}`;
+    const origin = String(settings.partners_origin || DEFAULT_SETTINGS.partners_origin)
+      .replace(/\/+$/, "")
+      .replace(/^(https?:\/\/)partners\.novaracleaning\.com/i, "$1partner.novaracleaning.com");
+    const unsub = `${origin}/partner/unsubscribe?t=${encodeURIComponent(unsubToken)}`;
     const body = channel === "email" ? withFooter(String(rawBody), role, unsub) : String(rawBody);
     const subject = channel === "email"
       ? (input.subject != null ? input.subject : substitutePartnershipTemplate(template?.subject, input.vars))
@@ -417,7 +421,7 @@ export async function sendHostPartnership(
     return;
   }
   const name = String(data.name || "there");
-  const link = String(data.agreementUrl || data.checkoutUrl || data.galleryUrl || data.link || "https://partners.novaracleaning.com/partner");
+  const link = String(data.agreementUrl || data.checkoutUrl || data.galleryUrl || data.link || "https://partner.novaracleaning.com/partner");
   const rate = String(data.rateSummary || "");
   const smsOverride = extras?.sms ?? (typeof data.smsOverride === "string" ? String(data.smsOverride) : null);
   await sendPartnership(admin, {

@@ -28,6 +28,7 @@ import {
   LEAD_SOURCES,
   START_TIMEFRAMES,
   intakeFieldsFor,
+  typeRequiresWalkthrough,
   type ProposalChecklists,
   type PropertyTypeDef,
 } from "@/lib/proposal-request";
@@ -140,7 +141,9 @@ export default function ProposalRequestIntake({
       });
       toast.success(
         out.requesterEmailed
-          ? "Proposal request in — requester emailed that a walkthrough agent is being assigned. This is not a booking."
+          ? (typeRequiresWalkthrough(type)
+            ? "Proposal request in — requester emailed that a walkthrough agent is being assigned. This is not a booking."
+            : "STR request in — requester emailed. Price bedrooms and bathrooms on the host record, then send host onboarding. No walkthrough. This is not a booking.")
           : "Proposal request saved. Requester email did not send — check templates / Resend.",
       );
       setTypeKey("");
@@ -161,7 +164,9 @@ export default function ProposalRequestIntake({
       <div className="space-y-4">
         <Section n={1} title="Property type">
           <p className="text-xs text-slate-500 -mt-1">
-            Routes the walkthrough agent&apos;s site findings (not the crew job list). Intake stays light — the on-site visit captures the rest.
+            {type && !typeRequiresWalkthrough(type)
+              ? "STR properties skip the walkthrough — they are residential. Intake stays light; you price beds, baths, and linen on the host record, then send host onboarding."
+              : "Routes the walkthrough agent's site findings (not the crew job list). Intake stays light — the on-site visit captures the rest."}
           </p>
           <div className="grid sm:grid-cols-2 gap-2">
             {types.map((t) => {
@@ -178,7 +183,9 @@ export default function ProposalRequestIntake({
                 >
                   <p className="text-sm font-semibold text-slate-900">{t.label}</p>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    {t.accountKind === "str" ? "Links to an STR host record" : `Prospective ${t.accountKind} account`}
+                    {t.accountKind === "str"
+                      ? "No walkthrough — host record, then host onboarding"
+                      : `Prospective ${t.accountKind} account · site findings visit`}
                   </p>
                 </button>
               );
@@ -220,8 +227,12 @@ export default function ProposalRequestIntake({
           </div>
         </Section>
 
-        <Section n={3} title="Property address(es)">
-          <p className="text-xs text-slate-500 -mt-1">A single request may cover several sites under one prospective account.</p>
+        <Section n={3} title={type && !typeRequiresWalkthrough(type) ? "Property address(es)" : "Property address(es)"}>
+          <p className="text-xs text-slate-500 -mt-1">
+            {type && !typeRequiresWalkthrough(type)
+              ? "Each address becomes an unpriced host property. Set the turnover rate before sending host onboarding."
+              : "A single request may cover several sites under one prospective account."}
+          </p>
           {sites.map((site, i) => (
             <div key={i} className="rounded-xl border border-slate-200 p-3 space-y-2">
               <div className="flex items-center justify-between">
@@ -278,7 +289,11 @@ export default function ProposalRequestIntake({
         {type && (
           <Section n={4} title={`${type.shortLabel} intake`}>
             {intake.length === 0 ? (
-              <p className="text-xs text-slate-500">No extra intake questions for this type — the walkthrough captures the rest.</p>
+              <p className="text-xs text-slate-500">
+                {typeRequiresWalkthrough(type)
+                  ? "No extra intake questions for this type — the walkthrough captures the rest."
+                  : "No extra intake questions. Price this host from the property record."}
+              </p>
             ) : (
               <div className="space-y-3">
                 {intake.map((item) => (
@@ -294,8 +309,12 @@ export default function ProposalRequestIntake({
           </Section>
         )}
 
-        <Section n={5} title="Walkthrough site contact">
-          <p className="text-xs text-slate-500 -mt-1">May differ from the requester. Needed so the agent can get in.</p>
+        <Section n={5} title={type && !typeRequiresWalkthrough(type) ? "Property contact" : "Walkthrough site contact"}>
+          <p className="text-xs text-slate-500 -mt-1">
+            {type && !typeRequiresWalkthrough(type)
+              ? "May differ from the requester. Stored on the host record."
+              : "May differ from the requester. Needed so the agent can get in."}
+          </p>
           <div className="grid sm:grid-cols-3 gap-3">
             <div>
               <Label className="text-xs text-slate-600">Name</Label>
@@ -321,7 +340,9 @@ export default function ProposalRequestIntake({
           <p className="text-xs text-white/80 mt-1 min-h-[2.5rem]">{addressPreview || "Address will show here"}</p>
           <p className="text-[11px] text-white/70 mt-2 flex items-start gap-1.5">
             <RiSparklingLine className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-            Submitting does not create a job booking. It opens a walkthrough pipeline and emails the requester.
+            {type && !typeRequiresWalkthrough(type)
+              ? "Submitting does not create a job or a walkthrough. It opens a host record so you can set rates and send host onboarding."
+              : "Submitting does not create a job booking. It opens a walkthrough pipeline and emails the requester."}
           </p>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-2">

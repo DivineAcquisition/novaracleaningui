@@ -1,3 +1,4 @@
+import { canonicalizePartnerOrigin } from "@/lib/partner-portal/origins";
 import type {
   PartnershipChannel,
   PartnershipCommsSettings,
@@ -182,7 +183,9 @@ export function mergePartnershipSettings(raw: unknown): PartnershipCommsSettings
     urgent_max_attempts: Number(v.urgent_max_attempts) > 0
       ? Number(v.urgent_max_attempts)
       : DEFAULT_PARTNERSHIP_COMMS_SETTINGS.urgent_max_attempts,
-    partners_origin: String(v.partners_origin || DEFAULT_PARTNERSHIP_COMMS_SETTINGS.partners_origin),
+    partners_origin: canonicalizePartnerOrigin(
+      String(v.partners_origin || DEFAULT_PARTNERSHIP_COMMS_SETTINGS.partners_origin),
+    ),
     senders: {
       partner: mergeSender("partner"),
       walkthrough_agent: mergeSender("walkthrough_agent"),

@@ -96,7 +96,7 @@ export default function ProposalsHub() {
           </span>
         </div>
         <p className="text-sm text-muted-foreground">
-          Request → tokenized onsite docs → firm price → send. Separate from Internal Booking — a request never creates a job.
+          Request → site findings (office / commercial) → firm price → send. STR skips the walkthrough — price the host record, then send host onboarding. A request never creates a job.
         </p>
       </div>
 

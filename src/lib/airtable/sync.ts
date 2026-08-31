@@ -48,6 +48,7 @@ const AGREEMENT_TYPE_BY_AUDIENCE: Record<string, string> = {
   one_time: "One-Time",
   membership: "Recurring",
   str_host: "STR Partnership",
+  commercial: "Commercial",
 };
 
 /**

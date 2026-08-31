@@ -5,6 +5,7 @@
 //   one_time      → One-Time Service Agreement   (signer role: Client)
 //   membership    → Recurring & Membership Agr.   (signer role: Member)
 //   str_host      → Host Partnership Agreement     (signer role: Host)
+//   commercial    → Commercial Cleaning Services   (signer role: Client)
 //   contractor    → Contractor Agreement           (signer role: Contractor)
 //   va_contractor → VA Independent Contractor Agr. (signer role: Contractor)
 //
@@ -18,6 +19,7 @@ export type AgreementAudience =
   | "one_time"
   | "membership"
   | "str_host"
+  | "commercial"
   | "contractor"
   | "va_contractor"
   | "va_contractor_hourly";
@@ -27,6 +29,7 @@ export const AUDIENCE_ROLE: Record<AgreementAudience, string> = {
   one_time: "Client",
   membership: "Member",
   str_host: "Host",
+  commercial: "Client",
   contractor: "Contractor",
   va_contractor: "Contractor",
   va_contractor_hourly: "Contractor",
@@ -36,11 +39,21 @@ const AUDIENCE_TEMPLATE_SECRET: Record<AgreementAudience, string> = {
   one_time: "DOCUSEAL_TEMPLATE_ONE_TIME",
   membership: "DOCUSEAL_TEMPLATE_MEMBERSHIP",
   str_host: "DOCUSEAL_TEMPLATE_STR_HOST",
+  commercial: "DOCUSEAL_TEMPLATE_COMMERCIAL",
   contractor: "DOCUSEAL_TEMPLATE_CONTRACTOR",
   va_contractor: "DOCUSEAL_TEMPLATE_VA_CONTRACTOR",
   // The "V2 Hourly" VA agreement template.
   va_contractor_hourly: "DOCUSEAL_TEMPLATE_VA_CONTRACTOR_HOURLY",
 };
+
+/** DocuSeal checkbox on the commercial template — hyphen is U+2011, not ASCII. */
+export const COMMERCIAL_AUTO_PAY_FIELD = "Auto\u2011Card or ACH";
+
+/** §3.3 walkthrough threshold blank on the commercial template (Company field). */
+export const COMMERCIAL_SQFT_THRESHOLD = 5000;
+
+/** §10.2 placement-fee blank on the commercial template (Client number field). */
+export const COMMERCIAL_LIQUIDATED_DAMAGES = 5000;
 
 // ─── Config resolution (app_secrets → env), cached ────────────────────────────
 
@@ -216,14 +229,65 @@ export function buildExhibitA(sites: ExhibitASite[]): {
   };
 }
 
+function prettyLabel(s?: string | null): string {
+  const v = String(s || "").trim();
+  if (!v) return "";
+  return v.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function netDaysFromTerms(terms?: string | null): number {
+  switch (String(terms || "")) {
+    case "net_15":
+      return 15;
+    case "net_30":
+      return 30;
+    case "net_45":
+      return 45;
+    default:
+      return 0;
+  }
+}
+
+function billingCycleLabel(method?: string | null, cycle?: string | null): string {
+  if (method === "auto_pay") return "Auto-Pay";
+  switch (String(cycle || "monthly")) {
+    case "per_visit":
+      return "per visit";
+    case "weekly":
+      return "weekly";
+    case "biweekly":
+      return "biweekly";
+    default:
+      return "monthly";
+  }
+}
+
+function serviceWindow(start?: string | null, end?: string | null): string {
+  const a = String(start || "").trim();
+  const b = String(end || "").trim();
+  if (a && b) return `${a}\u2013${b}`;
+  return a || b || "TBD";
+}
+
+function clientTypeLabel(accountType?: string | null): string {
+  const t = String(accountType || "").trim().toLowerCase();
+  if (t === "office") return "office business";
+  if (t === "partnership") return "partnership";
+  return "business";
+}
+
+export interface CommercialSitePrefill extends ExhibitASite {
+  serviceWindowStart?: string | null;
+  serviceWindowEnd?: string | null;
+  walkthroughCompleted?: boolean;
+  startDate?: string | null;
+}
+
 /**
- * Commercial Service Agreement values.
+ * Commercial Cleaning Services Agreement (template 5636550, role: Client).
  *
- * Reuses the one-time template's field names — the same contract shape the
- * commercial `send_agreement` action has always used — and adds the Exhibit A
- * schedule. Templates that carry no Exhibit A field simply ignore the extra
- * values; the schedule is still recorded and shown in the admin console, so
- * building it is never wasted.
+ * Field names must match the DocuSeal template exactly. Unused Site 2 / Site 3
+ * slots are filled with N/A so required blanks on the form still complete.
  */
 export function buildCommercialValues(b: {
   businessName: string;
@@ -231,48 +295,168 @@ export function buildCommercialValues(b: {
   email: string;
   phone?: string | null;
   address?: string | null;
-  sites: ExhibitASite[];
-}): Record<string, string | number | boolean> {
-  const exhibit = buildExhibitA(b.sites);
-  return compact({
-    "Effective Date": today(),
-    "Client Name": b.contactName || b.businessName,
-    "Company Name": b.businessName,
-    "Service Address": b.address,
-    "Phone": b.phone || undefined,
-    "Email": b.email,
-    "Selected service type": true,
-    "Exhibit A": exhibit.text,
-    "Schedule of Sites": exhibit.text,
-    // Per-visit across every priced site — the account-level number that
-    // actually corresponds to the sites being serviced.
-    "Total Service Fee": exhibit.totalPerVisitCents > 0
-      ? dollars(exhibit.totalPerVisitCents)
-      : undefined,
-  });
-}
-
-/** Host Partnership Agreement (role: Host). */
-export function buildHostValues(h: {
-  name?: string; company?: string; email: string; entityType?: "individual" | "entity";
-  propertyNickname?: string; rate?: number | null; rateEndDate?: string | null;
-  linen?: string; notes?: string;
+  accountType?: string | null;
+  billingMethod?: "auto_pay" | "invoiced" | string | null;
+  invoiceCycle?: string | null;
+  netTerms?: string | null;
+  sites: CommercialSitePrefill[];
 }): Record<string, string | number | boolean> {
   const t = today();
-  return compact({
+  const name = b.contactName || b.businessName;
+  const phone = String(b.phone || "").trim() || "000-000-0000";
+  const autoPay = b.billingMethod === "auto_pay";
+  const invoiced = b.billingMethod === "invoiced";
+  const slots: Array<Record<string, string | number | boolean>> = [];
+  const filled = b.sites.slice(0, 3);
+  const extras = b.sites.slice(3);
+
+  for (let i = 0; i < 3; i++) {
+    const s = filled[i];
+    const n = i + 1;
+    if (!s) {
+      slots.push({
+        [`Site${n} Nickname`]: "N/A",
+        [`Site${n} Facility Type`]: "N/A",
+        [`Site${n} Address`]: "N/A",
+        [`Site${n} SqFt`]: 0,
+        [`Site${n} Scope Level`]: "N/A",
+        [`Site${n} Frequency`]: "N/A",
+        [`Site${n} Service Window`]: "N/A",
+        [`Site${n} Rate`]: 0,
+        [`Site${n} Start Date`]: t,
+      });
+      continue;
+    }
+    let frequency = s.cadence || "TBD";
+    if (n === 3 && extras.length) {
+      const extraList = extras
+        .map((x) => `${x.nickname}${x.firmPriceCents ? ` ($${dollars(x.firmPriceCents)}/visit)` : ""}`)
+        .join("; ");
+      frequency = `${frequency}. Additional sites: ${extraList}`;
+    }
+    slots.push({
+      [`Site${n} Nickname`]: s.nickname,
+      [`Site${n} Facility Type`]: prettyLabel(s.facilityType) || "Commercial",
+      [`Site${n} Address`]: s.address || b.address || "TBD",
+      [`Site${n} SqFt`]: Number(s.sqft || 0),
+      [`Site${n} Scope Level`]: prettyLabel(s.scopeLevel) || "Standard",
+      [`Site${n} Frequency`]: frequency,
+      [`Site${n} Service Window`]: serviceWindow(s.serviceWindowStart, s.serviceWindowEnd),
+      [`Site${n} Rate`]: s.firmPriceCents != null ? dollars(s.firmPriceCents) : 0,
+      [`Site${n} Start Date`]: s.startDate || t,
+    });
+  }
+
+  const walkthroughYes = filled.some((s) => s.walkthroughCompleted);
+  const merged: Record<string, string | number | boolean | undefined | null> = {
     "Effective Date": t,
-    "Host/Entity Name": h.name,
-    "Company Name": h.company,
-    "Entity": h.entityType === "entity" ? "Business Entity" : "Individual",
-    "Email": h.email,
-    "Host/Entity": h.company || h.name,
-    "Printed Name": h.name,
-    "Date": t,
-    "Property Nickname": h.propertyNickname,
-    "Rate": h.rate != null ? Number(h.rate) : undefined,
-    "Rate End Date": h.rateEndDate || undefined,
-    "Linen Restock": h.linen,
-    "Notes/Scope": h.notes,
+    Client: b.businessName || name,
+    "Client Type": clientTypeLabel(b.accountType),
+    [COMMERCIAL_AUTO_PAY_FIELD]: autoPay,
+    "Billing Cycle": billingCycleLabel(b.billingMethod, b.invoiceCycle),
+    "Net Days": netDaysFromTerms(b.netTerms),
+    "Days from Invoice Date": invoiced,
+    "Liquidated Damages": COMMERCIAL_LIQUIDATED_DAMAGES,
+    "Client Printed Name": name,
+    "Client Date": t,
+    "Billing Contact Name": name,
+    "Billing Contact Email": b.email,
+    "Billing Contact Phone": phone,
+    "Primary Site Contact Name": name,
+    "Primary Site Contact Email": b.email,
+    "Primary Site Contact Phone": phone,
+    "Walkthrough Completed": walkthroughYes ? "Yes" : "N/A",
+  };
+  for (const slot of slots) Object.assign(merged, slot);
+  return compact(merged);
+}
+
+export interface HostPropertyPrefill {
+  nickname?: string | null;
+  address?: string | null;
+  bedrooms?: number | null;
+  bathrooms?: number | null;
+  rate?: number | null;
+  introRate?: number | null;
+  introEndDate?: string | null;
+  linen?: boolean;
+  restock?: boolean;
+  notes?: string | null;
+}
+
+export type HostFieldPrefill = { name: string; default_value: string | number | boolean };
+
+const HOST_LINEN_FIELDS = ["Linen laundry", "Linen laundry2", "Linen laundry3"] as const;
+const HOST_RESTOCK_FIELDS = ["Restock", "Restock2", "Restock3"] as const;
+
+function bedsBaths(bedrooms?: number | null, bathrooms?: number | null): string {
+  const beds = bedrooms == null ? "—" : String(bedrooms);
+  const baths = bathrooms == null ? "—" : String(bathrooms);
+  return `${beds} bed / ${baths} bath`;
+}
+
+/**
+ * Repeatable Part Two slots on the host template share field names (three
+ * "Property Nickname" fields, etc.). DocuSeal's `values` object cannot address
+ * those separately, so we emit them as a `fields` array in document order.
+ */
+export function buildHostPropertyFields(properties: HostPropertyPrefill[]): HostFieldPrefill[] {
+  const t = today();
+  const extras = properties.slice(3);
+  const fields: HostFieldPrefill[] = [];
+  for (let i = 0; i < 3; i++) {
+    const p = properties[i];
+    const empty = !p;
+    let notes = empty ? "Not applicable" : p.notes || "";
+    if (i === 2 && extras.length) {
+      const extraList = extras
+        .map((x) => `${x.nickname || x.address || "Property"}${x.rate != null ? ` ($${Number(x.rate)})` : ""}`)
+        .join("; ");
+      notes = [notes, `Additional properties: ${extraList}`].filter(Boolean).join(". ");
+    }
+    const rate = empty ? 0 : Number(p.rate ?? 0);
+    const intro = empty ? 0 : Number(p.introRate ?? p.rate ?? 0);
+    fields.push(
+      { name: "Property Nickname", default_value: empty ? "N/A" : p.nickname || p.address || "Property" },
+      { name: "Bedrooms/Bathrooms", default_value: empty ? "N/A" : bedsBaths(p.bedrooms, p.bathrooms) },
+      { name: "Property Address", default_value: empty ? "N/A" : p.address || "TBD" },
+      { name: "Standard Rate", default_value: rate },
+      { name: "Intro Rate", default_value: intro },
+      { name: "Intro End Date", default_value: empty ? t : p.introEndDate || t },
+      { name: HOST_LINEN_FIELDS[i], default_value: empty ? "No" : p.linen ? "Yes" : "No" },
+      { name: HOST_RESTOCK_FIELDS[i], default_value: empty ? "No" : p.restock ? "Yes" : "No" },
+      { name: "Notes/Scope", default_value: notes || "Standard turnover" },
+    );
+  }
+  if (extras.length) {
+    fields.push({ name: "Additional Option", default_value: true });
+  }
+  return fields;
+}
+
+/** Host Partnership Agreement (template 5636800, role: Host). */
+export function buildHostValues(h: {
+  name?: string;
+  company?: string;
+  email: string;
+  entityType?: "individual" | "entity" | string | null;
+  propertyNickname?: string;
+  rate?: number | null;
+  rateEndDate?: string | null;
+  linen?: string;
+  notes?: string;
+}): Record<string, string | number | boolean> {
+  const t = today();
+  const hostName = h.company || h.name;
+  return compact({
+    "Agreement Title": "Host Partnership Agreement",
+    "Confidential Notice": "CONFIDENTIAL",
+    "Effective Date": t,
+    "Host/Entity Name": hostName,
+    "Host/Entity": hostName,
+    "Host Email": h.email,
+    "Guarantor Name": h.name || hostName,
+    "Guarantor Date": t,
   });
 }
 
@@ -341,6 +525,8 @@ export interface SendAgreementInput {
   skipTracking?: boolean;
   /** Drawn signature as a data:image/png;base64 URL — rendered in the doc. */
   signatureImage?: string;
+  /** Repeatable fields that share a name (host Part Two slots). Applied in order. */
+  fields?: HostFieldPrefill[];
 }
 
 export interface SendAgreementResult {
@@ -431,10 +617,30 @@ const AUDIENCE_SPECS: Record<AgreementAudience, AudienceSpec> = {
   },
   str_host: {
     signerRole: "Host",
-    signerSignatures: ["Signature", "Host Signature"],
-    companyRole: "Company Representative",
-    companyValues: (c) => ({ "Signature": c.rep }),
-    guarantorRole: "Guarantor",
+    signerSignatures: ["Host Signature", "Guarantor Signature"],
+    signerDateField: "Host Date",
+    companyRole: "Company",
+    companyValues: (c) => ({
+      "Company Name": c.name,
+      "Authorized Rep": c.rep,
+      "Authorized Rep Title": "Owner",
+      "Company Signature": c.rep,
+      "Company Acceptance": c.rep,
+      "Printed Name": c.rep,
+      Date: today(),
+    }),
+  },
+  commercial: {
+    signerRole: "Client",
+    signerSignatures: ["Client Signature"],
+    signerDateField: "Client Date",
+    companyRole: "Company",
+    companyValues: (c) => ({
+      "Square Feet Threshold": COMMERCIAL_SQFT_THRESHOLD,
+      "Company Printed Name": c.rep,
+      "Company Date": today(),
+      "Company Signature": c.rep,
+    }),
   },
   membership: {
     signerRole: "Member",
@@ -581,6 +787,12 @@ export async function sendAgreement(input: SendAgreementInput): Promise<SendAgre
   const filteredSignerValues = keepKnown(signerValues, role);
   companyValues = keepKnown(companyValues, spec.companyRole);
 
+  const knownSignerFields = fieldsByRole?.[role];
+  const signerFields = (input.fields || []).filter((f) => {
+    if (!knownSignerFields) return true;
+    return knownSignerFields.has(f.name);
+  });
+
   const submitters: Array<Record<string, unknown>> = [
     {
       role,
@@ -589,6 +801,7 @@ export async function sendAgreement(input: SendAgreementInput): Promise<SendAgre
       completed: true,
       send_email: input.sendEmail !== false, // emails the customer the completed copy
       values: filteredSignerValues,
+      ...(signerFields.length ? { fields: signerFields } : {}),
     },
     {
       role: spec.companyRole,
@@ -666,4 +879,69 @@ export async function sendAgreement(input: SendAgreementInput): Promise<SendAgre
   }
 
   return { ok: true, submissionId, signingUrl, recordId };
+}
+
+function firstPdfUrl(body: unknown): string | null {
+  if (!body || typeof body !== "object") return null;
+  const rec = body as Record<string, unknown>;
+  if (typeof rec.combined_document_url === "string" && rec.combined_document_url) {
+    return rec.combined_document_url;
+  }
+  const lists: unknown[] = [];
+  if (Array.isArray(rec.documents)) lists.push(...rec.documents);
+  if (Array.isArray(rec.submitters)) {
+    for (const s of rec.submitters) {
+      if (s && typeof s === "object") {
+        const docs = (s as Record<string, unknown>).documents;
+        if (Array.isArray(docs)) lists.push(...docs);
+      }
+    }
+  }
+  for (const d of lists) {
+    if (d && typeof d === "object") {
+      const url = (d as Record<string, unknown>).url;
+      if (typeof url === "string" && url) return url;
+    }
+  }
+  return null;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Download the completed combined PDF for a DocuSeal submission as base64.
+ * Completion can lag a moment after POST /submissions with completed:true.
+ */
+export async function downloadCompletedAgreementPdf(submissionId: string): Promise<string | null> {
+  if (!submissionId) return null;
+  const token = await resolveSecret("DOCUSEAL_API_TOKEN");
+  const baseUrlRaw = await resolveSecret("DOCUSEAL_BASE_URL");
+  if (!token) return null;
+  const baseUrl = (baseUrlRaw || "https://api.docuseal.com").replace(/\/+$/, "");
+
+  let url: string | null = null;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    if (attempt > 0) await sleep(400 * attempt);
+    try {
+      const res = await fetch(`${baseUrl}/submissions/${submissionId}`, {
+        headers: { "X-Auth-Token": token },
+        cache: "no-store",
+      });
+      if (!res.ok) continue;
+      const body: unknown = await res.json().catch(() => null);
+      url = firstPdfUrl(body);
+      if (url) break;
+    } catch {
+      /* retry */
+    }
+  }
+  if (!url) return null;
+
+  const pdf = await fetch(url, { cache: "no-store" });
+  if (!pdf.ok) return null;
+  const buf = Buffer.from(await pdf.arrayBuffer());
+  if (buf.length < 500) return null;
+  return buf.toString("base64");
 }

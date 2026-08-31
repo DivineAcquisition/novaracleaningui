@@ -71,6 +71,7 @@ export async function PUT(req: Request): Promise<NextResponse> {
       facilityTypeKey: String(body.facilityTypeKey || "other").slice(0, 40),
       sort: Math.max(...current.types.map((t) => t.sort), 0) + 10,
       active: true,
+      requiresWalkthrough: body.accountKind !== "str",
     };
     const scopeTemplate = defaultScopeTemplateForType(key, def.accountKind);
     next = {
@@ -78,6 +79,7 @@ export async function PUT(req: Request): Promise<NextResponse> {
       types: [...current.types, def],
       intakeByType: { ...current.intakeByType, [key]: [] },
       byType: { ...current.byType, [key]: [] },
+      siteExtras: current.siteExtras,
       scopeTemplateByType: { ...current.scopeTemplateByType, [key]: scopeTemplate },
       scopeByType: { ...current.scopeByType, [key]: scopeSectionsFromTemplate(scopeTemplate) },
     };
@@ -93,6 +95,8 @@ export async function PUT(req: Request): Promise<NextResponse> {
     } else if (section === "intake") {
       if (!typeKey) return NextResponse.json({ error: "typeKey required." }, { status: 400 });
       next = { ...current, intakeByType: { ...current.intakeByType, [typeKey]: items } };
+    } else if (section === "extras" || section === "site") {
+      next = { ...current, siteExtras: items };
     } else {
       if (!typeKey) return NextResponse.json({ error: "typeKey required." }, { status: 400 });
       next = { ...current, byType: { ...current.byType, [typeKey]: items } };

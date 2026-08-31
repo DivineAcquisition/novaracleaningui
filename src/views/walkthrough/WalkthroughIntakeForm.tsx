@@ -9,12 +9,10 @@ import {
   RiLoader4Line,
   RiMapPinLine,
   RiShieldCheckLine,
-  RiSparklingLine,
   RiVideoLine,
 } from "@remixicon/react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
 import { SEO } from "@/components/SEO";
 import { MediaThumb } from "@/components/job-media/MediaThumb";
 import { isVideoFile, videoTooLargeMessage } from "@/lib/job-media";
@@ -22,6 +20,9 @@ import { ChecklistField } from "@/components/proposals/ChecklistField";
 import { ZoneMapEditor } from "@/components/commercial/ZoneMapEditor";
 import { parseSiteZones, type SiteZone } from "@/lib/site-zones";
 import type { ChecklistItem, PropertyTypeDef } from "@/lib/proposal-request";
+import { typeRequiresWalkthrough } from "@/lib/proposal-request";
+import { TokenPageShell, TokenPanel } from "@/components/token/TokenPageShell";
+import { ShimmerButton } from "@/components/magicui/shimmer-button";
 import { cn } from "@/lib/utils";
 
 const BUCKET = "cleaner-job-photos";
@@ -214,166 +215,174 @@ export default function WalkthroughIntakeForm({ staff = false }: { staff?: boole
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center text-slate-500 text-sm">
-        <RiLoader4Line className="w-4 h-4 animate-spin mr-2" /> Opening site findings…
-      </div>
+      <TokenPageShell embedded={staff} eyebrow="Site findings">
+        <div className="flex items-center justify-center py-16 text-slate-500 text-sm">
+          <RiLoader4Line className="w-4 h-4 animate-spin mr-2" /> Opening site findings…
+        </div>
+      </TokenPageShell>
     );
   }
   if (loadErr || !info) {
     return (
-      <div className={cn("flex items-center justify-center p-6", staff ? "py-16" : "min-h-screen bg-slate-50")}>
-        <div className="max-w-md text-center space-y-2">
-          <p className="font-bold text-slate-900">This link isn't valid</p>
+      <TokenPageShell embedded={staff} eyebrow="Site findings" title="This link isn't valid">
+        <TokenPanel className="text-center">
           <p className="text-sm text-slate-500">{loadErr || "Ask dispatch to resend the walkthrough assignment."}</p>
-        </div>
-      </div>
+        </TokenPanel>
+      </TokenPageShell>
     );
   }
 
   const universal = info.checklist.universal.filter((i) => i.kind !== "media");
   const typeItems = info.checklist.typeSpecific;
   const inPipeline = Boolean(done || info.submitted);
+  const extrasTitle = typeRequiresWalkthrough(info.propertyType)
+    ? "Additional findings"
+    : `${info.propertyType.shortLabel} findings`;
 
   return (
-    <div className={cn(staff ? "pb-16" : "min-h-screen bg-slate-50 pb-24")}>
-      <SEO title={`${info.propertyType.shortLabel} site findings`} />
-      {!staff && (
-        <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200">
-          <div className="max-w-xl mx-auto px-4 h-14 flex items-center justify-between">
-            <img src="/novara-logo.png" alt="Novara Cleaning" className="h-7" />
-            <span className="text-[11px] font-semibold text-slate-500">
-              {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved ✓" : saveState === "error" ? "Save failed" : "Auto-saves"}
-            </span>
-          </div>
-        </header>
-      )}
-
-      <main className="max-w-xl mx-auto px-4 py-4 space-y-4">
-        {staff && (
-          <div className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-900">
-            Office copy of the walkthrough agent's site findings. This is not the crew job checklist —
-            that token is issued after the job is booked and assigned.
-            <span className="block mt-1 text-violet-700/80">
-              {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved ✓" : "Auto-saves as you go"}
-            </span>
-          </div>
-        )}
-
-        <div className="rounded-2xl overflow-hidden border border-violet-200 bg-white shadow-sm">
-          <div className="px-5 py-4" style={{ background: "linear-gradient(135deg,#5C0FFE 0%,#8F7BFD 100%)" }}>
-            <p className="text-[11px] uppercase tracking-wider font-semibold text-white/70">
-              Novara · Site findings · {info.propertyType.shortLabel}
-            </p>
-            <h1 className="text-xl font-bold text-white flex items-center gap-2 mt-0.5">
-              <RiSparklingLine className="w-5 h-5" /> {info.site.nickname}
-            </h1>
-            <p className="text-xs text-white/85 flex items-start gap-1 mt-1">
-              <RiMapPinLine className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-              {info.site.address}
-            </p>
-            {info.site.clientStatedSqft ? (
-              <p className="text-[11px] text-white/70 mt-2">Client stated {Number(info.site.clientStatedSqft).toLocaleString()} sq ft — confirm on site.</p>
-            ) : null}
-            {info.access?.name && (
-              <p className="text-[11px] text-white/70 mt-1">Access: {info.access.name}{info.access.phone ? ` · ${info.access.phone}` : ""}</p>
-            )}
-          </div>
-        </div>
-
-        {info.preview && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-            Preview only — answers save in this browser session against the API fixture, not a live assignment.
-          </div>
-        )}
-
-        {inPipeline && (
-          <div className={cn(
-            "rounded-xl border px-3 py-2 text-sm flex items-start gap-2",
-            done === "excluded" ? "border-rose-200 bg-rose-50 text-rose-900" : "border-emerald-200 bg-emerald-50 text-emerald-900",
-          )}>
-            {done === "excluded" ? <RiShieldCheckLine className="w-4 h-4 mt-0.5 shrink-0" /> : <RiCheckLine className="w-4 h-4 mt-0.5 shrink-0" />}
-            <p>
-              {done === "excluded"
-                ? "Exclusion is recorded and pricing is stopped. You can still add photos or notes on this document."
-                : "Findings are in the pipeline. Same document — add photos or notes without re-entering."}
-            </p>
-          </div>
-        )}
-
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
-          <h2 className="text-sm font-bold text-slate-900">Site findings</h2>
-          <p className="text-[11px] text-slate-500">
-            Required fields set the firm price. Notes below them are optional — type only what matters.
-          </p>
-          {universal.map((item) => (
-            <ChecklistField key={item.key} item={item} value={answers[item.key]} onChange={(v) => setAnswer(item.key, v)} compact />
-          ))}
-        </section>
-
-        {typeItems.length > 0 && (
-          <section className="rounded-2xl border border-violet-200 bg-white p-4 space-y-3">
-            <h2 className="text-sm font-bold text-violet-900">{info.propertyType.shortLabel} findings</h2>
-            <p className="text-[11px] text-slate-500">Only this property type — not a generic form, and not the crew job list.</p>
-            {typeItems.map((item) => (
-              <ChecklistField key={item.key} item={item} value={answers[item.key]} onChange={(v) => setAnswer(item.key, v)} compact />
-            ))}
-          </section>
-        )}
-
-        {(info.zonesRequired || zones.length > 0) && (
-          <section className="rounded-2xl border border-violet-200 bg-violet-50/40 p-4 space-y-3">
-            <h2 className="text-sm font-bold text-violet-950">Site zones</h2>
-            <p className="text-[11px] text-violet-800">
-              This site is large enough that one photo pair doesn&apos;t prove the visit.
-              Name each physical section now — that map is reused on every future job.
-              {info.zoneThresholdSqft
-                ? ` Required at ${info.zoneThresholdSqft.toLocaleString()} sq ft and above.`
-                : ""}
-            </p>
-            <ZoneMapEditor zones={zones} onChange={saveZones} compact />
-          </section>
-        )}
-
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
-          <h2 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
-            <RiCameraLine className="w-4 h-4" /> Photos + video
-          </h2>
-          <p className="text-[11px] text-slate-500">
-            Condition photos and a short clip. When zones are named, tag each upload to the section it shows.
-          </p>
-          {zones.length > 0 && (
-            <select
-              value={photoZoneId}
-              onChange={(e) => setPhotoZoneId(e.target.value)}
-              className="h-8 text-xs rounded-md border border-slate-200 bg-white px-2"
-            >
-              <option value="">Whole site / not yet zoned</option>
-              {zones.map((z) => (
-                <option key={z.id} value={z.id}>{z.name}</option>
-              ))}
-            </select>
-          )}
-          <div className="flex flex-wrap gap-2">
-            {photos.map((url) => (
-              <MediaThumb key={url} url={url} className="w-20 h-20 rounded-lg overflow-hidden" />
-            ))}
-          </div>
-          <label className="inline-flex items-center gap-2 text-sm font-medium text-violet-700 cursor-pointer">
-            <input type="file" accept="image/*,video/*" multiple className="hidden" disabled={uploading}
-              onChange={(e) => void upload(e.target.files)} />
-            {uploading ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : <RiVideoLine className="w-4 h-4" />}
-            Add photos or video
-          </label>
-        </section>
-
-        <Button className="w-full h-11" disabled={submitting} onClick={() => void submit()}>
-          {submitting ? <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" /> : <RiCheckLine className="w-4 h-4 mr-1.5" />}
-          {inPipeline ? "Save additions" : "Submit site findings"}
-        </Button>
+    <TokenPageShell
+      embedded={staff}
+      eyebrow={`Site findings · ${info.propertyType.shortLabel}`}
+      title={info.site.nickname}
+      subtitle={info.site.address}
+      topBar={
+        !staff ? (
+          <span>
+            {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved ✓" : saveState === "error" ? "Save failed" : "Auto-saves"}
+          </span>
+        ) : undefined
+      }
+      footer={
         <p className="text-[11px] text-slate-400 text-center">
           If you find mold past threshold, active infestation, biohazard, or a structural hazard, mark it on the exclusion check. That stops pricing.
         </p>
-      </main>
-    </div>
+      }
+    >
+      <SEO title={`${info.propertyType.shortLabel} site findings`} />
+      {staff && (
+        <div className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-900">
+          Office copy of the walkthrough agent&apos;s site findings. This is not the crew job checklist —
+          that token is issued after the job is booked and assigned.
+          <span className="block mt-1 text-violet-700/80">
+            {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved ✓" : "Auto-saves as you go"}
+          </span>
+        </div>
+      )}
+
+      <TokenPanel shine>
+        <p className="text-[11px] uppercase tracking-wider font-semibold text-violet-700">
+          Novara · Site findings · {info.propertyType.shortLabel}
+        </p>
+        <p className="text-xs text-slate-600 flex items-start gap-1 mt-2">
+          <RiMapPinLine className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+          {info.site.address}
+        </p>
+        {info.site.clientStatedSqft ? (
+          <p className="text-[11px] text-slate-500 mt-2">Client stated {Number(info.site.clientStatedSqft).toLocaleString()} sq ft — confirm on site.</p>
+        ) : null}
+        {info.access?.name && (
+          <p className="text-[11px] text-slate-500 mt-1">Access: {info.access.name}{info.access.phone ? ` · ${info.access.phone}` : ""}</p>
+        )}
+      </TokenPanel>
+
+      {info.preview && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+          Preview only — answers save in this browser session against the API fixture, not a live assignment.
+        </div>
+      )}
+
+      {inPipeline && (
+        <div className={cn(
+          "rounded-xl border px-3 py-2 text-sm flex items-start gap-2",
+          done === "excluded" ? "border-rose-200 bg-rose-50 text-rose-900" : "border-emerald-200 bg-emerald-50 text-emerald-900",
+        )}>
+          {done === "excluded" ? <RiShieldCheckLine className="w-4 h-4 mt-0.5 shrink-0" /> : <RiCheckLine className="w-4 h-4 mt-0.5 shrink-0" />}
+          <p>
+            {done === "excluded"
+              ? "Exclusion is recorded and pricing is stopped. You can still add photos or notes on this document."
+              : "Findings are in the pipeline. Same document — add photos or notes without re-entering."}
+          </p>
+        </div>
+      )}
+
+      <TokenPanel>
+        <h2 className="text-sm font-bold text-slate-900">Site findings</h2>
+        <p className="text-[11px] text-slate-500 mb-3">
+          Required fields set the firm price. Notes below them are optional — type only what matters.
+        </p>
+        <div className="space-y-3">
+          {universal.map((item) => (
+            <ChecklistField key={item.key} item={item} value={answers[item.key]} onChange={(v) => setAnswer(item.key, v)} compact />
+          ))}
+        </div>
+      </TokenPanel>
+
+      {typeItems.length > 0 && (
+        <TokenPanel>
+          <h2 className="text-sm font-bold text-violet-900">{extrasTitle}</h2>
+          <p className="text-[11px] text-slate-500 mb-3">
+            {typeRequiresWalkthrough(info.propertyType)
+              ? "Same additional questions on every office and commercial walkthrough — not the crew job list."
+              : "Only this property type — leftover STR token. Not the crew job list."}
+          </p>
+          <div className="space-y-3">
+            {typeItems.map((item) => (
+              <ChecklistField key={item.key} item={item} value={answers[item.key]} onChange={(v) => setAnswer(item.key, v)} compact />
+            ))}
+          </div>
+        </TokenPanel>
+      )}
+
+      {(info.zonesRequired || zones.length > 0) && (
+        <TokenPanel className="bg-violet-50/40">
+          <h2 className="text-sm font-bold text-violet-950">Site zones</h2>
+          <p className="text-[11px] text-violet-800 mb-3">
+            This site is large enough that one photo pair doesn&apos;t prove the visit.
+            Name each physical section now — that map is reused on every future job.
+            {info.zoneThresholdSqft
+              ? ` Required at ${info.zoneThresholdSqft.toLocaleString()} sq ft and above.`
+              : ""}
+          </p>
+          <ZoneMapEditor zones={zones} onChange={saveZones} compact />
+        </TokenPanel>
+      )}
+
+      <TokenPanel>
+        <h2 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
+          <RiCameraLine className="w-4 h-4" /> Photos + video
+        </h2>
+        <p className="text-[11px] text-slate-500 mb-3">
+          Condition photos and a short clip. When zones are named, tag each upload to the section it shows.
+        </p>
+        {zones.length > 0 && (
+          <select
+            value={photoZoneId}
+            onChange={(e) => setPhotoZoneId(e.target.value)}
+            className="h-8 text-xs rounded-md border border-slate-200 bg-white px-2 mb-3"
+          >
+            <option value="">Whole site / not yet zoned</option>
+            {zones.map((z) => (
+              <option key={z.id} value={z.id}>{z.name}</option>
+            ))}
+          </select>
+        )}
+        <div className="flex flex-wrap gap-2">
+          {photos.map((url) => (
+            <MediaThumb key={url} url={url} className="w-20 h-20 rounded-lg overflow-hidden" />
+          ))}
+        </div>
+        <label className="inline-flex items-center gap-2 text-sm font-medium text-violet-700 cursor-pointer mt-3">
+          <input type="file" accept="image/*,video/*" multiple className="hidden" disabled={uploading}
+            onChange={(e) => void upload(e.target.files)} />
+          {uploading ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : <RiVideoLine className="w-4 h-4" />}
+          Add photos or video
+        </label>
+      </TokenPanel>
+
+      <ShimmerButton className="w-full h-11" disabled={submitting} onClick={() => void submit()}>
+        {submitting ? <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" /> : <RiCheckLine className="w-4 h-4 mr-1.5" />}
+        {inPipeline ? "Save additions" : "Submit site findings"}
+      </ShimmerButton>
+    </TokenPageShell>
   );
 }

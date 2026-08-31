@@ -9,7 +9,8 @@
 //
 // Saved copies live in app_settings.proposal_walkthrough_checklists. Defaults
 // here merge underneath so a new item we ship appears without a re-seed, and
-// an admin rewrite of a key still wins.
+// an admin rewrite of a key still wins. Office and commercial share one
+// site-findings setup. STR skips the walkthrough.
 
 import {
   defaultScopeTemplateForType,
@@ -83,12 +84,24 @@ export interface PropertyTypeDef {
   facilityTypeKey: string;
   sort: number;
   active: boolean;
+  /**
+   * Office and commercial get a tokenized site-findings visit.
+   * STR properties are residential — priced from beds/baths/linen on the
+   * host record, then host onboarding. No walkthrough agent.
+   */
+  requiresWalkthrough: boolean;
 }
 
 export interface ProposalChecklists {
   types: PropertyTypeDef[];
   intakeByType: Record<string, ChecklistItem[]>;
   universal: ChecklistItem[];
+  /**
+   * One additional-findings list for every type that walks (office +
+   * commercial). STR is not on this list.
+   */
+  siteExtras: ChecklistItem[];
+  /** Legacy per-type extras — kept so old STR walkthrough tokens still open. */
   byType: Record<string, ChecklistItem[]>;
   /** Published /checklist slug this type starts from (admin can then edit). */
   scopeTemplateByType: Record<string, ScopeTemplateKey>;
@@ -101,6 +114,8 @@ export type WalkthroughPayType = "flat" | "hourly";
 export interface ProposalRequestSettings {
   pendingEmailSubject: string;
   pendingEmailBody: string;
+  pendingStrEmailSubject: string;
+  pendingStrEmailBody: string;
   scheduledEmailSubject: string;
   scheduledEmailBody: string;
   adminNotifyEmail: string;
@@ -181,14 +196,14 @@ export const ACCESS_OPTIONS: SelectOption[] = [
 ];
 
 export const DEFAULT_PROPERTY_TYPES: PropertyTypeDef[] = [
-  { key: "str", label: "STR / Short-Term Rental", shortLabel: "STR", accountKind: "str", facilityTypeKey: "other", sort: 10, active: true },
-  { key: "office", label: "Office", shortLabel: "Office", accountKind: "office", facilityTypeKey: "office", sort: 20, active: true },
-  { key: "retail", label: "Commercial — Retail", shortLabel: "Retail", accountKind: "commercial", facilityTypeKey: "retail", sort: 30, active: true },
-  { key: "warehouse", label: "Commercial — Warehouse / Industrial", shortLabel: "Warehouse", accountKind: "commercial", facilityTypeKey: "warehouse", sort: 40, active: true },
-  { key: "restaurant", label: "Commercial — Restaurant", shortLabel: "Restaurant", accountKind: "commercial", facilityTypeKey: "restaurant", sort: 50, active: true },
-  { key: "gym", label: "Commercial — Gym / Fitness", shortLabel: "Gym", accountKind: "commercial", facilityTypeKey: "gym", sort: 60, active: true },
-  { key: "medical", label: "Commercial — Medical / Clinical", shortLabel: "Medical", accountKind: "commercial", facilityTypeKey: "medical", sort: 70, active: true },
-  { key: "other", label: "Other", shortLabel: "Other", accountKind: "commercial", facilityTypeKey: "other", sort: 80, active: true },
+  { key: "str", label: "STR / Short-Term Rental", shortLabel: "STR", accountKind: "str", facilityTypeKey: "other", sort: 10, active: true, requiresWalkthrough: false },
+  { key: "office", label: "Office", shortLabel: "Office", accountKind: "office", facilityTypeKey: "office", sort: 20, active: true, requiresWalkthrough: true },
+  { key: "retail", label: "Commercial — Retail", shortLabel: "Retail", accountKind: "commercial", facilityTypeKey: "retail", sort: 30, active: true, requiresWalkthrough: true },
+  { key: "warehouse", label: "Commercial — Warehouse / Industrial", shortLabel: "Warehouse", accountKind: "commercial", facilityTypeKey: "warehouse", sort: 40, active: true, requiresWalkthrough: true },
+  { key: "restaurant", label: "Commercial — Restaurant", shortLabel: "Restaurant", accountKind: "commercial", facilityTypeKey: "restaurant", sort: 50, active: true, requiresWalkthrough: true },
+  { key: "gym", label: "Commercial — Gym / Fitness", shortLabel: "Gym", accountKind: "commercial", facilityTypeKey: "gym", sort: 60, active: true, requiresWalkthrough: true },
+  { key: "medical", label: "Commercial — Medical / Clinical", shortLabel: "Medical", accountKind: "commercial", facilityTypeKey: "medical", sort: 70, active: true, requiresWalkthrough: true },
+  { key: "other", label: "Other", shortLabel: "Other", accountKind: "commercial", facilityTypeKey: "other", sort: 80, active: true, requiresWalkthrough: true },
 ];
 
 const UNIVERSAL: ChecklistItem[] = [
@@ -685,6 +700,40 @@ const BY_TYPE: Record<string, ChecklistItem[]> = {
   ],
 };
 
+/** One additional-findings list for every walkthrough (office + commercial). */
+const SITE_EXTRAS: ChecklistItem[] = [
+  {
+    key: "desk_count",
+    label: "Workstation / desk count",
+    help: "If this is an office or has a desk floor. Skip if not.",
+    kind: "integer",
+  },
+  {
+    key: "employee_headcount",
+    label: "People on site (typical)",
+    help: "Drives restroom and breakroom load more than sqft.",
+    kind: "integer",
+  },
+  {
+    key: "restricted_areas",
+    label: "Restricted areas",
+    help: "Server/IT rooms, executive offices, labs, secure storage — what the cleaner may not enter.",
+    kind: "textarea",
+  },
+  {
+    key: "operating_hours_confirmed",
+    label: "Operating hours / cleaning window",
+    help: "When the space is occupied vs when we can work.",
+    kind: "textarea",
+  },
+  {
+    key: "layout_notes",
+    label: "Layout and use of the space",
+    help: "Optional. What this building is used for, anything the crew needs to know.",
+    kind: "textarea",
+  },
+];
+
 function defaultScopeCatalog(): {
   scopeTemplateByType: Record<string, ScopeTemplateKey>;
   scopeByType: Record<string, ScopeChecklistSection[]>;
@@ -703,6 +752,7 @@ export const DEFAULT_CHECKLISTS: ProposalChecklists = {
   types: DEFAULT_PROPERTY_TYPES,
   intakeByType: INTAKE,
   universal: UNIVERSAL,
+  siteExtras: SITE_EXTRAS,
   byType: BY_TYPE,
   ...defaultScopeCatalog(),
 };
@@ -716,6 +766,13 @@ export const DEFAULT_PROPOSAL_SETTINGS: ProposalRequestSettings = {
     "on-site walkthrough before providing a firm quote — this protects you from surprise " +
     "adjustments later.\n\nWe'll reach out shortly to schedule a convenient time. If you have " +
     "a preferred window, just reply to this email.",
+  pendingStrEmailSubject: "Your NovaraCleaning STR request — next steps",
+  pendingStrEmailBody:
+    "Hi [Name], thank you for requesting a proposal for [property/address]. Short-term rentals " +
+    "are priced like a residential property from bedrooms, bathrooms, and linen handling — we " +
+    "don't send a walkthrough agent. We'll set your per-turnover rates and send a host " +
+    "onboarding link so you can review the partnership agreement and payment setup.\n\n" +
+    "If anything about the property has changed, just reply to this email.",
   scheduledEmailSubject: "Your NovaraCleaning walkthrough is scheduled",
   scheduledEmailBody:
     "Hi [Name], a walkthrough agent has been assigned for [property/address]. The visit is " +
@@ -798,7 +855,18 @@ export function mergeChecklists(saved: unknown): ProposalChecklists {
   for (const def of DEFAULT_PROPERTY_TYPES) {
     const override = typeMap.get(def.key);
     used.add(def.key);
-    types.push(override ? { ...def, ...override, key: def.key } : { ...def });
+    types.push(
+      override
+        ? {
+            ...def,
+            ...override,
+            key: def.key,
+            requiresWalkthrough: typeof override.requiresWalkthrough === "boolean"
+              ? override.requiresWalkthrough
+              : def.requiresWalkthrough,
+          }
+        : { ...def },
+    );
   }
   for (const extra of savedTypes) {
     if (!extra?.key || used.has(extra.key)) continue;
@@ -811,6 +879,9 @@ export function mergeChecklists(saved: unknown): ProposalChecklists {
       facilityTypeKey: extra.facilityTypeKey || "other",
       sort: Number(extra.sort) || 90,
       active: extra.active !== false,
+      requiresWalkthrough: typeof extra.requiresWalkthrough === "boolean"
+        ? extra.requiresWalkthrough
+        : extra.accountKind !== "str",
     });
   }
   types.sort((a, b) => a.sort - b.sort);
@@ -839,6 +910,7 @@ export function mergeChecklists(saved: unknown): ProposalChecklists {
     types,
     intakeByType,
     universal: mergeItemLists(UNIVERSAL, raw.universal),
+    siteExtras: mergeItemLists(SITE_EXTRAS, raw.siteExtras),
     byType,
     scopeTemplateByType,
     scopeByType,
@@ -861,6 +933,8 @@ export function mergeProposalSettings(saved: unknown): ProposalRequestSettings {
     tokenTtlHours: Number.isFinite(Number(raw.tokenTtlHours))
       ? Math.max(24, Math.round(Number(raw.tokenTtlHours)))
       : DEFAULT_PROPOSAL_SETTINGS.tokenTtlHours,
+    pendingStrEmailSubject: raw.pendingStrEmailSubject || DEFAULT_PROPOSAL_SETTINGS.pendingStrEmailSubject,
+    pendingStrEmailBody: raw.pendingStrEmailBody || DEFAULT_PROPOSAL_SETTINGS.pendingStrEmailBody,
   };
 }
 
@@ -872,9 +946,33 @@ export function propertyTypeByKey(catalog: ProposalChecklists, key: string): Pro
   return catalog.types.find((t) => t.key === key) || null;
 }
 
+export function typeRequiresWalkthrough(
+  type: Pick<PropertyTypeDef, "requiresWalkthrough" | "accountKind"> | null | undefined,
+): boolean {
+  if (!type) return true;
+  if (typeof type.requiresWalkthrough === "boolean") return type.requiresWalkthrough;
+  return type.accountKind !== "str";
+}
+
+export function proposalRequestStatusLabel(
+  status: string,
+  type?: PropertyTypeDef | null,
+  propertyTypeKey?: string,
+): string {
+  const skipWalk = type
+    ? !typeRequiresWalkthrough(type)
+    : propertyTypeKey === "str";
+  if (status === "pending_assign" && skipWalk) {
+    return "Pending — Price host properties";
+  }
+  return PROPOSAL_STATUS_LABELS[status as ProposalRequestStatus] || status;
+}
+
 /**
  * Site findings for the walkthrough token only.
  * Crew scope lists stay on `/cleaner/job-checklist/<token>` after dispatch.
+ * Office and commercial share one extras list. STR has no live walkthrough;
+ * leftover STR tokens still open against the stored STR extras.
  */
 export function walkthroughChecklistFor(
   catalog: ProposalChecklists,
@@ -887,14 +985,16 @@ export function walkthroughChecklistFor(
   scopeTemplate: ScopeTemplateKey;
 } {
   const type = catalog.types.find((t) => t.key === typeKey);
-  const typeSpecific = catalog.byType[typeKey] || [];
+  const extras = typeRequiresWalkthrough(type)
+    ? (catalog.siteExtras || SITE_EXTRAS)
+    : (catalog.byType[typeKey] || []);
   const scopeTemplate =
     catalog.scopeTemplateByType?.[typeKey]
     || defaultScopeTemplateForType(typeKey, type?.accountKind);
   return {
     universal: catalog.universal,
-    typeSpecific,
-    all: [...catalog.universal, ...typeSpecific],
+    typeSpecific: extras,
+    all: [...catalog.universal, ...extras],
     scope: [],
     scopeTemplate,
   };

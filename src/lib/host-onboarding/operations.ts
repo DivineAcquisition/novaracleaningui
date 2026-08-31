@@ -11,6 +11,13 @@ import { MIN_PASSWORD_LENGTH } from "./types";
 import type { PaymentOptionKey } from "./agreement";
 import { parseSnapshot, portalUrl } from "./session";
 import { sendPartnershipMessage } from "@/lib/partnership-comms/server";
+import {
+  sendAgreement,
+  buildHostValues,
+  buildHostPropertyFields,
+  downloadCompletedAgreementPdf,
+} from "@/lib/docuseal";
+import { buildHostAgreementBase64 } from "@/lib/host-onboarding/agreement-pdf";
 
 // eslint-disable-next-line
 type Admin = any;
@@ -42,7 +49,7 @@ export function validateSignature(input: {
   acknowledgedChargebacks: unknown;
   acknowledgedArbitration: unknown;
   signatureDataUrl: string;
-  pdfBase64: string;
+  pdfBase64?: string;
 }): string | null {
   if (input.signerName.length < 2) return "Please enter your full legal name to sign.";
   if (input.agreedToTerms !== true) return "Please confirm you've read and agree to the agreement.";
@@ -57,9 +64,6 @@ export function validateSignature(input: {
   }
   if (!/^data:image\/png;base64,/.test(input.signatureDataUrl)) {
     return "Please draw your signature in the box above.";
-  }
-  if (input.pdfBase64.length < 500) {
-    return "The signed document didn't generate correctly. Please reload and try again.";
   }
   return null;
 }
@@ -79,7 +83,7 @@ export async function signHostAgreement(
     entityType?: string | null;
     entityName?: string | null;
     signatureDataUrl: string;
-    pdfBase64: string;
+    pdfBase64?: string;
     ctx: RequestContext;
   },
 ): Promise<{ ok: boolean; status: number; message: string; alreadySigned?: boolean; agreementId?: string }> {
@@ -99,10 +103,66 @@ export async function signHostAgreement(
   const base = `${session.host_id}/${session.id}-${stamp}`;
   const pdfPath = `${base}.pdf`;
   const sigPath = `${base}-signature.png`;
+  const properties = parseSnapshot(session.property_snapshot);
+  const entityName = input.entityName || (input.host.entity_name as string) || null;
+  const hostName = input.signerName;
+  const hostEmail = input.signerEmail;
+
+  let pdfBase64 = input.pdfBase64 && input.pdfBase64.length >= 500 ? input.pdfBase64 : "";
+  try {
+    const res = await sendAgreement({
+      audience: "str_host",
+      email: hostEmail,
+      name: hostName,
+      sendEmail: true,
+      signatureImage: input.signatureDataUrl,
+      hostEmail,
+      values: buildHostValues({
+        name: hostName,
+        company: entityName || hostName,
+        email: hostEmail,
+        entityType: input.entityType,
+      }),
+      fields: buildHostPropertyFields(
+        properties.map((p) => ({
+          nickname: p.nickname,
+          address: p.address,
+          bedrooms: p.bedrooms,
+          bathrooms: p.bathrooms,
+          rate: p.turnover_price,
+          linen: p.linen,
+          restock: p.restock,
+          notes: p.special_notes,
+        })),
+      ),
+      metadata: { host_id: session.host_id, session_id: session.id, kind: "str_host" },
+    });
+    if (res.submissionId) {
+      const fromDocuseal = await downloadCompletedAgreementPdf(res.submissionId);
+      if (fromDocuseal && fromDocuseal.length >= 500) pdfBase64 = fromDocuseal;
+    }
+  } catch (err) {
+    console.error("[host-onboarding] docuseal complete failed", (err as Error).message);
+  }
+
+  if (pdfBase64.length < 500) {
+    pdfBase64 = await buildHostAgreementBase64({
+      signerName: hostName,
+      signerEmail: hostEmail,
+      entityType: input.entityType,
+      entityName,
+      properties,
+      signatureDataUrl: input.signatureDataUrl,
+    });
+  }
+
+  if (pdfBase64.length < 500) {
+    return { ok: false, status: 502, message: "The signed document didn't generate correctly. Please reload and try again." };
+  }
 
   const { error: pdfErr } = await supabase.storage
     .from(AGREEMENT_BUCKET)
-    .upload(pdfPath, Buffer.from(input.pdfBase64, "base64"), {
+    .upload(pdfPath, Buffer.from(pdfBase64, "base64"), {
       contentType: "application/pdf",
       upsert: true,
     });

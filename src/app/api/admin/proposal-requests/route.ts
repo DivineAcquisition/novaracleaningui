@@ -1,9 +1,8 @@
 // ─── /api/admin/proposal-requests ──────────────────────────────────────────
 //
 // Dedicated Proposals tab. A submit here is a Proposal Request — never a
-// job booking. Creates a prospective account (or STR host), sites, and
-// commercial_walkthroughs in `requested`, then emails the requester that a
-// walkthrough agent is being assigned.
+// job booking. Creates a prospective account (or STR host) and, for office
+// and commercial, a walkthrough in `requested`. STR skips the walkthrough.
 
 import { NextResponse } from "next/server";
 import { requireAdmin, AdminAuthError } from "@/lib/admin-auth";
@@ -14,7 +13,7 @@ import {
   sendProposalEmail,
   createProposalRequest,
 } from "@/lib/proposal-request-server";
-import { PROPOSAL_STATUS_LABELS } from "@/lib/proposal-request";
+import { propertyTypeByKey, proposalRequestStatusLabel, typeRequiresWalkthrough } from "@/lib/proposal-request";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,6 +35,7 @@ export async function GET(req: Request): Promise<NextResponse> {
   if (failure) return failure;
 
   const supabase = getAdminSupabase();
+  const catalog = await loadProposalChecklists(supabase);
   const url = new URL(req.url);
   const status = url.searchParams.get("status");
   const q = (url.searchParams.get("q") || "").trim().toLowerCase();
@@ -91,11 +91,16 @@ export async function GET(req: Request): Promise<NextResponse> {
     sitesByRequest.set(rid, [...(sitesByRequest.get(rid) || []), merged]);
   }
 
-  let rows = (data || []).map((r: Record<string, unknown>) => ({
-    ...r,
-    status_label: PROPOSAL_STATUS_LABELS[(r.status as keyof typeof PROPOSAL_STATUS_LABELS)] || r.status,
-    sites: sitesByRequest.get(String(r.id)) || [],
-  }));
+  let rows = (data || []).map((r: Record<string, unknown>) => {
+    const type = propertyTypeByKey(catalog, String(r.property_type_key || ""));
+    const status = String(r.status || "");
+    return {
+      ...r,
+      requires_walkthrough: typeRequiresWalkthrough(type),
+      status_label: proposalRequestStatusLabel(status, type, String(r.property_type_key || "")),
+      sites: sitesByRequest.get(String(r.id)) || [],
+    };
+  });
   if (q) {
     rows = rows.filter((r) => {
       const hay = `${r["requester_name"] || ""} ${r["requester_company"] || ""} ${r["requester_email"] || ""} ${r["property_type_key"] || ""}`;
@@ -151,6 +156,8 @@ export async function POST(req: Request): Promise<NextResponse> {
   }
 
   const request = created.request;
+  const type = propertyTypeByKey(catalog, String(request.property_type_key || ""));
+  const needsWalk = typeRequiresWalkthrough(type);
   const firstSite = Array.isArray(request.sites) ? (request.sites[0] as Record<string, unknown> | undefined) : undefined;
   const address = firstSite
     ? [firstSite.address, firstSite.city, firstSite.state].filter(Boolean).join(", ")
@@ -158,8 +165,8 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   const mail = await sendProposalEmail(supabase, {
     to: String(request.requester_email),
-    subject: settings.pendingEmailSubject,
-    body: settings.pendingEmailBody,
+    subject: needsWalk ? settings.pendingEmailSubject : settings.pendingStrEmailSubject,
+    body: needsWalk ? settings.pendingEmailBody : settings.pendingStrEmailBody,
     vars: { name: String(request.requester_name || ""), address },
     templateKey: "commercial_proposal_intake",
     trigger: "proposal-request.intake",
@@ -179,7 +186,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       subject: `New proposal request — ${request.requester_name}`,
       body:
         `A proposal request was submitted for ${address} (${request.property_type_key}). ` +
-        `Status: Pending — Assigning Walkthrough Agent. This is not a booking.`,
+        `Status: ${needsWalk ? "Pending — Assigning Walkthrough Agent" : "Pending — Price host properties (no walkthrough)"}. This is not a booking.`,
       vars: { name: "team", address },
       templateKey: "commercial_proposal_intake",
       role: "admin",

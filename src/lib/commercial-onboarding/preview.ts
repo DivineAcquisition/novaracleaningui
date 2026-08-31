@@ -281,7 +281,7 @@ export function commercialOnboardingPreviewPayload(
     billingMethod: method,
   });
 
-  const portal = previewMem.portal ? handoffUrl(method) : "https://partners.novaracleaning.com";
+  const portal = previewMem.portal ? handoffUrl(method) : "https://partner.novaracleaning.com";
 
   return {
     ok: true,

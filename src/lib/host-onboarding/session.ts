@@ -8,6 +8,7 @@
 // lives on hosts. The step is derived — a session cannot claim Page 2 is
 // open when Page 1 was never signed.
 
+import { PARTNER_ORIGIN, portalHomeUrl } from "@/lib/partner-portal/origins";
 import { PAYMENT_OPTIONS, type PaymentOptionKey } from "./agreement";
 import {
   deriveHostOnboardingProgress,
@@ -19,22 +20,15 @@ import {
 type Admin = any;
 type Row = Record<string, unknown>;
 
-const PARTNER_ORIGIN =
-  process.env.NEXT_PUBLIC_PARTNER_ORIGIN ||
-  process.env.PARTNER_ORIGIN ||
-  "https://partner.novaracleaning.com";
-
-const PARTNERS_ORIGIN = "https://partners.novaracleaning.com";
-
 export const HOST_ONBOARDING_PATH = "/partner/host-onboarding";
 
 export function onboardingUrl(token: string): string {
-  return `${PARTNER_ORIGIN.replace(/\/+$/, "")}${HOST_ONBOARDING_PATH}/${token}`;
+  return `${PARTNER_ORIGIN}${HOST_ONBOARDING_PATH}/${token}`;
 }
 
-/** Confirmation link into the host portal (partners.* is the alias the brief uses). */
+/** Confirmation link into the host portal. */
 export function portalUrl(): string {
-  return `${PARTNERS_ORIGIN.replace(/\/+$/, "")}/partner`;
+  return portalHomeUrl();
 }
 
 export const SESSION_COLS = `

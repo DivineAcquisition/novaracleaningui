@@ -22,8 +22,10 @@ import {
   mergeProposalSettings,
   missingRequired,
   propertyTypeByKey,
+  proposalRequestStatusLabel,
   RETIRED_FINDING_KEYS,
   slugTypeKey,
+  typeRequiresWalkthrough,
   walkthroughChecklistFor,
   walkthroughLink,
   walkthroughStaffPath,
@@ -55,26 +57,38 @@ check(
   ["str", "office", "retail", "warehouse", "restaurant", "gym", "medical", "other"],
 );
 check("STR links to a host record, not a commercial account type", propertyTypeByKey(DEFAULT_CHECKLISTS, "str")?.accountKind, "str");
+check("STR does not require a walkthrough", typeRequiresWalkthrough(propertyTypeByKey(DEFAULT_CHECKLISTS, "str")), false);
+check("office requires a walkthrough", typeRequiresWalkthrough(propertyTypeByKey(DEFAULT_CHECKLISTS, "office")), true);
+check("warehouse requires a walkthrough", typeRequiresWalkthrough(propertyTypeByKey(DEFAULT_CHECKLISTS, "warehouse")), true);
+check(
+  "pending STR status is price host properties",
+  proposalRequestStatusLabel("pending_assign", propertyTypeByKey(DEFAULT_CHECKLISTS, "str")),
+  "Pending — Price host properties",
+);
+check(
+  "pending office status still assigns an agent",
+  proposalRequestStatusLabel("pending_assign", propertyTypeByKey(DEFAULT_CHECKLISTS, "office")),
+  "Pending — Assigning Walkthrough Agent",
+);
 check("warehouse prices at the warehouse facility key", propertyTypeByKey(DEFAULT_CHECKLISTS, "warehouse")?.facilityTypeKey, "warehouse");
 
 console.log("\nChecklist routing:");
 const str = walkthroughChecklistFor(DEFAULT_CHECKLISTS, "str");
 const office = walkthroughChecklistFor(DEFAULT_CHECKLISTS, "office");
 const warehouse = walkthroughChecklistFor(DEFAULT_CHECKLISTS, "warehouse");
-check("STR includes linen handling", str.typeSpecific.some((i) => i.key === "linen_handling"), true);
-check("STR includes turnover window", str.typeSpecific.some((i) => i.key === "turnover_window"), true);
+check("office and warehouse share one additional-findings list", office.typeSpecific.map((i) => i.key), warehouse.typeSpecific.map((i) => i.key));
+check("shared extras include desk count as optional", office.typeSpecific.some((i) => i.key === "desk_count" && !i.required), true);
+check("shared extras do not include STR linen handling", office.typeSpecific.some((i) => i.key === "linen_handling"), false);
+check("legacy STR tokens still expose linen findings", str.typeSpecific.some((i) => i.key === "linen_handling"), true);
+check("legacy STR tokens still expose turnover window", str.typeSpecific.some((i) => i.key === "turnover_window"), true);
 check("STR does not copy residential consumables onto findings", str.typeSpecific.some((i) => i.key === "consumables"), false);
-check("STR does not include desk count", str.typeSpecific.some((i) => i.key === "desk_count"), false);
 check("STR does not include racking density", str.typeSpecific.some((i) => i.key === "racking_dense_sqft"), false);
-check("office includes desk count, headcount, restricted areas", office.typeSpecific.filter((i) => ["desk_count", "employee_headcount", "restricted_areas"].includes(i.key)).map((i) => i.key).sort(), ["desk_count", "employee_headcount", "restricted_areas"].sort());
-check("office does not include linen handling", office.typeSpecific.some((i) => i.key === "linen_handling"), false);
-check("warehouse includes racking density, floor type, auto-scrubber", warehouse.typeSpecific.filter((i) => ["racking_dense_sqft", "warehouse_floor_type", "auto_scrubber_suitable"].includes(i.key)).length, 3);
 check("universal confirmed sqft is on every type", str.universal.some((i) => i.key === "confirmed_sqft") && office.universal.some((i) => i.key === "confirmed_sqft"), true);
-check("universal exclusion check is on every type", str.all.some((i) => i.key === "exclusion_check"), true);
-check("access is open-ended, not a required select", str.universal.find((i) => i.key === "access_procedure")?.kind, "textarea");
-check("on-site storage is retired", str.universal.some((i) => i.key === "on_site_storage"), false);
-check("trash notes are optional", Boolean(str.universal.find((i) => i.key === "trash_volume")?.required), false);
-check("medical biohazard item states Novara does not handle it", warehouse.universal.some((i) => i.key === "exclusion_check") && DEFAULT_CHECKLISTS.byType.medical.some((i) => /biohazard/i.test(i.label + (i.help || ""))), true);
+check("universal exclusion check is on every type", office.all.some((i) => i.key === "exclusion_check"), true);
+check("access is open-ended, not a required select", office.universal.find((i) => i.key === "access_procedure")?.kind, "textarea");
+check("on-site storage is retired", office.universal.some((i) => i.key === "on_site_storage"), false);
+check("trash notes are optional", Boolean(office.universal.find((i) => i.key === "trash_volume")?.required), false);
+check("medical biohazard item states Novara does not handle it", DEFAULT_CHECKLISTS.byType.medical.some((i) => /biohazard/i.test(i.label + (i.help || ""))), true);
 
 console.log("\nWalkthrough token is site findings only:");
 check("STR walkthrough has no crew scope cards", str.scope, []);
@@ -95,9 +109,11 @@ const merged = mergeChecklists({
   universal: [{ key: "confirmed_sqft", label: "Verified sqft (admin rewrite)", kind: "integer", required: true, mapsTo: "sqft" }],
 });
 check("new property type survives merge", merged.types.some((t) => t.key === "school"), true);
+check("new commercial type requires a walkthrough", typeRequiresWalkthrough(merged.types.find((t) => t.key === "school")), true);
 check("built-in types remain", merged.types.some((t) => t.key === "str"), true);
 check("admin rewrite of a universal label wins", merged.universal.find((i) => i.key === "confirmed_sqft")?.label, "Verified sqft (admin rewrite)");
-check("school findings are only its items plus universal", walkthroughChecklistFor(merged, "school").typeSpecific.map((i) => i.key), ["classroom_count"]);
+check("new types share the one site-findings extras list", walkthroughChecklistFor(merged, "school").typeSpecific.map((i) => i.key), DEFAULT_CHECKLISTS.siteExtras.map((i) => i.key));
+check("admin-added type still stores its own byType for legacy", merged.byType.school.map((i) => i.key), ["classroom_count"]);
 check("new commercial type still has a commercial crew template on file", walkthroughChecklistFor(merged, "school").scopeTemplate, "commercial-standard");
 check("school walkthrough does not get a crew tick list", walkthroughChecklistFor(merged, "school").scope, []);
 check("admin rewrite of a stored crew template title still merges", mergeChecklists({
@@ -154,6 +170,12 @@ const body = interpolateTemplate(DEFAULT_PROPOSAL_SETTINGS.pendingEmailBody, {
 });
 check("pending email names the requester and address", body.includes("Hi Alex") && body.includes("12 Harbor St"), true);
 check("pending email frames the walkthrough as accurate pricing", /accurate pricing|on-site walkthrough|surprise/i.test(body), true);
+const strBody = interpolateTemplate(DEFAULT_PROPOSAL_SETTINGS.pendingStrEmailBody, {
+  name: "Alex",
+  address: "12 Harbor St",
+});
+check("STR pending email names the requester and address", strBody.includes("Hi Alex") && strBody.includes("12 Harbor St"), true);
+check("STR pending email says there is no walkthrough", /don't send a walkthrough|no walkthrough|residential/i.test(strBody), true);
 check("tokenized link lives on the contractor host", walkthroughLink("abc"), "https://contractor.novaracleaning.com/cleaner/walkthrough/abc");
 check("office copy of the same doc is under Proposals", walkthroughStaffPath("abc"), "/admin/proposals/doc/abc");
 check("email HTML does not execute tags from the body", emailToHtml("Hi <script>").includes("&lt;script&gt;"), true);
@@ -184,10 +206,11 @@ check("preview-str maps to STR", walkthroughPreviewTypeKey("preview-str"), "str"
 check("unknown token is not a preview", walkthroughPreviewTypeKey("not-a-preview"), null);
 const previewStr = walkthroughPreviewPayload("preview-str");
 check("STR preview has no crew scope cards", previewStr?.checklist.scope, []);
-check("STR preview still has linen findings", previewStr?.checklist.typeSpecific.some((i) => i.key === "linen_handling"), true);
+check("STR preview still has linen findings for leftover tokens", previewStr?.checklist.typeSpecific.some((i) => i.key === "linen_handling"), true);
 check("office preview has no crew scope cards", walkthroughPreviewPayload("preview-office")?.checklist.scope, []);
 check("warehouse preview has no crew scope cards", walkthroughPreviewPayload("preview-commercial")?.checklist.scope, []);
-check("warehouse preview still has racking findings", walkthroughPreviewPayload("preview-commercial")?.checklist.typeSpecific.some((i) => i.key === "racking_dense_sqft"), true);
+check("warehouse preview uses the shared extras list", walkthroughPreviewPayload("preview-commercial")?.checklist.typeSpecific.some((i) => i.key === "desk_count"), true);
+check("warehouse preview does not require racking as a separate catalog", walkthroughPreviewPayload("preview-commercial")?.checklist.typeSpecific.some((i) => i.key === "racking_dense_sqft"), false);
 
 console.log("\nBooking invariant:");
 check(

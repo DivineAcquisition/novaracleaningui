@@ -18,6 +18,7 @@ import {
   billingStepLabel,
   deriveCommercialOnboardingProgress,
 } from "../src/lib/commercial-onboarding/progress";
+import { buildCommercialValues, COMMERCIAL_AUTO_PAY_FIELD } from "../src/lib/docuseal";
 
 let failures = 0;
 function check(name: string, actual: unknown, expected: unknown): void {
@@ -193,6 +194,42 @@ resetCommercialOnboardingPreview();
 const pausedJump = commercialOnboardingPreviewPayload("preview-commercial", "paused");
 check("paused jump shows the pause card", pausedJump.progress.current_step, "paused");
 check("paused is not complete", pausedJump.progress.complete, false);
+
+console.log("\nDocuSeal commercial field map:");
+const commercialFields = buildCommercialValues({
+  businessName: "Harbor East Holdings",
+  contactName: "Nadia Okonkwo",
+  email: "nadia@harboreast.example",
+  phone: "410-555-0142",
+  address: "1000 S Caroline St, Baltimore, MD",
+  accountType: "commercial",
+  billingMethod: "invoiced",
+  invoiceCycle: "monthly",
+  netTerms: "net_15",
+  sites: [
+    {
+      nickname: "Canton suite",
+      address: "3600 Boston St",
+      sqft: 1100,
+      facilityType: "office",
+      scopeLevel: "light",
+      crewSize: 2,
+      firmPriceCents: 10000,
+      cadence: "weekly",
+      serviceWindowStart: "18:00",
+      serviceWindowEnd: "21:00",
+      walkthroughCompleted: true,
+    },
+  ],
+});
+check("Client is the business name", commercialFields.Client, "Harbor East Holdings");
+check("invoiced cycle is monthly", commercialFields["Billing Cycle"], "monthly");
+check("net 15 maps to 15", commercialFields["Net Days"], 15);
+check("auto-pay checkbox is off for invoiced", commercialFields[COMMERCIAL_AUTO_PAY_FIELD], false);
+check("Site 1 rate is dollars not cents", commercialFields["Site1 Rate"], 100);
+check("unused Site 2 is N/A", commercialFields["Site2 Nickname"], "N/A");
+check("walkthrough is Yes when a site was walked", commercialFields["Walkthrough Completed"], "Yes");
+check("auto-pay field uses the non-breaking hyphen", COMMERCIAL_AUTO_PAY_FIELD.includes("\u2011"), true);
 
 if (failures) {
   console.error(`\n${failures} check(s) failed.`);

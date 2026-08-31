@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import type { ChecklistItem, ChecklistFieldKind, ProposalChecklists } from "@/lib/proposal-request";
+import { typeRequiresWalkthrough } from "@/lib/proposal-request";
 import { proposalApi } from "@/lib/proposal-request-api";
 import { cn } from "@/lib/utils";
 
@@ -100,22 +101,22 @@ export default function ProposalChecklistEditor({
   onSaved: (next: ProposalChecklists) => void;
 }) {
   const [local, setLocal] = useState(catalog);
-  const [section, setSection] = useState<"universal" | "type" | "intake">("type");
-  const [typeKey, setTypeKey] = useState(catalog.types[0]?.key || "office");
+  const [section, setSection] = useState<"universal" | "extras" | "intake">("universal");
+  const [typeKey, setTypeKey] = useState(catalog.types.find((t) => t.key === "office")?.key || catalog.types[0]?.key || "office");
   const [saving, setSaving] = useState(false);
   const [newLabel, setNewLabel] = useState("");
   const [newKey, setNewKey] = useState("");
 
   const findings = useMemo(() => {
     if (section === "universal") return local.universal;
-    if (section === "intake") return local.intakeByType[typeKey] || [];
-    return local.byType[typeKey] || [];
+    if (section === "extras") return local.siteExtras || [];
+    return local.intakeByType[typeKey] || [];
   }, [local, section, typeKey]);
 
   const setFindings = (next: ChecklistItem[]) => {
     if (section === "universal") setLocal((c) => ({ ...c, universal: next }));
-    else if (section === "intake") setLocal((c) => ({ ...c, intakeByType: { ...c.intakeByType, [typeKey]: next } }));
-    else setLocal((c) => ({ ...c, byType: { ...c.byType, [typeKey]: next } }));
+    else if (section === "extras") setLocal((c) => ({ ...c, siteExtras: next }));
+    else setLocal((c) => ({ ...c, intakeByType: { ...c.intakeByType, [typeKey]: next } }));
   };
 
   const save = async () => {
@@ -124,7 +125,7 @@ export default function ProposalChecklistEditor({
       const out = await proposalApi.saveChecklists({ action: "save", catalog: local });
       onSaved(out.catalog);
       setLocal(out.catalog);
-      toast.success("Site findings saved — new walkthroughs use this content. Crew lists stay on the job token.");
+      toast.success("Site findings saved — office and commercial walkthroughs share this list. STR skips the visit.");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not save");
     } finally {
@@ -142,10 +143,10 @@ export default function ProposalChecklistEditor({
       const added = out.catalog.types[out.catalog.types.length - 1];
       if (added) {
         setTypeKey(added.key);
-        setSection("type");
+        setSection("intake");
       }
       setNewLabel(""); setNewKey("");
-      toast.success(`Added property type "${newLabel}"`);
+      toast.success(`Added property type "${newLabel}" — it uses the same site findings. Edit light intake if needed.`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not add type");
     } finally {
@@ -159,8 +160,9 @@ export default function ProposalChecklistEditor({
         <div>
           <h2 className="font-bold text-slate-900">Site findings</h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            The walkthrough agent&apos;s tokenized link. Keep required fields short; notes stay optional.
-            Assigned-cleaner job lists are a separate token after dispatch — edit those under Commercial hub Checklists, not here.
+            One setup for office and commercial walkthroughs. STR properties skip the visit —
+            they are residential and priced from bedrooms, bathrooms, and linen on the host record.
+            Assigned-cleaner job lists stay on a separate token after dispatch.
           </p>
         </div>
         <Button onClick={() => void save()} disabled={saving}>
@@ -180,32 +182,57 @@ export default function ProposalChecklistEditor({
           >
             Universal findings
           </button>
-          {local.types.map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => {
-                setTypeKey(t.key);
-                if (section === "universal") setSection("type");
-              }}
-              className={cn(
-                "w-full text-left rounded-lg px-3 py-2 text-sm font-medium",
-                typeKey === t.key && section !== "universal" ? "bg-violet-600 text-white" : "bg-slate-50 text-slate-700",
-              )}
-            >
-              {t.label}
-            </button>
-          ))}
+          <button
+            type="button"
+            onClick={() => setSection("extras")}
+            className={cn(
+              "w-full text-left rounded-lg px-3 py-2 text-sm font-medium",
+              section === "extras" ? "bg-violet-600 text-white" : "bg-slate-50 text-slate-700",
+            )}
+          >
+            Additional findings
+          </button>
+          <button
+            type="button"
+            onClick={() => setSection("intake")}
+            className={cn(
+              "w-full text-left rounded-lg px-3 py-2 text-sm font-medium",
+              section === "intake" ? "bg-violet-600 text-white" : "bg-slate-50 text-slate-700",
+            )}
+          >
+            Light intake
+          </button>
         </div>
         <div className="space-y-4">
-          {section !== "universal" && (
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" size="sm" variant={section === "type" ? "default" : "outline"} onClick={() => setSection("type")}>
-                On-site findings
-              </Button>
-              <Button type="button" size="sm" variant={section === "intake" ? "default" : "outline"} onClick={() => setSection("intake")}>
-                Light intake
-              </Button>
+          {section === "extras" && (
+            <p className="text-xs text-slate-500 rounded-lg border border-violet-100 bg-violet-50/60 px-3 py-2">
+              These questions appear on every office and commercial walkthrough after the universal
+              fields. Keep them optional unless every site needs the answer.
+            </p>
+          )}
+          {section === "intake" && (
+            <div className="space-y-2">
+              <p className="text-xs text-slate-500">
+                Intake is still per type — STR asks beds/baths/linen; office asks desks. This is not the walkthrough.
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {local.types.map((t) => (
+                  <button
+                    key={t.key}
+                    type="button"
+                    onClick={() => setTypeKey(t.key)}
+                    className={cn(
+                      "rounded-full px-3 py-1 text-xs font-medium border",
+                      typeKey === t.key
+                        ? "border-violet-500 bg-violet-50 text-violet-900"
+                        : "border-slate-200 bg-white text-slate-600",
+                    )}
+                  >
+                    {t.shortLabel}
+                    {!typeRequiresWalkthrough(t) ? " · no walkthrough" : ""}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
@@ -214,6 +241,9 @@ export default function ProposalChecklistEditor({
           <div className="rounded-xl border border-dashed border-slate-200 p-3 space-y-2">
             <p className="text-xs font-semibold text-slate-700 flex items-center gap-1">
               <RiAddLine className="w-3.5 h-3.5" /> New property type
+            </p>
+            <p className="text-[11px] text-slate-500">
+              New types share this site-findings setup and get their own light intake.
             </p>
             <div className="grid sm:grid-cols-2 gap-2">
               <div>
@@ -226,7 +256,7 @@ export default function ProposalChecklistEditor({
               </div>
             </div>
             <Button variant="outline" size="sm" disabled={saving} onClick={() => void addType()}>
-              Add type with empty findings
+              Add type
             </Button>
           </div>
         </div>

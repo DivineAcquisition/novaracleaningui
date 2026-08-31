@@ -245,7 +245,7 @@ export async function sessionPayload(supabase: Admin, session: Row): Promise<Ses
         .from("business_accounts")
         .select(
           "id, business_name, contact_name, email, phone, address, city, state, zip_code, " +
-            "preferred_billing_method, portal_user_id, portal_created_at, requires_coi_on_file",
+            "preferred_billing_method, portal_user_id, portal_created_at, requires_coi_on_file, account_type",
         )
         .eq("id", accountId)
         .maybeSingle(),
