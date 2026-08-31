@@ -25,6 +25,7 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { parseZoneCompletions, siteZoneNames, zoneCompletionGate } from "../_shared/site-zones.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -54,7 +55,7 @@ serve(async (req) => {
     const { data: booking, error: fetchError } = await supabase
       .from("bookings")
       .select(
-        "id, status, cleaner_id, photo_upload_token, after_photo_link_sent_at",
+        "id, status, cleaner_id, photo_upload_token, after_photo_link_sent_at, photo_zones, job_id",
       )
       .eq("id", bookingId)
       .single();
@@ -111,6 +112,32 @@ serve(async (req) => {
           ? `https://contractor.novaracleaning.com/cleaner/job-photos/${booking.photo_upload_token}?phase=after`
           : null,
       });
+    }
+
+    const zoneNames = siteZoneNames(booking.photo_zones);
+    if (zoneNames.length) {
+      const { data: byBooking } = await supabase
+        .from("job_checklists")
+        .select("zone_completion")
+        .eq("booking_id", bookingId)
+        .maybeSingle();
+      let zoneCompletion = byBooking?.zone_completion;
+      if (zoneCompletion == null && booking.job_id) {
+        const { data: byJob } = await supabase
+          .from("job_checklists")
+          .select("zone_completion")
+          .eq("job_id", booking.job_id)
+          .maybeSingle();
+        zoneCompletion = byJob?.zone_completion;
+      }
+      const gate = zoneCompletionGate(zoneNames, parseZoneCompletions(zoneCompletion));
+      if (!gate.ok) {
+        const unmarked = [...gate.missing, ...gate.unmarked];
+        return json({
+          error: `Every zone must be marked complete, partial, or not-done before this job can close. Still unmarked: ${unmarked.join(", ")}.`,
+          unmarked_zones: unmarked,
+        }, 400);
+      }
     }
 
     // ─── Move to pending_review (admin finalizes from the admin workspace) ──

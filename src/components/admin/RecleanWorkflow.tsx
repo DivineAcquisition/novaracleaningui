@@ -90,8 +90,10 @@ export default function RecleanWorkflow({
       setClassification(String(issue.reclean_classification || "") === "pending" ? "" : String(issue.reclean_classification || ""));
       setScope((issue.reclean_scope as "targeted" | "full") || "targeted");
       const named = Array.isArray(issue.reclean_areas_named) ? (issue.reclean_areas_named as string[]) : [];
-      const pktAreas = ((d.packet as { namedAreas?: string[] } | undefined)?.namedAreas) || [];
-      setAreas(named.length ? named : pktAreas);
+      const pkt = (d.packet as { namedAreas?: string[]; siteZones?: string[]; issueZone?: string | null } | undefined);
+      const pktAreas = pkt?.namedAreas || [];
+      const issueZone = String(issue.zone_name || pkt?.issueZone || "");
+      setAreas(named.length ? named : pktAreas.length ? pktAreas : issueZone ? [issueZone] : []);
       setChecklistItemIds(
         Array.isArray(issue.reclean_checklist_item_ids)
           ? (issue.reclean_checklist_item_ids as string[])
@@ -175,6 +177,9 @@ export default function RecleanWorkflow({
     conditionsFound?: Array<{ section: string; note?: string }>;
     originalCrew?: Array<{ name: string; role: string | null }>;
     namedAreas?: string[];
+    siteZones?: string[];
+    issueZone?: string | null;
+    zonePhotos?: Array<{ zoneName: string; kind: string; url: string; label: string }>;
     qualityHitApplies?: boolean;
   };
   const status = String(issue.reclean_status || "none");
@@ -185,7 +190,11 @@ export default function RecleanWorkflow({
   const locked = ["completed", "declined", "cancelled"].includes(status);
 
   const toggleArea = (id: string) => {
-    setAreas((prev) => prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]);
+    setAreas((prev) => {
+      const hit = prev.find((a) => a.toLowerCase() === id.toLowerCase());
+      if (hit) return prev.filter((a) => a.toLowerCase() !== id.toLowerCase());
+      return [...prev, id];
+    });
   };
 
   if (loading) {
@@ -293,14 +302,19 @@ export default function RecleanWorkflow({
           </div>
           {scope === "targeted" && (
             <div className="flex flex-wrap gap-2">
-              {AREAS.map((a) => (
+              {(pkt.siteZones && pkt.siteZones.length > 0
+                ? pkt.siteZones.map((z) => ({ id: z, label: z }))
+                : AREAS
+              ).map((a) => (
                 <button
                   key={a.id}
                   type="button"
                   onClick={() => toggleArea(a.id)}
                   className={cn(
                     "text-xs rounded-full border px-2.5 py-1",
-                    areas.includes(a.id) ? "bg-violet-600 text-white border-violet-600" : "border-slate-200 text-slate-700",
+                    areas.some((x) => x.toLowerCase() === a.id.toLowerCase())
+                      ? "bg-violet-600 text-white border-violet-600"
+                      : "border-slate-200 text-slate-700",
                   )}
                 >
                   {a.label}

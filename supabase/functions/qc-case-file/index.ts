@@ -20,6 +20,8 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { getContractorChecklist } from "../_shared/contractor-checklists.ts";
+import { labeledZonePhotos, parseZoneCompletions, siteZoneNames } from "../_shared/site-zones.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -178,7 +180,8 @@ serve(async (req) => {
         "completion_hold_pi_id, completion_hold_status, completion_hold_captured_amount, completion_hold_captured_at, " +
         "add_ons, membership_plan, is_recurring, team_notes, issues_notes, access_notes, check_in_time, check_out_time, " +
         "before_photos, after_photos, photo_upload_submitted_at, num_cleaners_assigned, " +
-        "is_reclean, reclean_of_booking_id, reclean_qc_issue_id, reclean_scope, reclean_assessed_value_cents",
+        "is_reclean, reclean_of_booking_id, reclean_qc_issue_id, reclean_scope, reclean_assessed_value_cents, " +
+        "photo_zones, reclean_zones, scope_level",
       )
       .eq("id", bookingId)
       .maybeSingle();
@@ -198,7 +201,7 @@ serve(async (req) => {
         : Promise.resolve({ data: null }),
       admin.from("job_documentation").select("*").eq("booking_id", bookingId).maybeSingle(),
       booking.job_id
-        ? admin.from("job_checklists").select("service_type, items, total_items, completed_items, progress_pct, started_at, completed_at, last_activity_by").eq("job_id", booking.job_id).maybeSingle()
+        ? admin.from("job_checklists").select("service_type, items, total_items, completed_items, progress_pct, started_at, completed_at, last_activity_by, section_meta, zone_completion").eq("job_id", booking.job_id).maybeSingle()
         : Promise.resolve({ data: null }),
       admin.from("service_agreements").select("id, customer_email, customer_name, signed_by, source, pdf_path, created_at, agreed_terms, agreed_disclaimer, agreed_refund, agreed_service_agreement")
         .or(`booking_id.eq.${bookingId}${booking.email ? `,customer_email.ilike.${booking.email}` : ""}`)
@@ -282,11 +285,28 @@ serve(async (req) => {
     }
 
     const doc = docRes.data;
+    const siteZones = siteZoneNames(booking.photo_zones);
+    const checklist = checklistRes.data;
+    const spec = siteZones.length
+      ? getContractorChecklist(
+        String(booking.service_type || "commercial"),
+        [],
+        undefined,
+        { scopeLevel: String(booking.scope_level || "standard"), photoZones: siteZones },
+      )
+      : null;
+    const zonePhotos = spec
+      ? labeledZonePhotos(
+        (checklist as { section_meta?: Record<string, { before?: string[]; after?: string[] }> } | null)?.section_meta,
+        spec.sections,
+      )
+      : [];
     const livePhotos = {
       before: (booking.before_photos || []).filter((u: string) => String(u).startsWith("http")),
       after: (booking.after_photos || []).filter((u: string) => String(u).startsWith("http")),
       purged: Boolean(doc?.photos_purged_at),
       submitted_at: booking.photo_upload_submitted_at,
+      zones: zonePhotos,
     };
 
     const recleanChildren = recleanChildRes.data || [];
@@ -360,6 +380,8 @@ serve(async (req) => {
           reclean_of_booking_id: booking.reclean_of_booking_id || null,
           reclean_scope: booking.reclean_scope || null,
           reclean_assessed_value_cents: booking.reclean_assessed_value_cents || null,
+          photo_zones: siteZones,
+          reclean_zones: siteZoneNames(booking.reclean_zones),
         },
         customer: customerRes.data
           ? { ...customerRes.data }
@@ -391,6 +413,9 @@ serve(async (req) => {
             : null,
         },
         photos: livePhotos,
+        zone_completion: parseZoneCompletions(
+          (checklist as { zone_completion?: unknown } | null)?.zone_completion,
+        ),
         reclean_photos: recleanPhotoSets,
         original_photos: originalPhotos,
         four_stage_sequence: fourStageSequence,

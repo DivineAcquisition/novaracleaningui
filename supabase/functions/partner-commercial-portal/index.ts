@@ -17,6 +17,12 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { getContractorChecklist } from "../_shared/contractor-checklists.ts";
+import {
+  labeledZonePhotos,
+  parseSiteZones,
+  parseZoneCompletions,
+} from "../_shared/site-zones.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -118,7 +124,7 @@ serve(async (req) => {
 
       const { data: sites } = await admin
         .from("business_sites")
-        .select("id, nickname, address, city, facility_type, sqft")
+        .select("id, nickname, address, city, facility_type, sqft, photo_zones")
         .eq("business_account_id", account.id)
         .eq("active", true)
         .order("created_at", { ascending: true });
@@ -152,6 +158,93 @@ serve(async (req) => {
         }
       }
 
+      const siteRows = sites || [];
+      const siteIds = siteRows.map((s: { id: string }) => s.id).filter(Boolean);
+      const lastBySite = new Map<string, {
+        bookingId: string;
+        jobId: string | null;
+        serviceDate: string | null;
+        serviceType: string | null;
+        scopeLevel: string | null;
+        photoZones: unknown;
+      }>();
+      if (siteIds.length) {
+        const { data: visits } = await admin
+          .from("bookings")
+          .select("id, job_id, business_site_id, service_date, status, service_type, scope_level, photo_zones")
+          .in("business_site_id", siteIds)
+          .in("status", ["completed", "pending_review"])
+          .order("service_date", { ascending: false })
+          .limit(80);
+        for (const v of visits || []) {
+          const sid = String(v.business_site_id || "");
+          if (!sid || lastBySite.has(sid)) continue;
+          lastBySite.set(sid, {
+            bookingId: v.id,
+            jobId: v.job_id || null,
+            serviceDate: v.service_date || null,
+            serviceType: v.service_type || null,
+            scopeLevel: v.scope_level || null,
+            photoZones: v.photo_zones,
+          });
+        }
+      }
+      const jobIds = [...lastBySite.values()].map((v) => v.jobId).filter(Boolean) as string[];
+      const checklistsByJob = new Map<string, { section_meta?: unknown; zone_completion?: unknown }>();
+      if (jobIds.length) {
+        const { data: cls } = await admin
+          .from("job_checklists")
+          .select("job_id, section_meta, zone_completion")
+          .in("job_id", jobIds);
+        for (const cl of cls || []) {
+          checklistsByJob.set(String(cl.job_id), cl);
+        }
+      }
+
+      const sitesOut = siteRows.map((st: Record<string, unknown>) => {
+        const map = parseSiteZones(st.photo_zones);
+        const last = lastBySite.get(String(st.id));
+        const cl = last?.jobId ? checklistsByJob.get(last.jobId) : null;
+        const completions = parseZoneCompletions(cl?.zone_completion);
+        const zoneNames = map.map((z) => z.name);
+        const spec = zoneNames.length
+          ? getContractorChecklist(
+            String(last?.serviceType || "commercial"),
+            [],
+            undefined,
+            { scopeLevel: last?.scopeLevel || "standard", photoZones: zoneNames },
+          )
+          : null;
+        const photos = spec
+          ? labeledZonePhotos(
+            (cl?.section_meta || {}) as Record<string, { before?: string[]; after?: string[] }>,
+            spec.sections,
+          )
+          : [];
+        return {
+          id: st.id,
+          nickname: st.nickname,
+          address: st.address,
+          city: st.city,
+          facility_type: st.facility_type,
+          sqft: st.sqft,
+          last_visit: last?.serviceDate || null,
+          zones: map.map((z) => {
+            const done = completions.find((c) => c.name.toLowerCase() === z.name.toLowerCase());
+            const zPhotos = photos.filter((p) => p.zoneName.toLowerCase() === z.name.toLowerCase());
+            return {
+              id: z.id,
+              name: z.name,
+              description: z.description,
+              status: done?.status || null,
+              note: done?.note || "",
+              before: zPhotos.filter((p) => p.kind === "before").map((p) => p.url),
+              after: zPhotos.filter((p) => p.kind === "after").map((p) => p.url),
+            };
+          }),
+        };
+      });
+
       return json({
         ok: true,
         account: {
@@ -169,7 +262,7 @@ serve(async (req) => {
           setup_complete: setupComplete,
         },
         bookings: bookings || [],
-        sites: sites || [],
+        sites: sitesOut,
         documents: docs,
       });
     }

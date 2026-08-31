@@ -16,7 +16,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { ensureJobChecklist } from "../_shared/job-checklist.ts";
-import { jobServiceTypeForBooking } from "../_shared/contractor-checklists.ts";
+import { jobServiceTypeForBooking, getContractorChecklist } from "../_shared/contractor-checklists.ts";
 import { parseTimeSlotToClock, sendSms } from "../_shared/sms.ts";
 import { computeCrewPay, shareFor } from "../_shared/crew-pay.ts";
 import {
@@ -46,6 +46,12 @@ import {
   sizeBand,
   type RecleanSettings,
 } from "../_shared/reclean.ts";
+import {
+  assessedZoneRecleanCents,
+  labeledZonePhotos,
+  matchNamedZones,
+  siteZoneNames,
+} from "../_shared/site-zones.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -178,7 +184,21 @@ function valueForScope(
   focusedSettings: ReturnType<typeof mergeFocusedSameDaySettings>,
   override?: { scope?: RecleanScope; areas?: string[] },
 ): number {
+  const originalZones = siteZoneNames(original.photo_zones);
   const scope = override?.scope ?? asScope(issue.reclean_scope);
+  if (originalZones.length) {
+    const zones = matchNamedZones(
+      override?.areas ?? issue.reclean_areas_named,
+      originalZones,
+      String(issue.zone_name || ""),
+    );
+    const n = scope === "full" ? originalZones.length : (zones.length || 1);
+    return assessedZoneRecleanCents(
+      Number(original.final_charge_cents ?? original.total_estimate_cents ?? original.custom_quote_cents ?? 0) || 0,
+      n,
+      originalZones.length,
+    );
+  }
   const areas = override?.areas ?? areasFromIssue(issue);
   return assessedRecleanValueCents({
     scope,
@@ -229,6 +249,26 @@ async function packetFor(admin: SB, issue: Record<string, unknown>, original: Re
     ...httpUrls(original.after_photos),
     ...httpUrls((origDoc as { after_photos?: unknown } | null)?.after_photos),
   ].filter((u, i, a) => a.indexOf(u) === i);
+
+  const siteZones = siteZoneNames(original.photo_zones);
+  const issueZone = String(issue.zone_name || "").trim();
+  const restrictZones = issueZone ? matchNamedZones([issueZone], siteZones, issueZone) : siteZones;
+  const spec = siteZones.length
+    ? getContractorChecklist(
+      String(original.service_type || "commercial"),
+      [],
+      undefined,
+      { scopeLevel: String(original.scope_level || "standard"), photoZones: siteZones },
+    )
+    : null;
+  const sectionMeta = (checklist as { section_meta?: Record<string, { before?: string[]; after?: string[] }> } | null)?.section_meta || {};
+  const zonePhotoSeq = spec
+    ? labeledZonePhotos(sectionMeta, spec.sections, restrictZones.length ? restrictZones : siteZones)
+    : [];
+  const zoneBefore = zonePhotoSeq.filter((p) => p.kind === "before").map((p) => p.url);
+  const zoneAfter = zonePhotoSeq.filter((p) => p.kind === "after").map((p) => p.url);
+  const packetBefore = zoneBefore.length ? zoneBefore : origBefore;
+  const packetAfter = zoneAfter.length ? zoneAfter : origAfter;
   const recleanBefore = [
     ...httpUrls(recleanBooking?.before_photos),
     ...httpUrls((recleanDoc as { before_photos?: unknown } | null)?.before_photos),
@@ -246,7 +286,6 @@ async function packetFor(admin: SB, issue: Record<string, unknown>, original: Re
     const rec = value as { skipped?: boolean; skipReason?: string; by?: string };
     if (rec && rec.skipped) skipped.push({ key, reason: String(rec.skipReason || ""), by: rec.by });
   }
-  const sectionMeta = (checklist as { section_meta?: Record<string, unknown> } | null)?.section_meta || {};
   const conditionsFound: Array<{ section: string; note?: string; photos?: unknown; at?: string }> = [];
   for (const [k, v] of Object.entries(sectionMeta)) {
     const rec = v as { conditions_note?: string; conditions_photos?: unknown; conditions_at?: string };
@@ -290,8 +329,8 @@ async function packetFor(admin: SB, issue: Record<string, unknown>, original: Re
   }
 
   const fourStageSequence = [
-    ...filterAreas(origBefore).map((url) => ({ stage: "original_before", url })),
-    ...filterAreas(origAfter).map((url) => ({ stage: "original_after", url })),
+    ...(siteZones.length ? packetBefore : filterAreas(origBefore)).map((url) => ({ stage: "original_before", url })),
+    ...(siteZones.length ? packetAfter : filterAreas(origAfter)).map((url) => ({ stage: "original_after", url })),
     ...recleanBefore.map((url) => ({ stage: "reclean_before", url })),
     ...recleanAfter.map((url) => ({ stage: "reclean_after", url })),
   ];
@@ -302,10 +341,13 @@ async function packetFor(admin: SB, issue: Record<string, unknown>, original: Re
     originalJob: origJob,
     recleanJobId,
     originalCrew: crew,
-    namedAreas: areas,
+    namedAreas: siteZones.length ? (restrictZones.length ? restrictZones : siteZones) : areas,
+    siteZones,
+    issueZone: issueZone || null,
+    zonePhotos: zonePhotoSeq,
     originalPhotos: {
-      before: filterAreas(origBefore),
-      after: filterAreas(origAfter),
+      before: siteZones.length ? packetBefore : filterAreas(origBefore),
+      after: siteZones.length ? packetAfter : filterAreas(origAfter),
       allBefore: origBefore,
       allAfter: origAfter,
     },
@@ -668,13 +710,37 @@ serve(async (req) => {
       const areas = (Array.isArray(body.areas) ? (body.areas as unknown[]).map(String) : [])
         .map((a) => String(a).toLowerCase().trim())
         .filter(Boolean);
-      const resolvedAreas = areas.length
-        ? areas
-        : areasFromIssue(issue, String(issue.description || ""));
+      const originalZones = siteZoneNames(original.photo_zones);
+      const requestedZones = matchNamedZones(
+        [
+          ...(Array.isArray(body.zones) ? body.zones : []),
+          ...(Array.isArray(body.areas) ? body.areas : []),
+        ],
+        originalZones,
+        String(issue.zone_name || ""),
+      );
+      const recleanZones = scope === "full" && originalZones.length
+        ? originalZones
+        : requestedZones;
+      const zonedTargeted = originalZones.length > 0 && scope === "targeted";
+      const resolvedAreas = zonedTargeted
+        ? recleanZones
+        : (areas.length ? areas : areasFromIssue(issue, String(issue.description || "")));
       if (scope === "targeted" && resolvedAreas.length === 0 && !Number(body.assessedValueCents)) {
-        return json({ ok: false, error: "Pick the areas to re-clean (kitchen, bathroom, …) so the pricing engine can assess pay." }, 400);
+        return json({
+          ok: false,
+          error: originalZones.length
+            ? `Pick the zone(s) to re-clean (${originalZones.join(", ")}) so the follow-up is scoped to that section, not the whole facility.`
+            : "Pick the areas to re-clean (kitchen, bathroom, …) so the pricing engine can assess pay.",
+        }, 400);
       }
-      let assessed = valueForScope(issue, original, focused, { scope, areas: resolvedAreas });
+      let assessed = zonedTargeted || (originalZones.length && scope === "full")
+        ? assessedZoneRecleanCents(
+          Number(original.final_charge_cents ?? original.total_estimate_cents ?? original.custom_quote_cents ?? 0) || 0,
+          recleanZones.length || originalZones.length,
+          originalZones.length,
+        )
+        : valueForScope(issue, original, focused, { scope, areas: resolvedAreas });
       if (Number(body.assessedValueCents) > 0) assessed = Math.round(Number(body.assessedValueCents));
       if (assessed <= 0) {
         return json({ ok: false, error: "Re-clean assessed value must be greater than $0 — unpaid re-cleans are prohibited." }, 400);
@@ -683,25 +749,31 @@ serve(async (req) => {
       const serviceDate = nextServiceDate(body.serviceDate ? String(body.serviceDate) : null, original);
       const timeSlot = String(body.timeSlot || original.time_slot || "morning");
       const customerPrefersOther = body.customerPrefersOther === true;
+      const scopeSummary = originalZones.length
+        ? recleanZones.join(", ")
+        : (resolvedAreas.length ? resolvedAreas.join(", ") : null);
       const draft = draftCustomerMessage({
         classification,
         firstName: original.first_name,
         serviceDate,
         timeSlot,
         scope,
-        scopeSummary: resolvedAreas.length ? resolvedAreas.join(", ") : null,
+        scopeSummary,
       });
       const message = String(body.customerMessage || "").trim() || draft.body;
 
-      const focusedAreas = scope === "targeted"
-        ? resolvedAreas.map((areaId) => ({ areaId, quantity: 1 }))
-        : original.focused_areas;
+      const keepCommercial = originalZones.length > 0;
+      const focusedAreas = keepCommercial
+        ? (original.focused_areas || [])
+        : (scope === "targeted"
+          ? resolvedAreas.map((areaId) => ({ areaId, quantity: 1 }))
+          : original.focused_areas);
       const originalRef = original.booking_number
         ? `NVC-${String(original.booking_number).padStart(4, "0")}`
         : String(original.id).slice(0, 8);
       const special = [
         String(original.team_notes || "").trim(),
-        `RE-CLEAN of ${originalRef} — ${scope === "full" ? "full re-service" : `targeted: ${resolvedAreas.join(", ") || "see QC case"}`}. Spotless Guarantee — customer not charged. Performer is paid on assessed value $${(assessed / 100).toFixed(2)}.`,
+        `RE-CLEAN of ${originalRef} — ${scope === "full" ? "full re-service" : `targeted: ${scopeSummary || "see QC case"}`}. Spotless Guarantee — customer not charged. Performer is paid on assessed value $${(assessed / 100).toFixed(2)}.`,
       ].filter(Boolean).join("\n");
 
       const insert: Record<string, unknown> = {
@@ -718,14 +790,14 @@ serve(async (req) => {
         estimated_duration_hours: scope === "full"
           ? (Number(original.estimated_duration_hours) || 3)
           : Math.max(1, resolvedAreas.length * 0.75),
-        service_type: scope === "full" ? original.service_type : "focused",
+        service_type: keepCommercial || scope === "full" ? original.service_type : "focused",
         service_date: serviceDate,
         time_slot: timeSlot,
         status: "confirmed",
         bedrooms: original.bedrooms,
         bathrooms: original.bathrooms,
         sqft: original.sqft,
-        add_ons: scope === "full" ? original.add_ons : [],
+        add_ons: scope === "full" || keepCommercial ? original.add_ons : [],
         focused_areas: focusedAreas,
         access_notes: original.access_notes,
         team_notes: special,
@@ -746,6 +818,13 @@ serve(async (req) => {
         reclean_scope: scope,
         reclean_assessed_value_cents: assessed,
         suppress_review_request: true,
+        business_account_id: original.business_account_id || null,
+        business_site_id: original.business_site_id || null,
+        facility_type: original.facility_type || null,
+        square_footage: original.square_footage || original.sqft || null,
+        scope_level: original.scope_level || null,
+        photo_zones: keepCommercial ? recleanZones : (original.photo_zones || null),
+        reclean_zones: keepCommercial ? recleanZones : null,
       };
       const { data: recleanBooking, error: bErr } = await admin.from("bookings").insert(insert).select("*").single();
       if (bErr) throw new Error(`Could not create re-clean booking: ${bErr.message}`);
@@ -795,6 +874,7 @@ serve(async (req) => {
         reclean_verified_by: issue.reclean_verified_by || actor!.id,
         reclean_verified_by_name: issue.reclean_verified_by_name || actor!.name,
         status: "investigating",
+        ...(recleanZones[0] && !issue.zone_name ? { zone_name: recleanZones[0] } : {}),
       }).eq("id", issue.id);
 
       await logEvent(admin, issueId, "reclean_approved", actor, {

@@ -21,6 +21,7 @@ import {
   FOCUSED_SAME_DAY_SETTINGS_KEY,
   mergeFocusedSameDaySettings,
 } from "./focused-same-day.ts";
+import { siteZoneNames } from "./site-zones.ts";
 
 export const CONTRACTOR_PORTAL_BASE = "https://contractor.novaracleaning.com";
 
@@ -123,9 +124,7 @@ export async function ensureJobChecklist(
   // from the same spec the crew will actually see.
   const commercialOpts = {
     scopeLevel: booking?.scope_level || null,
-    photoZones: Array.isArray(booking?.photo_zones)
-      ? booking.photo_zones.map(String).filter(Boolean)
-      : null,
+    photoZones: siteZoneNames(booking?.photo_zones),
   };
 
   const checklistKey = contractorChecklistKeyForBooking(

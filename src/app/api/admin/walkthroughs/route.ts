@@ -553,6 +553,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       service_window_start: wt.service_window_start || undefined,
       service_window_end: wt.service_window_end || undefined,
       required_equipment: Array.isArray(wt.required_equipment) ? wt.required_equipment : [],
+      photo_zones: Array.isArray(wt.photo_zones) && wt.photo_zones.length ? wt.photo_zones : undefined,
       // A site that was excluded and has since been priced is no longer
       // excluded — leaving the old reason would be actively misleading.
       excluded_at: null,

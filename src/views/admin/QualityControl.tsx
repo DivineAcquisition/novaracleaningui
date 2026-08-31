@@ -89,6 +89,8 @@ interface IssueRow {
   reclean_status?: string | null;
   reclean_classification?: string | null;
   reclean_inside_window?: boolean | null;
+  zone_id?: string | null;
+  zone_name?: string | null;
 }
 
 interface IssueEvent {
@@ -135,6 +137,7 @@ interface BookingPick {
   service_date: string | null;
   service_type: string | null;
   status: string | null;
+  photo_zones?: unknown;
 }
 
 // ─── Constants ──────────────────────────────────────────────────────────
@@ -513,6 +516,9 @@ function IssuesTab({
             {i.reclean_status && i.reclean_status !== "none" && (
               <Badge className="border-0 bg-violet-100 text-violet-800">Re-clean: {i.reclean_status.replace(/_/g, " ")}</Badge>
             )}
+            {i.zone_name && (
+              <Badge className="border-0 bg-slate-800 text-white">Zone: {i.zone_name}</Badge>
+            )}
                 <span className="text-xs text-slate-400 ml-auto">{fmtDT(i.created_at)}</span>
               </div>
               <p className="font-semibold text-slate-900 mt-1.5">{i.title}</p>
@@ -693,6 +699,9 @@ function IssueSheet({ issue, doc, onClose, reload }: {
             <Badge variant="outline">{ISSUE_TYPES.find((t) => t.id === issue.issue_type)?.label || issue.issue_type}</Badge>
             {issue.reclean_status && issue.reclean_status !== "none" && (
               <Badge className="border-0 bg-violet-100 text-violet-800">Re-clean: {issue.reclean_status.replace(/_/g, " ")}</Badge>
+            )}
+            {issue.zone_name && (
+              <Badge className="border-0 bg-slate-800 text-white">Zone: {issue.zone_name}</Badge>
             )}
             {attached.length > 0 && (
               <Badge variant="outline">
@@ -975,6 +984,7 @@ function CreateIssueDialog({ onClose, reload }: { onClose: () => void; reload: (
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [requestReclean, setRequestReclean] = useState(true);
+  const [zoneName, setZoneName] = useState("");
   const [saving, setSaving] = useState(false);
 
   const searchBookings = useCallback(async () => {
@@ -984,7 +994,7 @@ function CreateIssueDialog({ onClose, reload }: { onClose: () => void; reload: (
     try {
       const num = q.replace(/^(nvc|nov)-?0*/i, "");
       let sel = supabase.from("bookings")
-        .select("id, booking_number, first_name, last_name, email, service_date, service_type, status")
+        .select("id, booking_number, first_name, last_name, email, service_date, service_type, status, photo_zones")
         .order("service_date", { ascending: false })
         .limit(15);
       if (/^\d+$/.test(num)) {
@@ -1012,6 +1022,7 @@ function CreateIssueDialog({ onClose, reload }: { onClose: () => void; reload: (
           title: title.trim(),
           description: description.trim() || undefined,
           requestReclean: ["complaint", "reclean", "quality_flag"].includes(issueType) ? requestReclean : false,
+          zoneName: zoneName || undefined,
         },
       });
       if (error) throw error;
@@ -1066,7 +1077,7 @@ function CreateIssueDialog({ onClose, reload }: { onClose: () => void; reload: (
                   <strong>{booking.booking_number ? `NVC-${String(booking.booking_number).padStart(4, "0")}` : booking.id.slice(0, 8)}</strong>{" "}
                   · {booking.first_name} {booking.last_name} · {fmtD(booking.service_date)}
                 </span>
-                <button className="text-xs text-violet-600 font-semibold" onClick={() => setBooking(null)}>Change</button>
+                <button className="text-xs text-violet-600 font-semibold" onClick={() => { setBooking(null); setZoneName(""); }}>Change</button>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <Select value={issueType} onValueChange={setIssueType}>
@@ -1079,6 +1090,23 @@ function CreateIssueDialog({ onClose, reload }: { onClose: () => void; reload: (
                 </Select>
               </div>
               <Input placeholder="Short title (what happened)" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} />
+              {(() => {
+                const zones = Array.isArray(booking.photo_zones)
+                  ? booking.photo_zones.map((z) => typeof z === "string" ? z : String((z as { name?: string })?.name || "")).filter(Boolean)
+                  : [];
+                if (!zones.length) return null;
+                return (
+                  <div>
+                    <p className="text-[11px] font-semibold text-slate-500 mb-1">Zone this case concerns</p>
+                    <Select value={zoneName} onValueChange={setZoneName}>
+                      <SelectTrigger><SelectValue placeholder="Pick the zone" /></SelectTrigger>
+                      <SelectContent>
+                        {zones.map((z) => <SelectItem key={z} value={z}>{z}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                );
+              })()}
               <Textarea placeholder="Details — what the customer said, what was found…" value={description} onChange={(e) => setDescription(e.target.value)} rows={4} />
               {["complaint", "reclean", "quality_flag"].includes(issueType) && (
                 <label className="flex items-center gap-2 text-sm text-slate-700">
@@ -1091,7 +1119,7 @@ function CreateIssueDialog({ onClose, reload }: { onClose: () => void; reload: (
                   <RiAlertLine className="w-3.5 h-3.5" /> {label(severity)} issues alert admin on Discord immediately.
                 </p>
               )}
-              <Button className="w-full" disabled={!title.trim() || saving} onClick={() => void submit()}>
+              <Button className="w-full" disabled={!title.trim() || saving || (Array.isArray(booking.photo_zones) && booking.photo_zones.length > 0 && !zoneName && ["complaint", "reclean", "quality_flag"].includes(issueType))} onClick={() => void submit()}>
                 {saving ? <RiLoader4Line className="w-4 h-4 animate-spin mr-1.5" /> : <RiAddLine className="w-4 h-4 mr-1.5" />}
                 Create issue
               </Button>

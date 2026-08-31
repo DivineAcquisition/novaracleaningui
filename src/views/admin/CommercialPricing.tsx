@@ -117,10 +117,10 @@ const SETTING_FIELDS: Array<{ key: keyof CommercialSettings; label: string; help
   { key: "default_window_hours", label: "Default window (hours)", step: "0.5", help: "Used when no service window is set on the site or booking." },
   {
     key: "photo_zone_threshold_sqft",
-    label: "Photo zones start at (sq ft)",
-    help: "Below this a site is one before/after pair. Above it, documentation is captured zone by zone.",
+    label: "Zone documentation starts at (sq ft)",
+    help: "Independent of the walkthrough gate, but ships at the same value. Below this a site is one before/after pair. At or above it, the walkthrough names the zones used on every later visit.",
   },
-  { key: "photo_zone_sqft", label: "Square feet per zone", help: "How much area one documentation zone covers." },
+  { key: "photo_zone_sqft", label: "Square feet per zone (legacy)", help: "Unused for named maps. Kept so older auto-generated zone bookings still make sense." },
   { key: "max_photo_zones", label: "Maximum zones", help: "Ceiling on generated zones so a huge site doesn't produce an unusable checklist." },
   { key: "coi_warning_days", label: "COI warning window (days)", help: "A certificate expiring inside this window is flagged as needing attention; expired blocks outright." },
 ];

@@ -34,6 +34,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { SEO } from "@/components/SEO";
 import { cn } from "@/lib/utils";
+import { isZoneStatus, type ZoneCompletion, type ZoneStatus } from "@/lib/site-zones";
 
 // ─── Types (mirror cleaner-job-checklist edge fn payload) ────────────────
 interface ChecklistSection {
@@ -103,6 +104,9 @@ interface SiteFindingRow {
 interface ChecklistState {
   ok: boolean;
   canWrite: boolean;
+  is_crew_lead?: boolean;
+  crew_size?: number;
+  zone_completion?: ZoneCompletion[];
   job: {
     id: string;
     service_type: string;
@@ -159,6 +163,7 @@ interface ChecklistState {
     names?: string[];
     photos_complete?: boolean;
     missing_photo_sections?: number[];
+    completion?: ZoneCompletion[];
     progress?: Array<{
       title: string;
       zoneName: string | null;
@@ -229,6 +234,8 @@ export default function CleanerJobChecklistPage() {
   const [confinedAnswer, setConfinedAnswer] = useState<boolean | null>(null);
   const [findingBusy, setFindingBusy] = useState(false);
   const [afterBusyId, setAfterBusyId] = useState<string | null>(null);
+  const [zoneDraft, setZoneDraft] = useState<Record<string, { status: ZoneStatus | ""; note: string }>>({});
+  const [issueZone, setIssueZone] = useState("");
 
   const call = useCallback(
     async (body: Record<string, unknown>) => {
@@ -259,6 +266,25 @@ export default function CleanerJobChecklistPage() {
   useEffect(() => {
     if (token) void load();
   }, [token, load]);
+
+  useEffect(() => {
+    const names = state?.zones?.names || [];
+    if (!names.length) return;
+    const existing = state?.zone_completion?.length
+      ? state.zone_completion
+      : (state?.zones?.completion || []);
+    setZoneDraft((prev) => {
+      const next: Record<string, { status: ZoneStatus | ""; note: string }> = {};
+      for (const name of names) {
+        const row = existing.find((c) => c.name.toLowerCase() === name.toLowerCase());
+        next[name] = {
+          status: row?.status || prev[name]?.status || "",
+          note: row?.note || prev[name]?.note || "",
+        };
+      }
+      return next;
+    });
+  }, [state?.zones?.names, state?.zone_completion, state?.zones?.completion]);
 
   const toggleItem = async (itemKey: string, done: boolean) => {
     if (!state?.canWrite) return;
@@ -291,6 +317,17 @@ export default function CleanerJobChecklistPage() {
   const finish = async () => {
     setFinishing(true);
     try {
+      if (state?.zones?.enabled) {
+        const names = state.zones.names || [];
+        setState(await call({
+          action: "confirm_zones",
+          zones: names.map((name) => ({
+            name,
+            status: zoneDraft[name]?.status,
+            note: zoneDraft[name]?.note || "",
+          })),
+        }));
+      }
       setState(await call({ action: "complete" }));
       toast.success("Checklist complete — the office has been notified.");
     } catch (err) {
@@ -386,7 +423,12 @@ export default function CleanerJobChecklistPage() {
     setIssueSending(true);
     try {
       const { data, error: invokeError } = await supabase.functions.invoke("qc-issues", {
-        body: { action: "field_report", token, description },
+        body: {
+          action: "field_report",
+          token,
+          description,
+          zoneName: issueZone || undefined,
+        },
       });
       if (invokeError) throw invokeError;
       if ((data as { ok?: boolean; error?: string })?.ok === false) {
@@ -395,6 +437,7 @@ export default function CleanerJobChecklistPage() {
       toast.success("Report sent — dispatch has been alerted. Stay put unless it's unsafe.");
       setIssueOpen(false);
       setIssueText("");
+      setIssueZone("");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't send report — call dispatch instead");
     } finally {
@@ -484,16 +527,31 @@ export default function CleanerJobChecklistPage() {
   const progress = state?.checklist.progress_pct ?? 0;
   const isFocused = Boolean(state?.focused?.enabled);
   const hasZones = Boolean(state?.zones?.enabled);
+  const zoneNames = state?.zones?.names || [];
+  const isCrewLead = state?.is_crew_lead !== false;
+  const zonesMarked = !hasZones || zoneNames.every((name) => {
+    const row = zoneDraft[name];
+    if (!row || !isZoneStatus(row.status)) return false;
+    if (row.status !== "complete" && !row.note.trim()) return false;
+    return true;
+  });
+  const completeZonePhotosOk = !hasZones || zoneNames.every((name) => {
+    if (zoneDraft[name]?.status !== "complete") return true;
+    const p = (state?.zones?.progress || []).find((z) => z.zoneName === name);
+    return Boolean(p?.photosDone);
+  });
   // Anything that documents section by section — focused areas, commercial
-  // zones — can't finish until every one of those sections has both photos.
+  // zones — can't finish until every required section has both photos.
   const sectionPhotosComplete = state
     ? (!isFocused || Boolean(state.focused?.photos_complete))
-      && (!hasZones || Boolean(state.zones?.photos_complete))
+      && completeZonePhotosOk
     : false;
   const allDone = state
     ? state.checklist.completed_items >= state.checklist.total_items
       && state.checklist.total_items > 0
       && sectionPhotosComplete
+      && zonesMarked
+      && isCrewLead
       && !(state.findings || []).some((f) => f.details.status === "pending_after")
     : false;
 
@@ -639,6 +697,82 @@ export default function CleanerJobChecklistPage() {
                 {z.zoneName}: {z.complete ? "complete" : z.tasksDone ? "photos needed" : "in progress"}
               </span>
             ))}
+          </div>
+        </div>
+      )}
+
+      {hasZones && state.canWrite && !checklist.completed_at && (
+        <div className="rounded-2xl border border-violet-400 bg-white px-5 py-4 space-y-3">
+          <p className="text-sm font-semibold text-violet-950">
+            Crew Lead — confirm each zone before you leave
+          </p>
+          {!isCrewLead ? (
+            <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              The Crew Lead marks every zone complete, partial, or not done. This job cannot close with a blank.
+            </p>
+          ) : (
+            <p className="text-[11px] text-slate-500">
+              Partial or not-done opens a follow-up and tells the client which section wasn&apos;t finished. None can be left blank.
+            </p>
+          )}
+          <div className="space-y-3">
+            {zoneNames.map((name) => {
+              const row = zoneDraft[name] || { status: "" as const, note: "" };
+              const photosDone = (state.zones?.progress || []).find((z) => z.zoneName === name)?.photosDone;
+              return (
+                <div key={name} className="rounded-xl border border-slate-200 p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-slate-900">{name}</p>
+                    <span className={cn(
+                      "text-[10px] font-semibold uppercase tracking-wide",
+                      photosDone ? "text-emerald-600" : "text-amber-700",
+                    )}>
+                      {photosDone ? "photos in" : "photos still needed to mark complete"}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {([
+                      ["complete", "Complete"],
+                      ["partial", "Partial"],
+                      ["not_done", "Not done"],
+                    ] as Array<[ZoneStatus, string]>).map(([id, label]) => (
+                      <button
+                        key={id}
+                        type="button"
+                        disabled={!isCrewLead}
+                        onClick={() => setZoneDraft((prev) => ({
+                          ...prev,
+                          [name]: { status: id, note: prev[name]?.note || "" },
+                        }))}
+                        className={cn(
+                          "h-8 rounded-lg text-[11px] font-semibold border",
+                          row.status === id
+                            ? id === "complete"
+                              ? "bg-emerald-600 text-white border-emerald-600"
+                              : "bg-amber-600 text-white border-amber-600"
+                            : "bg-white text-slate-700 border-slate-200",
+                        )}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  {(row.status === "partial" || row.status === "not_done") && (
+                    <textarea
+                      disabled={!isCrewLead}
+                      rows={2}
+                      placeholder={`What was left in ${name}? The next visit and the client see this.`}
+                      value={row.note}
+                      onChange={(e) => setZoneDraft((prev) => ({
+                        ...prev,
+                        [name]: { status: prev[name]?.status || row.status, note: e.target.value },
+                      }))}
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-violet-300"
+                    />
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -1169,6 +1303,18 @@ export default function CleanerJobChecklistPage() {
               </Button>
             ) : (
               <div className="mt-3 space-y-2.5">
+                {hasZones && zoneNames.length > 0 && (
+                  <select
+                    value={issueZone}
+                    onChange={(e) => setIssueZone(e.target.value)}
+                    className="h-9 w-full text-sm rounded-lg border border-slate-200 bg-white px-2"
+                  >
+                    <option value="">Which zone? (required on this site)</option>
+                    {zoneNames.map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                )}
                 <textarea
                   placeholder="What's wrong? Be specific — dispatch acts on exactly what you write here."
                   value={issueText}
@@ -1179,7 +1325,7 @@ export default function CleanerJobChecklistPage() {
                 <div className="flex gap-2">
                   <Button
                     className="flex-1 bg-rose-600 hover:bg-rose-700"
-                    disabled={!issueText.trim() || issueSending}
+                    disabled={!issueText.trim() || issueSending || (hasZones && !issueZone)}
                     onClick={() => void sendFieldReport()}
                   >
                     {issueSending
@@ -1211,6 +1357,12 @@ export default function CleanerJobChecklistPage() {
             ? "Finish checklist — notify the office"
             : (state.findings || []).some((f) => f.details.status === "pending_after")
               ? "After photo still needed on the pest/mold finding"
+              : hasZones && !isCrewLead
+              ? "Ask the Crew Lead to confirm each zone before this job can close"
+              : hasZones && !zonesMarked
+              ? "Mark every zone complete, partial, or not done"
+              : hasZones && !completeZonePhotosOk
+              ? "Before and after photos required on every zone you mark complete"
               : isFocused || hasZones
               ? `Finish every task (or skip with reason) + ${hasZones ? "zone" : "area"} photos`
               : `Complete all ${checklist.total_items} tasks to finish`}
