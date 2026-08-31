@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { isLocalHost } from "@/lib/partner-portal/origins";
+import { requestIsLocal } from "@/lib/partner-portal/origins";
 import { isPreviewQuery, previewMe } from "@/lib/partner-portal/preview";
 import { resolvePortalSession } from "@/lib/partner-portal/session";
 
@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request): Promise<NextResponse> {
   const url = new URL(req.url);
   const preview = isPreviewQuery(url.searchParams.get("preview"));
-  if (preview && isLocalHost(url.hostname)) {
+  if (preview && requestIsLocal(req)) {
     return NextResponse.json(previewMe(preview));
   }
 

@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import {
+  commercialExhibitAText,
   commercialOverview,
   reportCommercialIssue,
   requestAdditionalService,
   requestAdditionalSite,
   requestScheduleChange,
 } from "@/lib/partner-portal/commercial";
-import { isLocalHost } from "@/lib/partner-portal/origins";
+import { portalCallbackUrl, requestIsLocal } from "@/lib/partner-portal/origins";
+import { openCommercialPaymentSetup, refreshCommercialPaymentMethod } from "@/lib/partner-portal/payment-method";
 import { isPreviewQuery, previewCommercialOverview } from "@/lib/partner-portal/preview";
 import { resolvePortalSession } from "@/lib/partner-portal/session";
 
@@ -16,8 +18,33 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request): Promise<NextResponse> {
   const url = new URL(req.url);
   const preview = isPreviewQuery(url.searchParams.get("preview"));
-  if (preview && isLocalHost(url.hostname)) {
-    return NextResponse.json(previewCommercialOverview());
+  const invoiced = url.searchParams.get("billing") === "invoiced";
+  if (url.searchParams.get("download") === "exhibit_a") {
+    if (preview && requestIsLocal(req)) {
+      return new NextResponse("EXHIBIT A — Harbor East office — $185.00 per visit\nCanton suite — $100.00 per visit\n", {
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Content-Disposition": 'attachment; filename="exhibit-a-schedule-of-sites.txt"',
+        },
+      });
+    }
+    const session = await resolvePortalSession();
+    if (!session) return NextResponse.json({ ok: false, error: "Not signed in." }, { status: 401 });
+    if (!session.identity.kinds.includes("commercial")) {
+      return NextResponse.json({ ok: false, error: "No commercial relationship on this account." }, { status: 403 });
+    }
+    const text = await commercialExhibitAText(session.identity);
+    if (!text) return NextResponse.json({ ok: false, error: "No Exhibit A on file." }, { status: 404 });
+    return new NextResponse(text, {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Content-Disposition": 'attachment; filename="exhibit-a-schedule-of-sites.txt"',
+        "Cache-Control": "no-store",
+      },
+    });
+  }
+  if (preview && requestIsLocal(req)) {
+    return NextResponse.json(previewCommercialOverview(invoiced ? "invoiced" : "auto_pay"));
   }
   const session = await resolvePortalSession();
   if (!session) return NextResponse.json({ ok: false, error: "Not signed in." }, { status: 401 });
@@ -29,7 +56,7 @@ export async function GET(req: Request): Promise<NextResponse> {
 
 export async function POST(req: Request): Promise<NextResponse> {
   const url = new URL(req.url);
-  if (isPreviewQuery(url.searchParams.get("preview")) && isLocalHost(url.hostname)) {
+  if (isPreviewQuery(url.searchParams.get("preview")) && requestIsLocal(req)) {
     return NextResponse.json({ ok: true, preview: true, message: "Preview only — not saved." });
   }
   const session = await resolvePortalSession();
@@ -73,6 +100,19 @@ export async function POST(req: Request): Promise<NextResponse> {
         siteId: body.siteId ? String(body.siteId) : undefined,
         bookingId: body.bookingId ? String(body.bookingId) : undefined,
       }),
+    );
+  }
+  if (action === "update_payment_method") {
+    return NextResponse.json(
+      await openCommercialPaymentSetup(
+        session.identity,
+        portalCallbackUrl(req, "payment=updated&kind=commercial&session_id={CHECKOUT_SESSION_ID}"),
+      ),
+    );
+  }
+  if (action === "refresh_payment") {
+    return NextResponse.json(
+      await refreshCommercialPaymentMethod(session.identity, body.sessionId ? String(body.sessionId) : undefined),
     );
   }
   return NextResponse.json({ ok: false, error: `Unknown action "${action}".` }, { status: 400 });
