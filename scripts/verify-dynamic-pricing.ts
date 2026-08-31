@@ -6,7 +6,7 @@
 // determinism). Run with:  npm run pricing:verify
 //
 // The config under test is parsed OUT OF THE MIGRATION SEED
-// (supabase/migrations/20260731090000_dynamic_zone_demand_pricing.sql), so
+// (supabase/migrations/20260731222235_dynamic_zone_demand_pricing.sql), so
 // this verifies exactly what ships to the database — the engine itself
 // hardcodes no prices.
 //
@@ -68,7 +68,7 @@ checkTrue("src/lib/dynamic-pricing.ts === _shared/dynamic-pricing.ts", mirrorA =
 // ─── Load the seeded config from the migration ──────────────────────────────
 
 const migration = readFileSync(
-  join(ROOT, "supabase/migrations/20260731090000_dynamic_zone_demand_pricing.sql"),
+  join(ROOT, "supabase/migrations/20260731222235_dynamic_zone_demand_pricing.sql"),
   "utf8",
 );
 const jsonMatch = migration.match(/\$json\$\s*([\s\S]*?)\s*\$json\$/);

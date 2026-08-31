@@ -13,7 +13,7 @@ import {
 
 // ── Load the seeded config out of the migration ──
 const migration = await Deno.readTextFile(
-  new URL("../supabase/migrations/20260731090000_dynamic_zone_demand_pricing.sql", import.meta.url),
+  new URL("../supabase/migrations/20260731222235_dynamic_zone_demand_pricing.sql", import.meta.url),
 );
 const config = JSON.parse(migration.match(/\$json\$\s*([\s\S]*?)\s*\$json\$/)![1]);
 
