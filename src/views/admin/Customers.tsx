@@ -60,6 +60,7 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { edgeResult } from "@/lib/edge-invoke";
 import { useAdminRole } from "@/hooks/use-admin-role";
+import { useOpsAssistantRecord } from "@/components/ops-assistant/OpsAssistantProvider";
 
 interface Customer {
   id: string;
@@ -129,6 +130,15 @@ export default function AdminCustomers() {
   const selected = useMemo(
     () => customers.find((c) => c.id === selectedId) || null,
     [customers, selectedId],
+  );
+  useOpsAssistantRecord(
+    selected
+      ? {
+          kind: "customer",
+          id: selected.id,
+          label: fullName(selected),
+        }
+      : null,
   );
 
   useEffect(() => {

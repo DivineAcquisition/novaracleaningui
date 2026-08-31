@@ -9,8 +9,9 @@
 //     changes a screen and a pull request that updates its guide are the
 //     same review;
 //   • the screenshots sit beside them and are recaptured in the same pass;
-//   • the Ops Assistant ingests exactly these files, so the assistant and
-//     the site cannot drift into two versions of the truth.
+//   • the Ops Assistant reads exactly these files on every request (the same
+//     chunker as `docs:export`), so the assistant and the site cannot drift
+//     into two versions of the truth.
 
 import "server-only";
 

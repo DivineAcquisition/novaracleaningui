@@ -126,6 +126,14 @@ function verifyAccessWiring() {
   if (docsFlash("nope") !== null || docsFlash(undefined) !== null) {
     problems.push("docsFlash must ignore unknown query values");
   }
+
+  const shell = readSrc("components/docs/DocsShell.tsx");
+  if (!shell.includes("OpsAssistantSearch")) {
+    problems.push("Docs search bar must be the Ops Assistant, not a separate keyword engine.");
+  }
+  if (!shell.includes('surface="docs"')) {
+    problems.push("Docs shell must mount the same Ops Assistant as the workspace, as the docs surface.");
+  }
 }
 
 function main() {

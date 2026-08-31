@@ -44,6 +44,7 @@ import {
   RiPriceTag3Line,
   RiRefreshLine,
   RiMailSendLine,
+  RiSparklingLine,
 } from "@remixicon/react";
 import { ReactNode, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
@@ -55,6 +56,8 @@ import { BRAND } from "@/lib/brand";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { useAdminRole } from "@/hooks/use-admin-role";
+import { OpsAssistantProvider, useOpsAssistant } from "@/components/ops-assistant/OpsAssistantProvider";
+import { OpsAssistantPanel, OpsAssistantToggle } from "@/components/ops-assistant/OpsAssistantPanel";
 
 // Brand ramp — Novara purple as a precise accent on a clean Coss-style shell.
 const RAMP = BRAND.gradient;
@@ -179,6 +182,13 @@ const NAV_ITEMS: NavItem[] = [
     description: "Admins & VA access",
     adminOnly: true,
   },
+  {
+    title: "Assistant",
+    url: "/admin/assistant",
+    icon: RiSparklingLine,
+    description: "Policy · review queue · assistant health",
+    adminOnly: true,
+  },
 ];
 
 // Segment-aware active check so prefix-colliding routes (e.g. /admin/partner vs
@@ -211,6 +221,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const active = NAV_ITEMS.find((n) => isNavActive(pathname, n.url));
 
   return (
+    <OpsAssistantProvider surface="workspace">
     <div className="relative min-h-screen flex w-full bg-background text-foreground font-sans">
       <BrandAtmosphere />
       {/* ─── Desktop sidebar ─────────────────────────────────────────── */}
@@ -249,44 +260,73 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       </aside>
 
       {/* ─── Main column ─────────────────────────────────────────────── */}
-      <main className="relative z-10 flex-1 flex flex-col min-w-0">
-        <header className="h-14 flex items-center gap-3 px-4 sm:px-6 border-b border-[color:var(--hairline)] bg-background/80 backdrop-blur-xl sticky top-0 z-30 hairline-glow">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="lg:hidden text-foreground"
-            onClick={() => setMobileOpen(true)}
-          >
-            <RiMenuLine className="w-5 h-5" />
-          </Button>
-          <div className="flex items-center gap-2 min-w-0">
-            {active ? (
-              <>
-                <span className="w-7 h-7 rounded-lg text-primary inline-flex items-center justify-center shrink-0 bg-brand-50">
-                  <active.icon className="w-4 h-4" />
-                </span>
-                <h1 className="font-heading text-sm font-semibold text-foreground truncate tracking-tight">
-                  {active.title}
-                </h1>
-                <span className="hidden sm:inline text-xs text-muted-foreground truncate">
-                  · {active.description}
-                </span>
-              </>
-            ) : (
-              <h1 className="font-heading text-sm font-semibold text-foreground">
-                Admin
-              </h1>
-            )}
-          </div>
-          <div className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
-            <span className="hidden md:inline truncate max-w-[200px] font-mono tabular-nums">
-              {user?.email}
-            </span>
-          </div>
-        </header>
-        <div className="flex-1 overflow-auto p-4 sm:p-6">{children}</div>
-      </main>
+      <AdminMain
+        active={active}
+        user={user}
+        onOpenMobile={() => setMobileOpen(true)}
+      >
+        {children}
+      </AdminMain>
+      <OpsAssistantPanel />
     </div>
+    </OpsAssistantProvider>
+  );
+}
+
+function AdminMain({
+  children,
+  active,
+  user,
+  onOpenMobile,
+}: {
+  children: ReactNode;
+  active: NavItem | undefined;
+  user: { email?: string | null } | null;
+  onOpenMobile: () => void;
+}) {
+  const { open } = useOpsAssistant();
+  return (
+    <main
+      className={cn(
+        "relative z-10 flex-1 flex flex-col min-w-0 transition-[margin] duration-300",
+        open && "lg:mr-[420px]",
+      )}
+    >
+      <header className="h-14 flex items-center gap-3 px-4 sm:px-6 border-b border-[color:var(--hairline)] bg-background/80 backdrop-blur-xl sticky top-0 z-30 hairline-glow">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="lg:hidden text-foreground"
+          onClick={onOpenMobile}
+        >
+          <RiMenuLine className="w-5 h-5" />
+        </Button>
+        <div className="flex items-center gap-2 min-w-0">
+          {active ? (
+            <>
+              <span className="w-7 h-7 rounded-lg text-primary inline-flex items-center justify-center shrink-0 bg-brand-50">
+                <active.icon className="w-4 h-4" />
+              </span>
+              <h1 className="font-heading text-sm font-semibold text-foreground truncate tracking-tight">
+                {active.title}
+              </h1>
+              <span className="hidden sm:inline text-xs text-muted-foreground truncate">
+                · {active.description}
+              </span>
+            </>
+          ) : (
+            <h1 className="font-heading text-sm font-semibold text-foreground">Admin</h1>
+          )}
+        </div>
+        <div className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
+          <OpsAssistantToggle />
+          <span className="hidden md:inline truncate max-w-[200px] font-mono tabular-nums">
+            {user?.email}
+          </span>
+        </div>
+      </header>
+      <div className="flex-1 overflow-auto p-4 sm:p-6">{children}</div>
+    </main>
   );
 }
 
