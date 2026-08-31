@@ -38,6 +38,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useOpsAssistantRecord } from "@/components/ops-assistant/OpsAssistantProvider";
 import { proposalsHubTab } from "@/lib/commercial-proposal";
 import PartnerAccounts from "@/views/admin/PartnerAccounts";
 import PartnerAdmin from "@/views/admin/PartnerAdmin";
@@ -160,6 +161,9 @@ export default function CommercialHub() {
   const initialTab = TAB_ALIASES[rawTab] || rawTab;
   const tab: Tab = isTab(initialTab) ? initialTab : "overview";
   const accountFromUrl = searchParams?.get("account") || "";
+  useOpsAssistantRecord(
+    accountFromUrl ? { kind: "account", id: accountFromUrl } : null,
+  );
   const workspace = TAB_WORKSPACE[tab];
   const workspaceDef = WORKSPACES.find((w) => w.id === workspace)!;
 

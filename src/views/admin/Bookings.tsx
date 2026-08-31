@@ -39,6 +39,7 @@ import {
   RiStickyNoteLine,
 } from "@remixicon/react";
 import { useAdminRole } from "@/hooks/use-admin-role";
+import { useOpsAssistantRecord } from "@/components/ops-assistant/OpsAssistantProvider";
 import imageCompression from "browser-image-compression";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -301,6 +302,15 @@ export default function AdminBookings() {
   >("all");
   const [totalCount, setTotalCount] = useState<number | null>(null);
   const [selected, setSelected] = useState<BookingRow | null>(null);
+  useOpsAssistantRecord(
+    selected
+      ? {
+          kind: "booking",
+          id: selected.id,
+          label: `#${selected.booking_number ?? ""} ${selected.first_name || ""} ${selected.last_name || ""}`.trim(),
+        }
+      : null,
+  );
 
   const load = useCallback(async () => {
     setLoading(true);

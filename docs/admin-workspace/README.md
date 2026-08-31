@@ -18,7 +18,9 @@ docs/admin-workspace/
   screenshots/                           annotated PNGs + manifest.json
   _data/pricing-snapshot.json            live pricing config, read from Supabase
   _data/pricing-examples.generated.json  worked examples, computed by the real engine
-  _data/ops-assistant-knowledge.generated.json  what the Ops Assistant is fed
+  _data/ops-assistant-knowledge.generated.json  reviewable snapshot of what the assistant cites
+                                (the live assistant reads the markdown itself — this file is not a second upload)
+
 ```
 
 Anything ending `.generated.json` is produced by a script. Don't hand-edit it.
@@ -54,9 +56,11 @@ npm run docs:capture                # in another
 # 3. Re-read the code for anything that changed, update the prose, and bump
 #    `lastVerified` in the front matter of every guide you checked
 
-# 4. Check the set holds together, then refresh what the assistant knows
+# 4. Check the set holds together. The Ops Assistant reads these same files
+#    on the next request — there is no separate knowledge-base upload.
 npm run docs:verify
-npm run docs:export
+npm run docs:export          # reviewable snapshot of what the assistant cites
+npm run ops-assistant:verify
 ```
 
 `docs:verify` fails on a guide referencing a screenshot that doesn't exist, missing front

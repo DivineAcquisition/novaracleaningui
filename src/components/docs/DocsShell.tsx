@@ -1,17 +1,21 @@
 "use client";
 
-// The documentation shell: a searchable list of guides on the left, the guide
-// itself on the right. Search runs over titles, summaries and section
-// headings so "why can't I assign this cleaner" finds the Bookings guide's
-// hard-stop section without the reader knowing which guide it lives in.
+// The documentation shell. The search bar IS the Ops Assistant — typing a
+// question there and opening the chat panel are the same answer engine.
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useMemo, useState } from "react";
-import { RiSearchLine, RiCloseLine, RiMenuLine, RiBookOpenLine } from "@remixicon/react";
+import { useState } from "react";
+import { RiCloseLine, RiMenuLine, RiBookOpenLine } from "@remixicon/react";
 
 import { cn } from "@/lib/utils";
 import { DOCS_HOME, DOCS_SIGN_OUT } from "@/lib/docs/paths";
+import { OpsAssistantProvider, useOpsAssistant } from "@/components/ops-assistant/OpsAssistantProvider";
+import {
+  OpsAssistantPanel,
+  OpsAssistantSearch,
+  OpsAssistantToggle,
+} from "@/components/ops-assistant/OpsAssistantPanel";
 
 export interface DocsNavItem {
   slug: string;
@@ -32,17 +36,27 @@ export function DocsShell({
   viewerEmail: string;
   children: React.ReactNode;
 }) {
-  const pathname = usePathname();
-  const [query, setQuery] = useState("");
-  const [mobileOpen, setMobileOpen] = useState(false);
+  return (
+    <OpsAssistantProvider surface="docs">
+      <DocsShellInner docs={docs} viewerEmail={viewerEmail}>
+        {children}
+      </DocsShellInner>
+    </OpsAssistantProvider>
+  );
+}
 
-  const results = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return docs;
-    return docs.filter((d) =>
-      [d.title, d.area, d.summary, ...d.headings].join(" ").toLowerCase().includes(q),
-    );
-  }, [docs, query]);
+function DocsShellInner({
+  docs,
+  viewerEmail,
+  children,
+}: {
+  docs: DocsNavItem[];
+  viewerEmail: string;
+  children: React.ReactNode;
+}) {
+  const pathname = usePathname();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const { open } = useOpsAssistant();
 
   const nav = (
     <>
@@ -59,25 +73,14 @@ export function DocsShell({
       </div>
 
       <div className="px-3 pb-3">
-        <div className="relative">
-          <RiSearchLine className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search the guides…"
-            aria-label="Search the guides"
-            className="w-full rounded-lg border border-[color:var(--hairline)] bg-background py-2 pl-8 pr-3 text-sm outline-none focus:border-primary/40"
-          />
-        </div>
+        <OpsAssistantSearch placeholder="Ask the guides…" />
+        <p className="mt-1.5 px-0.5 text-[10px] leading-snug text-muted-foreground">
+          This is the assistant, not a keyword search — same answers as the chat panel.
+        </p>
       </div>
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 pb-5">
-        {results.length === 0 && (
-          <p className="px-3 py-6 text-sm text-muted-foreground">
-            Nothing matches “{query}”. Try the name of the screen instead.
-          </p>
-        )}
-        {results.map((d) => {
+        {docs.map((d) => {
           const href = `/docs/${d.slug}`;
           const active = pathname === href;
           return (
@@ -146,7 +149,12 @@ export function DocsShell({
         {nav}
       </aside>
 
-      <main className="flex min-w-0 flex-1 flex-col">
+      <main
+        className={cn(
+          "flex min-w-0 flex-1 flex-col transition-[margin] duration-300",
+          open && "lg:mr-[420px]",
+        )}
+      >
         <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-[color:var(--hairline)] bg-background/85 px-4 backdrop-blur-xl sm:px-6">
           <button
             className="rounded-md p-1.5 text-foreground hover:bg-muted lg:hidden"
@@ -157,12 +165,14 @@ export function DocsShell({
           </button>
           <RiBookOpenLine className="h-4 w-4 text-primary" />
           <span className="text-sm font-semibold tracking-tight">Workspace guides</span>
-          <span className="ml-auto text-[11px] text-muted-foreground">
-            Internal · not indexed · admin sign-in required
+          <span className="ml-auto flex items-center gap-2 text-[11px] text-muted-foreground">
+            <OpsAssistantToggle />
+            <span className="hidden sm:inline">Internal · not indexed</span>
           </span>
         </header>
         <div className="flex-1 px-4 py-8 sm:px-8">{children}</div>
       </main>
+      <OpsAssistantPanel />
     </div>
   );
 }
