@@ -23,6 +23,18 @@ export interface HostAgreementPdfFields {
   signatureDataUrl?: string | null;
 }
 
+/** Helvetica is WinAnsi — drop or replace characters it cannot encode. */
+function winAnsi(value: string): string {
+  return String(value || "")
+    .replace(/[—–]/g, "-")
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/·/g, "-")
+    .replace(/[☑✓]/g, "[x]")
+    .replace(/[☐]/g, "[ ]")
+    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "");
+}
+
 export async function buildHostAgreementBase64(fields: HostAgreementPdfFields): Promise<string> {
   const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
 
@@ -57,7 +69,7 @@ export async function buildHostAgreementBase64(fields: HostAgreementPdfFields): 
     opts: { size?: number; f?: typeof font; color?: typeof dark; x?: number; dy?: number } = {},
   ) => {
     const size = opts.size ?? 10;
-    page.drawText(value, {
+    page.drawText(winAnsi(value), {
       x: opts.x ?? MARGIN,
       y,
       size,
@@ -74,7 +86,7 @@ export async function buildHostAgreementBase64(fields: HostAgreementPdfFields): 
     const size = opts.size ?? 9.5;
     const f = opts.f ?? font;
     const maxWidth = opts.width ?? RIGHT - (opts.x ?? MARGIN);
-    const words = value.split(/\s+/);
+    const words = winAnsi(value).split(/\s+/);
     let line = "";
     for (const word of words) {
       const candidate = line ? `${line} ${word}` : word;
@@ -114,8 +126,8 @@ export async function buildHostAgreementBase64(fields: HostAgreementPdfFields): 
 
   const field = (label: string, value: string) => {
     room(16);
-    page.drawText(label, { x: MARGIN, y, size: 9, font: bold, color: gray });
-    page.drawText(value || "—", { x: MARGIN + 132, y, size: 10, font, color: dark });
+    page.drawText(winAnsi(label), { x: MARGIN, y, size: 9, font: bold, color: gray });
+    page.drawText(winAnsi(value || "-"), { x: MARGIN + 132, y, size: 10, font, color: dark });
     y -= 17;
   };
 
@@ -182,7 +194,7 @@ export async function buildHostAgreementBase64(fields: HostAgreementPdfFields): 
   room(80);
   text("Acknowledged binding provisions", { size: 11, f: bold, dy: 14 });
   for (const ack of BINDING_ACKNOWLEDGMENTS) {
-    wrap(`☑  ${ack.label}. ${ack.text}`, { size: 8.5 });
+    wrap(`[x]  ${ack.label}. ${ack.text}`, { size: 8.5 });
     y -= 4;
   }
 

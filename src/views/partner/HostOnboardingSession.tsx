@@ -97,10 +97,18 @@ export default function HostOnboardingSession({ token }: { token: string }) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const noticeRef = useRef<HTMLDivElement | null>(null);
+  const initialQs = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const qs = typeof window !== "undefined" ? window.location.search : "";
+      if (initialQs.current === null && typeof window !== "undefined") {
+        initialQs.current = window.location.search;
+      }
+      const qs = initialQs.current || "";
+      initialQs.current = "";
+      if (qs && typeof window !== "undefined") {
+        window.history.replaceState({}, "", window.location.pathname);
+      }
       const res = await fetch(`/api/partner/host-onboarding/${token}${qs}`);
       const json = await res.json();
       if (!res.ok || !json?.ok) {
