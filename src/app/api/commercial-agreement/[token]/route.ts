@@ -214,7 +214,7 @@ export async function POST(
 
   const { data: account } = await supabase
     .from("business_accounts")
-    .select("id, business_name, contact_name, email, phone, address, city, state, zip_code, stripe_customer_id, requires_coi_on_file")
+    .select("id, business_name, contact_name, email, phone, address, city, state, zip_code, stripe_customer_id, requires_coi_on_file, account_type")
     .eq("id", accountId)
     .maybeSingle();
   const acct = (account || {}) as Record<string, unknown>;

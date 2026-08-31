@@ -15,7 +15,8 @@
 
 import { sendCompanyCoi } from "@/lib/company-coi";
 import { sendPartnershipMessage } from "@/lib/partnership-comms/server";
-import { sendAgreement, buildCommercialValues } from "@/lib/docuseal";
+import { sendAgreement, buildCommercialValues, downloadCompletedAgreementPdf } from "@/lib/docuseal";
+import { buildCommercialAgreementBase64 } from "@/lib/commercial-agreement-pdf";
 import { resolveAppSecret, stripeCall, ensureCommercialCustomer } from "@/lib/stripe-rest";
 import { money, type ProposalSite } from "@/lib/commercial-proposal";
 import { generateAgreement } from "@/lib/commercial-agreement-server";
@@ -252,7 +253,7 @@ export interface SignAgreementInput {
   signerName: string;
   signerTitle?: string | null;
   signatureDataUrl: string;
-  pdfBase64: string;
+  pdfBase64?: string;
   ctx: RequestContext;
   /**
    * Mint a fresh token on the agreement so the signer can carry on to billing
@@ -278,15 +279,12 @@ export function validateSignature(input: {
   signerName: string;
   agreedToTerms: unknown;
   signatureDataUrl: string;
-  pdfBase64: string;
+  pdfBase64?: string;
 }): string | null {
   if (input.signerName.length < 2) return "Please enter your full legal name to sign.";
   if (input.agreedToTerms !== true) return "Please confirm you've read and agree to the agreement.";
   if (!/^data:image\/png;base64,/.test(input.signatureDataUrl)) {
     return "Please draw your signature in the box above.";
-  }
-  if (input.pdfBase64.length < 500) {
-    return "The signed document didn't generate correctly. Please reload and try again.";
   }
   return null;
 }
@@ -320,9 +318,80 @@ export async function signCommercialAgreement(
   const pdfPath = `${base}.pdf`;
   const sigPath = `${base}-signature.png`;
 
+  const sites = (a.exhibit_a_sites as ProposalSite[]) || [];
+  const address =
+    [acct.address, acct.city, acct.state, acct.zip_code].filter(Boolean).join(", ") ||
+    String(acct.business_name || "");
+
+  let submissionId: string | null = null;
+  let pdfBase64 = input.pdfBase64 && input.pdfBase64.length >= 500 ? input.pdfBase64 : "";
+
+  try {
+    const res = await sendAgreement({
+      audience: "commercial",
+      email: String(a.signer_email || acct.email || ""),
+      name: input.signerName,
+      sendEmail: true,
+      signatureImage: input.signatureDataUrl,
+      values: buildCommercialValues({
+        businessName: String(acct.business_name || ""),
+        contactName: input.signerName,
+        email: String(a.signer_email || acct.email || ""),
+        phone: (acct.phone as string) || null,
+        address,
+        accountType: (acct.account_type as string) || null,
+        billingMethod: (a.billing_method as string) || null,
+        invoiceCycle: (a.invoice_cycle as string) || null,
+        netTerms: (a.net_terms as string) || null,
+        sites: sites.map((si) => ({
+          nickname: si.nickname,
+          address: si.address,
+          sqft: si.sqft,
+          facilityType: si.facility_type,
+          scopeLevel: si.scope_level,
+          crewSize: si.crew_size,
+          firmPriceCents: si.per_visit_price_cents,
+          cadence: si.frequency,
+          serviceWindowStart: si.service_window_start,
+          serviceWindowEnd: si.service_window_end,
+          walkthroughCompleted: si.price_source === "walkthrough" || Boolean(si.walkthrough_id),
+        })),
+      }),
+      metadata: { business_account_id: accountId, kind: "commercial", agreement_id: a.id },
+    });
+    submissionId = res.submissionId;
+    if (submissionId) {
+      const fromDocuseal = await downloadCompletedAgreementPdf(submissionId);
+      if (fromDocuseal && fromDocuseal.length >= 500) pdfBase64 = fromDocuseal;
+    }
+  } catch (err) {
+    console.error("[commercial-onboarding] docuseal complete failed", (err as Error).message);
+  }
+
+  if (pdfBase64.length < 500) {
+    pdfBase64 = await buildCommercialAgreementBase64({
+      businessName: String(acct.business_name || ""),
+      clientAddress: address || null,
+      signerName: input.signerName,
+      signerTitle: input.signerTitle || null,
+      signerEmail: String(a.signer_email || acct.email || ""),
+      term: String(a.term || "month_to_month"),
+      billingMethod: a.billing_method === "invoiced" ? "invoiced" : "auto_pay",
+      invoiceCycle: (a.invoice_cycle as string) || null,
+      netTerms: (a.net_terms as string) || null,
+      sites,
+      totalPerVisitCents: Number(a.total_per_visit_cents || 0),
+      signatureDataUrl: input.signatureDataUrl,
+    });
+  }
+
+  if (pdfBase64.length < 500) {
+    return { ok: false, status: 502, message: "The signed document didn't generate correctly. Please reload and try again." };
+  }
+
   const { error: pdfErr } = await supabase.storage
     .from(AGREEMENT_BUCKET)
-    .upload(pdfPath, Buffer.from(input.pdfBase64, "base64"), {
+    .upload(pdfPath, Buffer.from(pdfBase64, "base64"), {
       contentType: "application/pdf",
       upsert: true,
     });
@@ -370,6 +439,13 @@ export async function signCommercialAgreement(
     .eq("status", "pending");
   if (error) return { ok: false, status: 400, message: error.message };
 
+  if (submissionId) {
+    await supabase
+      .from("commercial_agreements")
+      .update({ docuseal_submission_id: submissionId })
+      .eq("id", a.id as string);
+  }
+
   // Open the billing profile in the method the agreement was signed under, so
   // the account reads "billing pending" rather than nothing at all.
   await supabase.from("commercial_billing_profiles").upsert(
@@ -399,45 +475,6 @@ export async function signCommercialAgreement(
       billing_method: a.billing_method,
     },
   });
-
-  // Mirror into DocuSeal so the commercial trail sits beside every other
-  // signed document in the app. Best effort — never blocks the signature.
-  try {
-    const sites = (a.exhibit_a_sites as ProposalSite[]) || [];
-    const res = await sendAgreement({
-      audience: "one_time",
-      email: String(a.signer_email || acct.email || ""),
-      name: input.signerName,
-      sendEmail: false,
-      signatureImage: input.signatureDataUrl,
-      values: buildCommercialValues({
-        businessName: String(acct.business_name || ""),
-        contactName: input.signerName,
-        email: String(a.signer_email || acct.email || ""),
-        phone: (acct.phone as string) || null,
-        address:
-          [acct.address, acct.city, acct.state, acct.zip_code].filter(Boolean).join(", ") ||
-          String(acct.business_name || ""),
-        sites: sites.map((si) => ({
-          nickname: si.nickname,
-          address: si.address,
-          sqft: si.sqft,
-          facilityType: si.facility_type,
-          scopeLevel: si.scope_level,
-          crewSize: si.crew_size,
-          firmPriceCents: si.per_visit_price_cents,
-          cadence: si.frequency,
-        })),
-      }),
-      metadata: { business_account_id: accountId, kind: "commercial", agreement_id: a.id },
-    });
-    await supabase
-      .from("commercial_agreements")
-      .update({ docuseal_submission_id: res.submissionId || null })
-      .eq("id", a.id as string);
-  } catch (err) {
-    console.error("[commercial-onboarding] docuseal mirror failed", (err as Error).message);
-  }
 
   // Our certificate of insurance goes out on signature, not on request.
   let coiSent = false;

@@ -21,6 +21,7 @@ import {
   RiBankCardLine,
   RiBuilding4Line,
   RiCheckboxCircleFill,
+  RiExternalLinkLine,
   RiFileTextLine,
   RiLoader4Line,
   RiMailLine,
@@ -30,6 +31,7 @@ import { useParams, useSearchParams } from "next/navigation";
 
 import { SEO } from "@/components/SEO";
 import { SignaturePad } from "@/components/booking/SignaturePad";
+import { PdfViewer } from "@/components/PdfViewer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -41,7 +43,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { buildCommercialAgreementBase64 } from "@/lib/commercial-agreement-pdf";
 import { CommercialScopePreview } from "@/components/checklists/CommercialScopePreview";
 import { uniqueScopeKeysFromSites } from "@/lib/commercial-checklists";
 import { CompanyCoiDownloadLink } from "@/components/commercial/CompanyCoiDownloadLink";
@@ -55,6 +56,8 @@ import {
   type NetTerms,
   type ProposalSite,
 } from "@/lib/commercial-proposal";
+
+const COMMERCIAL_AGREEMENT_PDF = "/api/commercial/agreement";
 
 interface Payload {
   ok: true;
@@ -207,25 +210,6 @@ export default function CommercialAgreementSign() {
     setBusy(true);
     setError(null);
     try {
-      const { agreement, account, sites } = state.data;
-      const pdfBase64 = await buildCommercialAgreementBase64({
-        businessName: account?.business_name || "",
-        clientAddress:
-          [account?.address, account?.city, account?.state, account?.zip_code]
-            .filter(Boolean)
-            .join(", ") || null,
-        signerName: legalName,
-        signerTitle: title || null,
-        signerEmail: agreement.signerEmail || "",
-        term: agreement.term,
-        billingMethod: agreement.billingMethod,
-        invoiceCycle: agreement.invoiceCycle,
-        netTerms: agreement.netTerms,
-        sites,
-        totalPerVisitCents: agreement.totalPerVisitCents,
-        signatureDataUrl: signature,
-      });
-
       const res = await fetch(`/api/commercial-agreement/${token}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -235,7 +219,6 @@ export default function CommercialAgreementSign() {
           signerTitle: title,
           agreedToTerms: agreed,
           signatureDataUrl: signature,
-          pdfBase64,
         }),
       });
       const json = await res.json();
@@ -441,40 +424,28 @@ export default function CommercialAgreementSign() {
             Sign the agreement
           </h2>
 
-          <div className="max-h-56 overflow-y-auto rounded-lg border border-[color:var(--hairline)] bg-brand-50/50 p-3 text-xs leading-relaxed text-foreground/80">
-            <p className="mb-2 font-semibold text-foreground">Commercial Cleaning Services Agreement</p>
-            <p className="mb-2">
-              NovaraCleaning LLC ("Company") will provide commercial janitorial services at each
-              location listed in Exhibit A above, at the scope level and frequency stated there.
-            </p>
-            <p className="mb-2">
-              <strong>Term.</strong> Month-to-month from the effective date. Either party may
-              terminate on thirty (30) days' written notice. No early-termination fee.
-            </p>
-            <p className="mb-2">
-              <strong>Fees.</strong> The per-visit rates in Exhibit A. Rates hold for the term and
-              change only on thirty (30) days' notice or after a re-walkthrough that materially
-              changes scope or square footage.
-            </p>
-            <p className="mb-2">
-              <strong>Personnel and access.</strong> All personnel are background-checked and
-              engaged by Company. Company honours the access, hours and security requirements
-              recorded for each location.
-            </p>
-            <p className="mb-2">
-              <strong>Quality.</strong> Every visit is documented against the site checklist with
-              photographic evidence. If work is missed, notify Company within 24 hours and Company
-              returns to correct it at no charge.
-            </p>
-            <p className="mb-2">
-              <strong>Insurance (8.1).</strong> Company maintains commercial general liability
-              insurance and will furnish Client with a current certificate on execution of this
-              Agreement and on each renewal for as long as it remains in force.{" "}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                Scroll to read the full agreement — every page is below.
+              </p>
+              <a
+                href={COMMERCIAL_AGREEMENT_PDF}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[11px] font-semibold text-primary underline underline-offset-2 flex items-center gap-1 shrink-0"
+              >
+                <RiExternalLinkLine className="w-3.5 h-3.5" /> Open in new tab
+              </a>
+            </div>
+            <PdfViewer
+              url={COMMERCIAL_AGREEMENT_PDF}
+              title="Commercial Cleaning Services Agreement"
+              className="rounded-xl border border-[color:var(--hairline)] overflow-y-auto h-[65vh] min-h-[380px] bg-slate-100 shadow-inner"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Company maintains commercial general liability insurance.{" "}
               <CompanyCoiDownloadLink tone="quiet">View the current certificate</CompanyCoiDownloadLink>.
-            </p>
-            <p>
-              <strong>Entire agreement.</strong> This Agreement, including Exhibit A, is the entire
-              agreement between the parties and supersedes any prior proposal.
             </p>
           </div>
 

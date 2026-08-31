@@ -20,9 +20,8 @@ import {
 } from "@remixicon/react";
 
 import { SignaturePad } from "@/components/booking/SignaturePad";
-import { buildHostAgreementBase64 } from "@/lib/host-onboarding/agreement-pdf";
+import { PdfViewer } from "@/components/PdfViewer";
 import {
-  AGREEMENT_CLAUSES,
   BINDING_ACKNOWLEDGMENTS,
   IMPORTANT_NOTICE,
   PAY_AFTER_DISCRETION,
@@ -34,6 +33,8 @@ import type { HostOnboardingProgress } from "@/lib/host-onboarding/progress";
 import type { SnapshotProperty } from "@/lib/host-onboarding/session";
 
 type Row = Record<string, unknown>;
+
+const HOST_AGREEMENT_PDF = "/api/host/agreement";
 
 interface Payload {
   session: {
@@ -288,20 +289,20 @@ function LegalStep({
   const [acks, setAcks] = useState({ non_circumvention: false, chargebacks: false, arbitration: false });
   const [signature, setSignature] = useState<string | null>(null);
 
+  const ready =
+    name.trim().length >= 2 &&
+    agreed &&
+    acks.non_circumvention &&
+    acks.chargebacks &&
+    acks.arbitration &&
+    Boolean(signature && signature.length > 100);
+
   const sign = async () => {
     if (!signature) {
       onError("Please draw your signature in the box.");
       return;
     }
     try {
-      const pdfBase64 = await buildHostAgreementBase64({
-        signerName: name.trim(),
-        signerEmail: data.host.email || "",
-        entityType: data.host.entityType,
-        entityName: data.host.entityName,
-        properties: data.properties,
-        signatureDataUrl: signature,
-      });
       await onPost({
         action: "sign",
         signerName: name.trim(),
@@ -313,11 +314,10 @@ function LegalStep({
         acknowledgedChargebacks: acks.chargebacks,
         acknowledgedArbitration: acks.arbitration,
         signatureDataUrl: signature,
-        pdfBase64,
       });
     } catch (err) {
       const detail = err instanceof Error ? err.message : "Please reload and try again.";
-      onError(`The signed document didn't generate. ${detail}`);
+      onError(`We couldn't record your signature. ${detail}`);
     }
   };
 
@@ -328,8 +328,8 @@ function LegalStep({
         <h2 className="text-lg font-semibold text-slate-900">Legal &amp; Signature</h2>
       </div>
       <p className="mt-1 text-sm text-slate-500">
-        Part One of the Host Partnership Agreement. Signing moves you to the rate schedule in this
-        same session — no new link.
+        The Host Partnership Agreement. Signing moves you to the rate schedule in this same session —
+        no new link.
       </p>
 
       <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-relaxed text-amber-950">
@@ -337,13 +337,25 @@ function LegalStep({
         <p className="mt-1">{IMPORTANT_NOTICE}</p>
       </div>
 
-      <div className="mt-4 max-h-[28rem] space-y-4 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-4">
-        {AGREEMENT_CLAUSES.map(([heading, copy]) => (
-          <section key={heading}>
-            <h3 className="text-sm font-semibold text-slate-900">{heading}</h3>
-            <p className="mt-1 text-[13px] leading-relaxed text-slate-600">{copy}</p>
-          </section>
-        ))}
+      <div className="mt-4 space-y-1.5">
+        <div className="flex items-center justify-between">
+          <p className="text-[11px] text-slate-500">
+            Scroll to read the full agreement — every page is below.
+          </p>
+          <a
+            href={HOST_AGREEMENT_PDF}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[11px] font-semibold text-violet-700 underline underline-offset-2 flex items-center gap-1 shrink-0"
+          >
+            <RiExternalLinkLine className="h-3.5 w-3.5" /> Open in new tab
+          </a>
+        </div>
+        <PdfViewer
+          url={HOST_AGREEMENT_PDF}
+          title="Host Partnership Agreement"
+          className="rounded-xl border border-slate-200 overflow-y-auto h-[65vh] min-h-[380px] bg-slate-100 shadow-inner"
+        />
       </div>
 
       <div className="mt-5 space-y-3">
@@ -386,7 +398,7 @@ function LegalStep({
 
       <button
         type="button"
-        disabled={busy}
+        disabled={busy || !ready}
         onClick={() => void sign()}
         className="mt-5 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-violet-600 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
       >

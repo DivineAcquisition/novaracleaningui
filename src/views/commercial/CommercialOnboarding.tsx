@@ -34,11 +34,12 @@ import {
   RiMapPin2Line,
   RiTimeLine,
   RiExternalLinkLine,
+  RiFileTextLine,
 } from "@remixicon/react";
 
 import { SignaturePad } from "@/components/booking/SignaturePad";
 import { CompanyCoiDownloadLink } from "@/components/commercial/CompanyCoiDownloadLink";
-import { buildCommercialAgreementBase64 } from "@/lib/commercial-agreement-pdf";
+import { PdfViewer } from "@/components/PdfViewer";
 import {
   money,
   BILLING_METHOD_LABELS,
@@ -88,6 +89,8 @@ type State =
   | { kind: "loading" }
   | { kind: "error"; message: string }
   | { kind: "ready"; data: Payload };
+
+const COMMERCIAL_AGREEMENT_PDF = "/api/commercial/agreement";
 
 const STEP_SHORT: Record<string, string> = {
   pricing: "Pricing",
@@ -517,27 +520,6 @@ function AgreementStep({
     setSigning(true);
     onError("");
     try {
-      // The executed PDF is built in the browser from the same frozen Exhibit
-      // A the server holds, then posted with the signature.
-      const pdfBase64 = await buildCommercialAgreementBase64({
-        businessName: String(data.account?.business_name || ""),
-        clientAddress:
-          [data.account?.address, data.account?.city, data.account?.state, data.account?.zip_code]
-            .filter(Boolean)
-            .join(", ") || null,
-        signerName: legalName,
-        signerTitle: title || null,
-        signerEmail: String(a.signerEmail || ""),
-        term: String(a.term || "month_to_month"),
-        billingMethod:
-          (a.billingMethod as "auto_pay" | "invoiced") || data.session.billingMethod,
-        invoiceCycle: (a.invoiceCycle as string) || null,
-        netTerms: (a.netTerms as string) || null,
-        sites: data.sites,
-        totalPerVisitCents: Number(a.totalPerVisitCents || 0),
-        signatureDataUrl: signature,
-      });
-
       const res = await fetch(`/api/commercial-onboarding/${token}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -547,7 +529,6 @@ function AgreementStep({
           signerTitle: title,
           agreedToTerms: agreed,
           signatureDataUrl: signature,
-          pdfBase64,
         }),
       });
       const json = await res.json();
@@ -557,7 +538,7 @@ function AgreementStep({
       }
       await onDone();
     } catch {
-      onError("We couldn't generate the signed document. Please reload and try again.");
+      onError("We couldn't record your signature. Please reload and try again.");
     } finally {
       setSigning(false);
     }
@@ -569,12 +550,34 @@ function AgreementStep({
     <Card>
       <h2 className="text-base font-semibold">Page 2 — Agreement E-Signature</h2>
       <p className="mt-1 text-sm text-slate-600">
-        Pre-filled with everything you just accepted, including the schedule of locations and rates
-        in Exhibit A.
+        The Commercial Cleaning Services Agreement, pre-filled with the locations and rates you just
+        accepted.
       </p>
 
+      <div className="mt-4 space-y-1.5">
+        <div className="flex items-center justify-between">
+          <p className="text-[11px] text-slate-500 flex items-center gap-1">
+            <RiFileTextLine className="w-3.5 h-3.5 text-violet-600" />
+            Scroll to read the full agreement — every page is below.
+          </p>
+          <a
+            href={COMMERCIAL_AGREEMENT_PDF}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[11px] font-semibold text-violet-700 underline underline-offset-2 flex items-center gap-1 shrink-0"
+          >
+            <RiExternalLinkLine className="w-3.5 h-3.5" /> Open in new tab
+          </a>
+        </div>
+        <PdfViewer
+          url={COMMERCIAL_AGREEMENT_PDF}
+          title="Commercial Cleaning Services Agreement"
+          className="rounded-xl border border-slate-200 overflow-y-auto h-[65vh] min-h-[380px] bg-slate-100 shadow-inner"
+        />
+      </div>
+
       {a.exhibitAText ? (
-        <pre className="mt-4 max-h-64 overflow-y-auto whitespace-pre-wrap rounded-xl bg-slate-50 p-4 font-sans text-xs leading-relaxed text-slate-700">
+        <pre className="mt-4 max-h-40 overflow-y-auto whitespace-pre-wrap rounded-xl bg-slate-50 p-4 font-sans text-xs leading-relaxed text-slate-700">
           {String(a.exhibitAText)}
         </pre>
       ) : null}
