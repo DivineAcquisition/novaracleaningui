@@ -13,6 +13,8 @@ interface Fbq {
   (command: 'init', pixelId: string): void;
   (command: 'track', event: string, params?: FbqTrackParams): void;
   (command: 'trackCustom', event: string, params?: FbqTrackParams): void;
+  (command: 'trackSingle', pixelId: string, event: string, params?: FbqTrackParams): void;
+  (command: 'trackSingleCustom', pixelId: string, event: string, params?: FbqTrackParams): void;
   callMethod?: (...args: unknown[]) => void;
   queue: unknown[];
   loaded: boolean;
