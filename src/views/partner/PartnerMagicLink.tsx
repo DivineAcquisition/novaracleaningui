@@ -26,8 +26,10 @@ export default function PartnerMagicLink({ notice }: { notice?: string | null })
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.message || "Could not send the link.");
+      const json = (await res.json().catch(() => ({}))) as { ok?: boolean; message?: string };
+      if (!res.ok && json?.ok !== true) {
+        throw new Error(json?.message || "Could not send the link.");
+      }
       setSent(true);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not send the link.");

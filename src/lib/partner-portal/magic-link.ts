@@ -6,9 +6,19 @@ import { hashToken, looksLikeEmail, mintRawToken, normalizeEmail } from "./token
 
 export async function requestMagicLink(emailRaw: string): Promise<{ ok: true }> {
   const email = normalizeEmail(emailRaw);
-  // Always the same shape — never reveal whether the address has a partnership.
+  // Always the same shape — never reveal whether the address has a partnership,
+  // and never 500 the sign-in screen if the mailer or admin client is down.
   if (!looksLikeEmail(email)) return { ok: true };
 
+  try {
+    return await sendMagicLink(email);
+  } catch (err) {
+    console.error("[partner-portal] magic link failed", err);
+    return { ok: true };
+  }
+}
+
+async function sendMagicLink(email: string): Promise<{ ok: true }> {
   const supabase = getAdminSupabase();
   const exists = await emailHasPartnership(supabase, email);
   if (!exists) return { ok: true };

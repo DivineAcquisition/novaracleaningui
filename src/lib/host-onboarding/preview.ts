@@ -207,7 +207,8 @@ export function hostOnboardingPreviewPayload(step?: string) {
       requested_address: "400 E Pratt Street, Baltimore, MD",
     })),
     paymentOptions: Object.values(PAYMENT_OPTIONS).filter((o) => o.key !== "pay_after" || payAfter),
-    portalUrl: portalUrl(),
+    portalUrl: previewMem.portal ? "/partner/enter/preview-host" : portalUrl(),
+    handoffUrl: previewMem.portal ? "/partner/enter/preview-host" : undefined,
     agreementSignedAt: previewMem.signed ? new Date().toISOString() : null,
     signerName: previewMem.signed ? "Jordan Hale" : null,
   };

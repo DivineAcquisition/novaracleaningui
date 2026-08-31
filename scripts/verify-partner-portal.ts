@@ -7,6 +7,7 @@ import { kindsOf } from "../src/lib/partner-portal/identity";
 import { publicStatusLabel, publicTurnoverStatus, stripCrewContact } from "../src/lib/partner-portal/sanitize";
 import { DEFAULT_PORTAL_SETTINGS } from "../src/lib/partner-portal/settings";
 import { previewKindFromToken, previewMe } from "../src/lib/partner-portal/preview";
+import { requestMagicLink } from "../src/lib/partner-portal/magic-link";
 
 let failures = 0;
 function check(name: string, actual: unknown, expected: unknown): void {
@@ -77,8 +78,17 @@ check("preview-mixed", previewKindFromToken("preview-mixed"), "mixed");
 check("mixed preview lists both kinds", previewMe("mixed").kinds, ["host", "commercial"]);
 check("host preview has no commercial account", previewMe("host").accounts.length, 0);
 
-if (failures) {
-  console.error(`\n${failures} check(s) failed.`);
-  process.exit(1);
-}
-console.log("\nAll partner portal checks passed.");
+void requestMagicLink("not-an-email")
+  .then((empty) => {
+    console.log("\nMagic-link request never enumerates:");
+    check("invalid email still returns ok", empty.ok, true);
+    if (failures) {
+      console.error(`\n${failures} check(s) failed.`);
+      process.exit(1);
+    }
+    console.log("\nAll partner portal checks passed.");
+  })
+  .catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
