@@ -422,7 +422,7 @@ export default function CommercialAgreementSign() {
         </p>
         <div className="space-y-3">
           {uniqueScopeKeysFromSites(sites).map((scope) => (
-            <CommercialScopePreview key={scope} kind={scope} compact />
+            <CommercialScopePreview key={scope} kind={scope} />
           ))}
         </div>
       </Card>

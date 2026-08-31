@@ -9,6 +9,10 @@ import {
   type ChecklistItem,
   type PropertyTypeDef,
 } from "@/lib/proposal-request";
+import {
+  defaultScopeTemplateForType,
+  scopeSectionsFromTemplate,
+} from "@/lib/proposal-scope-checklists";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -68,11 +72,14 @@ export async function PUT(req: Request): Promise<NextResponse> {
       sort: Math.max(...current.types.map((t) => t.sort), 0) + 10,
       active: true,
     };
+    const scopeTemplate = defaultScopeTemplateForType(key, def.accountKind);
     next = {
       ...current,
       types: [...current.types, def],
       intakeByType: { ...current.intakeByType, [key]: [] },
       byType: { ...current.byType, [key]: [] },
+      scopeTemplateByType: { ...current.scopeTemplateByType, [key]: scopeTemplate },
+      scopeByType: { ...current.scopeByType, [key]: scopeSectionsFromTemplate(scopeTemplate) },
     };
   } else if (action === "save") {
     const catalog = mergeChecklists(body.catalog || body);

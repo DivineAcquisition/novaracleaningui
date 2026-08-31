@@ -448,6 +448,7 @@ async function attachPdfAndDrive(
       exclusionNote,
       universal: ctx.checklist.universal,
       typeSpecific: ctx.checklist.typeSpecific,
+      scope: ctx.checklist.scope,
       answers,
       photoCount: photos.length,
     });
