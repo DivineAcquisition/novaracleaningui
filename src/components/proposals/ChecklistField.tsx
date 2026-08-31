@@ -26,16 +26,17 @@ export function ChecklistField({
   onChange: (v: unknown) => void;
   compact?: boolean;
 }) {
-  const labelCls = compact ? "text-[10px] text-slate-500" : "text-xs text-slate-600";
-  const inputCls = compact ? "h-8 text-xs mt-0.5" : "mt-1";
+  const labelCls = compact ? "text-[10px] text-slate-500" : "text-sm font-medium text-slate-700";
+  const inputCls = compact ? "h-8 text-xs mt-0.5" : "h-11 text-base mt-1";
+  const helpCls = compact ? "text-[11px] text-slate-500 leading-snug" : "text-sm text-slate-500 leading-relaxed";
 
   return (
-    <div className="space-y-1">
+    <div className={compact ? "space-y-1" : "space-y-1.5"}>
       <Label className={labelCls}>
         {item.label}
         {item.required ? " *" : ""}
       </Label>
-      {item.help && <p className="text-[11px] text-slate-500 leading-snug">{item.help}</p>}
+      {item.help && <p className={helpCls}>{item.help}</p>}
 
       {item.kind === "integer" || item.kind === "number" ? (
         <Input
@@ -52,7 +53,7 @@ export function ChecklistField({
           rows={compact ? 2 : 3}
           value={String(value ?? "")}
           onChange={(e) => onChange(e.target.value)}
-          className={cn("text-sm", compact && "text-xs")}
+          className={cn(compact ? "text-xs" : "text-base min-h-[5.5rem]")}
         />
       ) : item.kind === "time" ? (
         <Input type="time" value={String(value ?? "")} onChange={(e) => onChange(e.target.value)} className={inputCls} />
@@ -66,7 +67,8 @@ export function ChecklistField({
                 type="button"
                 onClick={() => onChange(opt === "yes")}
                 className={cn(
-                  "px-3 py-1.5 rounded-full text-xs font-semibold border",
+                  "rounded-full font-semibold border",
+                  compact ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm",
                   on ? "bg-violet-600 text-white border-violet-600" : "bg-white text-slate-600 border-slate-200",
                 )}
               >
@@ -99,7 +101,7 @@ export function ChecklistField({
             const share = (value && typeof value === "object" ? (value as Record<string, number>)[k.key] : "") ?? "";
             return (
               <div key={k.key}>
-                <Label className="text-[10px] text-slate-500">{k.label} %</Label>
+                <Label className={compact ? "text-[10px] text-slate-500" : "text-xs text-slate-600"}>{k.label} %</Label>
                 <Input
                   type="number"
                   min={0}
@@ -129,7 +131,8 @@ export function ChecklistField({
                   onChange(selected ? cur.filter((x) => x !== o.value) : [...cur, o.value]);
                 }}
                 className={cn(
-                  "px-2 py-1 rounded-full text-[11px] font-medium border",
+                  "rounded-full font-medium border",
+                  compact ? "px-2 py-1 text-[11px]" : "px-3 py-1.5 text-sm",
                   selected ? "bg-violet-600 text-white border-violet-600" : "bg-white text-slate-600 border-slate-200",
                 )}
               >

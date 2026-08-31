@@ -253,14 +253,14 @@ export default function WalkthroughIntakeForm({ staff = false }: { staff?: boole
         ) : undefined
       }
       footer={
-        <p className="text-[11px] text-slate-400 text-center">
+        <p className="text-xs text-slate-400 text-center">
           If you find mold past threshold, active infestation, biohazard, or a structural hazard, mark it on the exclusion check. That stops pricing.
         </p>
       }
     >
       <SEO title={`${info.propertyType.shortLabel} site findings`} />
       {staff && (
-        <div className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-900">
+        <div className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2.5 text-sm text-violet-900">
           Office copy of the walkthrough agent&apos;s site findings. This is not the crew job checklist —
           that token is issued after the job is booked and assigned.
           <span className="block mt-1 text-violet-700/80">
@@ -270,18 +270,18 @@ export default function WalkthroughIntakeForm({ staff = false }: { staff?: boole
       )}
 
       <TokenPanel shine>
-        <p className="text-[11px] uppercase tracking-wider font-semibold text-violet-700">
+        <p className="text-xs uppercase tracking-wider font-semibold text-violet-700">
           Novara · Site findings · {info.propertyType.shortLabel}
         </p>
-        <p className="text-xs text-slate-600 flex items-start gap-1 mt-2">
-          <RiMapPinLine className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+        <p className="text-sm text-slate-600 flex items-start gap-1.5 mt-2">
+          <RiMapPinLine className="w-4 h-4 mt-0.5 shrink-0" />
           {info.site.address}
         </p>
         {info.site.clientStatedSqft ? (
-          <p className="text-[11px] text-slate-500 mt-2">Client stated {Number(info.site.clientStatedSqft).toLocaleString()} sq ft — confirm on site.</p>
+          <p className="text-sm text-slate-500 mt-2">Client stated {Number(info.site.clientStatedSqft).toLocaleString()} sq ft — confirm on site.</p>
         ) : null}
         {info.access?.name && (
-          <p className="text-[11px] text-slate-500 mt-1">Access: {info.access.name}{info.access.phone ? ` · ${info.access.phone}` : ""}</p>
+          <p className="text-sm text-slate-500 mt-1">Access: {info.access.name}{info.access.phone ? ` · ${info.access.phone}` : ""}</p>
         )}
       </TokenPanel>
 
@@ -306,28 +306,28 @@ export default function WalkthroughIntakeForm({ staff = false }: { staff?: boole
       )}
 
       <TokenPanel>
-        <h2 className="text-sm font-bold text-slate-900">Site findings</h2>
-        <p className="text-[11px] text-slate-500 mb-3">
+        <h2 className="text-base font-bold text-slate-900">Site findings</h2>
+        <p className="text-sm text-slate-500 mb-4">
           Required fields set the firm price. Notes below them are optional — type only what matters.
         </p>
-        <div className="space-y-3">
+        <div className="space-y-4">
           {universal.map((item) => (
-            <ChecklistField key={item.key} item={item} value={answers[item.key]} onChange={(v) => setAnswer(item.key, v)} compact />
+            <ChecklistField key={item.key} item={item} value={answers[item.key]} onChange={(v) => setAnswer(item.key, v)} />
           ))}
         </div>
       </TokenPanel>
 
       {typeItems.length > 0 && (
         <TokenPanel>
-          <h2 className="text-sm font-bold text-violet-900">{extrasTitle}</h2>
-          <p className="text-[11px] text-slate-500 mb-3">
+          <h2 className="text-base font-bold text-violet-900">{extrasTitle}</h2>
+          <p className="text-sm text-slate-500 mb-4">
             {typeRequiresWalkthrough(info.propertyType)
               ? "Same additional questions on every office and commercial walkthrough — not the crew job list."
               : "Only this property type — leftover STR token. Not the crew job list."}
           </p>
-          <div className="space-y-3">
+          <div className="space-y-4">
             {typeItems.map((item) => (
-              <ChecklistField key={item.key} item={item} value={answers[item.key]} onChange={(v) => setAnswer(item.key, v)} compact />
+              <ChecklistField key={item.key} item={item} value={answers[item.key]} onChange={(v) => setAnswer(item.key, v)} />
             ))}
           </div>
         </TokenPanel>
@@ -335,30 +335,30 @@ export default function WalkthroughIntakeForm({ staff = false }: { staff?: boole
 
       {(info.zonesRequired || zones.length > 0) && (
         <TokenPanel className="bg-violet-50/40">
-          <h2 className="text-sm font-bold text-violet-950">Site zones</h2>
-          <p className="text-[11px] text-violet-800 mb-3">
+          <h2 className="text-base font-bold text-violet-950">Site zones</h2>
+          <p className="text-sm text-violet-800 mb-4">
             This site is large enough that one photo pair doesn&apos;t prove the visit.
             Name each physical section now — that map is reused on every future job.
             {info.zoneThresholdSqft
               ? ` Required at ${info.zoneThresholdSqft.toLocaleString()} sq ft and above.`
               : ""}
           </p>
-          <ZoneMapEditor zones={zones} onChange={saveZones} compact />
+          <ZoneMapEditor zones={zones} onChange={saveZones} />
         </TokenPanel>
       )}
 
       <TokenPanel>
-        <h2 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
-          <RiCameraLine className="w-4 h-4" /> Photos + video
+        <h2 className="text-base font-bold text-slate-900 flex items-center gap-1.5">
+          <RiCameraLine className="w-5 h-5" /> Photos + video
         </h2>
-        <p className="text-[11px] text-slate-500 mb-3">
+        <p className="text-sm text-slate-500 mb-4">
           Condition photos and a short clip. When zones are named, tag each upload to the section it shows.
         </p>
         {zones.length > 0 && (
           <select
             value={photoZoneId}
             onChange={(e) => setPhotoZoneId(e.target.value)}
-            className="h-8 text-xs rounded-md border border-slate-200 bg-white px-2 mb-3"
+            className="h-11 text-base rounded-md border border-slate-200 bg-white px-3 mb-3"
           >
             <option value="">Whole site / not yet zoned</option>
             {zones.map((z) => (
@@ -371,10 +371,10 @@ export default function WalkthroughIntakeForm({ staff = false }: { staff?: boole
             <MediaThumb key={url} url={url} className="w-20 h-20 rounded-lg overflow-hidden" />
           ))}
         </div>
-        <label className="inline-flex items-center gap-2 text-sm font-medium text-violet-700 cursor-pointer mt-3">
+        <label className="inline-flex items-center gap-2 text-base font-medium text-violet-700 cursor-pointer mt-3">
           <input type="file" accept="image/*,video/*" multiple className="hidden" disabled={uploading}
             onChange={(e) => void upload(e.target.files)} />
-          {uploading ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : <RiVideoLine className="w-4 h-4" />}
+          {uploading ? <RiLoader4Line className="w-5 h-5 animate-spin" /> : <RiVideoLine className="w-5 h-5" />}
           Add photos or video
         </label>
       </TokenPanel>
