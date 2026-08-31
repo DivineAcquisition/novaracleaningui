@@ -49,6 +49,8 @@ interface RequestRow {
   scheduled_at?: string | null;
   assigned_cleaner_id?: string | null;
   business_account_id?: string | null;
+  host_id?: string | null;
+  requires_walkthrough?: boolean;
   sites: SiteRow[];
 }
 
@@ -73,6 +75,12 @@ interface Candidate {
   match_score: number;
   available: boolean;
   reason?: string;
+}
+
+function needsWalkthrough(row: RequestRow | null): boolean {
+  if (!row) return true;
+  if (typeof row.requires_walkthrough === "boolean") return row.requires_walkthrough;
+  return row.property_type_key !== "str";
 }
 
 export default function ProposalRequestQueue({
@@ -209,8 +217,9 @@ function AssignSheet({
   };
 
   const open = Boolean(row);
+  const walk = needsWalkthrough(row);
   useEffect(() => {
-    if (row) void load(row.id);
+    if (row && needsWalkthrough(row)) void load(row.id);
     else {
       setCandidates([]);
       setCleanerId("");
@@ -271,7 +280,7 @@ function AssignSheet({
     <Sheet open={open} onOpenChange={(v) => { if (!v) { onClose(); setCandidates([]); setCleanerId(""); } }}>
       <SheetContent className="sm:max-w-lg overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>Assign walkthrough agent</SheetTitle>
+          <SheetTitle>{walk ? "Assign walkthrough agent" : "STR — no walkthrough"}</SheetTitle>
           <SheetDescription>
             {row ? `${row.requester_name} · ${row.property_type_key}` : ""}
           </SheetDescription>
@@ -282,10 +291,17 @@ function AssignSheet({
               {(row.sites || []).map((s) => (
                 <p key={s.id}>{[s.nickname, s.address, s.city, s.state].filter(Boolean).join(" · ")}</p>
               ))}
-              <p className="text-slate-400">This is paid contractor work, not unpaid prospecting.</p>
+              {walk ? (
+                <p className="text-slate-400">This is paid contractor work, not unpaid prospecting.</p>
+              ) : (
+                <p className="text-slate-700">
+                  Short-term rentals are residential. Price bedrooms, bathrooms, and linen on the
+                  host record, then send host onboarding. Do not assign a walkthrough agent.
+                </p>
+              )}
             </div>
 
-            {row.status === "pending_assign" && (
+            {walk && row.status === "pending_assign" && (
               <>
                 <div>
                   <Label className="text-xs">Visit date &amp; time *</Label>
@@ -334,12 +350,13 @@ function AssignSheet({
               </>
             )}
 
-            {row.status !== "pending_assign" && (
+            {walk && row.status !== "pending_assign" && (
               <p className="text-sm text-slate-600">
                 Status is {PROPOSAL_STATUS_LABELS[row.status]}. Onsite documentation is the same tokenized document the agent uses — VA and admin can add to it from here.
               </p>
             )}
 
+            {walk && (
             <div className="space-y-2">
               <p className="text-xs font-semibold text-slate-700">Onsite documentation</p>
               {(row.sites || []).map((s) => {
@@ -377,8 +394,16 @@ function AssignSheet({
                 {row.assigned_cleaner_id ? "Resend docs to walkthrough agent" : "Prepare agent link"}
               </Button>
             </div>
+            )}
 
-            {row.business_account_id && (row.status === "walkthrough_conducted" || row.status === "firm_price_set") && (
+            {!walk && (
+              <p className="text-xs text-slate-500 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                Next: Partnerships → STR. Set a turnover rate on each property, then send the host onboarding link.
+                {row.host_id ? " A host record is already attached to this request." : ""}
+              </p>
+            )}
+
+            {walk && row.business_account_id && (row.status === "walkthrough_conducted" || row.status === "firm_price_set") && (
               <Button
                 className="w-full"
                 onClick={() => {

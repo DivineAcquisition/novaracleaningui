@@ -15,6 +15,7 @@ import {
   mergeChecklists,
   mergeProposalSettings,
   propertyTypeByKey,
+  typeRequiresWalkthrough,
   walkthroughLink,
   type EmailVars,
   type ProposalChecklists,
@@ -377,8 +378,32 @@ export async function createProposalRequest(
       return { ok: false, error: siteErr?.message || "Could not save a site.", status: 400 };
     }
     const siteId = (bizSite as { id: string }).id;
-    if (sqft) {
+    // Stamping sqft can fire the walkthrough-threshold trigger. STR skips
+    // the visit entirely, so never write sqft onto the business site.
+    const needsWalk = typeRequiresWalkthrough(type);
+    if (needsWalk && sqft) {
       await supabase.from("business_sites").update({ sqft }).eq("id", siteId);
+    }
+
+    if (!needsWalk) {
+      await supabase.from("proposal_request_sites").insert({
+        proposal_request_id: requestId,
+        sort_order: i,
+        nickname,
+        address: s(site.address, 200) || null,
+        city: s(site.city, 80) || null,
+        state: s(site.state, 8) || null,
+        zip_code: zip || null,
+        client_stated_sqft: sqft,
+        business_site_id: siteId,
+        walkthrough_id: null,
+      });
+      createdSites.push({
+        ...site,
+        business_site_id: siteId,
+        walkthrough_id: null,
+      });
+      continue;
     }
 
     const { data: wt, error: wtErr } = await supabase
@@ -466,6 +491,14 @@ export async function createProposalRequest(
     });
   }
 
+  if (!typeRequiresWalkthrough(type) && hostId) {
+    await seedStrHostProperties(supabase, hostId, sites, input.intakeAnswers || {});
+  }
+
+  const walkCopy = typeRequiresWalkthrough(type)
+    ? "Pending — assigning walkthrough agent. Onsite documentation tokenized. Not a booking."
+    : "Pending — price host properties, then send host onboarding. No walkthrough (STR is residential). Not a booking.";
+
   await supabase.from("events").insert({
     event_type: "proposal_request.created",
     source: "admin-proposals",
@@ -474,17 +507,70 @@ export async function createProposalRequest(
       `${company ? ` · ${company}` : ""} · ${email}` +
       `${firstAddress ? ` · ${firstAddress}` : ""}` +
       `${sites.length > 1 ? ` · ${sites.length} sites` : ""}` +
-      ` · Pending — assigning walkthrough agent. Onsite documentation tokenized. Not a booking.`,
+      ` · ${walkCopy}`,
     data: {
       proposal_request_id: requestId,
       business_account_id: accountId,
       host_id: hostId,
       property_type_key: type.key,
       site_count: sites.length,
+      requires_walkthrough: typeRequiresWalkthrough(type),
     },
   });
 
   return { ok: true, request: { ...(request as object), sites: createdSites } };
+}
+
+function normalizeAddress(value: unknown): string {
+  return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function qty(v: unknown): number | null {
+  if (v == null || v === "") return null;
+  const num = Number(v);
+  return Number.isFinite(num) && num >= 0 ? num : null;
+}
+
+/** Best-effort: copy intake addresses onto the host as unpriced properties. */
+async function seedStrHostProperties(
+  supabase: SB,
+  hostId: string,
+  sites: IntakeSite[],
+  intake: Record<string, unknown>,
+): Promise<void> {
+  const { data: existing } = await supabase
+    .from("properties")
+    .select("id, address")
+    .eq("host_id", hostId);
+  const seen = new Set(
+    (existing || []).map((row) => normalizeAddress((row as { address?: string }).address)),
+  );
+  const bedrooms = qty(intake.approx_bedrooms);
+  const bathrooms = qty(intake.approx_bathrooms);
+  const linen = s(intake.linen_handling_guess, 40);
+  const laundry = linen === "on_site_laundry" || linen === "cleaner_offsite";
+  const windowNote = s(intake.typical_turnover_window, 400);
+
+  const rows: Array<Record<string, unknown>> = [];
+  for (const site of sites) {
+    const address = siteLine(site) || s(site.address, 200);
+    if (!address) continue;
+    const key = normalizeAddress(address);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    rows.push({
+      host_id: hostId,
+      nickname: s(site.nickname, 80) || s(site.address, 80) || null,
+      address,
+      bedrooms,
+      bathrooms,
+      sqft: n(site.clientStatedSqft),
+      laundry_included: laundry,
+      special_notes: windowNote || null,
+    });
+  }
+  if (rows.length === 0) return;
+  await supabase.from("properties").insert(rows);
 }
 
 export function agentPayCents(settings: ProposalRequestSettings, hours?: number | null): number {

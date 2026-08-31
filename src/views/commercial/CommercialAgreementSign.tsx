@@ -33,6 +33,8 @@ import { SEO } from "@/components/SEO";
 import { SignaturePad } from "@/components/booking/SignaturePad";
 import { PdfViewer } from "@/components/PdfViewer";
 import { Button } from "@/components/ui/button";
+import { TokenPageShell, TokenPanel } from "@/components/token/TokenPageShell";
+import { ShimmerButton } from "@/components/magicui/shimmer-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -95,26 +97,26 @@ type State =
   | { kind: "blocked"; message: string }
   | { kind: "complete"; data: Payload };
 
-function Shell({ children }: { children: React.ReactNode }) {
+function Shell({
+  children,
+  title,
+}: {
+  children: React.ReactNode;
+  title?: React.ReactNode;
+}) {
   return (
-    <div className="min-h-screen bg-background px-4 py-8">
-      <div className="mx-auto w-full max-w-2xl space-y-4">
-        <div className="text-center">
-          <p className="text-sm font-semibold tracking-tight text-foreground">Novara Cleaning</p>
-          <p className="text-xs text-muted-foreground">Commercial Cleaning Services Agreement</p>
-        </div>
-        {children}
-      </div>
-    </div>
+    <TokenPageShell
+      eyebrow="Commercial Cleaning Services Agreement"
+      title={title}
+      maxWidth="max-w-2xl"
+    >
+      {children}
+    </TokenPageShell>
   );
 }
 
 function Card({ children, className }: { children: React.ReactNode; className?: string }) {
-  return (
-    <div className={`token-card ${className || ""}`}>
-      {children}
-    </div>
-  );
+  return <TokenPanel className={className}>{children}</TokenPanel>;
 }
 
 export default function CommercialAgreementSign() {
@@ -483,14 +485,14 @@ export default function CommercialAgreementSign() {
 
           {error && <p className="text-sm text-red-600">{error}</p>}
 
-          <Button
-            className="w-full"
+          <ShimmerButton
+            className="w-full h-11"
             disabled={busy || !signature || !agreed || legalName.trim().length < 2}
             onClick={() => void sign()}
           >
             {busy ? <RiLoader4Line className="mr-1.5 h-4 w-4 animate-spin" /> : null}
             Sign agreement
-          </Button>
+          </ShimmerButton>
         </Card>
       )}
 

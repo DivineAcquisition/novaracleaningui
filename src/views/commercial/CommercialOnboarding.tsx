@@ -40,6 +40,7 @@ import {
 import { SignaturePad } from "@/components/booking/SignaturePad";
 import { CompanyCoiDownloadLink } from "@/components/commercial/CompanyCoiDownloadLink";
 import { PdfViewer } from "@/components/PdfViewer";
+import { TokenPageShell, TokenPanel } from "@/components/token/TokenPageShell";
 import {
   money,
   BILLING_METHOD_LABELS,
@@ -98,19 +99,39 @@ const STEP_SHORT: Record<string, string> = {
   billing: "Billing",
 };
 
-function Shell({ children }: { children: React.ReactNode }) {
+function Shell({
+  children,
+  eyebrow,
+  title,
+  subtitle,
+  footer,
+}: {
+  children: React.ReactNode;
+  eyebrow?: string;
+  title?: React.ReactNode;
+  subtitle?: React.ReactNode;
+  footer?: React.ReactNode;
+}) {
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
-      <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">{children}</div>
-    </div>
+    <TokenPageShell eyebrow={eyebrow} title={title} subtitle={subtitle} footer={footer}>
+      {children}
+    </TokenPageShell>
   );
 }
 
-function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+function Card({
+  children,
+  className = "",
+  shine = false,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  shine?: boolean;
+}) {
   return (
-    <div className={`rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 ${className}`}>
+    <TokenPanel className={className} shine={shine}>
       {children}
-    </div>
+    </TokenPanel>
   );
 }
 
@@ -219,7 +240,7 @@ export default function CommercialOnboarding({ token }: { token: string }) {
 
   if (state.kind === "loading") {
     return (
-      <Shell>
+      <Shell eyebrow="Novara Cleaning">
         <div className="flex items-center justify-center py-24 text-slate-400">
           <RiLoader4Line className="h-8 w-8 animate-spin" />
         </div>
@@ -229,10 +250,9 @@ export default function CommercialOnboarding({ token }: { token: string }) {
 
   if (state.kind === "error") {
     return (
-      <Shell>
+      <Shell eyebrow="Novara Cleaning" title="We couldn't open this link">
         <Card className="text-center">
-          <h1 className="text-lg font-semibold">We couldn&apos;t open this link</h1>
-          <p className="mt-2 text-sm leading-relaxed text-slate-600">{state.message}</p>
+          <p className="text-sm leading-relaxed text-slate-600">{state.message}</p>
         </Card>
       </Shell>
     );
@@ -243,53 +263,43 @@ export default function CommercialOnboarding({ token }: { token: string }) {
   const business = String(d.account?.business_name || "your account");
 
   return (
-    <Shell>
-      <header className="mb-6">
-        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-600">
-          Novara Cleaning
+    <Shell
+      eyebrow="Novara Cleaning · Commercial onboarding"
+      title={`Getting ${business} set up`}
+      subtitle={`Hi ${(d.session.recipientName || business).split(" ")[0]}. One link, three pages. You can close this and come back — we pick up exactly where you left off.`}
+      footer={
+        <p className="text-center text-xs text-slate-400">
+          Questions at any point? Reply to the email this link came from and it reaches your account
+          manager directly.
         </p>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">
-          Getting {business} set up
-        </h1>
-        <p className="mt-2 text-sm leading-relaxed text-slate-600">
-          Hi {(d.session.recipientName || business).split(" ")[0]}. One link, three pages. You can
-          close this and come back — we pick up exactly where you left off.
-        </p>
-      </header>
-
+      }
+    >
       {/* The progress indicator comes first, on every visit, by design. */}
       <ProgressBar progress={d.progress} />
 
       <div ref={noticeRef}>
         {notice && (
-          <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
             {notice}
           </div>
         )}
         {error && (
-          <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">
+          <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">
             {error}
           </div>
         )}
       </div>
 
-      <div className="mt-6 space-y-5">
-        {d.progress.paused_for_changes && <PausedCard proposal={d.proposal} />}
+      {d.progress.paused_for_changes && <PausedCard proposal={d.proposal} />}
 
-        {step === "pricing" && !d.progress.paused_for_changes && (
-          <PricingStep data={d} busy={busy} onPost={post} />
-        )}
-        {step === "agreement" && <AgreementStep data={d} busy={busy} token={token} onDone={load} onError={setError} />}
-        {step === "billing" && <BillingStep data={d} busy={busy} onPost={post} />}
-        {step === "done" && <DoneCard data={d} />}
+      {step === "pricing" && !d.progress.paused_for_changes && (
+        <PricingStep data={d} busy={busy} onPost={post} />
+      )}
+      {step === "agreement" && <AgreementStep data={d} busy={busy} token={token} onDone={load} onError={setError} />}
+      {step === "billing" && <BillingStep data={d} busy={busy} onPost={post} />}
+      {step === "done" && <DoneCard data={d} />}
 
-        <SubmitInfo busy={busy} onPost={post} submissions={d.submissions} />
-      </div>
-
-      <p className="mt-8 text-center text-xs text-slate-400">
-        Questions at any point? Reply to the email this link came from and it reaches your account
-        manager directly.
-      </p>
+      <SubmitInfo busy={busy} onPost={post} submissions={d.submissions} />
     </Shell>
   );
 }
@@ -301,7 +311,7 @@ function ProgressBar({ progress }: { progress: Progress }) {
   const pages = progress.steps.filter((s) => s.key === "pricing" || s.key === "agreement" || s.key === "billing");
 
   return (
-    <Card>
+    <Card shine>
       <h2 className="text-sm font-semibold text-slate-900">Where you are</h2>
       <ol className="mt-3 flex flex-wrap items-center justify-between gap-2">
         {pages.map((s, i) => {

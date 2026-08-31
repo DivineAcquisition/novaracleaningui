@@ -27,6 +27,9 @@ import { useParams } from "next/navigation";
 
 import { SEO } from "@/components/SEO";
 import { Button } from "@/components/ui/button";
+import { ShineBorder } from "@/components/magicui/shine-border";
+import { ShimmerButton } from "@/components/magicui/shimmer-button";
+import { TokenPageShell, TokenPanel } from "@/components/token/TokenPageShell";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -77,26 +80,24 @@ type State =
   | { kind: "accepted"; message: string; agreementUrl: string | null }
   | { kind: "changes"; message: string };
 
-function Shell({ children }: { children: React.ReactNode }) {
+function Shell({
+  children,
+  eyebrow = "Commercial service proposal",
+  title,
+}: {
+  children: React.ReactNode;
+  eyebrow?: string;
+  title?: React.ReactNode;
+}) {
   return (
-    <div className="min-h-screen bg-background px-4 py-8">
-      <div className="mx-auto w-full max-w-3xl space-y-4">
-        <div className="text-center">
-          <p className="text-sm font-semibold tracking-tight text-foreground">Novara Cleaning</p>
-          <p className="text-xs text-muted-foreground">Commercial service proposal</p>
-        </div>
-        {children}
-      </div>
-    </div>
+    <TokenPageShell eyebrow={eyebrow} title={title} maxWidth="max-w-3xl">
+      {children}
+    </TokenPageShell>
   );
 }
 
 function Card({ children, className }: { children: React.ReactNode; className?: string }) {
-  return (
-    <div className={`token-card ${className || ""}`}>
-      {children}
-    </div>
-  );
+  return <TokenPanel className={className}>{children}</TokenPanel>;
 }
 
 function longDate(iso: string | null): string {
@@ -255,7 +256,9 @@ export default function ProposalPage() {
       <SEO title={`Cleaning proposal — ${business}`} noindex />
 
       {/* Headline */}
-      <div className="token-hero p-6">
+      <div className="relative overflow-hidden rounded-2xl">
+        <ShineBorder borderWidth={1.5} duration={14} />
+        <div className="token-hero relative z-10 p-6">
         <p className="text-xs font-medium uppercase tracking-wide text-white/70">
           Proposal v{proposal.version}
           {proposal.expiresAt ? ` · open until ${longDate(proposal.expiresAt)}` : ""}
@@ -277,6 +280,7 @@ export default function ProposalPage() {
             </div>
           ) : null}
         </div>
+      </div>
       </div>
 
       {proposal.coverNote && (
@@ -394,10 +398,10 @@ export default function ProposalPage() {
         <Card className="space-y-3">
           <p className="text-sm font-semibold text-foreground">Ready to move forward?</p>
           <div className="flex flex-col gap-2 sm:flex-row">
-            <Button className="flex-1" onClick={() => setMode("accept")}>
+            <ShimmerButton className="flex-1 h-10" onClick={() => setMode("accept")}>
               <RiCheckLine className="mr-1.5 h-4 w-4" />
               Accept this proposal
-            </Button>
+            </ShimmerButton>
             <Button variant="outline" className="flex-1" onClick={() => setMode("changes")}>
               <RiEdit2Line className="mr-1.5 h-4 w-4" />
               Request changes
@@ -492,14 +496,14 @@ export default function ProposalPage() {
           {error && <p className="text-sm text-red-600">{error}</p>}
 
           <div className="flex gap-2">
-            <Button
-              className="flex-1"
+            <ShimmerButton
+              className="flex-1 h-10"
               disabled={busy || name.trim().length < 2}
               onClick={() => void submit("accept")}
             >
               {busy ? <RiLoader4Line className="mr-1.5 h-4 w-4 animate-spin" /> : null}
               Accept proposal
-            </Button>
+            </ShimmerButton>
             <Button variant="ghost" disabled={busy} onClick={() => setMode("review")}>
               Back
             </Button>

@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireAdmin, AdminAuthError } from "@/lib/admin-auth";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
-import { PROPOSAL_STATUS_LABELS, formatWhen, walkthroughLink } from "@/lib/proposal-request";
-import { loadProposalSettings, sendProposalEmail, sendProposalSms } from "@/lib/proposal-request-server";
+import { proposalRequestStatusLabel, propertyTypeByKey, formatWhen, walkthroughLink } from "@/lib/proposal-request";
+import { loadProposalChecklists, loadProposalSettings, sendProposalEmail, sendProposalSms } from "@/lib/proposal-request-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,6 +28,7 @@ export async function GET(
 
   const supabase = getAdminSupabase();
   const id = params.id;
+  const catalog = await loadProposalChecklists(supabase);
   const { data: request, error } = await supabase
     .from("proposal_requests")
     .select("*")
@@ -52,12 +53,16 @@ export async function GET(
     .select("*")
     .eq("proposal_request_id", id);
 
+  const type = propertyTypeByKey(catalog, String((request as { property_type_key?: string }).property_type_key || ""));
   return NextResponse.json({
     ok: true,
     request: {
       ...request,
-      status_label: PROPOSAL_STATUS_LABELS[(request as { status: keyof typeof PROPOSAL_STATUS_LABELS }).status]
-        || (request as { status: string }).status,
+      status_label: proposalRequestStatusLabel(
+        String((request as { status: string }).status),
+        type,
+        String((request as { property_type_key?: string }).property_type_key || ""),
+      ),
       sites: sites || [],
       walkthroughs: walkthroughs || [],
       payouts: payouts || [],
