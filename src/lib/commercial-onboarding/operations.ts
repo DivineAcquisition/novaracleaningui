@@ -14,7 +14,7 @@
 // different — one link, one meaning, checked where it is read.
 
 import { sendCompanyCoi } from "@/lib/company-coi";
-import { sendPartnershipMessage } from "@/lib/partnership-comms";
+import { sendPartnershipMessage } from "@/lib/partnership-comms/server";
 import { sendAgreement, buildCommercialValues } from "@/lib/docuseal";
 import { resolveAppSecret, stripeCall, ensureCommercialCustomer } from "@/lib/stripe-rest";
 import { money, type ProposalSite } from "@/lib/commercial-proposal";

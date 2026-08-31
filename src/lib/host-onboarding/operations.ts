@@ -10,7 +10,7 @@ import { resolveAppSecret, stripeCall } from "@/lib/stripe-rest";
 import { MIN_PASSWORD_LENGTH } from "./types";
 import type { PaymentOptionKey } from "./agreement";
 import { parseSnapshot, portalUrl } from "./session";
-import { sendPartnershipMessage } from "@/lib/partnership-comms";
+import { sendPartnershipMessage } from "@/lib/partnership-comms/server";
 
 // eslint-disable-next-line
 type Admin = any;

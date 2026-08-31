@@ -24,12 +24,6 @@ export {
   quietHoursEndsAt,
   retryBackoffMs,
 } from "./policy";
-export {
-  deliverPartnershipRow,
-  drainPartnershipQueue,
-  loadPartnershipSettings,
-  recordPartnershipOptOut,
-  revokePartnershipOptOut,
-  sendPartnershipMessage,
-  sendPortalMagicLink,
-} from "./send";
+
+// Node send path (crypto, Resend, GHL) lives in ./server so client
+// screens can import this barrel without failing the Vercel bundle.

@@ -10,7 +10,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin, AdminAuthError } from "@/lib/admin-auth";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
-import { sendPartnershipMessage } from "@/lib/partnership-comms";
+import { sendPartnershipMessage } from "@/lib/partnership-comms/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

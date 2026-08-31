@@ -29,7 +29,7 @@
 import { NextResponse } from "next/server";
 
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
-import { sendPartnershipMessage } from "@/lib/partnership-comms";
+import { sendPartnershipMessage } from "@/lib/partnership-comms/server";
 import { AGREEMENT_COLS, PROPOSAL_COLS } from "@/lib/commercial-agreement-server";
 import {
   acceptProposal,

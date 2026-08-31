@@ -5,7 +5,7 @@ import {
   drainPartnershipQueue,
   loadPartnershipSettings,
   mergePartnershipSettings,
-} from "@/lib/partnership-comms";
+} from "@/lib/partnership-comms/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

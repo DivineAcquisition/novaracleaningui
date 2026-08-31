@@ -29,8 +29,8 @@ import type {
   PartnershipCommsSettings,
   PartnershipMessageStatus,
   PartnershipTemplate,
-} from "@/lib/partnership-comms";
-import { DEFAULT_PARTNERSHIP_COMMS_SETTINGS } from "@/lib/partnership-comms";
+} from "@/lib/partnership-comms/types";
+import { DEFAULT_PARTNERSHIP_COMMS_SETTINGS } from "@/lib/partnership-comms/types";
 
 interface LogRow {
   id: string;

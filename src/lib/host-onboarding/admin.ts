@@ -6,7 +6,7 @@
 
 import { onboardingUrl } from "./session";
 import type { SnapshotProperty } from "./session";
-import { sendPartnershipMessage } from "@/lib/partnership-comms";
+import { sendPartnershipMessage } from "@/lib/partnership-comms/server";
 
 // eslint-disable-next-line
 type Admin = any;

@@ -4,7 +4,7 @@
 // through admin-send-email, and creates proposal requests without ever
 // inserting a booking.
 
-import { sendPartnershipMessage } from "@/lib/partnership-comms";
+import { sendPartnershipMessage } from "@/lib/partnership-comms/server";
 import { randomBytes } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {

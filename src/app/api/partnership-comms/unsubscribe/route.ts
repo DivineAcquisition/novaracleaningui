@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
-import { recordPartnershipOptOut } from "@/lib/partnership-comms";
+import { recordPartnershipOptOut } from "@/lib/partnership-comms/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

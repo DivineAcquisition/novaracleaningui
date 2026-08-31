@@ -19,7 +19,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
-import { sendPartnershipMessage } from "@/lib/partnership-comms";
+import { sendPartnershipMessage } from "@/lib/partnership-comms/server";
 import {
   COMPANY_COI_CARRIER,
   COMPANY_COI_COVERAGE_NOTES,

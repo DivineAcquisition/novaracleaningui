@@ -11,7 +11,7 @@
 
 import { NextResponse } from "next/server";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
-import { sendPartnershipMessage } from "@/lib/partnership-comms";
+import { sendPartnershipMessage } from "@/lib/partnership-comms/server";
 import { syncHostOnboardingToAirtable } from "@/lib/airtable";
 import { invokeHostOnboardingGhl } from "@/lib/host-onboarding/ghl";
 import { provisionHostAccount } from "@/lib/host-onboarding/provision";

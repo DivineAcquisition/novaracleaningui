@@ -34,7 +34,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin, AdminAuthError } from "@/lib/admin-auth";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
-import { sendPartnershipMessage } from "@/lib/partnership-comms";
+import { sendPartnershipMessage } from "@/lib/partnership-comms/server";
 import { loadCommercialConfigServer } from "@/lib/commercial-pricing-server";
 import { computeCommercialQuote } from "@/lib/commercial-pricing";
 import {

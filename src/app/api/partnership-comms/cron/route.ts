@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
-import { drainPartnershipQueue } from "@/lib/partnership-comms";
+import { drainPartnershipQueue } from "@/lib/partnership-comms/server";
 import { requireAdmin, AdminAuthError } from "@/lib/admin-auth";
 
 export const runtime = "nodejs";

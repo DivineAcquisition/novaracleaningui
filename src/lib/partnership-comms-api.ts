@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import type { PartnershipCommsSettings, PartnershipTemplate } from "@/lib/partnership-comms";
+import type { PartnershipCommsSettings, PartnershipTemplate } from "@/lib/partnership-comms/types";
 
 async function authHeaders(): Promise<HeadersInit> {
   const { data } = await supabase.auth.getSession();
