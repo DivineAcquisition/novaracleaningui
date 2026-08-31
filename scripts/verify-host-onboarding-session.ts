@@ -9,6 +9,7 @@
 //   Run:  npm run host-onboarding:verify
 
 import { PAYMENT_OPTIONS, PAY_AFTER_DISCRETION } from "../src/lib/host-onboarding/agreement";
+import { buildHostAgreementBase64 } from "../src/lib/host-onboarding/agreement-pdf";
 import {
   deriveHostOnboardingProgress,
   ratesReady,
@@ -196,8 +197,39 @@ check(
   false,
 );
 
-if (failures) {
-  console.error(`\n${failures} check(s) failed`);
-  process.exit(1);
-}
-console.log("\nAll host-onboarding checks passed.");
+void (async () => {
+  console.log("\nSigned PDF:");
+  const tinyPng =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+  try {
+    const pdf = await buildHostAgreementBase64({
+      signerName: "Jordan Hale",
+      signerEmail: "jordan@example.com",
+      entityType: "individual",
+      properties: [
+        {
+          property_id: "p1",
+          nickname: "Harbor Loft",
+          address: "1200 Light Street",
+          bedrooms: 2,
+          bathrooms: 2,
+          sqft: 1100,
+          turnover_price: 185,
+          linen: true,
+          restock: true,
+          special_notes: null,
+        },
+      ],
+      signatureDataUrl: tinyPng,
+    });
+    check("agreement PDF encodes (WinAnsi)", pdf.length > 1000, true);
+  } catch (err) {
+    check("agreement PDF encodes (WinAnsi)", String(err), "ok");
+  }
+
+  if (failures) {
+    console.error(`\n${failures} check(s) failed`);
+    process.exit(1);
+  }
+  console.log("\nAll host-onboarding checks passed.");
+})();

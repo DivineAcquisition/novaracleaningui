@@ -102,7 +102,7 @@ export function hostOnboardingPreviewPayload(step?: string) {
     previewMem.card = false;
     previewMem.portal = false;
   }
-  if (step === "payment") {
+  if (step === "payment" || step === "no-pay-after") {
     previewMem.signed = true;
     previewMem.decisions = [
       { propertyId: "preview-1", decision: "confirmed" },
@@ -110,6 +110,7 @@ export function hostOnboardingPreviewPayload(step?: string) {
     ];
     previewMem.card = false;
     previewMem.portal = false;
+    previewMem.paymentOption = null;
   }
   if (step === "done") {
     previewMem.signed = true;
