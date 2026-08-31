@@ -78,10 +78,14 @@ interface Data {
   billing: {
     method: "auto_pay" | "invoiced";
     cardOnFile: boolean;
+    paymentBrand?: string | null;
+    paymentLast4?: string | null;
+    canUpdatePayment?: boolean;
     netTerms: string | null;
+    netTermsLabel?: string | null;
     invoiceCycle: string | null;
-    invoices: Array<{ id: string; date: string; amountCents: number; url: string | null; status: string; dueDate: string }>;
-    charges: Array<{ id: string; date: string; amountCents: number; url: string | null; status: string; dueDate: string }>;
+    invoices: Array<{ id: string; date: string; amountCents: number; url: string | null; status: string; dueDate: string | null }>;
+    charges: Array<{ id: string; date: string; amountCents: number; url: string | null; status: string; dueDate: string | null }>;
   };
   coi: { status: "current" | "expiring" | "expired"; expiresLabel: string; href: string };
   sites: Site[];
@@ -115,8 +119,25 @@ export default function CommercialPortal() {
     try {
       const params = new URLSearchParams();
       const preview = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("preview") : null;
+      const billing = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("billing") : null;
       if (preview) params.set("preview", preview);
+      if (billing) params.set("billing", billing);
       if (siteId) params.set("siteId", siteId);
+      if (!preview) {
+        const q = new URLSearchParams(window.location.search);
+        if (q.get("payment") === "updated") {
+          await fetch("/api/partner-portal/commercial", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "refresh_payment", sessionId: q.get("session_id") }),
+          });
+          toast.success("Payment method updated.");
+          const next = new URL(window.location.href);
+          next.searchParams.delete("payment");
+          next.searchParams.delete("session_id");
+          window.history.replaceState({}, "", next.pathname + (next.search ? next.search : ""));
+        }
+      }
       const res = await fetch(`/api/partner-portal/commercial${params.toString() ? `?${params}` : ""}`);
       const json = await res.json();
       if (!json?.ok) throw new Error(json?.error || "Couldn't load your account.");
@@ -200,7 +221,8 @@ export default function CommercialPortal() {
         <div className="space-y-3">
           <p className="text-sm text-slate-600">
             Commercial service is contract-based. Visits are generated from your signed agreement&apos;s frequency —
-            you don&apos;t request each one the way a host requests a turnover.
+            you don&apos;t request each visit. Ask for a schedule change or a one-time extra visit if the pattern
+            needs to move.
           </p>
           {data.sites.length > 1 && (
             <div className="grid gap-2 sm:grid-cols-2">
@@ -312,17 +334,35 @@ export default function CommercialPortal() {
             <CardContent className="p-5">
               <p className="font-semibold flex items-center gap-1.5">
                 <RiMoneyDollarCircleLine className="h-4 w-4 text-[#5C0FFE]" />
-                {data.billing.method === "invoiced" ? "Invoiced account" : "Stripe Pre-Auth / Auto-Pay"}
+                {data.billing.method === "invoiced" ? "Invoiced account" : "Stripe Pre-Auth"}
               </p>
               {data.billing.method === "auto_pay" ? (
-                <p className="mt-1 text-sm text-slate-500">
-                  Payment method on file: {data.billing.cardOnFile ? "Yes" : "Not yet"}. Charge history below is per
-                  completed visit.
-                </p>
+                <>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Payment method on file:{" "}
+                    {data.billing.paymentLast4
+                      ? `${(data.billing.paymentBrand || "Card").replace(/^\w/, (c) => c.toUpperCase())} •••• ${data.billing.paymentLast4}`
+                      : data.billing.cardOnFile
+                        ? "Yes"
+                        : "Not yet"}
+                    . Charge history below is per completed visit.
+                  </p>
+                  {data.billing.canUpdatePayment && (
+                    <Button
+                      size="sm"
+                      className="mt-3 text-white"
+                      style={{ background: PURPLE }}
+                      onClick={() => void updateCommercialPayment()}
+                    >
+                      {data.billing.cardOnFile ? "Update payment method" : "Add payment method"}
+                    </Button>
+                  )}
+                </>
               ) : (
                 <p className="mt-1 text-sm text-slate-500">
-                  Net terms {data.billing.netTerms || "on file"}
-                  {data.billing.invoiceCycle ? ` · ${data.billing.invoiceCycle}` : ""}.
+                  {data.billing.netTermsLabel || "Net terms on file"}
+                  {data.billing.invoiceCycle ? ` · ${data.billing.invoiceCycle}` : ""}. Pay each invoice by its due
+                  date — this account does not keep a card on file.
                 </p>
               )}
               {data.account.contractValueCents != null && (
@@ -330,18 +370,38 @@ export default function CommercialPortal() {
               )}
             </CardContent>
           </Card>
+          {(data.billing.method === "invoiced" ? data.billing.invoices : data.billing.charges).length === 0 && (
+            <Card>
+              <CardContent className="p-6 text-center text-sm text-slate-500">
+                {data.billing.method === "invoiced" ? "No invoices yet." : "No charges yet."}
+              </CardContent>
+            </Card>
+          )}
           {(data.billing.method === "invoiced" ? data.billing.invoices : data.billing.charges).map((row) => (
             <Card key={row.id}>
               <CardContent className="flex items-center justify-between p-4">
                 <div>
                   <p className="text-sm font-medium">{fmt(row.date)}</p>
                   <p className="text-xs text-slate-500">{money(row.amountCents)}</p>
+                  {data.billing.method === "invoiced" && row.dueDate && (
+                    <p className="text-xs text-slate-400">Due {fmt(row.dueDate)}</p>
+                  )}
                 </div>
                 <div className="flex items-center gap-3">
-                  <Badge className="border-0 bg-slate-100">{row.status}</Badge>
+                  <Badge
+                    className={
+                      row.status === "overdue"
+                        ? "border-0 bg-rose-100 text-rose-700"
+                        : row.status === "paid"
+                          ? "border-0 bg-emerald-100 text-emerald-700"
+                          : "border-0 bg-slate-100"
+                    }
+                  >
+                    {row.status}
+                  </Badge>
                   {row.url && (
                     <a href={row.url} className="text-xs font-semibold text-[#5C0FFE]" target="_blank" rel="noreferrer">
-                      Invoice
+                      {data.billing.method === "invoiced" ? "Invoice" : "Receipt"}
                     </a>
                   )}
                 </div>
@@ -451,6 +511,25 @@ function VisitRow({ v }: { v: Visit }) {
       </CardContent>
     </Card>
   );
+}
+
+async function updateCommercialPayment() {
+  try {
+    const res = await fetch(`/api/partner-portal/commercial${qs()}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "update_payment_method" }),
+    });
+    const json = await res.json();
+    if (json.preview) {
+      toast.success(json.message || "Preview only — not saved.");
+      return;
+    }
+    if (!json.ok || !json.url) throw new Error(json.error || "Couldn't open card setup.");
+    window.location.href = json.url;
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : "Couldn't open card setup.");
+  }
 }
 
 function CommercialRequests({ sites, onDone }: { sites: Site[]; onDone: () => void }) {

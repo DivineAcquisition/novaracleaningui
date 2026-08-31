@@ -46,8 +46,15 @@ export default function PartnerPortal() {
       .then((json) => {
         if (json?.ok && (json.kinds || []).length) {
           const kinds = json.kinds as Kind[];
+          const requested = previewFromLocation()
+            ? null
+            : (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("kind")) || null;
           setMe(json);
-          setView(kinds.includes("host") && !kinds.includes("commercial") ? "host" : kinds[0]);
+          if (requested === "host" || requested === "commercial") {
+            setView(kinds.includes(requested) ? requested : kinds[0]);
+          } else {
+            setView(kinds.includes("host") && !kinds.includes("commercial") ? "host" : kinds[0]);
+          }
         } else {
           setMe(null);
         }

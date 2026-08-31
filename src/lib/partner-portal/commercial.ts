@@ -14,6 +14,16 @@ import {
 import type { PartnerIdentity } from "./identity";
 import { stripCrewContact } from "./sanitize";
 import { parseSiteZones, parseZoneCompletions } from "@/lib/site-zones";
+import {
+  describeCustomerPaymentMethod,
+  facingInvoiceStatus,
+  listStripeCharges,
+  listStripeInvoices,
+  netTermsDueDate,
+  netTermsLabel,
+  portalCanUpdatePayment,
+  type PortalLedgerRow,
+} from "./stripe-billing";
 
 type Admin = any;
 
@@ -80,18 +90,28 @@ export async function commercialOverview(identity: PartnerIdentity, siteId?: str
   const coiDoc = (await currentCompanyCoi(supabase, accountId)) || bundledCompanyCoi();
   const coiStatus = coiIsExpired(coiDoc) ? "expired" : coiFacingStatus(coiDoc.expiration_date);
 
-  const docs: Array<{ label: string; url: string | null; date: string }> = [];
+  const docs: Array<{ label: string; url: string | null; date: string; kind?: string }> = [];
   for (const a of agreements || []) {
     docs.push({
       label: `Commercial Cleaning Services Agreement — signed ${String(a.signed_at || "").slice(0, 10)}`,
       url: await signedUrl(supabase, AGREEMENT_BUCKET, a.document_path),
       date: a.signed_at || new Date().toISOString(),
+      kind: "agreement",
+    });
+  }
+  if (agreements?.[0]?.exhibit_a_text) {
+    docs.push({
+      label: "Exhibit A — Schedule of Sites (as signed)",
+      url: "/api/partner-portal/commercial?download=exhibit_a",
+      date: agreements[0].signed_at || new Date().toISOString(),
+      kind: "exhibit_a",
     });
   }
   docs.push({
     label: "Certificate of Insurance (current)",
     url: COMPANY_COI_PUBLIC_HREF,
     date: coiDoc.expiration_date || "",
+    kind: "coi",
   });
 
   const today = new Date().toISOString().slice(0, 10);
@@ -145,24 +165,41 @@ export async function commercialOverview(identity: PartnerIdentity, siteId?: str
   const billingMethod =
     account?.preferred_billing_method || account?.billing_method || profile?.method || "auto_pay";
   const method: "auto_pay" | "invoiced" = billingMethod === "invoiced" ? "invoiced" : "auto_pay";
+  const customerId = (account?.stripe_customer_id || profile?.stripe_customer_id || null) as string | null;
+  const netTerms = method === "invoiced" ? profile?.net_terms || null : null;
 
-  const invoices = allBookings
+  const bookingLedger: PortalLedgerRow[] = allBookings
     .filter((b: Record<string, unknown>) =>
       method === "invoiced" ? !!(b.hosted_invoice_url || b.stripe_invoice_id) : !!b.final_charge_cents,
     )
     .map((b: Record<string, unknown>) => {
-      const status = String(b.status || "");
-      const paid = status === "completed" || status === "paid";
-      const overdue = method === "invoiced" && !paid && String(b.service_date || "") < today;
+      const dueDate =
+        method === "invoiced"
+          ? netTermsDueDate(String(b.service_date || ""), netTerms)
+          : String(b.service_date || "");
+      const paid = String(b.status || "") === "completed" || String(b.status || "") === "paid";
       return {
-        id: b.id,
-        date: b.service_date,
+        id: String(b.id),
+        date: String(b.service_date || ""),
         amountCents: Number(b.final_charge_cents ?? b.custom_quote_cents ?? b.total_estimate_cents ?? 0),
-        url: b.hosted_invoice_url || null,
-        status: paid ? "paid" : overdue ? "overdue" : "outstanding",
-        dueDate: b.service_date,
+        url: (b.hosted_invoice_url as string) || null,
+        status: facingInvoiceStatus({
+          status: paid ? "paid" : "open",
+          dueDate,
+        }),
+        dueDate,
       };
     });
+
+  const stripeInvoices = method === "invoiced" ? await listStripeInvoices(customerId) : [];
+  const stripeCharges = method === "auto_pay" ? await listStripeCharges(customerId) : [];
+  const invoices = method === "invoiced" ? (stripeInvoices.length ? stripeInvoices : bookingLedger) : [];
+  const charges = method === "auto_pay" ? (stripeCharges.length ? stripeCharges : bookingLedger) : [];
+
+  const payment =
+    method === "auto_pay"
+      ? await describeCustomerPaymentMethod(customerId, profile?.stripe_payment_method_id)
+      : { onFile: false, id: null, brand: null, last4: null, type: null };
 
   const siteList = (sites || []).map((s: Record<string, unknown>) => {
     const map = parseSiteZones(s.photo_zones);
@@ -243,11 +280,15 @@ export async function commercialOverview(identity: PartnerIdentity, siteId?: str
     },
     billing: {
       method,
-      cardOnFile: method === "auto_pay" ? !!account?.stripe_customer_id : false,
-      netTerms: method === "invoiced" ? profile?.net_terms || null : null,
+      cardOnFile: method === "auto_pay" ? payment.onFile : false,
+      paymentBrand: method === "auto_pay" ? payment.brand : null,
+      paymentLast4: method === "auto_pay" ? payment.last4 : null,
+      canUpdatePayment: portalCanUpdatePayment(method),
+      netTerms: netTerms,
+      netTermsLabel: netTermsLabel(netTerms),
       invoiceCycle: profile?.invoice_cycle || null,
-      invoices: method === "invoiced" ? invoices : [],
-      charges: method === "auto_pay" ? invoices : [],
+      invoices,
+      charges,
     },
     coi: {
       status: coiStatus,
@@ -260,6 +301,22 @@ export async function commercialOverview(identity: PartnerIdentity, siteId?: str
     visits: visitsFor(selected?.id || null),
     documents: docs,
   });
+}
+
+export async function commercialExhibitAText(identity: PartnerIdentity): Promise<string | null> {
+  const ids = accountIds(identity);
+  if (!ids.length) return null;
+  const supabase = getAdminSupabase();
+  const { data } = await supabase
+    .from("commercial_agreements")
+    .select("exhibit_a_text")
+    .eq("business_account_id", ids[0])
+    .eq("status", "signed")
+    .order("signed_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const text = String(data?.exhibit_a_text || "").trim();
+  return text || null;
 }
 
 async function routeCommercialRequest(

@@ -58,7 +58,15 @@ interface Turnover {
   completedAt: string | null;
 }
 interface HostData {
-  host: { name: string | null; status: string; paymentOption: string | null; cardOnFile: boolean };
+  host: {
+    name: string | null;
+    status: string;
+    paymentOption: string | null;
+    cardOnFile: boolean;
+    paymentBrand?: string | null;
+    paymentLast4?: string | null;
+    canUpdatePayment?: boolean;
+  };
   properties: Property[];
   turnovers: Turnover[];
   documents: Array<{ label: string; url: string | null; date: string }>;
@@ -81,6 +89,33 @@ export default function HostPortalView() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      const params = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+      const preview = params.get("preview");
+      if (!preview) {
+        const sessionId = params.get("session_id");
+        if (params.get("turnover") === "paid" && sessionId) {
+          await fetch("/api/partner-portal/host", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "finalize_turnover", sessionId }),
+          });
+        }
+        if (params.get("payment") === "updated") {
+          await fetch("/api/partner-portal/host", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "refresh_payment", sessionId }),
+          });
+          toast.success("Payment method updated.");
+        }
+        if (params.get("turnover") === "paid" || params.get("payment")) {
+          const next = new URL(window.location.href);
+          next.searchParams.delete("turnover");
+          next.searchParams.delete("payment");
+          next.searchParams.delete("session_id");
+          window.history.replaceState({}, "", next.pathname + (next.search ? next.search : ""));
+        }
+      }
       const res = await fetch(`/api/partner-portal/host${qs()}`);
       const json = await res.json();
       if (!json?.ok) throw new Error(json?.error || "Couldn't load your host account.");
@@ -141,7 +176,7 @@ export default function HostPortalView() {
             <Kpi label="Properties" value={String(data.properties.length)} />
             <Kpi label="Upcoming" value={String(upcoming.length)} />
             <Kpi label="Payment" value={payLabel(data.host.paymentOption)} />
-            <Kpi label="Card on file" value={data.host.cardOnFile ? "Yes" : "No"} />
+            <Kpi label="Card on file" value={cardLabel(data.host)} />
           </div>
           <Card>
             <CardContent className="p-5">
@@ -253,9 +288,18 @@ export default function HostPortalView() {
                 <RiMoneyDollarCircleLine className="h-4 w-4 text-[#5C0FFE]" /> Section 6.2 payment option
               </p>
               <p className="mt-1 text-sm text-slate-600">{payLabel(data.host.paymentOption)}</p>
-              <p className="mt-2 text-sm text-slate-500">
-                Card on file: {data.host.cardOnFile ? "Yes" : "Not yet — save one during your next turnover request."}
+              <p className="mt-2 text-sm text-slate-500">Payment method: {cardLabel(data.host)}</p>
+              <p className="mt-1 text-xs text-slate-400">
+                Rates are Company-set. Updating the card on file does not change a per-turnover rate.
               </p>
+              <Button
+                size="sm"
+                className="mt-3 text-white"
+                style={{ background: PURPLE }}
+                onClick={() => void updatePayment()}
+              >
+                {data.host.cardOnFile ? "Update payment method" : "Add payment method"}
+              </Button>
             </CardContent>
           </Card>
           <h3 className="font-semibold">Per-turnover invoices</h3>
@@ -328,6 +372,32 @@ function payLabel(option: string | null | undefined) {
   if (option === "pay_after") return "Pay After (Card on File)";
   if (option === "full") return "Pay in Full";
   return "Not selected yet";
+}
+function cardLabel(host: HostData["host"]) {
+  if (host.paymentLast4) {
+    const brand = host.paymentBrand ? host.paymentBrand.charAt(0).toUpperCase() + host.paymentBrand.slice(1) : "Card";
+    return `${brand} •••• ${host.paymentLast4}`;
+  }
+  return host.cardOnFile ? "On file" : "Not yet";
+}
+
+async function updatePayment() {
+  try {
+    const res = await fetch(`/api/partner-portal/host${qs()}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "update_payment_method" }),
+    });
+    const json = await res.json();
+    if (json.preview) {
+      toast.success(json.message || "Preview only — not saved.");
+      return;
+    }
+    if (!json.ok || !json.url) throw new Error(json.error || "Couldn't open card setup.");
+    window.location.href = json.url;
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : "Couldn't open card setup.");
+  }
 }
 
 function TurnoverRow({
@@ -402,8 +472,21 @@ function RequestModal({ property, onClose, onDone }: { property: Property; onClo
         }),
       });
       const json = await res.json();
+      if (json.preview) {
+        toast.success(json.message || "Preview only — not saved.");
+        onDone();
+        return;
+      }
       if (!json.ok) throw new Error(json.error);
-      toast.success("Turnover requested.");
+      if (json.checkoutUrl) {
+        window.location.href = json.checkoutUrl;
+        return;
+      }
+      if (json.needsSetup) {
+        toast.error(json.error || "Save a payment method first.");
+        return;
+      }
+      toast.success(json.scheduled ? "Turnover booked." : "Turnover requested.");
       onDone();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Couldn't request that turnover.");
@@ -413,7 +496,8 @@ function RequestModal({ property, onClose, onDone }: { property: Property; onClo
   };
   return (
     <Modal title="Request a turnover" onClose={onClose}>
-      <p className="text-sm text-slate-500">{property.nickname || property.address} · ${property.turnoverPrice}/turnover (Company-set)</p>
+      <p className="text-sm text-slate-500">{property.nickname || property.address}</p>
+      <p className="text-sm font-medium">${property.turnoverPrice}/turnover (Company-set, read-only)</p>
       <label className="mt-3 block text-sm">
         Checkout date
         <Input type="date" className="mt-1" value={date} onChange={(e) => setDate(e.target.value)} />

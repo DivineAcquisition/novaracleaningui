@@ -59,7 +59,7 @@ export default function PartnerTurnoverSuccess() {
               </div>
               <h1 className="text-2xl font-bold">Turnover confirmed!</h1>
               <p className="text-sm text-muted-foreground">{state === "ok" ? assignment : "Payment received — we'll confirm your assignment shortly."}</p>
-              <Button onClick={() => router.push("/partner/dashboard")} className="h-11 w-full">
+              <Button onClick={() => router.push("/partner")} className="h-11 w-full">
                 View my turnovers <RiArrowRightLine className="w-4 h-4 ml-2" />
               </Button>
             </>
@@ -69,7 +69,7 @@ export default function PartnerTurnoverSuccess() {
               <div className="mx-auto w-16 h-16 rounded-2xl bg-amber-100 flex items-center justify-center"><RiErrorWarningLine className="w-8 h-8 text-amber-600" /></div>
               <h1 className="text-xl font-bold">We couldn't confirm just yet</h1>
               <p className="text-sm text-muted-foreground">If you completed payment, your turnover will appear on your dashboard shortly.</p>
-              <Button onClick={() => router.push("/partner/dashboard")} className="h-11 w-full">Go to dashboard</Button>
+              <Button onClick={() => router.push("/partner")} className="h-11 w-full">Go to portal</Button>
             </>
           )}
         </CardContent>

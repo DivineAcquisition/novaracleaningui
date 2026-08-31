@@ -59,7 +59,12 @@ export function previewHostOverview() {
   return {
     ok: true,
     preview: true,
-    host: previewMe("host").hosts[0],
+    host: {
+      ...previewMe("host").hosts[0],
+      paymentBrand: "visa",
+      paymentLast4: "4242",
+      canUpdatePayment: true,
+    },
     properties: [
       {
         id: "p1",
@@ -100,13 +105,14 @@ export function previewHostOverview() {
       },
     ],
     documents: [
-      { label: "Host Partnership Agreement — signed 2026-08-01", url: "/host-partnership-agreement", date: "2026-08-01" },
-      { label: "Property & Rate Schedule — 2026-08-01", url: "/host-partnership-agreement", date: "2026-08-01" },
+      { label: "Host Partnership Agreement — signed 2026-08-01", url: "/host-partnership-agreement", date: "2026-08-01", kind: "agreement" },
+      { label: "Property & Rate Schedule (current, Company-set)", url: "/api/partner-portal/host?preview=host&download=rate_schedule", date: "2026-08-01", kind: "rate_schedule" },
     ],
   };
 }
 
-export function previewCommercialOverview() {
+export function previewCommercialOverview(method: "auto_pay" | "invoiced" = "auto_pay") {
+  const invoiced = method === "invoiced";
   return {
     ok: true,
     preview: true,
@@ -127,14 +133,24 @@ export function previewCommercialOverview() {
       term: "12_month",
     },
     billing: {
-      method: "auto_pay" as const,
-      cardOnFile: true,
-      netTerms: null,
-      invoiceCycle: null,
-      invoices: [],
-      charges: [
-        { id: "b1", date: "2026-08-20", amountCents: 28500, url: null, status: "paid", dueDate: "2026-08-20" },
-      ],
+      method,
+      cardOnFile: invoiced ? false : true,
+      paymentBrand: invoiced ? null : "visa",
+      paymentLast4: invoiced ? null : "4242",
+      canUpdatePayment: !invoiced,
+      netTerms: invoiced ? "net_15" : null,
+      netTermsLabel: invoiced ? "Net 15" : null,
+      invoiceCycle: invoiced ? "monthly" : null,
+      invoices: invoiced
+        ? [
+            { id: "in_1", date: "2026-08-01", amountCents: 28500, url: "https://invoice.stripe.com/preview", status: "paid", dueDate: "2026-08-16" },
+            { id: "in_2", date: "2026-08-20", amountCents: 28500, url: "https://invoice.stripe.com/preview", status: "outstanding", dueDate: "2026-09-04" },
+            { id: "in_3", date: "2026-07-01", amountCents: 28500, url: null, status: "overdue", dueDate: "2026-07-16" },
+          ]
+        : [],
+      charges: invoiced
+        ? []
+        : [{ id: "b1", date: "2026-08-20", amountCents: 28500, url: null, status: "paid", dueDate: "2026-08-20" }],
     },
     coi: {
       status: "current" as const,
@@ -215,8 +231,9 @@ export function previewCommercialOverview() {
       },
     ],
     documents: [
-      { label: "Commercial Cleaning Services Agreement — signed 2026-08-10", url: null, date: "2026-08-10" },
-      { label: "Certificate of Insurance (current)", url: "/commercial/novara-certificate-of-insurance.pdf", date: "2027-07-21" },
+      { label: "Commercial Cleaning Services Agreement — signed 2026-08-10", url: null, date: "2026-08-10", kind: "agreement" },
+      { label: "Exhibit A — Schedule of Sites (as signed)", url: "/api/partner-portal/commercial?preview=commercial&download=exhibit_a", date: "2026-08-10", kind: "exhibit_a" },
+      { label: "Certificate of Insurance (current)", url: "/commercial/novara-certificate-of-insurance.pdf", date: "2027-07-21", kind: "coi" },
     ],
   };
 }

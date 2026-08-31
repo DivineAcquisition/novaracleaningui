@@ -21,6 +21,37 @@ export function enterUrl(token: string): string {
 }
 
 export function isLocalHost(hostname: string): boolean {
-  const h = hostname.toLowerCase();
-  return h.includes("localhost") || h.includes("127.0.0.1");
+  const h = hostname.toLowerCase().split(":")[0];
+  return (
+    h.includes("localhost") ||
+    h.includes("127.0.0.1") ||
+    h === "::1" ||
+    h === "0.0.0.0"
+  );
+}
+
+/** Prefer the Host header — Next's Request URL hostname is empty in some dev setups. */
+export function requestIsLocal(req: Request): boolean {
+  let fromUrl = "";
+  try {
+    fromUrl = new URL(req.url).hostname;
+  } catch {
+    fromUrl = "";
+  }
+  const fromHeader = req.headers.get("host") || "";
+  return isLocalHost(fromUrl) || isLocalHost(fromHeader);
+}
+
+/**
+ * Stripe Checkout return URL on the portal the user is actually using.
+ * `{CHECKOUT_SESSION_ID}` must stay a literal so Stripe can substitute it —
+ * do not run this through URLSearchParams.
+ */
+export function portalCallbackUrl(req: Request, query: string): string {
+  const url = new URL(req.url);
+  const host = req.headers.get("host") || url.host;
+  const origin = requestIsLocal(req)
+    ? `${url.protocol === "https:" ? "https" : "http"}://${host}`
+    : partnersOrigin();
+  return `${origin.replace(/\/+$/, "")}/partner?${query}`;
 }

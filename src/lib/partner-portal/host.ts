@@ -1,8 +1,12 @@
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
-import { AGREEMENT_BUCKET } from "@/lib/host-onboarding/operations";
+import { AGREEMENT_BUCKET, ensureHostCustomer } from "@/lib/host-onboarding/operations";
+import { sendPartnershipMessage } from "@/lib/partnership-comms/server";
+import { resolveAppSecret, stripeCall } from "@/lib/stripe-rest";
 import { computeCancelFee } from "./cancel-fee";
 import type { PartnerIdentity } from "./identity";
+import { buildRateSchedulePdf } from "./rate-schedule-pdf";
 import { publicStatusLabel, publicTurnoverStatus, stripCrewContact } from "./sanitize";
+import { describeCustomerPaymentMethod } from "./stripe-billing";
 
 type Admin = any;
 
@@ -53,19 +57,26 @@ export async function hostOverview(identity: PartnerIdentity) {
       .limit(3),
   ]);
 
-  const docs: Array<{ label: string; url: string | null; date: string }> = [];
+  const docs: Array<{ label: string; url: string | null; date: string; kind?: string }> = [];
   for (const a of agreements || []) {
     docs.push({
       label: `Host Partnership Agreement — signed ${String(a.signed_at).slice(0, 10)}`,
       url: await signedUrl(supabase, AGREEMENT_BUCKET, a.document_path),
       date: a.signed_at,
-    });
-    docs.push({
-      label: `Property & Rate Schedule — ${String(a.signed_at).slice(0, 10)}`,
-      url: await signedUrl(supabase, AGREEMENT_BUCKET, a.document_path),
-      date: a.signed_at,
+      kind: "agreement",
     });
   }
+  docs.push({
+    label: "Property & Rate Schedule (current, Company-set)",
+    url: "/api/partner-portal/host?download=rate_schedule",
+    date: new Date().toISOString(),
+    kind: "rate_schedule",
+  });
+
+  const payment = await describeCustomerPaymentMethod(
+    host?.stripe_customer_id,
+    host?.default_payment_method_id,
+  );
 
   const safeTurnovers = (turnovers || []).map((t: Record<string, unknown>) => {
     const priceCents = Math.round(Number(t.price || 0) * 100);
@@ -109,7 +120,10 @@ export async function hostOverview(identity: PartnerIdentity) {
       email: host?.email || identity.email,
       status: host?.status || "active",
       paymentOption: host?.preferred_payment_option || identity.hosts[0]?.paymentOption || null,
-      cardOnFile: !!host?.default_payment_method_id,
+      cardOnFile: payment.onFile || !!host?.default_payment_method_id,
+      paymentBrand: payment.brand,
+      paymentLast4: payment.last4,
+      canUpdatePayment: true as const,
       payAfterEnabled: !!host?.pay_after_enabled,
     },
     properties: (properties || []).map((p: Record<string, unknown>) => ({
@@ -211,17 +225,14 @@ export async function rescheduleTurnover(
       window_end: input.windowEnd || tr.window_end,
       reschedule_count: (Number(tr.reschedule_count) || 0) + 1,
       last_rescheduled_at: new Date().toISOString(),
-      cancel_fee_cents: fee.feeCents,
-      cancel_fee_tier: fee.tier,
-      cancel_hours_out: fee.hoursOut,
     })
     .eq("id", tr.id);
 
   await supabase.from("events").insert({
     event_type: "partner.host.turnover_rescheduled",
     source: "partner-portal",
-    summary: `Host rescheduled a turnover to ${input.requestedDate} (${fee.label}).`,
-    data: { host_id: tr.host_id, turnover_id: tr.id, fee, requested_date: input.requestedDate },
+    summary: `Host rescheduled a turnover to ${input.requestedDate}.`,
+    data: { host_id: tr.host_id, turnover_id: tr.id, requested_date: input.requestedDate },
   });
   return { ok: true as const, fee };
 }
@@ -235,6 +246,8 @@ export async function requestTurnover(
     windowEnd?: string;
     notes?: string;
     paymentOption?: string;
+    successUrl: string;
+    cancelUrl: string;
   },
 ) {
   const supabase = getAdminSupabase();
@@ -245,9 +258,35 @@ export async function requestTurnover(
   }
   if (!input.requestedDate) return { ok: false as const, error: "Checkout date is required." };
 
+  const { data: hostRow } = await supabase
+    .from("hosts")
+    .select("id, email, name, stripe_customer_id, default_payment_method_id, preferred_payment_option, pay_after_enabled")
+    .eq("id", property.host_id)
+    .maybeSingle();
+
   const option = ["full", "split", "pay_after"].includes(String(input.paymentOption))
     ? String(input.paymentOption)
-    : identity.hosts[0]?.paymentOption || "full";
+    : hostRow?.preferred_payment_option || identity.hosts[0]?.paymentOption || "full";
+  if (option === "pay_after" && !hostRow?.pay_after_enabled && !identity.hosts[0]?.payAfterEnabled) {
+    return { ok: false as const, error: "Pay After isn't available for this account. Choose Pay in Full or Split Payment." };
+  }
+
+  const priceCents = Math.round(Number(property.turnover_price) * 100);
+  const depositCents = option === "split" ? Math.floor(priceCents / 2) : option === "pay_after" ? 0 : priceCents;
+  const balanceCents = priceCents - depositCents;
+  const payment = await describeCustomerPaymentMethod(
+    hostRow?.stripe_customer_id,
+    hostRow?.default_payment_method_id,
+  );
+
+  if (option === "pay_after" && !payment.onFile) {
+    return {
+      ok: false as const,
+      needsSetup: true as const,
+      error: "Pay After needs a card on file. Save a payment method first, then request the turnover.",
+    };
+  }
+
   const { data: tr, error } = await supabase
     .from("turnover_requests")
     .insert({
@@ -260,6 +299,9 @@ export async function requestTurnover(
       status: "pending_payment",
       notes: (input.notes || "").trim() || null,
       payment_option: option,
+      deposit_cents: depositCents,
+      balance_cents: balanceCents,
+      card_on_file: payment.onFile,
     })
     .select("id, status")
     .single();
@@ -269,9 +311,160 @@ export async function requestTurnover(
     event_type: "partner.host.turnover_requested",
     source: "partner-portal",
     summary: `Host requested a turnover on ${input.requestedDate}.`,
-    data: { host_id: property.host_id, property_id: property.id, turnover_id: tr.id },
+    data: { host_id: property.host_id, property_id: property.id, turnover_id: tr.id, payment_option: option },
   });
-  return { ok: true as const, turnoverId: tr.id, status: tr.status };
+
+  if (option === "pay_after") {
+    await invokePartnerTurnover({
+      action: "turnover.finalizeByInvoice",
+      turnoverId: tr.id,
+      paymentIntentId: null,
+    });
+    return { ok: true as const, turnoverId: tr.id, status: "paid", scheduled: true as const };
+  }
+
+  const stripeKey = await resolveAppSecret("STRIPE_SECRET_KEY");
+  if (!stripeKey) {
+    return { ok: false as const, error: "Payment is temporarily unavailable. Your request is saved as awaiting payment." };
+  }
+
+  let customerId = (hostRow?.stripe_customer_id as string) || null;
+  try {
+    customerId = await ensureHostCustomer(stripeKey, {
+      hostId: property.host_id,
+      email: String(hostRow?.email || identity.email || ""),
+      name: String(hostRow?.name || identity.displayName || ""),
+      existingId: customerId,
+    });
+    await supabase.from("hosts").update({ stripe_customer_id: customerId }).eq("id", property.host_id);
+  } catch (err) {
+    return { ok: false as const, error: `Could not start checkout: ${(err as Error).message}` };
+  }
+
+  if (payment.onFile && payment.id) {
+    try {
+      const pi = await stripeCall(stripeKey, "POST", "payment_intents", {
+        amount: String(depositCents),
+        currency: "usd",
+        customer: customerId,
+        payment_method: payment.id,
+        off_session: "true",
+        confirm: "true",
+        "metadata[kind]": "turnover",
+        "metadata[turnover_id]": tr.id,
+        "metadata[host_id]": property.host_id,
+        "metadata[payment_option]": option,
+      });
+      if (pi.status === "succeeded") {
+        if (option === "split") {
+          await supabase.from("turnover_requests").update({ deposit_payment_intent_id: pi.id }).eq("id", tr.id);
+        }
+        await invokePartnerTurnover({
+          action: "turnover.finalizeByInvoice",
+          turnoverId: tr.id,
+          paymentIntentId: pi.id,
+        });
+        return { ok: true as const, turnoverId: tr.id, status: "paid", scheduled: true as const };
+      }
+    } catch {
+      /* SCA / decline — fall through to Checkout */
+    }
+  }
+
+  const label =
+    option === "split"
+      ? `Turnover deposit (50%) - ${property.nickname || property.address || "Property"}`
+      : `Turnover - ${property.nickname || property.address || "Property"}`;
+  try {
+    const session = await stripeCall(stripeKey, "POST", "checkout/sessions", {
+      customer: customerId,
+      mode: "payment",
+      "line_items[0][price_data][currency]": "usd",
+      "line_items[0][price_data][product_data][name]": label,
+      "line_items[0][price_data][unit_amount]": String(depositCents),
+      "line_items[0][quantity]": "1",
+      success_url: input.successUrl,
+      cancel_url: input.cancelUrl,
+      "payment_intent_data[setup_future_usage]": "off_session",
+      "metadata[kind]": "turnover",
+      "metadata[turnover_id]": tr.id,
+      "metadata[host_id]": property.host_id,
+      "metadata[payment_option]": option,
+    });
+    await supabase
+      .from("turnover_requests")
+      .update({ stripe_checkout_session_id: session.id })
+      .eq("id", tr.id);
+    return {
+      ok: true as const,
+      turnoverId: tr.id,
+      status: "pending_payment",
+      checkoutUrl: String(session.url || ""),
+    };
+  } catch (err) {
+    return { ok: false as const, error: `Could not open checkout: ${(err as Error).message}` };
+  }
+}
+
+export async function finalizeTurnoverCheckout(identity: PartnerIdentity, sessionId: string) {
+  if (!sessionId) return { ok: false as const, error: "Missing checkout session." };
+  const supabase = getAdminSupabase();
+  const { data: tr } = await supabase
+    .from("turnover_requests")
+    .select("id, host_id, stripe_checkout_session_id")
+    .eq("stripe_checkout_session_id", sessionId)
+    .maybeSingle();
+  if (!tr || !ownsHost(identity, tr.host_id)) return { ok: false as const, error: "Turnover not found." };
+  const result = await invokePartnerTurnover({ action: "turnover.finalize", sessionId });
+  return { ok: true as const, ...result };
+}
+
+export async function hostRateSchedulePdf(identity: PartnerIdentity): Promise<Uint8Array> {
+  const ids = hostIds(identity);
+  const supabase = getAdminSupabase();
+  const hostId = ids[0];
+  const [{ data: host }, { data: properties }] = await Promise.all([
+    hostId
+      ? supabase.from("hosts").select("name").eq("id", hostId).maybeSingle()
+      : Promise.resolve({ data: null }),
+    hostId
+      ? supabase
+          .from("properties")
+          .select("nickname, address, bedrooms, bathrooms, turnover_price")
+          .eq("host_id", hostId)
+          .order("created_at", { ascending: false })
+      : Promise.resolve({ data: [] }),
+  ]);
+  return buildRateSchedulePdf({
+    hostName: String(host?.name || identity.displayName || identity.email),
+    properties: (properties || []).map((p: Record<string, unknown>) => ({
+      nickname: (p.nickname as string) || null,
+      address: (p.address as string) || null,
+      bedrooms: p.bedrooms != null ? Number(p.bedrooms) : null,
+      bathrooms: p.bathrooms != null ? Number(p.bathrooms) : null,
+      turnoverPrice: p.turnover_price != null ? Number(p.turnover_price) : null,
+    })),
+  });
+}
+
+async function invokePartnerTurnover(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return { ok: false, error: "Not configured." };
+  try {
+    const res = await fetch(`${url.replace(/\/+$/, "")}/functions/v1/partner-turnover`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${key}`,
+        apikey: key,
+      },
+      body: JSON.stringify(body),
+    });
+    return (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 export async function requestAdditionalProperty(
@@ -303,6 +496,14 @@ export async function requestAdditionalProperty(
     source: "partner-portal",
     summary: `${identity.displayName || identity.email} requested an additional property: ${address.slice(0, 160)}`,
     data: { host_id: hostId, address, priced: false },
+  });
+  await notifyHostAdmin({
+    subject: `Additional property requested — ${identity.displayName || identity.email}`,
+    html: [
+      `<p><strong>${identity.displayName || identity.email}</strong> requested an additional property from the partner portal.</p>`,
+      `<p>This has <strong>not</strong> been priced or added — it needs Company pricing under Section 5.</p>`,
+      `<p><strong>${String(input.nickname || "Property").replace(/</g, "&lt;")}</strong><br/>${address.replace(/</g, "&lt;")}</p>`,
+    ].join(""),
   });
   return {
     ok: true as const,
@@ -359,4 +560,27 @@ export async function reportHostIssue(
     data: { host_id: hostId, qc_issue_id: issue.id, turnover_request_id: turnoverRequestId },
   });
   return { ok: true as const, issueId: issue.id, issueNumber: issue.issue_number };
+}
+
+async function notifyHostAdmin(input: { subject: string; html: string }): Promise<void> {
+  const supabase = getAdminSupabase();
+  const { data: setting } = await supabase
+    .from("app_settings")
+    .select("value")
+    .eq("key", "host_onboarding_settings")
+    .maybeSingle();
+  const notify =
+    (setting?.value as { notify_email?: string } | null)?.notify_email ||
+    process.env.HOST_ONBOARDING_NOTIFY_EMAIL ||
+    null;
+  if (!notify) return;
+  await sendPartnershipMessage(supabase, {
+    templateKey: "admin_internal_notice",
+    trigger: "partner.host.additional_property",
+    role: "admin",
+    email: notify,
+    subject: input.subject,
+    html: input.html,
+    vars: { subject_line: input.subject, body_html: input.html },
+  }).catch(() => null);
 }
