@@ -1,6 +1,6 @@
 // ─── Commercial portal provisioning ────────────────────────────────────────
 //
-// Creating the client's login for partners.novaracleaning.com, from inside the
+// Creating the client's login for partner.novaracleaning.com, from inside the
 // onboarding session, so they finish with working access rather than a signed
 // PDF and a promise that someone will set them up.
 //
@@ -113,7 +113,7 @@ export async function inviteCommercialPortalUser(
       result.userId = await findUserIdByEmail(admin, email);
       if (!result.userId) {
         result.error =
-        "That email already has an account, but we couldn't link it. Ask them to sign in at partners.novaracleaning.com.";
+        "That email already has an account, but we couldn't link it. Ask them to sign in at partner.novaracleaning.com.";
         return result;
       }
     } else {

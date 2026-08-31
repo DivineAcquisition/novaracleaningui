@@ -13,6 +13,7 @@ import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import { sendPartnershipMessage } from "@/lib/partnership-comms/server";
 import { markHostAgreementSigned } from "@/lib/airtable";
 import { invokeHostOnboardingGhl } from "@/lib/host-onboarding/ghl";
+import { portalHomeUrl } from "@/lib/partner-portal/origins";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -94,7 +95,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       hostId: submission.host_id || null,
       vars: {
         first_name: firstName,
-        link: "https://partners.novaracleaning.com/partner",
+        link: portalHomeUrl(),
       },
     });
   } catch { /* best-effort */ }

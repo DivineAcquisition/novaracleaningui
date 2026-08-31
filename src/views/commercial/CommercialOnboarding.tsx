@@ -671,7 +671,7 @@ function BillingStep({
       <Card>
         <h2 className="text-base font-semibold">Page 3 — Billing Setup</h2>
         <p className="mt-1 text-sm leading-relaxed text-slate-600">
-          Billing is configured. Opening your partner portal at partners.novaracleaning.com — no
+          Billing is configured. Opening your partner portal at partner.novaracleaning.com — no
           password, this session signs you in.
         </p>
         <div className="mt-4 flex items-center gap-2 text-sm text-slate-500">
@@ -791,7 +791,7 @@ function DoneCard({ data }: { data: Payload }) {
           <h2 className="text-base font-semibold text-emerald-900">You&apos;re all set</h2>
           <p className="mt-1 text-sm leading-relaxed text-emerald-900">
             Pricing accepted, agreement signed, billing configured, and your portal is ready. You
-            can go straight into partners.novaracleaning.com from here.
+            can go straight into partner.novaracleaning.com from here.
           </p>
           <ul className="mt-3 space-y-1 text-sm text-emerald-900">
             {[

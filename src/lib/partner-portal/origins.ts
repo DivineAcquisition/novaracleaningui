@@ -1,15 +1,29 @@
-export const PARTNERS_ORIGIN =
-  process.env.NEXT_PUBLIC_PARTNERS_ORIGIN ||
-  process.env.PARTNERS_ORIGIN ||
-  "https://partners.novaracleaning.com";
+const FALLBACK_PARTNER_ORIGIN = "https://partner.novaracleaning.com";
 
-export const PARTNER_ORIGIN =
+/**
+ * Canonical portal host is partner.novaracleaning.com.
+ * Historical partners.* values (env, settings, emails) are rewritten here
+ * so Stripe returns and handoff links never advertise the alias.
+ */
+export function canonicalizePartnerOrigin(raw: string): string {
+  return String(raw || FALLBACK_PARTNER_ORIGIN)
+    .replace(/\/+$/, "")
+    .replace(/^(https?:\/\/)partners\.novaracleaning\.com/i, "$1partner.novaracleaning.com");
+}
+
+export const PARTNER_ORIGIN = canonicalizePartnerOrigin(
   process.env.NEXT_PUBLIC_PARTNER_ORIGIN ||
-  process.env.PARTNER_ORIGIN ||
-  "https://partner.novaracleaning.com";
+    process.env.PARTNER_ORIGIN ||
+    process.env.NEXT_PUBLIC_PARTNERS_ORIGIN ||
+    process.env.PARTNERS_ORIGIN ||
+    FALLBACK_PARTNER_ORIGIN,
+);
+
+/** Alias kept so existing imports keep compiling. */
+export const PARTNERS_ORIGIN = PARTNER_ORIGIN;
 
 export function partnersOrigin(): string {
-  return PARTNERS_ORIGIN.replace(/\/+$/, "");
+  return PARTNER_ORIGIN;
 }
 
 export function portalHomeUrl(): string {

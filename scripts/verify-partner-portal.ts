@@ -132,11 +132,16 @@ check("host UI has no cleaner contact", /cleaner|crew member/i.test(hostUi), fal
 check("commercial UI has no cleaner contact", /cleaner_phone|crew member/i.test(commercialUi), false);
 
 const cb = portalCallbackUrl(
-  new Request("https://partners.novaracleaning.com/api/partner-portal/host"),
+  new Request("https://partner.novaracleaning.com/api/partner-portal/host"),
   "payment=updated&kind=host&session_id={CHECKOUT_SESSION_ID}",
 );
 check("stripe return keeps CHECKOUT_SESSION_ID literal", cb.includes("{CHECKOUT_SESSION_ID}"), true);
-check("stripe return lands on the portal", cb.startsWith("https://partners.novaracleaning.com/partner?"), true);
+check("stripe return lands on the portal", cb.startsWith("https://partner.novaracleaning.com/partner?"), true);
+const aliasCb = portalCallbackUrl(
+  new Request("https://partners.novaracleaning.com/api/partner-portal/host"),
+  "kind=host&session_id={CHECKOUT_SESSION_ID}",
+);
+check("partners.* alias still canonicalizes to partner.*", aliasCb.startsWith("https://partner.novaracleaning.com/partner?"), true);
 const localCb = portalCallbackUrl(
   new Request("http://127.0.0.1:3010/api/partner-portal/host", { headers: { host: "127.0.0.1:3010" } }),
   "kind=host",

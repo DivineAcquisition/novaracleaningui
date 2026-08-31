@@ -33,7 +33,7 @@ import { updateSession } from "@/integrations/supabase/middleware";
 // Owned paths: /hiring/*. DNS points here; Framer is no longer the front door.
 //
 // docs.novaracleaning.com — internal workspace guides ("how the tool works").
-//                    UNLIKE commercial.* and partners.*, this host is NOT
+//                    UNLIKE commercial.* and partner.*, this host is NOT
 //                    public: it carries pricing formulas, the cleaner-pay
 //                    floor, override bands and every hard stop in the admin
 //                    workspace. Access is gated server-side by the same
@@ -99,11 +99,11 @@ const ROUTE_OWNER: Array<[string, SubdomainKey]> = [
 
   // Partner (Airbnb/STR host + commercial/office) portal — its own subdomain.
   // Owns the whole /partner/* tree, including its auth callback
-  // (/partner/auth/callback). partners.* is an alias of partner.*.
+  // (/partner/auth/callback). partners.* 308s onto partner.*.
   // Listed before the try.* marketing prefixes so it can never fall through.
   ["/partner", "partner"],
   // Public Host Partnership Agreement (the apply-form link). Lives on the
-  // partner host so partners.novaracleaning.com/host-partnership-agreement works.
+  // partner host so partner.novaracleaning.com/host-partnership-agreement works.
   ["/host-partnership-agreement", "partner"],
 
   // Public commercial / office / STR partnership intake funnel — no login.
@@ -304,6 +304,15 @@ export async function middleware(request: NextRequest) {
   // Skip dev / preview hosts — single-origin dev still works.
   if (!isProdHost(hostname) || isExemptHost(hostname)) {
     return response;
+  }
+
+  // Canonical host is partner.novaracleaning.com. Old emails, Stripe
+  // returns, and bookmarks on partners.* keep working via 308.
+  if (hostname.startsWith("partners.")) {
+    const canonical = request.nextUrl.clone();
+    canonical.protocol = "https:";
+    canonical.host = HOSTS.partner;
+    return NextResponse.redirect(canonical, 308);
   }
 
   // Apex novaracleaning.com / www.novaracleaning.com → treat as try.*

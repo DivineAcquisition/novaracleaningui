@@ -32,7 +32,7 @@ export const DEFAULT_PARTNERSHIP_COMMS_SETTINGS: PartnershipCommsSettings = {
   frequency_cap_hours: 4,
   standard_max_attempts: 3,
   urgent_max_attempts: 5,
-  partners_origin: "https://partners.novaracleaning.com",
+  partners_origin: "https://partner.novaracleaning.com",
   senders: {
     partner: {
       from: "Novara Cleaning <hello@novaracleaning.com>",
