@@ -147,7 +147,7 @@ export async function commercialOverview(identity: PartnerIdentity, siteId?: str
   const method: "auto_pay" | "invoiced" = billingMethod === "invoiced" ? "invoiced" : "auto_pay";
 
   const invoices = allBookings
-    .filter((b: { hosted_invoice_url?: string | null; stripe_invoice_id?: string | null }) =>
+    .filter((b: Record<string, unknown>) =>
       method === "invoiced" ? !!(b.hosted_invoice_url || b.stripe_invoice_id) : !!b.final_charge_cents,
     )
     .map((b: Record<string, unknown>) => {
@@ -171,7 +171,7 @@ export async function commercialOverview(identity: PartnerIdentity, siteId?: str
     const completions = parseZoneCompletions(cl?.zone_completion);
     const slots = photoSlots(cl?.section_meta);
     return {
-      id: s.id,
+      id: String(s.id),
       nickname: s.nickname,
       address: s.address,
       city: s.city,
@@ -199,7 +199,7 @@ export async function commercialOverview(identity: PartnerIdentity, siteId?: str
     };
   });
 
-  const selected = siteId ? siteList.find((s: { id: string }) => s.id === siteId) || null : null;
+  const selected = siteId ? siteList.find((s) => s.id === siteId) || null : null;
   const visitsFor = (sid?: string | null) =>
     allBookings
       .filter((b: { business_site_id?: string }) => !sid || b.business_site_id === sid)
