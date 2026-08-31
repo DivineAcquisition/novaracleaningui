@@ -3,8 +3,7 @@
 -- One unique link, sent when a priced host proposal / agreement goes out,
 -- carrying the host through Legal → Property & Rate Schedule → Payment
 -- inside a single resumable session. Mirrors commercial_onboarding_sessions
--- without depending on the official commercial migration chain (those files
--- were never fully applied on hosted).
+-- without depending on the official commercial migration chain.
 --
 -- CREATE / ADD COLUMN IF NOT EXISTS so later official files can still run.
 

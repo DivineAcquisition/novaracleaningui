@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ─── Local validation for the commercial onboarding session migration ───────
 #
-# The commercial pipeline this migration extends is not yet applied to the
-# hosted project, so there is nothing to validate against there. This spins up
+# The commercial pipeline this migration extends is applied on hosted under
+# matching schema_migrations versions. This spins up
 # a throwaway local Postgres, stubs the Supabase platform objects our
 # migrations assume (auth/storage schemas, a couple of helper functions), then
 # applies the real commercial migration chain in order followed by the new one.
@@ -204,12 +204,12 @@ CHAIN=(
   20260711174143_partnerships_hub.sql
   20260711160000_business_sites.sql
   20260711170000_partner_internal_booking.sql
-  20260824120000_commercial_pricing_walkthrough.sql
-  20260824170000_coi_lifecycle.sql
-  20260824190000_walkthrough_pipeline.sql
-  20260824210000_commercial_proposal_billing.sql
-  20260824223000_commercial_hub_console_paths.sql
-  20260829200000_commercial_onboarding_session.sql
+  20260831060614_commercial_pricing_walkthrough.sql
+  20260831060757_coi_lifecycle.sql
+  20260831060928_walkthrough_pipeline.sql
+  20260831061055_commercial_proposal_billing_tables.sql
+  20260831061212_commercial_hub_console_paths.sql
+  20260831061550_commercial_onboarding_session.sql
 )
 
 for f in "${CHAIN[@]}"; do

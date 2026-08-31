@@ -2,10 +2,10 @@
 -- client on signature (Section 8.1), distinct from commercial_coi_documents
 -- (certificates belonging to an account).
 --
--- Official 20260824210000 was never applied on hosted. CREATE / ADD COLUMN
--- IF NOT EXISTS so that file can still run later. company_coi_deliveries
--- .agreement_id is a bare uuid: commercial_agreements does not exist on
--- hosted yet, and the official file's FK would fail here.
+-- Official commercial_proposal_billing was later applied on hosted as
+-- 20260831061055. CREATE / ADD COLUMN IF NOT EXISTS so that file can still
+-- run. company_coi_deliveries.agreement_id starts as a bare uuid here; the
+-- billing file adds the FK to commercial_agreements.
 
 ALTER TABLE public.business_accounts
   ADD COLUMN IF NOT EXISTS requires_coi_on_file boolean NOT NULL DEFAULT true,

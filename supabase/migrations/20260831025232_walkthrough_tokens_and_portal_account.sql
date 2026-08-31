@@ -1,10 +1,8 @@
 -- Tokenized walkthrough rows + client portal account on business_accounts.
 --
--- Official commercial pipeline files (20260824120000 … 20260829200000) were
--- never applied on the hosted project. The contractor walkthrough page and
--- "account required to send a proposal" both need a subset of that schema
--- now. CREATE / ADD COLUMN IF NOT EXISTS so the later official files can
--- still run without colliding.
+-- Official commercial pipeline files were later applied on hosted under
+-- 20260831060614 … 20260831061550. CREATE / ADD COLUMN IF NOT EXISTS so
+-- those files can still run without colliding.
 
 ALTER TABLE public.business_accounts
   ADD COLUMN IF NOT EXISTS portal_user_id uuid,

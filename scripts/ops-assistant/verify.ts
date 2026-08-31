@@ -483,7 +483,9 @@ function insightDriveAndFeedback() {
   assert(insightsApi.includes("docs_noted"), "the queue must support a docs-update action that does not rewrite markdown itself");
   assert(!/update\(.*body/.test(insightsApi) || insightsApi.includes("prompt_edited"), "prompt body only changes on an explicit prompt_edited resolve");
 
-  const mig = join(ROOT, "supabase/migrations/20260831060000_ops_assistant_insights_feedback.sql");
+  const migDir = join(ROOT, "supabase/migrations");
+  const migName = readdirSync(migDir).find((f) => f.endsWith("_ops_assistant_insights_feedback.sql"));
+  const mig = migName ? join(migDir, migName) : join(migDir, "20260831061415_ops_assistant_insights_feedback.sql");
   assert(existsSync(mig), "feedback-loop migration must exist");
   if (existsSync(mig)) {
     const sql = readFileSync(mig, "utf8");
