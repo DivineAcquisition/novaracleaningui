@@ -6,9 +6,17 @@
 //
 // Step order is enforced here. Pages 2 and 3 refuse unless Page 1 is signed.
 
-import { resolveAppSecret, stripeCall, createCardPreAuth, readPaymentIntent } from "@/lib/stripe-rest";
+import {
+  resolveAppSecret,
+  stripeCall,
+  createCardPreAuth,
+  createSetupIntent,
+  readPaymentIntent,
+  readSetupIntent,
+  splitHoldAmountCents,
+} from "@/lib/stripe-rest";
 import { MIN_PASSWORD_LENGTH } from "./types";
-import type { PaymentOptionKey } from "./agreement";
+import { hostPaymentSetupMode, type HostPaymentSetupMode, type PaymentOptionKey } from "./agreement";
 import { parseSnapshot, portalUrl } from "./session";
 import { sendPartnershipMessage } from "@/lib/partnership-comms/server";
 import {
@@ -412,6 +420,7 @@ export async function openPaymentSetup(
   clientSecret?: string;
   amountCents?: number;
   alreadyHeld?: boolean;
+  mode?: HostPaymentSetupMode;
 }> {
   const gate = requireSigned(input.session);
   if (gate) return { ok: false, status: 409, message: gate };
@@ -446,8 +455,10 @@ export async function openPaymentSetup(
     });
     await supabase.from("hosts").update({ stripe_customer_id: customerId }).eq("id", input.host.id as string);
 
+    const mode = hostPaymentSetupMode(input.paymentOption);
     const existingId = String(input.session.stripe_setup_session_id || "");
-    if (existingId.startsWith("pi_")) {
+
+    if (mode === "hold" && existingId.startsWith("pi_")) {
       const existing = await readPaymentIntent(stripeKey, existingId);
       if (existing.held && existing.paymentMethodId) {
         await applyHostHold(supabase, {
@@ -458,7 +469,7 @@ export async function openPaymentSetup(
           intentId: existing.id,
           paymentOption: input.paymentOption,
         });
-        return { ok: true, status: 200, alreadyHeld: true, amountCents: existing.amountCents };
+        return { ok: true, status: 200, alreadyHeld: true, mode, amountCents: existing.amountCents };
       }
       if (existing.needsCard && existing.clientSecret) {
         await supabase
@@ -472,22 +483,94 @@ export async function openPaymentSetup(
         return {
           ok: true,
           status: 200,
+          mode,
           clientSecret: existing.clientSecret,
           amountCents: existing.amountCents,
         };
       }
     }
 
-    const snapshot = parseSnapshot(input.session.property_snapshot);
-    const amountCents = Math.round(Number(snapshot[0]?.turnover_price || 0) * 100);
-    const hold = await createCardPreAuth(stripeKey, {
+    if (mode === "setup") {
+      if (existingId.startsWith("seti_")) {
+        const existing = await readSetupIntent(stripeKey, existingId);
+        if (existing.ready && existing.paymentMethodId) {
+          await applyHostHold(supabase, {
+            session: input.session,
+            host: input.host,
+            customerId: existing.customerId || customerId,
+            paymentMethodId: existing.paymentMethodId,
+            intentId: existing.id,
+            paymentOption: input.paymentOption,
+          });
+          return { ok: true, status: 200, alreadyHeld: true, mode, amountCents: 0 };
+        }
+        if (existing.needsCard && existing.clientSecret) {
+          await supabase
+            .from("host_onboarding_sessions")
+            .update({
+              payment_option: input.paymentOption,
+              stripe_setup_session_id: existing.id,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", input.session.id as string);
+          return { ok: true, status: 200, mode, clientSecret: existing.clientSecret, amountCents: 0 };
+        }
+      }
+      // A leftover Pre-Auth PI from an earlier Split attempt can already have a
+      // card on file. Reuse that card — do not open another hold for Pay in Full.
+      if (existingId.startsWith("pi_")) {
+        const existing = await readPaymentIntent(stripeKey, existingId);
+        if (existing.held && existing.paymentMethodId) {
+          await applyHostHold(supabase, {
+            session: input.session,
+            host: input.host,
+            customerId: existing.customerId || customerId,
+            paymentMethodId: existing.paymentMethodId,
+            intentId: existing.id,
+            paymentOption: input.paymentOption,
+          });
+          return { ok: true, status: 200, alreadyHeld: true, mode, amountCents: 0 };
+        }
+      }
+    }
+
+    await supabase
+      .from("hosts")
+      .update({ preferred_payment_option: input.paymentOption })
+      .eq("id", input.host.id as string);
+
+    if (mode === "hold") {
+      const snapshot = parseSnapshot(input.session.property_snapshot);
+      const hold = await createCardPreAuth(stripeKey, {
+        customerId,
+        amountCents: splitHoldAmountCents(Number(snapshot[0]?.turnover_price || 0)),
+        description: `Novara host split-pay pre-auth (50%) — ${String(input.host.name || "host")}`,
+        metadata: {
+          host_id: String(input.host.id),
+          session_id: String(input.session.id),
+          kind: "host_onboarding_split_preauth",
+          payment_option: input.paymentOption,
+        },
+      });
+
+      await supabase
+        .from("host_onboarding_sessions")
+        .update({
+          payment_option: input.paymentOption,
+          stripe_setup_session_id: hold.id,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", input.session.id as string);
+
+      return { ok: true, status: 200, mode, clientSecret: hold.clientSecret, amountCents: hold.amountCents };
+    }
+
+    const setup = await createSetupIntent(stripeKey, {
       customerId,
-      amountCents,
-      description: `Novara host pre-auth hold — ${String(input.host.name || "host")}`,
       metadata: {
         host_id: String(input.host.id),
         session_id: String(input.session.id),
-        kind: "host_onboarding_preauth",
+        kind: "host_onboarding_card_setup",
         payment_option: input.paymentOption,
       },
     });
@@ -496,17 +579,12 @@ export async function openPaymentSetup(
       .from("host_onboarding_sessions")
       .update({
         payment_option: input.paymentOption,
-        stripe_setup_session_id: hold.id,
+        stripe_setup_session_id: setup.id,
         updated_at: new Date().toISOString(),
       })
       .eq("id", input.session.id as string);
 
-    await supabase
-      .from("hosts")
-      .update({ preferred_payment_option: input.paymentOption })
-      .eq("id", input.host.id as string);
-
-    return { ok: true, status: 200, clientSecret: hold.clientSecret, amountCents: hold.amountCents };
+    return { ok: true, status: 200, mode, clientSecret: setup.clientSecret, amountCents: 0 };
   } catch (err) {
     return { ok: false, status: 502, message: `Could not open card setup: ${(err as Error).message}` };
   }
@@ -565,7 +643,15 @@ export async function refreshPaymentFromStripe(
   let methodId: string | null = (input.host.default_payment_method_id as string) || null;
 
   const setupId = String(input.paymentIntentId || input.session.stripe_setup_session_id || "");
-  if (setupId.startsWith("pi_")) {
+  if (setupId.startsWith("seti_")) {
+    try {
+      const intent = await readSetupIntent(stripeKey, setupId);
+      if (intent.customerId) customerId = intent.customerId;
+      if (intent.ready && intent.paymentMethodId) methodId = intent.paymentMethodId;
+    } catch {
+      /* fall through */
+    }
+  } else if (setupId.startsWith("pi_")) {
     try {
       const intent = await readPaymentIntent(stripeKey, setupId);
       if (intent.customerId) customerId = intent.customerId;

@@ -133,3 +133,67 @@ export async function readPaymentIntent(
     needsCard: paymentIntentNeedsCard(status),
   };
 }
+
+export function setupIntentIsReady(status: string): boolean {
+  return status === "succeeded";
+}
+
+export function setupIntentNeedsCard(status: string): boolean {
+  return status === "requires_payment_method" || status === "requires_confirmation" || status === "requires_action";
+}
+
+/**
+ * Save a card with no hold and no charge. Used for host Pay in Full / Pay After
+ * onboarding — Split Payment is the only option that places a Pre-Auth hold.
+ */
+export async function createSetupIntent(
+  stripeKey: string,
+  args: {
+    customerId: string;
+    metadata: Record<string, string>;
+  },
+): Promise<{ id: string; clientSecret: string }> {
+  const params: Record<string, string> = {
+    customer: args.customerId,
+    usage: "off_session",
+    "payment_method_types[0]": "card",
+  };
+  for (const [k, v] of Object.entries(args.metadata)) {
+    if (v) params[`metadata[${k}]`] = String(v).slice(0, 500);
+  }
+  const si = await stripeCall(stripeKey, "POST", "setup_intents", params);
+  const clientSecret = String(si.client_secret || "");
+  if (!clientSecret) throw new Error("Stripe did not return a client secret for card setup.");
+  return { id: String(si.id), clientSecret };
+}
+
+export async function readSetupIntent(
+  stripeKey: string,
+  intentId: string,
+): Promise<{
+  id: string;
+  paymentMethodId: string | null;
+  customerId: string | null;
+  status: string;
+  clientSecret: string | null;
+  ready: boolean;
+  needsCard: boolean;
+}> {
+  const si = await stripeCall(stripeKey, "GET", `setup_intents/${intentId}`);
+  const status = String(si.status || "");
+  return {
+    id: String(si.id || intentId),
+    paymentMethodId: si.payment_method ? String(si.payment_method) : null,
+    customerId: si.customer ? String(si.customer) : null,
+    status,
+    clientSecret: si.client_secret ? String(si.client_secret) : null,
+    ready: setupIntentIsReady(status),
+    needsCard: setupIntentNeedsCard(status),
+  };
+}
+
+/** Half of a dollar amount, as cents, never below Stripe's card minimum. */
+export function splitHoldAmountCents(turnoverPriceDollars: number): number {
+  const fullCents = Math.round(Number(turnoverPriceDollars || 0) * 100);
+  return holdAmountCents(Math.round(fullCents / 2));
+}

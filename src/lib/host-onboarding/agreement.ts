@@ -41,6 +41,13 @@ export const BINDING_ACKNOWLEDGMENTS = [
 
 export type PaymentOptionKey = "full" | "split" | "pay_after";
 
+/** Split Payment is the only STR option that places a Stripe Pre-Auth hold. */
+export type HostPaymentSetupMode = "hold" | "setup";
+
+export function hostPaymentSetupMode(option: PaymentOptionKey): HostPaymentSetupMode {
+  return option === "split" ? "hold" : "setup";
+}
+
 /** Agreement §6.2 — the three options, in the document's own wording. */
 export const PAYMENT_OPTIONS: Record<
   PaymentOptionKey,
@@ -59,7 +66,7 @@ export const PAYMENT_OPTIONS: Record<
   split: {
     key: "split",
     title: "Split Payment",
-    summary: "A deposit is charged at booking; the balance is charged on completion.",
+    summary: "Pay half now. The remaining amount is paid on service completion.",
     body:
       "Split Payment. The Host authorizes the Company to charge fifty percent (50%) " +
       "of the per-turnover rate as a deposit when the turnover is booked, and to " +

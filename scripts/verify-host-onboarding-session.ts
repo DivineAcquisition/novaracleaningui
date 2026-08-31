@@ -8,7 +8,7 @@
 //
 //   Run:  npm run host-onboarding:verify
 
-import { PAYMENT_OPTIONS, PAY_AFTER_DISCRETION } from "../src/lib/host-onboarding/agreement";
+import { PAYMENT_OPTIONS, PAY_AFTER_DISCRETION, hostPaymentSetupMode } from "../src/lib/host-onboarding/agreement";
 import {
   deriveHostOnboardingProgress,
   ratesReady,
@@ -93,7 +93,20 @@ console.log("\nPayment options (Agreement §6.2):");
 check("three named options exist", Object.keys(PAYMENT_OPTIONS).sort(), ["full", "pay_after", "split"]);
 check("Pay in Full title", PAYMENT_OPTIONS.full.title, "Pay in Full");
 check("Split Payment title", PAYMENT_OPTIONS.split.title, "Split Payment");
+check(
+  "Split Payment summary is half now / remaining on completion",
+  PAYMENT_OPTIONS.split.summary,
+  "Pay half now. The remaining amount is paid on service completion.",
+);
+check(
+  "Pay in Full summary does not mention a deposit or Pre-Auth",
+  /pre-auth|deposit/i.test(PAYMENT_OPTIONS.full.summary),
+  false,
+);
 check("Pay After title", PAYMENT_OPTIONS.pay_after.title, "Pay After (Card on File)");
+check("Pay in Full opens card setup, not a Pre-Auth hold", hostPaymentSetupMode("full"), "setup");
+check("Split Payment opens a Pre-Auth hold", hostPaymentSetupMode("split"), "hold");
+check("Pay After opens card setup, not a Pre-Auth hold", hostPaymentSetupMode("pay_after"), "setup");
   check(
   "Pay After names Company discretion",
   /available at the Company's discretion to Hosts in good standing/i.test(PAYMENT_OPTIONS.pay_after.body),
