@@ -2,18 +2,18 @@
 
 // ─── Commercial onboarding session ─────────────────────────────────────────
 //
-// One page, one link, five things: review the pricing, sign the agreement, set
-// up billing, create a portal login, see where you stand. A commercial signer
-// routinely cannot finish this in one sitting — they need finance to confirm a
-// billing contact, or IT to approve a login — so the page is built around
-// leaving and coming back rather than around a single uninterrupted run.
+// One page, one link, three things: review the pricing, sign the agreement,
+// set up billing — and leaving with a working portal login. A commercial
+// signer routinely cannot finish this in one sitting — they need finance to
+// confirm a billing contact — so the page is built around leaving and coming
+// back rather than around a single uninterrupted run.
 //
 // Two consequences for how this is written:
 //
-//   * THE STATUS CHECKLIST IS FIRST, always. Reopening the link shows what is
-//     done and what is left before it shows any form. Someone returning after
-//     four days should not have to re-read the proposal to work out where they
-//     got to.
+//   * THE PAGE-PROGRESS INDICATOR IS FIRST, always. Reopening the link shows
+//     Pricing · Agreement · Billing before it shows any form. Someone
+//     returning after four days should not have to re-read the proposal to
+//     work out where they got to.
 //   * THE SERVER DECIDES THE STEP. `progress.current_step` comes from the real
 //     proposal/agreement/billing records on every load, so a different device,
 //     a cleared cache or a forwarded link all resume identically. Nothing about
@@ -21,15 +21,14 @@
 //
 // The client is never asked how they want to be billed — that was decided when
 // the account was approved, and this page renders only that method's fields.
+// Portal access is the conclusion of Page 3, not a fourth page.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   RiCheckLine,
   RiLoader4Line,
   RiArrowRightLine,
-  RiFileTextLine,
   RiBankCardLine,
-  RiShieldCheckLine,
   RiUserAddLine,
   RiUploadCloud2Line,
   RiMapPin2Line,
@@ -52,9 +51,11 @@ import {
 type Row = Record<string, unknown>;
 
 interface Progress {
-  current_step: "pricing" | "agreement" | "billing" | "portal" | "done" | "paused";
+  current_step: "pricing" | "agreement" | "billing" | "done" | "paused";
   paused_for_changes: boolean;
   complete: boolean;
+  billing_configured: boolean;
+  portal_ready: boolean;
   billing_method: "auto_pay" | "invoiced";
   steps: Array<{ key: string; label: string; done: boolean }>;
   compliance: Row | null;
@@ -88,11 +89,10 @@ type State =
   | { kind: "error"; message: string }
   | { kind: "ready"; data: Payload };
 
-const STEP_ICONS: Record<string, typeof RiFileTextLine> = {
-  pricing: RiFileTextLine,
-  agreement: RiShieldCheckLine,
-  billing: RiBankCardLine,
-  portal: RiUserAddLine,
+const STEP_SHORT: Record<string, string> = {
+  pricing: "Pricing",
+  agreement: "Agreement",
+  billing: "Billing",
 };
 
 function Shell({ children }: { children: React.ReactNode }) {
@@ -243,13 +243,13 @@ export default function CommercialOnboarding({ token }: { token: string }) {
           Getting {business} set up
         </h1>
         <p className="mt-2 text-sm leading-relaxed text-slate-600">
-          Everything happens on this one page. You can close it and come back to this same link at
-          any time — we&apos;ll pick up exactly where you left off.
+          Hi {(d.session.recipientName || business).split(" ")[0]}. One link, three pages. You can
+          close this and come back — we pick up exactly where you left off.
         </p>
       </header>
 
-      {/* The checklist comes first, on every visit, by design. */}
-      <Checklist progress={d.progress} />
+      {/* The progress indicator comes first, on every visit, by design. */}
+      <ProgressBar progress={d.progress} />
 
       <div ref={noticeRef}>
         {notice && (
@@ -272,7 +272,6 @@ export default function CommercialOnboarding({ token }: { token: string }) {
         )}
         {step === "agreement" && <AgreementStep data={d} busy={busy} token={token} onDone={load} onError={setError} />}
         {step === "billing" && <BillingStep data={d} busy={busy} onPost={post} />}
-        {step === "portal" && <PortalStep data={d} busy={busy} onPost={post} />}
         {step === "done" && <DoneCard data={d} />}
 
         <SubmitInfo busy={busy} onPost={post} submissions={d.submissions} />
@@ -288,48 +287,43 @@ export default function CommercialOnboarding({ token }: { token: string }) {
 
 // ─── Status ────────────────────────────────────────────────────────────────
 
-function Checklist({ progress }: { progress: Progress }) {
+function ProgressBar({ progress }: { progress: Progress }) {
   const outstanding = (progress.compliance as { blockers?: string[] } | null)?.blockers || [];
+  const pages = progress.steps.filter((s) => s.key === "pricing" || s.key === "agreement" || s.key === "billing");
 
   return (
     <Card>
       <h2 className="text-sm font-semibold text-slate-900">Where you are</h2>
-      <ol className="mt-3 space-y-2">
-        {progress.steps.map((s) => {
-          const Icon = STEP_ICONS[s.key] || RiFileTextLine;
-          const isCurrent = progress.current_step === s.key;
+      <ol className="mt-3 flex flex-wrap items-center justify-between gap-2">
+        {pages.map((s, i) => {
+          const current = progress.current_step === s.key;
           return (
-            <li key={s.key} className="flex items-start gap-3">
+            <li key={s.key} className="flex min-w-[7rem] flex-1 items-center gap-2">
               <span
-                className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
+                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
                   s.done
                     ? "bg-emerald-500 text-white"
-                    : isCurrent
-                      ? "bg-violet-100 text-violet-700 ring-2 ring-violet-300"
+                    : current
+                      ? "bg-violet-600 text-white"
                       : "bg-slate-100 text-slate-400"
                 }`}
               >
-                {s.done ? <RiCheckLine className="h-4 w-4" /> : <Icon className="h-3.5 w-3.5" />}
+                {s.done ? <RiCheckLine className="h-4 w-4" /> : i + 1}
               </span>
-              <span
-                className={`text-sm leading-6 ${
-                  s.done ? "text-slate-500 line-through decoration-slate-300" : isCurrent ? "font-semibold" : "text-slate-500"
-                }`}
-              >
-                {s.label}
-                {isCurrent && !s.done && (
-                  <span className="ml-2 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-700">
+              <span className={`text-sm ${s.done ? "text-slate-400" : current ? "font-semibold" : "text-slate-500"}`}>
+                {STEP_SHORT[s.key] || s.label}
+                {current && !s.done && (
+                  <span className="ml-2 hidden rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-700 sm:inline">
                     You&apos;re here
                   </span>
                 )}
               </span>
+              {i < pages.length - 1 && <span className="ml-auto hidden h-px flex-1 bg-slate-200 sm:block" />}
             </li>
           );
         })}
       </ol>
 
-      {/* What is pending on US, so the client can tell the difference between
-          something they owe us and something we owe them. */}
       {progress.complete && outstanding.length > 0 && (
         <div className="mt-4 rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-600">
           <p className="font-semibold text-slate-700">On our side</p>
@@ -381,7 +375,7 @@ function PricingStep({
 
   return (
     <Card>
-      <h2 className="text-base font-semibold">Step 1 — Your pricing and terms</h2>
+      <h2 className="text-base font-semibold">Page 1 — Pricing &amp; Terms Review</h2>
       <p className="mt-1 text-sm text-slate-600">
         Please check this over. Nothing is binding until you sign on the next step.
       </p>
@@ -567,7 +561,7 @@ function AgreementStep({
 
   return (
     <Card>
-      <h2 className="text-base font-semibold">Step 2 — Sign the services agreement</h2>
+      <h2 className="text-base font-semibold">Page 2 — Agreement E-Signature</h2>
       <p className="mt-1 text-sm text-slate-600">
         Pre-filled with everything you just accepted, including the schedule of locations and rates
         in Exhibit A.
@@ -634,20 +628,63 @@ function BillingStep({
 }) {
   const method = data.session.billingMethod;
   const a = data.agreement || {};
+  const billed = Boolean(data.progress.billing_configured);
+  const portalReady = Boolean(data.progress.portal_ready);
+  const autoStarted = useRef(false);
+  const onPostRef = useRef(onPost);
+  onPostRef.current = onPost;
   const [contactName, setContactName] = useState(String(a.signedByName || ""));
   const [contactEmail, setContactEmail] = useState(String(data.account?.email || ""));
   const [contactPhone, setContactPhone] = useState("");
   const [poNumber, setPoNumber] = useState("");
 
-  // Auto-Pay. A card field, and no invoicing questions.
+  useEffect(() => {
+    if (!billed || portalReady || autoStarted.current) return;
+    autoStarted.current = true;
+    void onPostRef.current({
+      action: "create_portal",
+      email: String(data.account?.email || ""),
+    });
+  }, [billed, portalReady, data.account?.email]);
+
+  if (billed && !portalReady) {
+    return (
+      <Card>
+        <h2 className="text-base font-semibold">Page 3 — Billing Setup</h2>
+        <p className="mt-1 text-sm leading-relaxed text-slate-600">
+          Billing is configured. Opening your partner portal at partners.novaracleaning.com — no
+          password, this session signs you in.
+        </p>
+        <div className="mt-4 flex items-center gap-2 text-sm text-slate-500">
+          <RiLoader4Line className="h-4 w-4 animate-spin" />
+          Opening your partner portal…
+        </div>
+        <button
+          disabled={busy}
+          onClick={() => {
+            autoStarted.current = true;
+            void onPost({
+              action: "create_portal",
+              email: String(data.account?.email || ""),
+            });
+          }}
+          className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+        >
+          {busy ? <RiLoader4Line className="h-4 w-4 animate-spin" /> : <RiUserAddLine className="h-4 w-4" />}
+          Retry opening the portal
+        </button>
+      </Card>
+    );
+  }
+
   if (method === "auto_pay") {
     return (
       <Card>
-        <h2 className="text-base font-semibold">Step 3 — Add a payment method</h2>
+        <h2 className="text-base font-semibold">Page 3 — Billing Setup</h2>
         <p className="mt-1 text-sm leading-relaxed text-slate-600">
-          Your account is set up for Auto-Pay, so we&apos;ll keep a card or bank account on file and
-          bill it automatically. <strong>Nothing is charged now</strong> — this only saves the
-          method for future invoices.
+          Your account is set up for Stripe Pre-Auth, so we&apos;ll save a card or bank account on
+          file for future automatic billing. <strong>This is a verification hold, not a charge</strong>
+          {" "}— nothing is charged now.
         </p>
         <button
           disabled={busy}
@@ -664,13 +701,12 @@ function BillingStep({
     );
   }
 
-  // Invoiced. No card field anywhere on this path.
   return (
     <Card>
-      <h2 className="text-base font-semibold">Step 3 — Confirm your billing contact</h2>
+      <h2 className="text-base font-semibold">Page 3 — Billing Setup</h2>
       <p className="mt-1 text-sm leading-relaxed text-slate-600">
-        Your account is set up for invoicing, so there&apos;s no payment method to add. We just need
-        to know who invoices should go to.
+        Your account is set up for invoicing, so there&apos;s no payment method to add. Confirm your
+        billing contact — Net terms are already in the signed Agreement.
       </p>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -693,7 +729,6 @@ function BillingStep({
         </Field>
       </div>
 
-      {/* The terms come from the agreement they just signed — shown, not asked. */}
       <div className="mt-4 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
         <p className="font-medium">Already set in your signed agreement</p>
         <p className="mt-1 text-xs text-slate-600">
@@ -725,67 +760,8 @@ function BillingStep({
 
 // ─── Step 4: portal login ──────────────────────────────────────────────────
 
-function PortalStep({
-  data,
-  busy,
-  onPost,
-}: {
-  data: Payload;
-  busy: boolean;
-  onPost: (b: Record<string, unknown>) => Promise<Row | null>;
-}) {
-  const [email, setEmail] = useState(String(data.account?.email || ""));
-  const ready = /^[^@\s]+@[^@\s]+\.[^\s@]+$/.test(email);
-
-  return (
-    <Card>
-      <h2 className="text-base font-semibold">Open your partner portal</h2>
-      <p className="mt-1 text-sm leading-relaxed text-slate-600">
-        Last step. No password — this session signs you in and takes you to
-        partners.novaracleaning.com.
-      </p>
-
-      <ul className="mt-3 space-y-1.5 text-sm text-slate-600">
-        {[
-          "See all of your sites and what's scheduled",
-          "Look back at completed cleans",
-          "Request additional service",
-          "View invoices and billing status",
-          "Download your agreement and our certificate of insurance",
-        ].map((t) => (
-          <li key={t} className="flex items-start gap-2">
-            <RiCheckLine className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
-            {t}
-          </li>
-        ))}
-      </ul>
-
-      <div className="mt-4 grid gap-3">
-        <Field label="Email you'll sign in with later">
-          <input className={inputCls} type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-        </Field>
-      </div>
-
-      <button
-        disabled={busy || !ready}
-        onClick={() =>
-          void onPost({ action: "create_portal", email }).then((res) => {
-            const url = (res?.handoffUrl || res?.portalUrl) as string | undefined;
-            if (url) window.location.assign(String(url));
-          })
-        }
-        className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
-      >
-        {busy ? <RiLoader4Line className="h-4 w-4 animate-spin" /> : <RiUserAddLine className="h-4 w-4" />}
-        Enter the partner portal
-      </button>
-    </Card>
-  );
-}
-
-// ─── Done ──────────────────────────────────────────────────────────────────
-
 function DoneCard({ data }: { data: Payload }) {
+  const remaining = (data.progress.compliance as { blockers?: string[] } | null)?.blockers || [];
   return (
     <Card className="border-emerald-200 bg-emerald-50">
       <div className="flex items-start gap-3">
@@ -795,9 +771,22 @@ function DoneCard({ data }: { data: Payload }) {
         <div>
           <h2 className="text-base font-semibold text-emerald-900">You&apos;re all set</h2>
           <p className="mt-1 text-sm leading-relaxed text-emerald-900">
-            Pricing accepted, agreement signed, billing configured and your portal login is ready.
-            We&apos;ll be in touch to confirm your first service date.
+            Pricing accepted, agreement signed, billing configured, and your portal is ready. You
+            can go straight into partners.novaracleaning.com from here.
           </p>
+          <ul className="mt-3 space-y-1 text-sm text-emerald-900">
+            {[
+              "Pricing & terms accepted",
+              "Agreement signed",
+              "Billing configured",
+              "Portal created",
+            ].map((item) => (
+              <li key={item} className="flex items-center gap-2">
+                <RiCheckLine className="h-4 w-4 shrink-0" />
+                {item}
+              </li>
+            ))}
+          </ul>
           <a
             href={data.handoffUrl || data.portalUrl}
             className="mt-4 inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700"
@@ -810,6 +799,13 @@ function DoneCard({ data }: { data: Payload }) {
               Download our certificate of insurance
             </CompanyCoiDownloadLink>
           </div>
+          <p className="mt-3 text-xs leading-relaxed text-emerald-800">
+            Still on our side
+            {remaining.length
+              ? `: ${remaining.join(", ")}`
+              : ": COI delivery (automatic on signature) and the final dispatch-eligible confirmation"}
+            . Nothing else is needed from you.
+          </p>
         </div>
       </div>
     </Card>
@@ -843,9 +839,10 @@ function SubmitInfo({
 
   return (
     <Card>
-      <h2 className="text-sm font-semibold">Need to send us something?</h2>
+      <h2 className="text-sm font-semibold">Submit additional information</h2>
       <p className="mt-1 text-sm text-slate-600">
-        You can do this at any point, including after you&apos;ve finished.
+        Need to send us something? You can do this at any point, including after you&apos;ve
+        finished — it never changes pricing, scope, or billing on its own.
       </p>
 
       <div className="mt-3 flex flex-wrap gap-2">

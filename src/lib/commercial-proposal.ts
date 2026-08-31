@@ -143,8 +143,8 @@ export const INVOICE_CYCLE_LABELS: Record<InvoiceCycle, string> = {
 };
 
 export const BILLING_METHOD_LABELS: Record<BillingMethod, string> = {
-  auto_pay: "Auto-Pay",
-  invoiced: "Invoiced",
+  auto_pay: "Stripe Pre-Auth",
+  invoiced: "Invoice",
 };
 
 /** Cadence cards on the send-proposal workspace — same role as the service-type cards on Internal Booking. */
@@ -156,8 +156,8 @@ export const FREQUENCY_OPTIONS: Array<{ id: string; label: string; sub: string }
 ];
 
 export const BILLING_METHOD_OPTIONS: Array<{ id: BillingMethod; label: string; sub: string }> = [
-  { id: "invoiced", label: "Invoiced", sub: "Confirm contact, cycle, and net terms — no card" },
-  { id: "auto_pay", label: "Auto-Pay", sub: "Card or ACH captured after they sign, never charged now" },
+  { id: "invoiced", label: "Invoice", sub: "Confirm contact, cycle, and net terms — no card" },
+  { id: "auto_pay", label: "Stripe Pre-Auth", sub: "Card or ACH saved after they sign — verification hold, never charged now" },
 ];
 
 export const TERM_OPTIONS: Array<{ id: "month_to_month" | "annual"; label: string; sub: string }> = [

@@ -1,8 +1,8 @@
 // ─── The consolidated onboarding session ───────────────────────────────────
 //
-// One token, one continuous visit: pricing review → signature → billing →
-// portal login → status. Resolution, progress and the payload the client
-// renders from all live here.
+// One token, one continuous visit: three pages — pricing review → signature →
+// billing setup (which concludes with portal access). Resolution, progress and
+// the payload the client renders from all live here.
 //
 // The session is a DELIVERY wrapper. It does not decide whether an account may
 // dispatch, it does not hold a second copy of whether billing is configured,
@@ -12,6 +12,8 @@
 
 import { AGREEMENT_COLS, PROPOSAL_COLS, PROPOSAL_SITE_COLS } from "@/lib/commercial-agreement-server";
 import { estimatedMonthlyCents, VALUE_STACK, type ProposalSite } from "@/lib/commercial-proposal";
+import { partnersOrigin } from "@/lib/partner-portal/origins";
+import type { CommercialOnboardingStep, CommercialOnboardingProgress } from "./progress";
 
 // eslint-disable-next-line
 type Admin = any;
@@ -22,10 +24,7 @@ const COMMERCIAL_ORIGIN =
   process.env.COMMERCIAL_ORIGIN ||
   "https://commercial.novaracleaning.com";
 
-const PARTNER_ORIGIN =
-  process.env.NEXT_PUBLIC_PARTNER_ORIGIN ||
-  process.env.PARTNER_ORIGIN ||
-  "https://partner.novaracleaning.com";
+const PARTNER_ORIGIN = partnersOrigin();
 
 /** The one link a commercial client is ever sent during onboarding. */
 export function onboardingUrl(token: string): string {
@@ -43,7 +42,7 @@ export const SESSION_COLS = `
   last_activity_at, last_completed_step, completed_at, created_by_name, created_at
 `;
 
-export type SessionStep = "pricing" | "agreement" | "billing" | "portal" | "done" | "paused";
+export type SessionStep = CommercialOnboardingStep;
 
 export interface Resolved {
   ok: boolean;
@@ -111,29 +110,47 @@ export async function resolveSession(supabase: Admin, token: string): Promise<Re
   return { ok: true, status: 200, reason: "ok", message: "", session };
 }
 
-export interface Progress {
-  ok: boolean;
-  current_step: SessionStep;
-  paused_for_changes: boolean;
-  complete: boolean;
-  billing_method: "auto_pay" | "invoiced";
-  steps: Array<{ key: string; label: string; done: boolean }>;
+export type Progress = CommercialOnboardingProgress & {
   compliance: Row | null;
   billing: Row | null;
-}
+};
 
 export async function loadProgress(supabase: Admin, sessionId: string): Promise<Progress> {
   const { data } = await supabase.rpc("commercial_onboarding_progress", { p_session_id: sessionId });
-  return (data || {
+  const empty: Progress = {
     ok: false,
     current_step: "pricing",
     paused_for_changes: false,
     complete: false,
+    billing_configured: false,
+    portal_ready: false,
     billing_method: "invoiced",
     steps: [],
     compliance: null,
     billing: null,
-  }) as Progress;
+  };
+  if (!data || (data as { ok?: boolean }).ok === false) return empty;
+  const raw = data as Progress & { current_step?: string };
+  const reportedStep = String(raw.current_step || "pricing");
+  const current: SessionStep =
+    reportedStep === "portal"
+      ? "billing"
+      : ((["pricing", "agreement", "billing", "done", "paused"].includes(reportedStep)
+          ? reportedStep
+          : "pricing") as SessionStep);
+  return {
+    ok: true,
+    current_step: current,
+    paused_for_changes: Boolean(raw.paused_for_changes),
+    complete: Boolean(raw.complete),
+    billing_configured:
+      raw.billing_configured === true || reportedStep === "portal" || reportedStep === "done",
+    portal_ready: Boolean(raw.portal_ready) || reportedStep === "done",
+    billing_method: raw.billing_method === "auto_pay" ? "auto_pay" : "invoiced",
+    steps: Array.isArray(raw.steps) ? raw.steps : [],
+    compliance: raw.compliance ?? null,
+    billing: raw.billing ?? null,
+  };
 }
 
 /**
@@ -157,9 +174,8 @@ export async function touchActivity(
 }
 
 /**
- * Close the session once every step is done — and only then. The link is
- * retired at the same moment, the same retire-on-completion pattern the
- * proposal and agreement links use.
+ * Mark the session complete once every page is done. The token stays live so
+ * the signer can reopen for the checklist, portal link, or additional info.
  */
 export async function closeIfComplete(
   supabase: Admin,
@@ -172,7 +188,6 @@ export async function closeIfComplete(
     .update({
       status: "completed",
       completed_at: new Date().toISOString(),
-      token: null,
       updated_at: new Date().toISOString(),
     })
     .eq("id", session.id as string);
@@ -208,6 +223,7 @@ export interface SessionPayload {
   billingProfile: Row | null;
   valueStack: typeof VALUE_STACK;
   portalUrl: string;
+  handoffUrl?: string;
   submissions: Row[];
 }
 
@@ -326,6 +342,44 @@ export async function sessionPayload(supabase: Admin, session: Row): Promise<Ses
     billingProfile: (profileRes?.data || null) as Row | null,
     valueStack: VALUE_STACK,
     portalUrl: portalUrl(),
+    handoffUrl: await mintHandoffIfReady(supabase, {
+      accountId,
+      email:
+        (session.recipient_email as string) ||
+        ((accountRes?.data as Row | null)?.email as string) ||
+        "",
+      fullName:
+        (session.recipient_name as string) ||
+        ((accountRes?.data as Row | null)?.contact_name as string) ||
+        undefined,
+      businessName: ((accountRes?.data as Row | null)?.business_name as string) || undefined,
+      ready: Boolean(progress.portal_ready || progress.complete),
+    }),
     submissions: (subsRes?.data || []) as Row[],
   };
+}
+
+async function mintHandoffIfReady(
+  supabase: Admin,
+  input: {
+    accountId: string;
+    email: string;
+    fullName?: string;
+    businessName?: string;
+    ready: boolean;
+  },
+): Promise<string | undefined> {
+  if (!input.ready || !input.email) return undefined;
+  try {
+    const { provisionCommercialPortalUser } = await import("./portal");
+    const access = await provisionCommercialPortalUser(supabase, {
+      accountId: input.accountId,
+      email: input.email,
+      fullName: input.fullName,
+      businessName: input.businessName,
+    });
+    return access.ok ? access.handoffUrl : undefined;
+  } catch {
+    return undefined;
+  }
 }

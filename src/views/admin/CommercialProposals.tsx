@@ -204,9 +204,26 @@ function shortDate(iso: string | null | undefined): string {
   return format(new Date(iso), "MMM d, yyyy");
 }
 
+interface OnboardingSessionRow {
+  id: string;
+  business_account_id: string;
+  stalled?: boolean;
+  idle_hours?: number | null;
+  current_step?: string | null;
+  paused_for_changes?: boolean;
+  pending_submissions?: number;
+  status?: string;
+}
+
+function onboardingNeedsAttention(s?: OnboardingSessionRow | null): boolean {
+  if (!s) return false;
+  return s.stalled === true || s.paused_for_changes === true || Number(s.pending_submissions || 0) > 0;
+}
+
 export default function CommercialProposals() {
   const [loading, setLoading] = useState(true);
   const [deals, setDeals] = useState<Deal[]>([]);
+  const [sessions, setSessions] = useState<Record<string, OnboardingSessionRow>>({});
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState<string>("open");
   const [selected, setSelected] = useState<Deal | null>(null);
@@ -216,6 +233,11 @@ export default function CommercialProposals() {
     try {
       const out = await commercialProposalApi("GET", undefined, "?view=pipeline");
       setDeals((out.deals || []) as Deal[]);
+      const map: Record<string, OnboardingSessionRow> = {};
+      for (const row of [...(out.onboarding || []), ...(out.onboardingAttention || [])] as OnboardingSessionRow[]) {
+        if (row?.business_account_id) map[row.business_account_id] = row;
+      }
+      setSessions(map);
     } catch (err) {
       toast.error((err as Error).message);
     } finally {
@@ -233,14 +255,17 @@ export default function CommercialProposals() {
       .filter((d) => {
         if (stageFilter === "open") return d.stage !== "dispatch_eligible" && d.stage !== "pricing_pending";
         if (stageFilter === "attention") {
-          return ["changes_requested", "coi_blocked", "billing_pending", "proposal_expired"].includes(d.stage);
+          return (
+            ["changes_requested", "coi_blocked", "billing_pending", "proposal_expired"].includes(d.stage) ||
+            onboardingNeedsAttention(sessions[d.account_id])
+          );
         }
         if (stageFilter !== "all") return d.stage === stageFilter;
         return true;
       })
       .filter((d) => !q || d.business_name.toLowerCase().includes(q) || (d.email || "").toLowerCase().includes(q))
       .sort((a, b) => STAGE_ORDER.indexOf(a.stage) - STAGE_ORDER.indexOf(b.stage));
-  }, [deals, search, stageFilter]);
+  }, [deals, search, stageFilter, sessions]);
 
   const counts = useMemo(() => {
     const out: Partial<Record<PipelineStage, number>> = {};
@@ -343,6 +368,21 @@ export default function CommercialProposals() {
                   {deal.stage === "coi_blocked" && (
                     <p className="mt-1 text-xs text-rose-700">
                       Signed and billable, but the certificate of insurance isn't current — fixed under Compliance.
+                    </p>
+                  )}
+                  {sessions[deal.account_id]?.stalled && (
+                    <p className="mt-1 text-xs text-amber-800">
+                      Onboarding idle {Math.round(Number(sessions[deal.account_id].idle_hours || 0))}h
+                      {sessions[deal.account_id].current_step
+                        ? ` on ${sessions[deal.account_id].current_step}`
+                        : ""}
+                      . Same link still resumes.
+                    </p>
+                  )}
+                  {Number(sessions[deal.account_id]?.pending_submissions || 0) > 0 && (
+                    <p className="mt-1 text-xs text-amber-800">
+                      {sessions[deal.account_id].pending_submissions} additional-info submission
+                      {Number(sessions[deal.account_id].pending_submissions) === 1 ? "" : "s"} waiting for review.
                     </p>
                   )}
                 </div>
@@ -950,7 +990,8 @@ function BillingBlock({
         {reason || "Nothing dispatches for this account until billing is set up."}
       </p>
       <p className="mt-1 text-xs text-amber-700">
-        The client normally does this on the agreement page. Record it here if they gave you the
+        The client normally does this on Page 3 of the onboarding session. Record it here if they
+        gave you the terms directly.
         terms directly.
       </p>
 
@@ -1003,8 +1044,8 @@ function BillingBlock({
 
       {method === "auto_pay" && (
         <p className="mt-2 rounded bg-white/60 px-2 py-1.5 text-xs text-amber-800">
-          Auto-Pay only counts as configured once a card or bank account is actually on file. Send
-          the signer the agreement link, or use “Send payment setup link” on the account.
+          Stripe Pre-Auth only counts as configured once a card or bank account is actually on file.
+          Send the signer the onboarding link — Page 3 is the Stripe setup, not a charge.
         </p>
       )}
 
@@ -1036,8 +1077,8 @@ function BillingBlock({
 //
 // The billing decision and the one link the client is sent. This is the
 // approval gate: there is no way to generate the link without choosing
-// Invoice or Auto-Pay first, because the client's session presents whichever
-// was chosen and never asks them.
+// Invoice or Stripe Pre-Auth first, because the client's session presents
+// whichever was chosen and never asks them.
 
 function OnboardingPanel({
   detail,
@@ -1065,7 +1106,6 @@ function OnboardingPanel({
     pricing: "reviewing the pricing",
     agreement: "signing the agreement",
     billing: "setting up billing",
-    portal: "creating their portal login",
     paused: "waiting on a revised proposal",
     done: "finished",
   };
@@ -1088,7 +1128,7 @@ function OnboardingPanel({
             {(
               [
                 { id: "invoiced", label: "Invoice", sub: "Confirm contact + Net terms. No card." },
-                { id: "auto_pay", label: "Auto-Pay", sub: "Card or ACH saved. Never charged at setup." },
+                { id: "auto_pay", label: "Stripe Pre-Auth", sub: "Card or ACH saved. Verification hold, never charged at setup." },
               ] as const
             ).map((opt) => (
               <button
@@ -1205,6 +1245,48 @@ function OnboardingPanel({
             </Button>
           </div>
         </>
+      )}
+
+      {account.preferred_billing_method && (
+        <div className="mt-3 rounded-lg border border-slate-200 bg-white p-2.5">
+          <p className="text-[11px] font-semibold text-slate-700">Change billing method later</p>
+          <p className="mt-0.5 text-[11px] leading-snug text-slate-500">
+            Sends a targeted billing-setup link — they don&apos;t review pricing or sign again. Invoice
+            accounts never see a card field.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy !== null || method === "invoiced"}
+              onClick={() => {
+                setMethod("invoiced");
+                void run(
+                  "chgbill",
+                  { action: "change_billing_method", accountId, billingMethod: "invoiced" },
+                  "Switched to Invoice.",
+                );
+              }}
+            >
+              Invoice
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy !== null || method === "auto_pay"}
+              onClick={() => {
+                setMethod("auto_pay");
+                void run(
+                  "chgbill",
+                  { action: "change_billing_method", accountId, billingMethod: "auto_pay" },
+                  "Switched to Stripe Pre-Auth.",
+                );
+              }}
+            >
+              Stripe Pre-Auth
+            </Button>
+          </div>
+        </div>
       )}
 
       {pending.length > 0 && (

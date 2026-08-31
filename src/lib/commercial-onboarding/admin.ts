@@ -42,6 +42,9 @@ export interface StartOnboardingResult {
   link?: string;
   emailed?: boolean;
   texted?: boolean;
+  recipientEmail?: string;
+  recipientName?: string | null;
+  recipientPhone?: string | null;
 }
 
 /**
@@ -149,12 +152,26 @@ export async function startOnboardingSession(
     })
     .eq("id", input.accountId);
 
-  // Retire any live session before opening a new one.
+  // If this proposal already produced a signed agreement, attach it so the
+  // session opens on billing rather than asking them to sign again. That's
+  // the targeted billing-setup path when admin later changes the method.
+  const { data: signedAgreement } = await supabase
+    .from("commercial_agreements")
+    .select("id")
+    .eq("proposal_id", proposalId)
+    .eq("status", "signed")
+    .order("signed_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  // Retire any live (or previously completed) link before opening a new one.
+  // Two working entry points into the same account is how a client finishes
+  // billing on one and reopens a stale "you're all set" on the other.
   await supabase
     .from("commercial_onboarding_sessions")
     .update({ status: "superseded", token: null, updated_at: new Date().toISOString() })
     .eq("business_account_id", input.accountId)
-    .eq("status", "active");
+    .in("status", ["active", "completed"]);
 
   const { data: minted } = await supabase.rpc("mint_commercial_token");
   const token = String(minted || "");
@@ -167,6 +184,7 @@ export async function startOnboardingSession(
     .insert({
       business_account_id: input.accountId,
       proposal_id: proposalId,
+      agreement_id: (signedAgreement?.id as string) || null,
       token,
       expires_at: new Date(Date.now() + ttlDays * 86400_000).toISOString(),
       billing_method: input.billingMethod,
@@ -186,6 +204,9 @@ export async function startOnboardingSession(
     sessionId: String(session.id),
     token,
     link,
+    recipientEmail,
+    recipientName,
+    recipientPhone: input.recipientPhone || (account.phone as string) || null,
   };
 
   if (input.send !== false) {
@@ -208,7 +229,7 @@ export async function startOnboardingSession(
     source: "admin-proposals",
     summary:
       `Onboarding link sent to ${recipientEmail} for ${String(account.business_name || "an account")} — ` +
-      `billing set to ${input.billingMethod === "auto_pay" ? "Auto-Pay" : "invoiced"} by ${input.actorName}.`,
+      `billing set to ${input.billingMethod === "auto_pay" ? "Stripe Pre-Auth" : "Invoice"} by ${input.actorName}.`,
     data: {
       account_id: input.accountId,
       session_id: session.id,
@@ -239,6 +260,8 @@ export interface SendLinkInput {
   link: string;
   /** Wording for a nudge rather than a first send. */
   reminder?: boolean;
+  /** Targeted billing re-setup after admin changes the method. */
+  billingSetup?: boolean;
   accountId?: string | null;
 }
 
@@ -248,9 +271,14 @@ export async function sendOnboardingLink(
   input: SendLinkInput,
 ): Promise<{ emailed: boolean; texted: boolean }> {
   const name = (input.recipientName || "there").split(" ")[0];
+  const billingLabel = input.billingMethod === "auto_pay" ? "Stripe Pre-Auth" : "Invoice";
   const sent = await sendPartnershipMessage(supabase, {
     templateKey: "commercial_onboarding_link",
-    trigger: input.reminder ? "commercial-onboarding.reminder" : "commercial-onboarding.send",
+    trigger: input.billingSetup
+      ? "commercial-onboarding.billing-setup"
+      : input.reminder
+        ? "commercial-onboarding.reminder"
+        : "commercial-onboarding.send",
     email: input.recipientEmail,
     phone: input.recipientPhone,
     accountId: input.accountId,
@@ -259,16 +287,24 @@ export async function sendOnboardingLink(
       business_name: input.accountName,
       link: input.link,
     },
-    html: input.reminder
+    html: input.billingSetup
       ? [
         `<p>Hi ${name},</p>`,
-        `<p>Just a nudge — setting up <strong>${input.accountName}</strong> is part-finished and picks up exactly where you left off.</p>`,
-        `<p><a href="${input.link}">Open your setup page</a></p>`,
+        `<p>We've updated billing for <strong>${input.accountName}</strong> to ${billingLabel}. This link opens on billing setup — you don't need to review pricing or sign again.</p>`,
+        `<p><a href="${input.link}">Finish billing setup</a></p>`,
       ].join("")
-      : undefined,
-    sms: input.reminder
-      ? `Novara Cleaning: your setup for ${input.accountName} is part-finished — pick up where you left off: ${input.link}`
-      : undefined,
+      : input.reminder
+        ? [
+          `<p>Hi ${name},</p>`,
+          `<p>Just a nudge — setting up <strong>${input.accountName}</strong> is part-finished and picks up exactly where you left off.</p>`,
+          `<p><a href="${input.link}">Open your setup page</a></p>`,
+        ].join("")
+        : undefined,
+    sms: input.billingSetup
+      ? `Novara Cleaning: finish billing setup (${billingLabel}) for ${input.accountName}: ${input.link}`
+      : input.reminder
+        ? `Novara Cleaning: your setup for ${input.accountName} is part-finished — pick up where you left off: ${input.link}`
+        : undefined,
   });
   const emailed = sent.emailed;
   const texted = sent.texted;
@@ -312,7 +348,7 @@ export async function changeBillingMethod(
 
   const { data: agreement } = await supabase
     .from("commercial_agreements")
-    .select("id, status, token")
+    .select("id, status, proposal_id")
     .eq("business_account_id", input.accountId)
     .eq("status", "signed")
     .order("signed_at", { ascending: false })
@@ -349,7 +385,7 @@ export async function changeBillingMethod(
   await supabase.from("events").insert({
     event_type: "commercial.billing.method_changed",
     source: "admin-proposals",
-    summary: `${input.actorName} changed billing for ${String(account.business_name || "an account")} to ${input.billingMethod === "auto_pay" ? "Auto-Pay" : "invoiced"}.`,
+    summary: `${input.actorName} changed billing for ${String(account.business_name || "an account")} to ${input.billingMethod === "auto_pay" ? "Stripe Pre-Auth" : "Invoice"}.`,
     data: {
       account_id: input.accountId,
       from: account.preferred_billing_method,
@@ -357,8 +393,14 @@ export async function changeBillingMethod(
     },
   });
 
-  // A targeted link so they only redo billing.
+  // Keep an in-flight session on the new method so Page 3 shows the right
+  // fields if they haven't signed yet — no new link, they still have the one.
   if (!agreement?.id) {
+    await supabase
+      .from("commercial_onboarding_sessions")
+      .update({ billing_method: input.billingMethod, updated_at: new Date().toISOString() })
+      .eq("business_account_id", input.accountId)
+      .eq("status", "active");
     return {
       ok: true,
       status: 200,
@@ -366,23 +408,49 @@ export async function changeBillingMethod(
     };
   }
 
-  const { data: minted } = await supabase.rpc("mint_commercial_token");
-  const token = String(minted || "");
   await supabase
     .from("commercial_agreements")
     .update({
-      token,
       billing_method: input.billingMethod,
-      expires_at: new Date(Date.now() + 14 * 86400_000).toISOString(),
       updated_at: new Date().toISOString(),
     })
     .eq("id", agreement.id);
 
+  const started = await startOnboardingSession(supabase, {
+    accountId: input.accountId,
+    billingMethod: input.billingMethod,
+    proposalId: (agreement.proposal_id as string) || undefined,
+    actorName: input.actorName,
+    send: false,
+  });
+  if (!started.ok || !started.token || !started.sessionId) {
+    return {
+      ok: started.ok,
+      status: started.status,
+      message: started.message || "Billing method updated, but a billing-setup link could not be generated.",
+      link: started.link,
+    };
+  }
+
+  const sent = await sendOnboardingLink(supabase, {
+    sessionId: started.sessionId,
+    accountName: String(account.business_name || "your account"),
+    recipientName: started.recipientName || (account.contact_name as string) || null,
+    recipientEmail: started.recipientEmail || (account.email as string) || "",
+    recipientPhone: started.recipientPhone || (account.phone as string) || null,
+    billingMethod: input.billingMethod,
+    link: started.link as string,
+    billingSetup: true,
+    accountId: input.accountId,
+  });
+
   return {
     ok: true,
     status: 200,
-    message: "Billing method updated and a billing-only link is ready to send — they don't sign again.",
-    link: token ? `${process.env.NEXT_PUBLIC_COMMERCIAL_ORIGIN || "https://commercial.novaracleaning.com"}/commercial-agreement/${token}` : undefined,
+    message: sent.emailed
+      ? "Billing method updated and a billing-setup link was sent — they don't review pricing or sign again."
+      : "Billing method updated and a billing-setup link is ready — they don't review pricing or sign again.",
+    link: started.link,
   };
 }
 

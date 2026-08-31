@@ -1,6 +1,6 @@
 // ─── Commercial portal provisioning ────────────────────────────────────────
 //
-// Creating the client's login for partner.novaracleaning.com, from inside the
+// Creating the client's login for partners.novaracleaning.com, from inside the
 // onboarding session, so they finish with working access rather than a signed
 // PDF and a promise that someone will set them up.
 //
@@ -14,6 +14,8 @@
 // email) — so business_accounts.portal_user_id now carries the link
 // explicitly, with email matching kept as a fallback for accounts that
 // predate it.
+
+import { partnersOrigin } from "@/lib/partner-portal/origins";
 
 // eslint-disable-next-line
 type Admin = any;
@@ -66,7 +68,7 @@ export function validatePortalPassword(password: string, minLength = MIN_PASSWOR
   return null;
 }
 
-const PARTNER_ORIGIN = "https://partner.novaracleaning.com";
+const PARTNER_ORIGIN = partnersOrigin();
 
 /**
  * Staff-side: create (or link) the portal login before a proposal can go out.
@@ -111,7 +113,7 @@ export async function inviteCommercialPortalUser(
       result.userId = await findUserIdByEmail(admin, email);
       if (!result.userId) {
         result.error =
-          "That email already has an account, but we couldn't link it. Ask them to sign in at partner.novaracleaning.com.";
+        "That email already has an account, but we couldn't link it. Ask them to sign in at partners.novaracleaning.com.";
         return result;
       }
     } else {

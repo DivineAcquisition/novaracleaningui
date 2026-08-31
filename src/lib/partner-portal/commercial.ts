@@ -1,5 +1,6 @@
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import { AGREEMENT_BUCKET } from "@/lib/commercial-onboarding/operations";
+import { sendPartnershipMessage } from "@/lib/partnership-comms/server";
 import {
   bundledCompanyCoi,
   coiIsExpired,
@@ -25,7 +26,10 @@ import {
   type PortalLedgerRow,
 } from "./stripe-billing";
 
+// eslint-disable-next-line
 type Admin = any;
+
+const UPLOAD_BUCKET = "commercial-onboarding-uploads";
 
 function accountIds(identity: PartnerIdentity): string[] {
   return identity.accounts.map((a) => a.id);
@@ -363,6 +367,21 @@ async function routeCommercialRequest(
     summary: `${identity.accounts[0]?.businessName || identity.email} — ${kind.replace(/_/g, " ")}: ${(message || input.address || "").slice(0, 240)}`,
     data: { business_account_id: accountId, kind, site_id: siteId, priced: false },
   });
+
+  if (kind === "additional_site") {
+    await supabase.from("commercial_onboarding_submissions").insert({
+      business_account_id: accountId,
+      kind: "site_request",
+      site_nickname: input.nickname || null,
+      site_address: input.address || null,
+      note: message || null,
+      submitted_by_name: identity.displayName || identity.email,
+      submitted_by_email: identity.email,
+    });
+  }
+
+  await notifyCommercialAdmin(supabase, accountId, identity, kind, message || input.address || "");
+
   return {
     ok: true as const,
     message:
@@ -380,6 +399,90 @@ export const requestAdditionalService = (identity: PartnerIdentity, input: { sit
 
 export const requestScheduleChange = (identity: PartnerIdentity, input: { siteId?: string; message: string }) =>
   routeCommercialRequest(identity, "schedule_change", input);
+
+async function notifyCommercialAdmin(
+  supabase: Admin,
+  accountId: string,
+  identity: PartnerIdentity,
+  kind: string,
+  detail: string,
+) {
+  const { data: account } = await supabase
+    .from("business_accounts")
+    .select("business_name, assigned_va_email")
+    .eq("id", accountId)
+    .maybeSingle();
+  const owner = account?.assigned_va_email as string | undefined;
+  if (!owner) return;
+  const who = identity.displayName || identity.email;
+  const business = String(account?.business_name || identity.accounts[0]?.businessName || "commercial account");
+  await sendPartnershipMessage(supabase, {
+    templateKey: "commercial_request_changes",
+    trigger: "partner-portal.commercial.submission",
+    email: owner,
+    role: "admin",
+    accountId,
+    vars: { first_name: who, business_name: business, note: detail },
+    subject: `Portal submission — ${business}`,
+    html: [
+      `<p><strong>${who}</strong> sent something from the partner portal for <strong>${business}</strong>.</p>`,
+      kind === "additional_site" || kind === "site_request"
+        ? `<p>They'd like a site added. This has NOT been priced or added — it needs its own walkthrough.</p>`
+        : kind === "document"
+          ? `<p>They uploaded a document.</p>`
+          : `<p>Kind: ${kind.replace(/_/g, " ")}.</p>`,
+      detail
+        ? `<p style="border-left:3px solid #7c3aed;padding-left:12px;white-space:pre-wrap">${detail.replace(/</g, "&lt;")}</p>`
+        : "",
+      `<p>Review it in Commercial → the account. Nothing here was auto-applied to pricing, scope, or billing.</p>`,
+    ].join(""),
+  });
+}
+
+export async function uploadCommercialDocument(
+  identity: PartnerIdentity,
+  input: { documentName: string; documentType?: string; documentBase64: string; note?: string },
+) {
+  const accountId = accountIds(identity)[0];
+  if (!accountId) return { ok: false as const, error: "No commercial relationship on this account." };
+  const name = String(input.documentName || "").trim().slice(0, 200);
+  const base64 = String(input.documentBase64 || "");
+  if (!name || base64.length < 100) return { ok: false as const, error: "Choose a file to upload." };
+
+  const supabase = getAdminSupabase();
+  const safe = name.replace(/[^\w.\-]+/g, "_").slice(0, 120);
+  const path = `${accountId}/${Date.now()}-${safe}`;
+  const bytes = Buffer.from(base64.split(",").pop() || "", "base64");
+  if (bytes.length > 12 * 1024 * 1024) {
+    return { ok: false as const, error: "That file is larger than 12 MB. Send a smaller copy or email it to us." };
+  }
+  const { error: upErr } = await supabase.storage
+    .from(UPLOAD_BUCKET)
+    .upload(path, bytes, { contentType: input.documentType || "application/octet-stream", upsert: false });
+  if (upErr) return { ok: false as const, error: `Upload failed: ${upErr.message}` };
+
+  await supabase.from("commercial_onboarding_submissions").insert({
+    business_account_id: accountId,
+    kind: "document",
+    document_path: path,
+    document_name: name,
+    document_size_bytes: bytes.length,
+    note: String(input.note || "").slice(0, 4000) || null,
+    submitted_by_name: identity.displayName || identity.email,
+    submitted_by_email: identity.email,
+  });
+  await supabase.from("events").insert({
+    event_type: "partner.commercial.document",
+    source: "partner-portal",
+    summary: `${identity.accounts[0]?.businessName || identity.email} uploaded ${name}`,
+    data: { business_account_id: accountId, document_name: name, priced: false },
+  });
+  await notifyCommercialAdmin(supabase, accountId, identity, "document", `${name}${input.note ? ` — ${input.note}` : ""}`);
+  return {
+    ok: true as const,
+    message: "Thanks — that's with our team. Uploading a document doesn't change pricing, scope, or billing on its own.",
+  };
+}
 
 export async function reportCommercialIssue(
   identity: PartnerIdentity,

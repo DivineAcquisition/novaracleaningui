@@ -278,8 +278,8 @@ serve(async (req) => {
             ? "signing the agreement"
             : step === "billing"
               ? "setting up billing"
-              : step === "portal"
-                ? "creating their portal login"
+              : step === "paused"
+                ? "waiting on a revised proposal"
                 : step;
 
       await admin.from("events").insert({
