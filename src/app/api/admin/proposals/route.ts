@@ -113,8 +113,8 @@ async function loadProposalSource(supabase: Supa, accountId: string): Promise<{
         .eq("business_account_id", accountId)
         .order("conducted_at", { ascending: false }),
     ]);
-    request = reqRow as Record<string, unknown> | null;
-    for (const wt of (walkthroughs || []) as Array<Record<string, unknown>>) {
+    request = (reqRow as unknown as Record<string, unknown> | null) || null;
+    for (const wt of (walkthroughs || []) as unknown as Array<Record<string, unknown>>) {
       const sid = String(wt.business_site_id || "");
       if (!sid || walkthroughsBySite.has(sid)) continue;
       walkthroughsBySite.set(sid, wt);
