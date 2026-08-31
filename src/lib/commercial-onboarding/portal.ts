@@ -65,6 +65,85 @@ export function validatePortalPassword(password: string, minLength = MIN_PASSWOR
   return null;
 }
 
+const PARTNER_ORIGIN = "https://partner.novaracleaning.com";
+
+/**
+ * Staff-side: create (or link) the portal login before a proposal can go out.
+ * Sends Supabase's invite email when the address is new; links an existing
+ * login when it is not. Does not set a password — they choose one from the invite.
+ */
+export async function inviteCommercialPortalUser(
+  admin: Admin,
+  input: Omit<ProvisionPortalInput, "password">,
+): Promise<ProvisionPortalResult & { invited: boolean }> {
+  const result: ProvisionPortalResult & { invited: boolean } = {
+    ok: false,
+    created: false,
+    linkedExisting: false,
+    invited: false,
+    userId: null,
+  };
+
+  const email = input.email.trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    result.error = "That doesn't look like a valid email address.";
+    return result;
+  }
+
+  try {
+    const invited = await admin.auth.admin.inviteUserByEmail(email, {
+      data: {
+        is_commercial_client: true,
+        business_account_id: input.accountId,
+        business_name: input.businessName || null,
+        full_name: input.fullName || null,
+      },
+      redirectTo: `${PARTNER_ORIGIN}/auth/callback`,
+    });
+
+    if (invited.error) {
+      if (!isDuplicate(invited.error.message)) {
+        result.error = invited.error.message;
+        return result;
+      }
+      result.linkedExisting = true;
+      result.userId = await findUserIdByEmail(admin, email);
+      if (!result.userId) {
+        result.error =
+          "That email already has an account, but we couldn't link it. Ask them to sign in at partner.novaracleaning.com.";
+        return result;
+      }
+    } else {
+      result.created = true;
+      result.invited = true;
+      result.userId = invited.data?.user?.id || null;
+    }
+
+    if (!result.userId) {
+      result.error = "The login was created but could not be linked.";
+      return result;
+    }
+
+    const { error: linkError } = await admin
+      .from("business_accounts")
+      .update({
+        portal_user_id: result.userId,
+        portal_created_at: new Date().toISOString(),
+      })
+      .eq("id", input.accountId);
+    if (linkError) {
+      result.error = linkError.message;
+      return result;
+    }
+
+    result.ok = true;
+    return result;
+  } catch (err) {
+    result.error = err instanceof Error ? err.message : String(err);
+    return result;
+  }
+}
+
 /**
  * Create (or link) the portal login and attach it to the account.
  *

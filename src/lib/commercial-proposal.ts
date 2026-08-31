@@ -327,6 +327,16 @@ export function agreementUrl(token: string): string {
   return `${origin()}/commercial-agreement/${token}`;
 }
 
+/** A proposal cannot go out until the client has a portal login on the account. */
+export function portalAccountRequired(
+  account: { portal_user_id?: string | null } | null | undefined,
+): boolean {
+  return !String(account?.portal_user_id || "").trim();
+}
+
+export const PORTAL_ACCOUNT_REQUIRED_MESSAGE =
+  "A client portal account is required before this proposal can go out. Create one for the decision-maker first.";
+
 // ─── Requirement vocabulary ────────────────────────────────────────────────
 //
 // Mirrors commercial_site_dispatch_eligibility so the console and the refusal

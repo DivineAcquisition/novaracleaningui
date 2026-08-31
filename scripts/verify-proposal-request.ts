@@ -28,6 +28,11 @@ import {
   walkthroughStaffPath,
 } from "../src/lib/proposal-request";
 import { CHECKLISTS } from "../src/lib/checklists";
+import { portalAccountRequired, PORTAL_ACCOUNT_REQUIRED_MESSAGE } from "../src/lib/commercial-proposal";
+import {
+  walkthroughPreviewPayload,
+  walkthroughPreviewTypeKey,
+} from "../src/lib/walkthrough-preview";
 
 let failures = 0;
 function check(name: string, actual: unknown, expected: unknown): void {
@@ -133,6 +138,20 @@ check("tokenized link lives on the contractor host", walkthroughLink("abc"), "ht
 check("office copy of the same doc is under Proposals", walkthroughStaffPath("abc"), "/admin/proposals/doc/abc");
 check("email HTML does not execute tags from the body", emailToHtml("Hi <script>").includes("&lt;script&gt;"), true);
 check("settings merge keeps unknown keys from wiping templates", mergeProposalSettings({ walkthroughPayCents: 9000 }).pendingEmailSubject, DEFAULT_PROPOSAL_SETTINGS.pendingEmailSubject);
+
+console.log("\nPortal account required to send:");
+check("missing portal_user_id blocks send", portalAccountRequired({ portal_user_id: null }), true);
+check("empty portal_user_id blocks send", portalAccountRequired({ portal_user_id: "" }), true);
+check("linked portal_user_id allows send", portalAccountRequired({ portal_user_id: "user-1" }), false);
+check("refusal names the client account", /portal account is required/i.test(PORTAL_ACCOUNT_REQUIRED_MESSAGE), true);
+
+console.log("\nLocal walkthrough preview fixture:");
+check("preview-str maps to STR", walkthroughPreviewTypeKey("preview-str"), "str");
+check("unknown token is not a preview", walkthroughPreviewTypeKey("not-a-preview"), null);
+const previewStr = walkthroughPreviewPayload("preview-str");
+check("STR preview uses Kitchen / Bathrooms / All rooms", previewStr?.checklist.scope.map((s) => s.title), CHECKLISTS["standard-clean"].sections.map((s) => s.title));
+check("STR preview first kitchen line matches residential", previewStr?.checklist.scope[0]?.items[0], CHECKLISTS["standard-clean"].sections[0].items[0]);
+check("office preview is the published office list", walkthroughPreviewPayload("preview-office")?.checklist.scope.map((s) => s.title), CHECKLISTS.office.sections.map((s) => s.title));
 
 console.log("\nBooking invariant:");
 check(

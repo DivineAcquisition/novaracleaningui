@@ -58,6 +58,7 @@ async function prepareForUpload(file: File): Promise<{ blob: Blob; ext: string; 
 
 interface FormPayload {
   submitted: boolean;
+  preview?: boolean;
   expired?: boolean;
   staffAccess?: boolean;
   editable?: boolean;
@@ -316,6 +317,12 @@ export default function WalkthroughIntakeForm({ staff = false }: { staff?: boole
             </div>
           )}
         </div>
+
+        {info.preview && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+            Preview only — ticks save in this browser session against the API fixture, not a live assignment.
+          </div>
+        )}
 
         {inPipeline && (
           <div className={cn(

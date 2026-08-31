@@ -17,6 +17,10 @@ import {
   WALKTHROUGH_EXCLUSION_CODES,
 } from "@/lib/proposal-request";
 import { buildWalkthroughPdf } from "@/lib/walkthrough-pdf";
+import {
+  isLocalWalkthroughPreview,
+  walkthroughPreviewPayload,
+} from "@/lib/walkthrough-preview";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -87,6 +91,10 @@ export async function GET(
   { params }: { params: { token: string } },
 ): Promise<NextResponse> {
   try {
+    if (isLocalWalkthroughPreview(_req, params.token)) {
+      const preview = walkthroughPreviewPayload(params.token);
+      if (preview) return NextResponse.json(preview);
+    }
     const { supabase, wt, error } = await resolveToken(params.token);
     if (error && !wt) return NextResponse.json({ error }, { status: 404 });
     if (!wt || !supabase) return NextResponse.json({ error: error || "Not found" }, { status: 404 });
@@ -134,6 +142,9 @@ export async function PATCH(
   { params }: { params: { token: string } },
 ): Promise<NextResponse> {
   try {
+    if (isLocalWalkthroughPreview(req, params.token)) {
+      return NextResponse.json({ ok: true, preview: true, savedAt: new Date().toISOString(), submitted: false });
+    }
     const { supabase, wt, error } = await resolveToken(params.token);
     if (!wt || !supabase) return NextResponse.json({ error: error || "Not found" }, { status: 404 });
     const staff = await tryStaff(req);
@@ -169,6 +180,14 @@ export async function POST(
   { params }: { params: { token: string } },
 ): Promise<NextResponse> {
   try {
+    if (isLocalWalkthroughPreview(req, params.token)) {
+      return NextResponse.json({
+        ok: true,
+        preview: true,
+        status: "scheduled",
+        message: "Preview only — this is not a live walkthrough, so findings are not stored.",
+      });
+    }
     const { supabase, wt, error } = await resolveToken(params.token);
     if (!wt || !supabase) return NextResponse.json({ error: error || "Not found" }, { status: 404 });
     const staff = await tryStaff(req);

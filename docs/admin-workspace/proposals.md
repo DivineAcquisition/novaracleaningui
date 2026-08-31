@@ -163,6 +163,17 @@ as fast.
 The Send tab builds the document: the account, the sites and their rates, the terms, and the
 recipient.
 
+:::gate A client portal account is required before a proposal can go out
+The decision-maker must have a portal login on the business account. The Send tab
+shows **Create client account** — that emails them an invite to set a password at
+partner.novaracleaning.com. Drafts can still be saved without it. The send button
+stays disabled, and the API refuses with *"A client portal account is required
+before this proposal can go out."*
+
+This is separate from onboarding: they get the login first so the proposal is
+tied to an account, not only a forwarded token.
+:::
+
 **Frequency** options are Weekly (~4.3 visits a month), Twice a week (~8.7), 3× a week (~13),
 Monthly, or a custom cadence. **Term** is month-to-month or a 12-month locked rate. **Billing**
 is invoiced — with a cycle and payment terms — or auto-pay, where a card or ACH is captured
@@ -234,4 +245,5 @@ version rather than reviving the old one.
 Yes. $75 flat by default, owed regardless.
 
 **"Why can't I send this proposal?"**
-One of the sites has no firm price. The screen lists which.
+Either a site has no firm price, or the account has no client portal login.
+The screen lists which. Use **Create client account** if the login is missing.

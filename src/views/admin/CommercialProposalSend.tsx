@@ -60,11 +60,13 @@ import {
   FREQUENCY_OPTIONS,
   INVOICE_CYCLE_LABELS,
   NET_TERMS_LABELS,
+  PORTAL_ACCOUNT_REQUIRED_MESSAGE,
   STAGE_LABELS,
   TERM_OPTIONS,
   commercialTab,
   estimatedMonthlyCents,
   money,
+  portalAccountRequired,
   titleCase,
   totalPerVisitCents,
   type BillingMethod,
@@ -155,7 +157,7 @@ export default function CommercialProposalSend({
   const [sitePrices, setSitePrices] = useState<Record<string, string>>({});
   const [priceTouched, setPriceTouched] = useState<Record<string, boolean>>({});
 
-  const [busy, setBusy] = useState<"send" | "draft" | null>(null);
+  const [busy, setBusy] = useState<"send" | "draft" | "invite" | null>(null);
   const [result, setResult] = useState<SendResult | null>(null);
 
   const loadDeals = useCallback(async () => {
@@ -242,11 +244,15 @@ export default function CommercialProposalSend({
     ["draft", "sent"].includes(p.status),
   );
 
+  const needsPortalAccount = portalAccountRequired(detail?.account);
   const requirements = useMemo(() => {
     const out: string[] = [];
     if (!accountId) out.push("Pick the account this proposal is for");
     if (accountId && !canPropose) {
       out.push(detail?.readiness?.reason || "Every site needs a firm price before this can go out");
+    }
+    if (accountId && needsPortalAccount) {
+      out.push("Client portal account — create one before this can go out");
     }
     if (!recipientName.trim()) out.push("Decision-maker's name");
     if (!recipientEmail.trim() || !recipientEmail.includes("@")) out.push("Decision-maker's email");
@@ -257,9 +263,39 @@ export default function CommercialProposalSend({
       }
     }
     return out;
-  }, [accountId, canPropose, detail, recipientName, recipientEmail, resolvedFrequency, readySites, sitePrices]);
+  }, [accountId, canPropose, needsPortalAccount, detail, recipientName, recipientEmail, resolvedFrequency, readySites, sitePrices]);
 
   const canSubmit = requirements.length === 0;
+
+  const invitePortal = async () => {
+    if (!accountId) return;
+    const email = recipientEmail.trim() || String(detail?.account?.email || "");
+    if (!email.includes("@")) {
+      toast.error("Add the decision-maker's email — that's who the portal login is for.");
+      return;
+    }
+    setBusy("invite");
+    try {
+      const out = await commercialProposalApi("POST", {
+        action: "invite_portal",
+        accountId,
+        email,
+        fullName: recipientName.trim() || undefined,
+      });
+      if (out.alreadyLinked) {
+        toast.success("This account already has a portal login.");
+      } else if (out.linkedExisting) {
+        toast.success("Linked their existing portal login to this account.");
+      } else {
+        toast.success(`Invite sent to ${email}. They set a password from that email.`);
+      }
+      await loadAccount(accountId);
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const submit = async (send: boolean) => {
     if (!canSubmit && send) return;
@@ -693,6 +729,41 @@ export default function CommercialProposalSend({
                     placeholder="A line or two on the walkthrough, the cadence, or what moved since the last version."
                   />
                 </Field>
+              </FormSection>
+
+              <FormSection
+                number={5}
+                title="Client account"
+                description="A portal login is required before the proposal can go out. They use it to review this document and later to request service."
+                icon={<RiUserLine className="w-4 h-4" />}
+              >
+                {needsPortalAccount ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-3">
+                    <p className="text-sm text-amber-950">{PORTAL_ACCOUNT_REQUIRED_MESSAGE}</p>
+                    <p className="text-[11px] text-amber-900/80">
+                      Invite goes to {recipientEmail.trim() || "the email above"}. They set a password from that email.
+                    </p>
+                    <Button
+                      type="button"
+                      onClick={() => void invitePortal()}
+                      disabled={busy !== null || !recipientEmail.includes("@")}
+                      className="bg-violet-600 hover:bg-violet-700 text-white"
+                    >
+                      {busy === "invite" ? (
+                        <><RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" /> Creating account…</>
+                      ) : (
+                        <>Create client account</>
+                      )}
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                    Portal login is on this account
+                    {detail?.account?.portal_created_at
+                      ? ` · created ${new Date(String(detail.account.portal_created_at)).toLocaleDateString()}`
+                      : ""}.
+                  </div>
+                )}
               </FormSection>
             </>
           )}

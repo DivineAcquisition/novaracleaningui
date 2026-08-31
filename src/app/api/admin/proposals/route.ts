@@ -14,7 +14,9 @@
 //                         sites. Pass send:true to mint the link and email
 //                         in the same click (Internal Booking's submit).
 //                         Refuses outright if any active site lacks a
-//                         firm price.
+//                         firm price, or if the account has no portal login.
+//     invite_portal       create / link the client portal login (required
+//                         before send)
 //     update_draft        edit recipient, cadence, billing method, sites
 //     send                mint the link and email the decision-maker
 //     resend              same link, fresh expiry
@@ -39,12 +41,15 @@ import { computeCommercialQuote } from "@/lib/commercial-pricing";
 import {
   estimatedMonthlyCents,
   money,
+  portalAccountRequired,
+  PORTAL_ACCOUNT_REQUIRED_MESSAGE,
   proposalUrl,
   agreementUrl,
   totalPerVisitCents,
   visitsPerMonth,
   type ProposalSite,
 } from "@/lib/commercial-proposal";
+import { inviteCommercialPortalUser } from "@/lib/commercial-onboarding/portal";
 import {
   generateAgreement,
   mapBillingTerms,
@@ -133,7 +138,14 @@ async function sendProposal(
   }
 
   const { data: account } = await supabase.from("business_accounts")
-    .select("business_name").eq("id", p.business_account_id as string).maybeSingle();
+    .select("business_name, portal_user_id").eq("id", p.business_account_id as string).maybeSingle();
+  if (portalAccountRequired(account as { portal_user_id?: string | null } | null)) {
+    return {
+      ok: false,
+      error: PORTAL_ACCOUNT_REQUIRED_MESSAGE,
+      status: 409,
+    };
+  }
 
   const { data: days } = await supabase.rpc("commercial_proposal_setting_int", {
     p_key: "proposal_expiry_days", p_default: 14,
@@ -338,6 +350,49 @@ export async function POST(req: Request): Promise<NextResponse> {
   const action = String(body.action || "");
   const actorName = s(body.actorName, 120) || principal?.email || "Admin";
 
+  // ── Create / link the client portal login (required before send) ──────
+  if (action === "invite_portal") {
+    const accountId = s(body.accountId, 60);
+    if (!accountId) return NextResponse.json({ error: "accountId is required." }, { status: 400 });
+    const { data: account } = await supabase
+      .from("business_accounts")
+      .select("id, business_name, contact_name, email, portal_user_id")
+      .eq("id", accountId)
+      .maybeSingle();
+    if (!account) return NextResponse.json({ error: "Account not found." }, { status: 404 });
+    if (!portalAccountRequired(account as { portal_user_id?: string | null })) {
+      return NextResponse.json({
+        ok: true,
+        alreadyLinked: true,
+        message: "This account already has a portal login.",
+      });
+    }
+    const email = s(body.email, 200) || String((account as { email?: string | null }).email || "");
+    const invited = await inviteCommercialPortalUser(supabase, {
+      accountId,
+      email,
+      fullName: s(body.fullName, 120) || String((account as { contact_name?: string | null }).contact_name || ""),
+      businessName: String((account as { business_name?: string }).business_name || ""),
+    });
+    if (!invited.ok) {
+      return NextResponse.json({ error: invited.error || "Could not create the client account." }, { status: 400 });
+    }
+    await supabase.from("events").insert({
+      event_type: "commercial.portal.invited",
+      source: "admin-proposals",
+      summary: invited.linkedExisting
+        ? `Linked existing portal login ${email} to ${(account as { business_name?: string }).business_name}.`
+        : `Invited ${email} to create a portal login for ${(account as { business_name?: string }).business_name}.`,
+      data: { account_id: accountId, email, user_id: invited.userId, linkedExisting: invited.linkedExisting },
+    });
+    return NextResponse.json({
+      ok: true,
+      invited: invited.invited,
+      linkedExisting: invited.linkedExisting,
+      userId: invited.userId,
+    });
+  }
+
   // ── Build the next version from the account's priced sites ─────────────
   if (action === "create_draft") {
     const accountId = s(body.accountId, 60);
@@ -345,9 +400,15 @@ export async function POST(req: Request): Promise<NextResponse> {
 
     const { data: account } = await supabase
       .from("business_accounts")
-      .select("id, business_name, contact_name, email, phone, recurring_frequency, billing_terms, assigned_va_email")
+      .select("id, business_name, contact_name, email, phone, recurring_frequency, billing_terms, assigned_va_email, portal_user_id")
       .eq("id", accountId).maybeSingle();
     if (!account) return NextResponse.json({ error: "Account not found." }, { status: 404 });
+    if (body.send === true && portalAccountRequired(account as { portal_user_id?: string | null })) {
+      return NextResponse.json(
+        { error: PORTAL_ACCOUNT_REQUIRED_MESSAGE, code: "portal_account_required" },
+        { status: 409 },
+      );
+    }
 
     const { data: readiness } = await supabase.rpc("commercial_proposal_readiness", {
       p_account_id: accountId,
