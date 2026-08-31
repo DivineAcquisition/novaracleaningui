@@ -70,9 +70,12 @@ export function CommercialScopePreview({
           Public page <RiExternalLinkLine className="w-3.5 h-3.5" />
         </Link>
       </div>
-      <div className={cn("p-4 space-y-4", compact && "max-h-80 overflow-y-auto")}>
+      <div className={cn("p-4", compact ? "space-y-4" : "grid grid-cols-1 md:grid-cols-2 gap-3")}>
         {sections.map((section) => (
-          <div key={section.title}>
+          <div
+            key={section.title}
+            className={cn(!compact && "rounded-xl border border-slate-100 bg-slate-50/50 p-3")}
+          >
             <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
               {section.title}
             </p>

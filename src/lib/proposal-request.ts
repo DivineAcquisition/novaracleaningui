@@ -2,12 +2,25 @@
 //
 // The dedicated Proposals tab is the front door to the existing commercial
 // walkthrough → firm price → proposal-to-billing pipeline. This module is the
-// admin-editable content: property types, light intake questions, and the
-// on-site checklists the tokenized contractor link renders.
+// admin-editable content: property types, light intake questions, the
+// residential-style scope checklist the tokenized contractor link ticks, and
+// the findings fields that still set firm price.
 //
 // Saved copies live in app_settings.proposal_walkthrough_checklists. Defaults
 // here merge underneath so a new item we ship appears without a re-seed, and
 // an admin rewrite of a key still wins.
+
+import {
+  cloneScopeSections,
+  defaultScopeTemplateForType,
+  isScopeTemplate,
+  mergeScopeSections,
+  scopeSectionsFromTemplate,
+  type ScopeChecklistSection,
+  type ScopeTemplateKey,
+} from "@/lib/proposal-scope-checklists";
+
+export type { ScopeChecklistSection, ScopeTemplateKey } from "@/lib/proposal-scope-checklists";
 
 export const PROPOSAL_CHECKLISTS_KEY = "proposal_walkthrough_checklists";
 export const PROPOSAL_SETTINGS_KEY = "proposal_request_settings";
@@ -77,6 +90,10 @@ export interface ProposalChecklists {
   intakeByType: Record<string, ChecklistItem[]>;
   universal: ChecklistItem[];
   byType: Record<string, ChecklistItem[]>;
+  /** Published /checklist slug this type starts from (admin can then edit). */
+  scopeTemplateByType: Record<string, ScopeTemplateKey>;
+  /** Kitchen / Bathrooms / All rooms (or commercial areas) the tokenized link ticks. */
+  scopeByType: Record<string, ScopeChecklistSection[]>;
 }
 
 export type WalkthroughPayType = "flat" | "hourly";
@@ -572,11 +589,26 @@ const BY_TYPE: Record<string, ChecklistItem[]> = {
   ],
 };
 
+function defaultScopeCatalog(): {
+  scopeTemplateByType: Record<string, ScopeTemplateKey>;
+  scopeByType: Record<string, ScopeChecklistSection[]>;
+} {
+  const scopeTemplateByType: Record<string, ScopeTemplateKey> = {};
+  const scopeByType: Record<string, ScopeChecklistSection[]> = {};
+  for (const type of DEFAULT_PROPERTY_TYPES) {
+    const template = defaultScopeTemplateForType(type.key, type.accountKind);
+    scopeTemplateByType[type.key] = template;
+    scopeByType[type.key] = scopeSectionsFromTemplate(template);
+  }
+  return { scopeTemplateByType, scopeByType };
+}
+
 export const DEFAULT_CHECKLISTS: ProposalChecklists = {
   types: DEFAULT_PROPERTY_TYPES,
   intakeByType: INTAKE,
   universal: UNIVERSAL,
   byType: BY_TYPE,
+  ...defaultScopeCatalog(),
 };
 
 export const DEFAULT_PROPOSAL_SETTINGS: ProposalRequestSettings = {
@@ -684,12 +716,22 @@ export function mergeChecklists(saved: unknown): ProposalChecklists {
 
   const intakeByType: Record<string, ChecklistItem[]> = {};
   const byType: Record<string, ChecklistItem[]> = {};
+  const scopeTemplateByType: Record<string, ScopeTemplateKey> = {};
+  const scopeByType: Record<string, ScopeChecklistSection[]> = {};
   for (const t of types) {
     intakeByType[t.key] = mergeItemLists(
       INTAKE[t.key] || INTAKE.other,
       raw.intakeByType?.[t.key],
     );
     byType[t.key] = mergeItemLists(BY_TYPE[t.key] || [], raw.byType?.[t.key]);
+    const template = isScopeTemplate(raw.scopeTemplateByType?.[t.key])
+      ? raw.scopeTemplateByType[t.key]
+      : defaultScopeTemplateForType(t.key, t.accountKind);
+    scopeTemplateByType[t.key] = template;
+    scopeByType[t.key] = mergeScopeSections(
+      scopeSectionsFromTemplate(template),
+      raw.scopeByType?.[t.key],
+    );
   }
 
   return {
@@ -697,6 +739,8 @@ export function mergeChecklists(saved: unknown): ProposalChecklists {
     intakeByType,
     universal: mergeItemLists(UNIVERSAL, raw.universal),
     byType,
+    scopeTemplateByType,
+    scopeByType,
   };
 }
 
@@ -731,12 +775,27 @@ export function propertyTypeByKey(catalog: ProposalChecklists, key: string): Pro
 export function walkthroughChecklistFor(
   catalog: ProposalChecklists,
   typeKey: string,
-): { universal: ChecklistItem[]; typeSpecific: ChecklistItem[]; all: ChecklistItem[] } {
+): {
+  universal: ChecklistItem[];
+  typeSpecific: ChecklistItem[];
+  all: ChecklistItem[];
+  scope: ScopeChecklistSection[];
+  scopeTemplate: ScopeTemplateKey;
+} {
+  const type = catalog.types.find((t) => t.key === typeKey);
   const typeSpecific = catalog.byType[typeKey] || [];
+  const scopeTemplate =
+    catalog.scopeTemplateByType?.[typeKey]
+    || defaultScopeTemplateForType(typeKey, type?.accountKind);
+  const scope = catalog.scopeByType?.[typeKey]?.length
+    ? cloneScopeSections(catalog.scopeByType[typeKey])
+    : scopeSectionsFromTemplate(scopeTemplate);
   return {
     universal: catalog.universal,
     typeSpecific,
     all: [...catalog.universal, ...typeSpecific],
+    scope,
+    scopeTemplate,
   };
 }
 

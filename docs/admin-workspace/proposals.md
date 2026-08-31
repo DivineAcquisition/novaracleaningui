@@ -5,7 +5,7 @@ category: How the Tool Works
 summary: Taking a commercial or office enquiry from first call to a sent proposal, and what blocks each step.
 whoCanSee: Admins and VAs
 where: /admin/proposals
-lastVerified: 2026-08-29
+lastVerified: 2026-08-31
 order: 11
 ---
 
@@ -65,7 +65,9 @@ If the list is empty: *"No contractors flagged walkthrough-eligible. Flag them o
 tab."* — that's a checkbox on the contractor's profile.
 
 On assignment, the requester is notified and the agent is emailed and texted their checklist
-link. The success message includes the line that matters commercially:
+link. That link opens the same section cards a residential job uses — Kitchen, Bathrooms, All
+rooms for STR, or the published commercial / office list for those types — then the site
+findings that set the firm price. The success message includes the line that matters commercially:
 
 > Pay is owed whether or not this converts.
 
@@ -202,9 +204,15 @@ fourth — see [Commercial](/docs/commercial) for how insurance blocks work.
 
 ## Checklists and settings
 
-**Checklists** edits what the agent is asked on site: universal items apply to every property
-type, and each type adds its own. Changes take effect for new walkthroughs immediately —
-there's no deploy.
+**Checklists** has two layers:
+
+1. **Scope checklist** — the same Kitchen / Bathrooms / All rooms cards as a residential
+   job (or the published commercial / office list). Load a public `/checklist` template,
+   edit the lines, save. The tokenized walkthrough link ticks these items on site.
+2. **Findings** — square footage, floors, access, exclusions. These still set the firm
+   price. Universal findings apply to every type; each type adds its own.
+
+Changes take effect for new walkthroughs immediately — there's no deploy.
 
 **Settings** holds the requester email templates and the walkthrough pay values above.
 

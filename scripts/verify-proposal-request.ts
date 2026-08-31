@@ -27,6 +27,7 @@ import {
   walkthroughLink,
   walkthroughStaffPath,
 } from "../src/lib/proposal-request";
+import { CHECKLISTS } from "../src/lib/checklists";
 
 let failures = 0;
 function check(name: string, actual: unknown, expected: unknown): void {
@@ -66,6 +67,13 @@ check("universal confirmed sqft is on every type", str.universal.some((i) => i.k
 check("universal exclusion check is on every type", str.all.some((i) => i.key === "exclusion_check"), true);
 check("medical biohazard item states Novara does not handle it", warehouse.universal.some((i) => i.key === "exclusion_check") && DEFAULT_CHECKLISTS.byType.medical.some((i) => /biohazard/i.test(i.label + (i.help || ""))), true);
 
+console.log("\nResidential-style scope on the tokenized walkthrough:");
+check("STR scope is the Standard Clean kitchen / bathrooms / all rooms list", str.scope.map((s) => s.title), CHECKLISTS["standard-clean"].sections.map((s) => s.title));
+check("STR first kitchen line matches the public residential checklist", str.scope[0]?.items[0], CHECKLISTS["standard-clean"].sections[0].items[0]);
+check("office scope is the published office list, not Kitchen", office.scope.map((s) => s.title), CHECKLISTS.office.sections.map((s) => s.title));
+check("warehouse scope is Commercial Standard, not residential rooms", warehouse.scopeTemplate, "commercial-standard");
+check("warehouse scope is not the residential kitchen card", warehouse.scope.some((s) => s.title === "Kitchen"), false);
+
 console.log("\nAdmin-editable merge:");
 const merged = mergeChecklists({
   types: [{ key: "school", label: "School / Daycare", shortLabel: "School", accountKind: "commercial", facilityTypeKey: "other", sort: 90, active: true }],
@@ -76,6 +84,10 @@ check("new property type survives merge", merged.types.some((t) => t.key === "sc
 check("built-in types remain", merged.types.some((t) => t.key === "str"), true);
 check("admin rewrite of a universal label wins", merged.universal.find((i) => i.key === "confirmed_sqft")?.label, "Verified sqft (admin rewrite)");
 check("school checklist is only its items plus universal", walkthroughChecklistFor(merged, "school").typeSpecific.map((i) => i.key), ["classroom_count"]);
+check("new commercial type gets the Commercial Standard scope by default", walkthroughChecklistFor(merged, "school").scopeTemplate, "commercial-standard");
+check("admin rewrite of a scope section title wins", mergeChecklists({
+  scopeByType: { str: [{ title: "Kitchen (host notes)", items: ["Confirm SPA photos"] }] },
+}).scopeByType.str[0].title, "Kitchen (host notes)");
 check("slug sanitizes a new type key", slugTypeKey("School / Daycare"), "school_daycare");
 
 console.log("\nConduct mapping + exclusion stop:");

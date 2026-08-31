@@ -6,9 +6,12 @@ import imageCompression from "browser-image-compression";
 import {
   RiCameraLine,
   RiCheckLine,
+  RiCheckboxCircleFill,
   RiLoader4Line,
   RiMapPinLine,
+  RiProhibitedLine,
   RiShieldCheckLine,
+  RiSparklingLine,
   RiVideoLine,
 } from "@remixicon/react";
 import { toast } from "sonner";
@@ -19,6 +22,15 @@ import { MediaThumb } from "@/components/job-media/MediaThumb";
 import { isVideoFile, videoTooLargeMessage } from "@/lib/job-media";
 import { ChecklistField } from "@/components/proposals/ChecklistField";
 import type { ChecklistItem, PropertyTypeDef } from "@/lib/proposal-request";
+import {
+  SCOPE_PROGRESS_ANSWER_KEY,
+  itemIsComplete,
+  parseScopeProgress,
+  scopeProgressKey,
+  scopeProgressStats,
+  type ScopeChecklistSection,
+  type ScopeItemState,
+} from "@/lib/proposal-scope-checklists";
 import { cn } from "@/lib/utils";
 
 const BUCKET = "cleaner-job-photos";
@@ -52,7 +64,13 @@ interface FormPayload {
   status: string;
   walkthroughId: string;
   propertyType: PropertyTypeDef;
-  checklist: { universal: ChecklistItem[]; typeSpecific: ChecklistItem[]; all: ChecklistItem[] };
+  checklist: {
+    universal: ChecklistItem[];
+    typeSpecific: ChecklistItem[];
+    all: ChecklistItem[];
+    scope?: ScopeChecklistSection[];
+    scopeTemplate?: string;
+  };
   answers: Record<string, unknown>;
   photos: string[];
   scheduledAt: string | null;
@@ -83,6 +101,8 @@ export default function WalkthroughIntakeForm({ staff = false }: { staff?: boole
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState<"conducted" | "excluded" | null>(null);
+  const [skipKey, setSkipKey] = useState<string | null>(null);
+  const [skipReason, setSkipReason] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -125,6 +145,30 @@ export default function WalkthroughIntakeForm({ staff = false }: { staff?: boole
       void persist(next, photos);
       return next;
     });
+  };
+
+  const scopeProgress = parseScopeProgress(answers[SCOPE_PROGRESS_ANSWER_KEY]);
+
+  const setScopeProgress = (next: Record<string, ScopeItemState>) => {
+    setAnswer(SCOPE_PROGRESS_ANSWER_KEY, next);
+  };
+
+  const toggleScopeItem = (key: string, done: boolean) => {
+    const next = { ...scopeProgress };
+    if (done) next[key] = { done: true };
+    else delete next[key];
+    setSkipKey(null);
+    setScopeProgress(next);
+  };
+
+  const skipScopeItem = () => {
+    if (!skipKey || skipReason.trim().length < 3) return;
+    setScopeProgress({
+      ...scopeProgress,
+      [skipKey]: { skipped: true, skipReason: skipReason.trim() },
+    });
+    setSkipKey(null);
+    setSkipReason("");
   };
 
   const upload = async (files: FileList | null) => {
@@ -204,6 +248,9 @@ export default function WalkthroughIntakeForm({ staff = false }: { staff?: boole
   const universal = info.checklist.universal.filter((i) => i.kind !== "media");
   const typeItems = info.checklist.typeSpecific;
   const inPipeline = Boolean(done || info.submitted);
+  const liveScope = info.checklist.scope || [];
+  const liveProgress = parseScopeProgress(answers[SCOPE_PROGRESS_ANSWER_KEY]);
+  const liveStats = scopeProgressStats(liveScope, liveProgress);
 
   return (
     <div className={cn(staff ? "pb-16" : "min-h-screen bg-slate-50 pb-24")}>
@@ -229,18 +276,44 @@ export default function WalkthroughIntakeForm({ staff = false }: { staff?: boole
           </div>
         )}
 
-        <div className="rounded-2xl text-white p-4" style={{ background: "linear-gradient(135deg,#5C0FFE,#6810FE)" }}>
-          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-white/80">{info.propertyType.label}</p>
-          <p className="text-lg font-bold mt-1">{info.site.nickname}</p>
-          <p className="text-xs text-white/85 flex items-start gap-1 mt-1">
-            <RiMapPinLine className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-            {info.site.address}
-          </p>
-          {info.site.clientStatedSqft ? (
-            <p className="text-[11px] text-white/70 mt-2">Client stated {Number(info.site.clientStatedSqft).toLocaleString()} sq ft — confirm on site.</p>
-          ) : null}
-          {info.access?.name && (
-            <p className="text-[11px] text-white/70 mt-1">Access: {info.access.name}{info.access.phone ? ` · ${info.access.phone}` : ""}</p>
+        <div className="rounded-2xl overflow-hidden border border-violet-200 bg-white shadow-sm">
+          <div className="px-5 py-4" style={{ background: "linear-gradient(135deg,#5C0FFE 0%,#8F7BFD 100%)" }}>
+            <p className="text-[11px] uppercase tracking-wider font-semibold text-white/70">
+              Novara · Walkthrough checklist · {info.propertyType.shortLabel}
+            </p>
+            <h1 className="text-xl font-bold text-white flex items-center gap-2 mt-0.5">
+              <RiSparklingLine className="w-5 h-5" /> {info.site.nickname}
+            </h1>
+            <p className="text-xs text-white/85 flex items-start gap-1 mt-1">
+              <RiMapPinLine className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+              {info.site.address}
+            </p>
+            {info.site.clientStatedSqft ? (
+              <p className="text-[11px] text-white/70 mt-2">Client stated {Number(info.site.clientStatedSqft).toLocaleString()} sq ft — confirm on site.</p>
+            ) : null}
+            {info.access?.name && (
+              <p className="text-[11px] text-white/70 mt-1">Access: {info.access.name}{info.access.phone ? ` · ${info.access.phone}` : ""}</p>
+            )}
+          </div>
+          {liveStats.total > 0 && (
+            <div className="px-5 py-4">
+              <div className="flex items-center justify-between text-xs font-semibold mb-1.5">
+                <span className={cn(liveStats.pct === 100 ? "text-emerald-600" : "text-violet-700")}>
+                  {liveStats.completed}/{liveStats.total} tasks · {liveStats.pct}%
+                </span>
+                {liveStats.pct === 100 && (
+                  <span className="text-emerald-600 flex items-center gap-1">
+                    <RiCheckboxCircleFill className="w-4 h-4" /> Scope walked
+                  </span>
+                )}
+              </div>
+              <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden">
+                <div
+                  className={cn("h-full rounded-full transition-all duration-500", liveStats.pct === 100 ? "bg-emerald-500" : "bg-violet-600")}
+                  style={{ width: `${liveStats.pct}%` }}
+                />
+              </div>
+            </div>
           )}
         </div>
 
@@ -258,8 +331,90 @@ export default function WalkthroughIntakeForm({ staff = false }: { staff?: boole
           </div>
         )}
 
+        {liveScope.map((section, sIdx) => {
+          const sectionDone = section.items.every((_, iIdx) => itemIsComplete(liveProgress[scopeProgressKey(sIdx, iIdx)]));
+          return (
+            <div key={`${section.title}-${sIdx}`} className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+              <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
+                <h2 className="font-bold text-slate-900">{section.title}</h2>
+                {sectionDone && (
+                  <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1">
+                    <RiCheckboxCircleFill className="w-4 h-4" /> Tasks done
+                  </span>
+                )}
+              </div>
+              <ul className="divide-y divide-slate-100">
+                {section.items.map((item, iIdx) => {
+                  const key = scopeProgressKey(sIdx, iIdx);
+                  const entry = liveProgress[key];
+                  const skipped = Boolean(entry?.skipped && entry?.skipReason);
+                  const doneItem = Boolean(entry?.done) || skipped;
+                  return (
+                    <li key={key} className={cn(doneItem ? "bg-emerald-50/50" : "")}>
+                      <div className="flex items-start gap-3 px-5 py-3">
+                        <button
+                          type="button"
+                          onClick={() => toggleScopeItem(key, !doneItem)}
+                          className="mt-0.5 shrink-0"
+                          aria-label={doneItem ? "Uncheck" : "Check off"}
+                        >
+                          <span
+                            className={cn(
+                              "w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all",
+                              skipped ? "bg-amber-500 border-amber-500" : doneItem ? "bg-emerald-500 border-emerald-500" : "border-slate-300 bg-white",
+                            )}
+                          >
+                            {skipped
+                              ? <RiProhibitedLine className="w-3.5 h-3.5 text-white" />
+                              : doneItem && <RiCheckLine className="w-3.5 h-3.5 text-white" />}
+                          </span>
+                        </button>
+                        <div className="min-w-0 flex-1">
+                          <p className={cn("text-sm", doneItem && !skipped ? "text-slate-400 line-through" : "text-slate-800")}>
+                            {item}
+                          </p>
+                          {skipped && (
+                            <p className="text-[11px] text-amber-800 mt-0.5">Skipped: {entry?.skipReason}</p>
+                          )}
+                          {!doneItem && (
+                            <button
+                              type="button"
+                              className="mt-1 text-[11px] font-semibold text-slate-500 underline"
+                              onClick={() => { setSkipKey(key); setSkipReason(""); }}
+                            >
+                              Skip with reason
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      {skipKey === key && (
+                        <div className="px-5 pb-3 space-y-2">
+                          <textarea
+                            value={skipReason}
+                            onChange={(e) => setSkipReason(e.target.value)}
+                            rows={2}
+                            placeholder='Why? e.g. "no kitchen on this floor" or "client asked us not to enter"'
+                            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300"
+                          />
+                          <div className="flex gap-2">
+                            <Button size="sm" disabled={skipReason.trim().length < 3} onClick={skipScopeItem}>
+                              Save skip
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => setSkipKey(null)}>Cancel</Button>
+                          </div>
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          );
+        })}
+
         <section className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
-          <h2 className="text-sm font-bold text-slate-900">Universal findings</h2>
+          <h2 className="text-sm font-bold text-slate-900">Site findings</h2>
+          <p className="text-[11px] text-slate-500">These numbers set the firm price. Confirm them after you walk the scope above.</p>
           {universal.map((item) => (
             <ChecklistField key={item.key} item={item} value={answers[item.key]} onChange={(v) => setAnswer(item.key, v)} compact />
           ))}
@@ -267,7 +422,7 @@ export default function WalkthroughIntakeForm({ staff = false }: { staff?: boole
 
         {typeItems.length > 0 && (
           <section className="rounded-2xl border border-violet-200 bg-white p-4 space-y-3">
-            <h2 className="text-sm font-bold text-violet-900">{info.propertyType.shortLabel} checklist</h2>
+            <h2 className="text-sm font-bold text-violet-900">{info.propertyType.shortLabel} findings</h2>
             <p className="text-[11px] text-slate-500">Only this property type — not a generic form.</p>
             {typeItems.map((item) => (
               <ChecklistField key={item.key} item={item} value={answers[item.key]} onChange={(v) => setAnswer(item.key, v)} compact />
