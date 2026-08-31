@@ -946,7 +946,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     const method = body.billingMethod === "auto_pay" ? "auto_pay" : body.billingMethod === "invoiced" ? "invoiced" : null;
     if (!method) {
       return NextResponse.json(
-        { error: "Choose Invoice or Auto-Pay before generating the onboarding link." },
+        { error: "Choose Invoice or Stripe Pre-Auth before generating the onboarding link." },
         { status: 400 },
       );
     }

@@ -6,6 +6,7 @@ import {
   requestAdditionalService,
   requestAdditionalSite,
   requestScheduleChange,
+  uploadCommercialDocument,
 } from "@/lib/partner-portal/commercial";
 import { portalCallbackUrl, requestIsLocal } from "@/lib/partner-portal/origins";
 import { openCommercialPaymentSetup, refreshCommercialPaymentMethod } from "@/lib/partner-portal/payment-method";
@@ -113,6 +114,16 @@ export async function POST(req: Request): Promise<NextResponse> {
   if (action === "refresh_payment") {
     return NextResponse.json(
       await refreshCommercialPaymentMethod(session.identity, body.sessionId ? String(body.sessionId) : undefined),
+    );
+  }
+  if (action === "upload_document") {
+    return NextResponse.json(
+      await uploadCommercialDocument(session.identity, {
+        documentName: String(body.documentName || ""),
+        documentType: body.documentType ? String(body.documentType) : undefined,
+        documentBase64: String(body.documentBase64 || ""),
+        note: body.note ? String(body.note) : body.message ? String(body.message) : undefined,
+      }),
     );
   }
   return NextResponse.json({ ok: false, error: `Unknown action "${action}".` }, { status: 400 });

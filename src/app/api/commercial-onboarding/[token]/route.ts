@@ -45,6 +45,11 @@ import {
 } from "@/lib/commercial-onboarding/operations";
 import { provisionCommercialPortalUser } from "@/lib/commercial-onboarding/portal";
 import {
+  applyCommercialOnboardingPreviewAction,
+  commercialOnboardingPreviewPayload,
+  isLocalCommercialOnboardingPreview,
+} from "@/lib/commercial-onboarding/preview";
+import {
   closeIfComplete,
   loadProgress,
   onboardingUrl,
@@ -90,10 +95,20 @@ async function loadContext(supabase: ReturnType<typeof getAdminSupabase>, sessio
 }
 
 export async function GET(
-  _req: Request,
+  req: Request,
   ctx: { params: Promise<{ token: string }> },
 ): Promise<NextResponse> {
   const { token } = await ctx.params;
+  if (isLocalCommercialOnboardingPreview(req, token)) {
+    const url = new URL(req.url);
+    return NextResponse.json(
+      commercialOnboardingPreviewPayload(
+        token,
+        url.searchParams.get("step") || undefined,
+        url.searchParams.get("billing"),
+      ),
+    );
+  }
   const supabase = getAdminSupabase();
   const resolved = await resolveSession(supabase, token);
   if (!resolved.ok || !resolved.session) {
@@ -123,6 +138,17 @@ export async function POST(
   ctx: { params: Promise<{ token: string }> },
 ): Promise<NextResponse> {
   const { token } = await ctx.params;
+  if (isLocalCommercialOnboardingPreview(req, token)) {
+    const url = new URL(req.url);
+    const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+    const result = applyCommercialOnboardingPreviewAction(
+      token,
+      String(body.action || ""),
+      body,
+      url.searchParams.get("billing"),
+    );
+    return NextResponse.json(result, { status: result.status });
+  }
   const supabase = getAdminSupabase();
   const resolved = await resolveSession(supabase, token);
   if (!resolved.ok || !resolved.session) {
@@ -154,6 +180,33 @@ export async function POST(
     }
     return NextResponse.json({ ok: true, progress: fresh, ...extra });
   };
+
+  async function provisionPortalNow(emailHint?: string) {
+    const email =
+      clip(emailHint, 200) ||
+      (session.recipient_email as string) ||
+      (account.email as string) ||
+      "";
+    if (!email) return { ok: false as const, error: "No email on file to open the portal with." };
+    const result = await provisionCommercialPortalUser(supabase, {
+      accountId,
+      email,
+      fullName:
+        (agreement?.signed_by_name as string) ||
+        (session.recipient_name as string) ||
+        undefined,
+      businessName: (account.business_name as string) || undefined,
+    });
+    if (!result.ok) return result;
+    await supabase.from("events").insert({
+      event_type: "commercial.onboarding.portal_created",
+      source: "commercial-onboarding",
+      summary: `Portal access ${result.linkedExisting ? "linked" : "created"} for ${String(account.business_name || "an account")} (${email}).`,
+      data: { account_id: accountId, session_id: sessionId, email, linked_existing: result.linkedExisting },
+    });
+    await touchActivity(supabase, sessionId, "billing");
+    return result;
+  }
 
   // ── Submitting information is available at every point, including after
   //    the flow is finished. That is the whole point of it.
@@ -428,7 +481,7 @@ export async function POST(
       message: result.alreadySigned
         ? result.message
         : String(session.billing_method) === "auto_pay"
-          ? "Signed. Next: add a payment method for Auto-Pay — nothing is charged now."
+          ? "Signed. Next: a verification hold via Stripe Pre-Auth — nothing is charged now."
           : "Signed. Next: confirm where your invoices should go.",
     });
   }
@@ -464,8 +517,20 @@ export async function POST(
         return NextResponse.json({ ok: false, message: result.message }, { status: result.status });
       }
       await touchActivity(supabase, sessionId, "billing");
+      const portal = await provisionPortalNow(
+        clip(body.billingContactEmail, 200) || (session.recipient_email as string) || undefined,
+      );
       const billing = await billingSnapshot(supabase, accountId);
-      return finish({ outcome: "billing_configured", billing: billing.state, message: result.message });
+      return finish({
+        outcome: portal.ok ? "billing_configured" : "billing_configured",
+        billing: billing.state,
+        portalUrl: portal.ok ? portal.handoffUrl || portalUrl() : undefined,
+        handoffUrl: portal.ok ? portal.handoffUrl : undefined,
+        message: portal.ok
+          ? `${result.message} Your partner portal is ready.`
+          : result.message,
+        portalError: portal.ok ? null : portal.error || "Could not open the portal yet.",
+      });
     }
 
     const setup = await openAutoPaySetup(supabase, {
@@ -488,47 +553,39 @@ export async function POST(
       await refreshAutoPayFromStripe(supabase, { agreement, account });
     }
     const billing = await billingSnapshot(supabase, accountId);
-    const fresh = await loadProgress(supabase, sessionId);
-    if (fresh.steps.find((s) => s.key === "billing")?.done) {
+    const billed = await loadProgress(supabase, sessionId);
+    let portal: Awaited<ReturnType<typeof provisionPortalNow>> | null = null;
+    if (billed.billing_configured) {
       await touchActivity(supabase, sessionId, "billing");
+      portal = await provisionPortalNow();
     }
-    return finish({ billing: billing.state, billingProfile: billing.profile });
+    return finish({
+      billing: billing.state,
+      billingProfile: billing.profile,
+      portalUrl: portal?.ok ? portal.handoffUrl || portalUrl() : undefined,
+      handoffUrl: portal?.ok ? portal.handoffUrl : undefined,
+    });
   }
 
-  // ── Step 4: portal login ───────────────────────────────────────────────
-
+  // Portal retry — Page 3 auto-provisions; this is only if that first attempt
+  // failed, or the client reopens before portal_created_at lands.
   if (action === "create_portal") {
-    if (progress.current_step !== "portal" && progress.current_step !== "done" && !account.portal_created_at && !account.portal_user_id) {
+    if (!progress.billing_configured && progress.current_step !== "done") {
       return NextResponse.json(
-        { ok: false, message: "Finish the earlier steps first — your portal is the last one." },
+        { ok: false, message: "Finish billing setup first — your portal opens as soon as that's done." },
         { status: 409 },
       );
     }
 
-    const email = clip(body.email, 200) || (session.recipient_email as string) || "";
-    const result = await provisionCommercialPortalUser(supabase, {
-      accountId,
-      email,
-      fullName: clip(body.fullName, 120) || (agreement?.signed_by_name as string) || undefined,
-      businessName: (account.business_name as string) || undefined,
-    });
+    const result = await provisionPortalNow(clip(body.email, 200) || undefined);
     if (!result.ok) {
       return NextResponse.json({ ok: false, message: result.error || "Could not open your portal." }, { status: 400 });
     }
 
-    await supabase.from("events").insert({
-      event_type: "commercial.onboarding.portal_created",
-      source: "commercial-onboarding",
-      summary: `Portal access ${result.linkedExisting ? "linked" : "created"} for ${String(account.business_name || "an account")} (${email}).`,
-      data: { account_id: accountId, session_id: sessionId, email, linked_existing: result.linkedExisting },
-    });
-
-    await touchActivity(supabase, sessionId, "portal");
     return finish({
       outcome: "portal_created",
       portalUrl: result.handoffUrl || portalUrl(),
       handoffUrl: result.handoffUrl || portalUrl(),
-      email,
       message: "Your portal is ready — no password needed.",
     });
   }

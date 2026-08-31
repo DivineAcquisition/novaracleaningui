@@ -210,6 +210,8 @@ CHAIN=(
   20260831061055_commercial_proposal_billing_tables.sql
   20260831061212_commercial_hub_console_paths.sql
   20260831061550_commercial_onboarding_session.sql
+  20260831071022_partner_portal_handoff_progress.sql
+  20260831090926_commercial_onboarding_three_pages.sql
 )
 
 for f in "${CHAIN[@]}"; do
@@ -337,8 +339,13 @@ BEGIN
      invoice_cycle, net_terms)
   VALUES (v_account, v_agreement, 'invoiced', 'ap@example.test', 'monthly', 'net_30');
   v_progress := public.commercial_onboarding_progress(v_session);
-  RAISE NOTICE 'after billing             -> current=%', v_progress->>'current_step';
-  ASSERT v_progress->>'current_step' = 'portal', 'expected portal';
+  RAISE NOTICE 'after billing             -> current=%  billed=%  portal=%',
+    v_progress->>'current_step', v_progress->>'billing_configured', v_progress->>'portal_ready';
+  ASSERT v_progress->>'current_step' = 'billing', 'expected billing (portal is not a fourth page)';
+  ASSERT (v_progress->>'billing_configured')::boolean, 'expected billing_configured';
+  ASSERT NOT (v_progress->>'portal_ready')::boolean, 'portal should still be outstanding';
+  ASSERT jsonb_array_length(v_progress->'steps') = 3, 'expected exactly three pages';
+  ASSERT NOT (v_progress->'steps' @> '[{"key":"portal"}]'::jsonb), 'portal must not be a page';
 
   -- Portal login created.
   UPDATE public.business_accounts

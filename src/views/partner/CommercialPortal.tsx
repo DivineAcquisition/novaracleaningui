@@ -9,6 +9,7 @@ import {
   RiLoader4Line,
   RiMoneyDollarCircleLine,
   RiShieldCheckLine,
+  RiUploadCloud2Line,
 } from "@remixicon/react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -533,14 +534,15 @@ async function updateCommercialPayment() {
 }
 
 function CommercialRequests({ sites, onDone }: { sites: Site[]; onDone: () => void }) {
-  const [kind, setKind] = useState<"additional_site" | "additional_service" | "schedule_change" | "report_issue">(
-    "schedule_change",
-  );
+  const [kind, setKind] = useState<
+    "additional_site" | "additional_service" | "schedule_change" | "report_issue" | "document"
+  >("schedule_change");
   const [message, setMessage] = useState("");
   const [address, setAddress] = useState("");
   const [title, setTitle] = useState("");
   const [siteId, setSiteId] = useState("");
   const [busy, setBusy] = useState(false);
+  const [file, setFile] = useState<{ name: string; type: string; base64: string } | null>(null);
 
   const submit = async () => {
     setBusy(true);
@@ -552,11 +554,23 @@ function CommercialRequests({ sites, onDone }: { sites: Site[]; onDone: () => vo
             ? "request_additional_site"
             : kind === "additional_service"
               ? "request_additional_service"
-              : "request_schedule_change";
+              : kind === "document"
+                ? "upload_document"
+                : "request_schedule_change";
       const res = await fetch(`/api/partner-portal/commercial${qs()}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, message, address, title, siteId: siteId || undefined }),
+        body: JSON.stringify({
+          action,
+          message,
+          address,
+          title,
+          siteId: siteId || undefined,
+          documentName: file?.name,
+          documentType: file?.type,
+          documentBase64: file?.base64,
+          note: message,
+        }),
       });
       const json = await res.json();
       if (!json.ok) throw new Error(json.error);
@@ -564,6 +578,7 @@ function CommercialRequests({ sites, onDone }: { sites: Site[]; onDone: () => vo
       setMessage("");
       setAddress("");
       setTitle("");
+      setFile(null);
       onDone();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Couldn't send that.");
@@ -572,16 +587,23 @@ function CommercialRequests({ sites, onDone }: { sites: Site[]; onDone: () => vo
     }
   };
 
+  const readFile = (f: File) => {
+    const reader = new FileReader();
+    reader.onload = () => setFile({ name: f.name, type: f.type, base64: String(reader.result || "") });
+    reader.readAsDataURL(f);
+  };
+
   return (
     <Card>
       <CardContent className="space-y-3 p-5">
-        <p className="font-semibold">Ask the team — nothing here auto-prices or auto-schedules</p>
+        <p className="font-semibold">Submit additional information — nothing here auto-prices or auto-schedules</p>
         <div className="flex flex-wrap gap-2">
           {(
             [
               ["schedule_change", "Schedule change"],
               ["additional_service", "One-time extra visit"],
               ["additional_site", "Additional site"],
+              ["document", "Upload a document"],
               ["report_issue", "Report an issue"],
             ] as const
           ).map(([id, label]) => (
@@ -594,7 +616,7 @@ function CommercialRequests({ sites, onDone }: { sites: Site[]; onDone: () => vo
             </button>
           ))}
         </div>
-        {sites.length > 0 && kind !== "additional_site" && (
+        {sites.length > 0 && kind !== "additional_site" && kind !== "document" && (
           <select className="w-full rounded-lg border px-3 py-2 text-sm" value={siteId} onChange={(e) => setSiteId(e.target.value)}>
             <option value="">Account / any site</option>
             {sites.map((s) => (
@@ -610,6 +632,21 @@ function CommercialRequests({ sites, onDone }: { sites: Site[]; onDone: () => vo
         {kind === "report_issue" && (
           <Input placeholder="Short title" value={title} onChange={(e) => setTitle(e.target.value)} />
         )}
+        {kind === "document" && (
+          <label className="block text-sm">
+            <span className="mb-1 flex items-center gap-1 text-xs text-slate-500">
+              <RiUploadCloud2Line className="h-3.5 w-3.5" /> W-9, tax exemption, COI — up to 12 MB
+            </span>
+            <input
+              type="file"
+              className="block w-full text-sm"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) readFile(f);
+              }}
+            />
+          </label>
+        )}
         <Textarea
           rows={4}
           placeholder={
@@ -617,12 +654,19 @@ function CommercialRequests({ sites, onDone }: { sites: Site[]; onDone: () => vo
               ? "Anything we should know before walkthrough / pricing"
               : kind === "report_issue"
                 ? "What happened, and where"
-                : "Describe the change. This does not alter your rate or add a priced visit."
+                : kind === "document"
+                  ? "What is this document? (optional)"
+                  : "Describe the change. This does not alter your rate or add a priced visit."
           }
           value={message}
           onChange={(e) => setMessage(e.target.value)}
         />
-        <Button className="text-white" style={{ background: PURPLE }} disabled={busy} onClick={() => void submit()}>
+        <Button
+          className="text-white"
+          style={{ background: PURPLE }}
+          disabled={busy || (kind === "document" && !file)}
+          onClick={() => void submit()}
+        >
           {busy ? <RiLoader4Line className="h-4 w-4 animate-spin" /> : kind === "report_issue" ? (
             <span className="inline-flex items-center gap-1">
               <RiAlertLine className="h-4 w-4" /> Send to QC

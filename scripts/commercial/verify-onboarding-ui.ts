@@ -22,12 +22,14 @@ import { chromium, type Page, type Route } from "playwright";
 const BASE = process.env.DOCS_CAPTURE_BASE_URL || "http://localhost:3100";
 const TOKEN = "0".repeat(64);
 
-type Step = "pricing" | "agreement" | "billing" | "portal" | "done" | "paused";
+type Step = "pricing" | "agreement" | "billing" | "done" | "paused";
 
 interface Scenario {
   step: Step;
   billingMethod: "auto_pay" | "invoiced";
   paused?: boolean;
+  billingConfigured?: boolean;
+  portalReady?: boolean;
 }
 
 const SITES = [
@@ -44,14 +46,16 @@ const SITES = [
   },
 ];
 
-function payload({ step, billingMethod, paused }: Scenario) {
+function payload({ step, billingMethod, paused, billingConfigured, portalReady }: Scenario) {
   const done = (k: string) => {
-    const order = ["pricing", "agreement", "billing", "portal"];
+    const order = ["pricing", "agreement", "billing"];
     const at = order.indexOf(step);
     if (step === "done") return true;
     if (step === "paused") return false;
     return order.indexOf(k) < at;
   };
+  const billed = billingConfigured === true || step === "done";
+  const portal = portalReady === true || step === "done";
   return {
     ok: true,
     session: {
@@ -66,19 +70,20 @@ function payload({ step, billingMethod, paused }: Scenario) {
       current_step: paused ? "paused" : step,
       paused_for_changes: Boolean(paused),
       complete: step === "done",
+      billing_configured: billed,
+      portal_ready: portal,
       billing_method: billingMethod,
       steps: [
-        { key: "pricing", label: "Review pricing and terms", done: done("pricing") },
-        { key: "agreement", label: "Sign the services agreement", done: done("agreement") },
+        { key: "pricing", label: "Pricing & Terms", done: done("pricing") },
+        { key: "agreement", label: "Agreement", done: done("agreement") },
         {
           key: "billing",
           label:
             billingMethod === "auto_pay"
-              ? "Add a payment method for Auto-Pay"
-              : "Confirm your billing contact and terms",
-          done: done("billing"),
+              ? "Billing setup (Stripe Pre-Auth) and portal access"
+              : "Billing setup (Invoice) and portal access",
+          done: billed && portal,
         },
-        { key: "portal", label: "Create your portal login", done: done("portal") },
       ],
       compliance: { blockers: [] },
       billing: null,
@@ -91,7 +96,7 @@ function payload({ step, billingMethod, paused }: Scenario) {
       city: "Columbia",
       state: "MD",
       zip_code: "21044",
-      portal_user_id: step === "done" ? "user-1" : null,
+      portal_user_id: portal ? "user-1" : null,
     },
     proposal: {
       id: "prop-1",
@@ -117,13 +122,12 @@ function payload({ step, billingMethod, paused }: Scenario) {
             totalPerVisitCents: 28080,
             signerName: "Nadia Okonkwo",
             signerEmail: "ap@example.test",
-            // `pricing` is already excluded by the ternary above.
             signedByName: step === "agreement" ? null : "Nadia Okonkwo",
           },
     billing: null,
     billingProfile: null,
     valueStack: [],
-    portalUrl: "https://partner.novaracleaning.com",
+    portalUrl: "https://partners.novaracleaning.com",
     submissions: [],
   };
 }
@@ -180,17 +184,19 @@ async function main() {
 
     const body = (await page.textContent("body")) || "";
     const checklistY = (await page.getByText("Where you are").first().boundingBox())?.y ?? 1e9;
-    const formY = (await page.getByText("Step 1 — Your pricing and terms").first().boundingBox())?.y ?? 0;
+    const formY = (await page.getByText("Page 1 — Pricing & Terms Review").first().boundingBox())?.y ?? 0;
 
     check("status checklist renders above the form", checklistY < formY);
-    check("opens on pricing review", body.includes("Step 1 — Your pricing and terms"));
+    check("opens on pricing review", body.includes("Page 1 — Pricing & Terms Review"));
     check("shows the per-site rate", body.includes("$280.80"));
     check("offers Request Changes", body.includes("Request changes instead"));
     check(
       "no signature field before pricing is accepted",
-      !body.includes("Sign below") && !body.includes("Step 2 —"),
+      !body.includes("Sign below") && !body.includes("Page 2 —"),
     );
     check("send-us-something is available at this step", body.includes("Need to send us something?"));
+    check("progress shows Pricing · Agreement · Billing", body.includes("Pricing") && body.includes("Agreement") && body.includes("Billing"));
+    check("no password field anywhere", (await page.locator('input[type="password"]').count()) === 0);
     await page.close();
   }
 
@@ -212,9 +218,9 @@ async function main() {
     const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
     await open(page, { step: "agreement", billingMethod: "invoiced" });
     const body = (await page.textContent("body")) || "";
-    check("resumes at the signature step, not the beginning", body.includes("Step 2 — Sign the services agreement"));
+    check("resumes at the signature step, not the beginning", body.includes("Page 2 — Agreement E-Signature"));
     check("does not re-show the pricing form", !body.includes("Accept and continue to the agreement"));
-    check("earlier step is marked done", body.includes("Review pricing and terms"));
+    check("earlier step is marked done", body.includes("Pricing"));
     check("Exhibit A is shown before signing", body.includes("EXHIBIT A"));
     await page.close();
   }
@@ -242,6 +248,8 @@ async function main() {
       `${cardButtons} card button(s), ${cardInputs} card input(s)`,
     );
     check("shows the Net terms from the signed agreement", /Net 30/i.test(body));
+    check("invoiced page is Billing Setup, not a fourth portal page", body.includes("Page 3 — Billing Setup"));
+    check("no password on invoiced billing", (await page.locator('input[type="password"]').count()) === 0);
     await page.close();
   }
 
@@ -254,22 +262,29 @@ async function main() {
 
     check("offers the card / bank setup", body.includes("Add a card or bank account"));
     check("states nothing is charged now", /nothing is charged now/i.test(body));
+    check("names Stripe Pre-Auth", body.includes("Stripe Pre-Auth"));
     check(
-      "NEVER shows invoice-contact fields to an Auto-Pay account",
+      "NEVER shows invoice-contact fields to a Stripe Pre-Auth account",
       !body.includes("Confirm your billing contact"),
     );
     await page.close();
   }
 
-  // ── 6. Portal creation is in-session ────────────────────────────────────
-  console.log("\nPortal login");
+  // ── 6. Billing concludes with portal (not a fourth page) ────────────────
+  console.log("\nBilling concludes with portal");
   {
     const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } });
-    await open(page, { step: "portal", billingMethod: "invoiced" });
+    await open(page, {
+      step: "billing",
+      billingMethod: "invoiced",
+      billingConfigured: true,
+      portalReady: false,
+    });
     const body = (await page.textContent("body")) || "";
-    check("offers to create the login in this session", body.includes("Create your portal login"));
-    check("explains what the portal is for", body.includes("Request additional service"));
-    check("collects a password", (await page.locator('input[type="password"]').count()) >= 2);
+    check("shows portal opening on Page 3, not a fourth page", body.includes("Opening your partner portal"));
+    check("does not collect a password", (await page.locator('input[type="password"]').count()) === 0);
+    check("does not re-show invoice fields once billing is configured", !body.includes("Confirm your billing contact"));
+    check("send-us-something is still available", body.includes("Need to send us something?"));
     await page.close();
   }
 
@@ -281,10 +296,12 @@ async function main() {
     const body = (await page.textContent("body")) || "";
     check("confirms completion", body.includes("You're all set"));
     check("links straight into the portal", body.includes("Open your portal"));
+    check("summarizes pricing, agreement, billing, portal", body.includes("Pricing & terms accepted") && body.includes("Portal created"));
     check(
       "send-us-something is STILL available after finishing",
       body.includes("Need to send us something?"),
     );
+    check("no password on the finished screen", (await page.locator('input[type="password"]').count()) === 0);
     await page.close();
   }
 
