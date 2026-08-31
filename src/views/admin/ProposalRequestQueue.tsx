@@ -258,7 +258,7 @@ function AssignSheet({
         cleanerId,
         scheduledAt: new Date(scheduledAt).toISOString(),
       });
-      toast.success("Walkthrough scheduled — requester notified, agent emailed and texted the checklist link. Pay is owed whether or not this converts.");
+      toast.success("Walkthrough scheduled — requester notified, agent emailed and texted the site findings link. Pay is owed whether or not this converts.");
       onDone();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Assignment failed");

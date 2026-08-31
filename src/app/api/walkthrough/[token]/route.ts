@@ -1,6 +1,7 @@
 // Public tokenized walkthrough form — unique, auto-expiring, auto-saving.
-// Resolves to one request/site. Checklist is universal + that property type
-// only. Submit feeds the existing walkthrough pipeline (conduct or exclude).
+// Resolves to one request/site. This token is site findings only
+// (universal + that property type). Crew execution lists use the separate
+// job-checklist token after dispatch. Submit feeds conduct or exclude.
 
 import { NextResponse } from "next/server";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
@@ -352,7 +353,7 @@ async function applyConduct(
     condition_level: conduct.conditionLevel,
     restroom_count: conduct.restroomCount,
     breakroom_count: conduct.breakroomCount ?? 0,
-    floor_count: conduct.floorCount,
+    floor_count: conduct.floorCount ?? 1,
     obstacle_density: conduct.obstacleDensity,
     obstacles: conduct.obstacles,
     floor_types: conduct.floorTypes,
@@ -362,7 +363,7 @@ async function applyConduct(
     service_window_start: clock(conduct.serviceWindowStart),
     service_window_end: clock(conduct.serviceWindowEnd),
     service_window_notes: conduct.serviceWindowNotes,
-    recommended_crew_size: conduct.recommendedCrewSize,
+    recommended_crew_size: Number(conduct.recommendedCrewSize) > 0 ? conduct.recommendedCrewSize : 2,
     photos,
     checklist_answers: answers,
     findings_extra: findingsExtra,
@@ -382,12 +383,9 @@ async function applyConduct(
   if (!merged.scope_level) missing.push("scope level");
   if (!merged.condition_level) missing.push("condition assessment");
   if (merged.restroom_count == null) missing.push("restroom count");
-  if (merged.breakroom_count == null) missing.push("breakroom count");
-  if (merged.floor_count == null) missing.push("floor count");
   if (!merged.obstacle_density) missing.push("obstacle density");
   if (!merged.floor_types) missing.push("floor types");
   if (!merged.service_window_start || !merged.service_window_end) missing.push("service window");
-  if (!Number(merged.recommended_crew_size)) missing.push("recommended crew size");
   if (!Array.isArray(merged.photos) || merged.photos.length === 0) missing.push("condition photos");
   if (missing.length) {
     return NextResponse.json({
@@ -467,7 +465,6 @@ async function attachPdfAndDrive(
       exclusionNote,
       universal: ctx.checklist.universal,
       typeSpecific: ctx.checklist.typeSpecific,
-      scope: ctx.checklist.scope,
       answers,
       photoCount: photos.length,
     });

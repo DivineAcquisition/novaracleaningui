@@ -22,12 +22,13 @@ import {
   mergeProposalSettings,
   missingRequired,
   propertyTypeByKey,
+  RETIRED_FINDING_KEYS,
   slugTypeKey,
   walkthroughChecklistFor,
   walkthroughLink,
   walkthroughStaffPath,
 } from "../src/lib/proposal-request";
-import { CHECKLISTS } from "../src/lib/checklists";
+import { checklistPathForServiceType } from "../src/lib/checklists";
 import { portalAccountRequired, PORTAL_ACCOUNT_REQUIRED_MESSAGE } from "../src/lib/commercial-proposal";
 import {
   walkthroughPreviewPayload,
@@ -62,7 +63,7 @@ const office = walkthroughChecklistFor(DEFAULT_CHECKLISTS, "office");
 const warehouse = walkthroughChecklistFor(DEFAULT_CHECKLISTS, "warehouse");
 check("STR includes linen handling", str.typeSpecific.some((i) => i.key === "linen_handling"), true);
 check("STR includes turnover window", str.typeSpecific.some((i) => i.key === "turnover_window"), true);
-check("STR includes consumables", str.typeSpecific.some((i) => i.key === "consumables"), true);
+check("STR does not copy residential consumables onto findings", str.typeSpecific.some((i) => i.key === "consumables"), false);
 check("STR does not include desk count", str.typeSpecific.some((i) => i.key === "desk_count"), false);
 check("STR does not include racking density", str.typeSpecific.some((i) => i.key === "racking_dense_sqft"), false);
 check("office includes desk count, headcount, restricted areas", office.typeSpecific.filter((i) => ["desk_count", "employee_headcount", "restricted_areas"].includes(i.key)).map((i) => i.key).sort(), ["desk_count", "employee_headcount", "restricted_areas"].sort());
@@ -70,14 +71,22 @@ check("office does not include linen handling", office.typeSpecific.some((i) => 
 check("warehouse includes racking density, floor type, auto-scrubber", warehouse.typeSpecific.filter((i) => ["racking_dense_sqft", "warehouse_floor_type", "auto_scrubber_suitable"].includes(i.key)).length, 3);
 check("universal confirmed sqft is on every type", str.universal.some((i) => i.key === "confirmed_sqft") && office.universal.some((i) => i.key === "confirmed_sqft"), true);
 check("universal exclusion check is on every type", str.all.some((i) => i.key === "exclusion_check"), true);
+check("access is open-ended, not a required select", str.universal.find((i) => i.key === "access_procedure")?.kind, "textarea");
+check("on-site storage is retired", str.universal.some((i) => i.key === "on_site_storage"), false);
+check("trash notes are optional", Boolean(str.universal.find((i) => i.key === "trash_volume")?.required), false);
 check("medical biohazard item states Novara does not handle it", warehouse.universal.some((i) => i.key === "exclusion_check") && DEFAULT_CHECKLISTS.byType.medical.some((i) => /biohazard/i.test(i.label + (i.help || ""))), true);
 
-console.log("\nResidential-style scope on the tokenized walkthrough:");
-check("STR scope is the Standard Clean kitchen / bathrooms / all rooms list", str.scope.map((s) => s.title), CHECKLISTS["standard-clean"].sections.map((s) => s.title));
-check("STR first kitchen line matches the public residential checklist", str.scope[0]?.items[0], CHECKLISTS["standard-clean"].sections[0].items[0]);
-check("office scope is the published office list, not Kitchen", office.scope.map((s) => s.title), CHECKLISTS.office.sections.map((s) => s.title));
-check("warehouse scope is Commercial Standard, not residential rooms", warehouse.scopeTemplate, "commercial-standard");
-check("warehouse scope is not the residential kitchen card", warehouse.scope.some((s) => s.title === "Kitchen"), false);
+console.log("\nWalkthrough token is site findings only:");
+check("STR walkthrough has no crew scope cards", str.scope, []);
+check("office walkthrough has no crew scope cards", office.scope, []);
+check("warehouse walkthrough has no crew scope cards", warehouse.scope, []);
+check("warehouse still remembers its commercial crew template for the job token", warehouse.scopeTemplate, "commercial-standard");
+
+console.log("\nCrew list routing (separate job token):");
+check("warehouse public list is commercial, not Kitchen/Bath", checklistPathForServiceType("warehouse"), "/checklist/commercial-standard");
+check("retail public list is commercial", checklistPathForServiceType("retail"), "/checklist/commercial-standard");
+check("office public list stays office", checklistPathForServiceType("office"), "/checklist/office");
+check("STR public list is not a commercial page", checklistPathForServiceType("str"), "/checklist");
 
 console.log("\nAdmin-editable merge:");
 const merged = mergeChecklists({
@@ -88,11 +97,22 @@ const merged = mergeChecklists({
 check("new property type survives merge", merged.types.some((t) => t.key === "school"), true);
 check("built-in types remain", merged.types.some((t) => t.key === "str"), true);
 check("admin rewrite of a universal label wins", merged.universal.find((i) => i.key === "confirmed_sqft")?.label, "Verified sqft (admin rewrite)");
-check("school checklist is only its items plus universal", walkthroughChecklistFor(merged, "school").typeSpecific.map((i) => i.key), ["classroom_count"]);
-check("new commercial type gets the Commercial Standard scope by default", walkthroughChecklistFor(merged, "school").scopeTemplate, "commercial-standard");
-check("admin rewrite of a scope section title wins", mergeChecklists({
+check("school findings are only its items plus universal", walkthroughChecklistFor(merged, "school").typeSpecific.map((i) => i.key), ["classroom_count"]);
+check("new commercial type still has a commercial crew template on file", walkthroughChecklistFor(merged, "school").scopeTemplate, "commercial-standard");
+check("school walkthrough does not get a crew tick list", walkthroughChecklistFor(merged, "school").scope, []);
+check("admin rewrite of a stored crew template title still merges", mergeChecklists({
   scopeByType: { str: [{ title: "Kitchen (host notes)", items: ["Confirm SPA photos"] }] },
 }).scopeByType.str[0].title, "Kitchen (host notes)");
+const stale = mergeChecklists({
+  universal: [
+    { key: "confirmed_sqft", label: "Verified sqft (admin rewrite)", kind: "integer", required: true, mapsTo: "sqft" },
+    { key: "on_site_storage", label: "Storage", kind: "yesno", required: true },
+    { key: "access_method", label: "Access method", kind: "select", required: true },
+  ],
+  byType: { str: [{ key: "consumables", label: "Consumables", kind: "textarea", required: true }] },
+});
+check("retired universal keys stay dropped", stale.universal.some((i) => RETIRED_FINDING_KEYS.has(i.key)), false);
+check("retired STR keys stay dropped", stale.byType.str.some((i) => i.key === "consumables"), false);
 check("slug sanitizes a new type key", slugTypeKey("School / Daycare"), "school_daycare");
 
 console.log("\nConduct mapping + exclusion stop:");
@@ -149,9 +169,11 @@ console.log("\nLocal walkthrough preview fixture:");
 check("preview-str maps to STR", walkthroughPreviewTypeKey("preview-str"), "str");
 check("unknown token is not a preview", walkthroughPreviewTypeKey("not-a-preview"), null);
 const previewStr = walkthroughPreviewPayload("preview-str");
-check("STR preview uses Kitchen / Bathrooms / All rooms", previewStr?.checklist.scope.map((s) => s.title), CHECKLISTS["standard-clean"].sections.map((s) => s.title));
-check("STR preview first kitchen line matches residential", previewStr?.checklist.scope[0]?.items[0], CHECKLISTS["standard-clean"].sections[0].items[0]);
-check("office preview is the published office list", walkthroughPreviewPayload("preview-office")?.checklist.scope.map((s) => s.title), CHECKLISTS.office.sections.map((s) => s.title));
+check("STR preview has no crew scope cards", previewStr?.checklist.scope, []);
+check("STR preview still has linen findings", previewStr?.checklist.typeSpecific.some((i) => i.key === "linen_handling"), true);
+check("office preview has no crew scope cards", walkthroughPreviewPayload("preview-office")?.checklist.scope, []);
+check("warehouse preview has no crew scope cards", walkthroughPreviewPayload("preview-commercial")?.checklist.scope, []);
+check("warehouse preview still has racking findings", walkthroughPreviewPayload("preview-commercial")?.checklist.typeSpecific.some((i) => i.key === "racking_dense_sqft"), true);
 
 console.log("\nBooking invariant:");
 check(

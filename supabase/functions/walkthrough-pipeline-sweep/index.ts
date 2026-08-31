@@ -93,7 +93,7 @@ serve(async (req) => {
       // The person walking the building.
       if (wt.conductor_phone) {
         const tokenLink = wt.assignment_token
-          ? ` Checklist: https://contractor.novaracleaning.com/cleaner/walkthrough/${wt.assignment_token}`
+          ? ` Site findings: https://contractor.novaracleaning.com/cleaner/walkthrough/${wt.assignment_token}`
           : "";
         await sendSms(admin, {
           toPhone: String(wt.conductor_phone),

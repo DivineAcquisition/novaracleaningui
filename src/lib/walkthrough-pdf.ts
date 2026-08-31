@@ -7,13 +7,6 @@ import {
   type ChecklistItem,
   type PropertyTypeDef,
 } from "@/lib/proposal-request";
-import {
-  SCOPE_PROGRESS_ANSWER_KEY,
-  itemIsComplete,
-  parseScopeProgress,
-  scopeProgressKey,
-  type ScopeChecklistSection,
-} from "@/lib/proposal-scope-checklists";
 
 const PAGE_W = 612;
 const PAGE_H = 792;
@@ -50,7 +43,6 @@ export interface WalkthroughPdfInput {
   exclusionNote?: string;
   universal: ChecklistItem[];
   typeSpecific: ChecklistItem[];
-  scope?: ScopeChecklistSection[];
   answers: Record<string, unknown>;
   photoCount: number;
 }
@@ -130,22 +122,6 @@ export async function buildWalkthroughPdf(input: WalkthroughPdfInput): Promise<U
   if (input.excluded) {
     sectionHeader("Exclusion — pricing stopped");
     qa("Finding", input.exclusionNote || "Excluded condition found on site.");
-  }
-
-  if ((input.scope || []).length > 0) {
-    const progress = parseScopeProgress(input.answers[SCOPE_PROGRESS_ANSWER_KEY]);
-    sectionHeader("Scope checklist");
-    for (const [sIdx, section] of (input.scope || []).entries()) {
-      qa(section.title, section.items.map((item, iIdx) => {
-        const entry = progress[scopeProgressKey(sIdx, iIdx)];
-        const mark = entry?.skipped && entry.skipReason
-          ? `SKIP — ${entry.skipReason}`
-          : itemIsComplete(entry)
-            ? "Done"
-            : "Open";
-        return `${item} (${mark})`;
-      }).join("\n"));
-    }
   }
 
   sectionHeader("Site findings");

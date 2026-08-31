@@ -24,7 +24,7 @@ The tabs run left to right in the order work moves through them:
 | **Firm price** | Turn the findings into a price. |
 | **Send** | Build and send the proposal. |
 | **Pipeline** | Track sent proposals to signature and billing. |
-| **Checklists** | Edit what the walkthrough agent is asked on site. |
+| **Site findings** | Edit the walkthrough agent's findings. Crew lists are a separate job token. |
 | **Settings** | Requester email templates and walkthrough pay. |
 
 :::note A proposal request is not a booking
@@ -64,10 +64,12 @@ date/time."* otherwise.
 If the list is empty: *"No contractors flagged walkthrough-eligible. Flag them on the Cleaners
 tab."* — that's a checkbox on the contractor's profile.
 
-On assignment, the requester is notified and the agent is emailed and texted their checklist
-link. That link opens the same section cards a residential job uses — Kitchen, Bathrooms, All
-rooms for STR, or the published commercial / office list for those types — then the site
-findings that set the firm price. The success message includes the line that matters commercially:
+On assignment, the requester is notified and the agent is emailed and texted their **site
+findings** link (`/cleaner/walkthrough/<token>`). That is not the crew job checklist. The
+walkthrough agent records the numbers and notes that set the firm price. Assigned cleaners
+get a separate token (`/cleaner/job-checklist/<token>`) only after the job is booked and
+dispatched. Commercial job lists stay commercial; STR job lists may resemble a residential
+turnover. The success message includes the line that matters commercially:
 
 > Pay is owed whether or not this converts.
 
@@ -83,12 +85,13 @@ thing from the queue, copy the agent's link, or resend it.
 The walkthrough moves through: **Requested → Scheduled → Pending price → Firm price set**,
 with **Excluded** as a terminal branch for anything we don't service.
 
-:::gate Every finding is required before a price can be set
-Recording findings needs all of them: confirmed square footage, facility type, scope level,
-condition, obstacle density, restrooms, breakrooms, floors, floor types, service window, crew
-size, **and condition photos**.
+:::gate Price-setting findings are required; notes are optional
+The walkthrough needs confirmed square footage, facility type, scope level, condition,
+obstacle density, restrooms, floor types, the service window, **and condition photos**.
+Breakroom count, floor count, and crew size default if left blank. Type-specific notes
+(linen handling, dock notes, and so on) stay short — most of them are optional typing.
 
-Try to skip and you get: *"A walkthrough isn't complete without every finding the price
+Try to skip a required field and you get: *"A walkthrough isn't complete without every finding the price
 depends on. Still needed: …"*
 
 Try to price without findings: *"A price comes from findings. Record the walkthrough's
@@ -215,13 +218,12 @@ fourth — see [Commercial](/docs/commercial) for how insurance blocks work.
 
 ## Checklists and settings
 
-**Checklists** has two layers:
+**Site findings** on this tab:
 
-1. **Scope checklist** — the same Kitchen / Bathrooms / All rooms cards as a residential
-   job (or the published commercial / office list). Load a public `/checklist` template,
-   edit the lines, save. The tokenized walkthrough link ticks these items on site.
-2. **Findings** — square footage, floors, access, exclusions. These still set the firm
-   price. Universal findings apply to every type; each type adds its own.
+- Universal findings apply to every walkthrough; each property type adds a short list.
+- Required fields stay few. Optional textareas are for anything the selects miss.
+- Crew execution lists are **not** edited here. Those live on the assigned-cleaner
+  job token and the Commercial hub Checklists.
 
 Changes take effect for new walkthroughs immediately — there's no deploy.
 

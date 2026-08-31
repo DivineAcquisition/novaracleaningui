@@ -5,8 +5,7 @@
 // service-role key, so the contractor UI cannot be exercised against a live
 // row here. These tokens (`preview-str`, `preview-office`, `preview-commercial`)
 // return the same payload shape as GET /api/walkthrough/[token] using the
-// published catalog — Kitchen / Bathrooms / All rooms for STR, office list
-// for offices, Commercial Standard otherwise.
+// published site-findings catalog (no crew scope list).
 //
 // Host must be localhost / 127.0.0.1. Never served on contractor.novaracleaning.com.
 

@@ -1,14 +1,11 @@
-// ─── Walkthrough scope checklist (residential-style sections) ────────────
+// ─── Published crew-list templates (job token, not walkthrough) ──────────
 //
-// The Proposals → Checklists tab used to edit only pricing-findings fields
-// (integer / select / yesno). The tokenized walkthrough then rendered as a
-// form, not as the Kitchen / Bathrooms / All rooms list a residential job
-// uses. This module is the published scope sheet for a property type: the
-// same section cards the public /checklist pages and the contractor job
-// checklist already show.
+// Property types still store a published /checklist template so Commercial
+// hub Checklists and the assigned-cleaner job token can start from the
+// right family. STR may resemble residential; commercial types do not.
 //
-// Findings fields stay in proposal-request.ts — they feed firm price.
-// Scope sections are what the agent ticks on site.
+// The walkthrough token never ticks these sections. Site findings live in
+// proposal-request.ts and feed firm price.
 
 import {
   CHECKLISTS,

@@ -2,16 +2,16 @@
 //
 // The dedicated Proposals tab is the front door to the existing commercial
 // walkthrough → firm price → proposal-to-billing pipeline. This module is the
-// admin-editable content: property types, light intake questions, the
-// residential-style scope checklist the tokenized contractor link ticks, and
-// the findings fields that still set firm price.
+// admin-editable content: property types, light intake questions, and the
+// site-findings fields the walkthrough token captures. Crew execution lists
+// live on a separate job-checklist token after dispatch — they are not
+// copied onto the walkthrough.
 //
 // Saved copies live in app_settings.proposal_walkthrough_checklists. Defaults
 // here merge underneath so a new item we ship appears without a re-seed, and
 // an admin rewrite of a key still wins.
 
 import {
-  cloneScopeSections,
   defaultScopeTemplateForType,
   isScopeTemplate,
   mergeScopeSections,
@@ -92,7 +92,7 @@ export interface ProposalChecklists {
   byType: Record<string, ChecklistItem[]>;
   /** Published /checklist slug this type starts from (admin can then edit). */
   scopeTemplateByType: Record<string, ScopeTemplateKey>;
-  /** Kitchen / Bathrooms / All rooms (or commercial areas) the tokenized link ticks. */
+  /** Published crew-list template for this type (job token after booking, not the walkthrough). */
   scopeByType: Record<string, ScopeChecklistSection[]>;
 }
 
@@ -216,99 +216,6 @@ const UNIVERSAL: ChecklistItem[] = [
     mapsTo: "restroom_count",
   },
   {
-    key: "restroom_fixtures",
-    label: "Fixture count per restroom",
-    help: "Toilets, urinals, sinks — note anything unusual.",
-    kind: "textarea",
-  },
-  {
-    key: "trash_volume",
-    label: "Trash volume",
-    help: "Receptacle count, and where waste is taken (dumpster, compactor, distance from the space).",
-    kind: "textarea",
-    required: true,
-  },
-  {
-    key: "janitor_closet",
-    label: "Janitor closet / mop sink / water source",
-    help: "A site with no on-site water source materially changes how the job is performed. Note where it is — or that there isn't one.",
-    kind: "textarea",
-    required: true,
-  },
-  {
-    key: "on_site_storage",
-    label: "On-site storage for supplies/equipment",
-    kind: "yesno",
-    required: true,
-  },
-  {
-    key: "on_site_storage_notes",
-    label: "Storage notes",
-    kind: "textarea",
-  },
-  {
-    key: "access_method",
-    label: "Access method",
-    kind: "select",
-    required: true,
-    options: ACCESS_OPTIONS,
-  },
-  {
-    key: "access_procedure",
-    label: "Access / alarm procedure",
-    help: "Keys, codes, badge, lockbox, on-site contact, alarm arm/disarm.",
-    kind: "textarea",
-    mapsTo: "after_hours_access_notes",
-  },
-  {
-    key: "badge_required",
-    label: "Badge or keycard required",
-    kind: "yesno",
-    required: true,
-    mapsTo: "badge_required",
-  },
-  {
-    key: "service_window_start",
-    label: "Service window starts",
-    help: "Hours the space is realistically available.",
-    kind: "time",
-    required: true,
-    mapsTo: "service_window_start",
-  },
-  {
-    key: "service_window_end",
-    label: "Service window ends",
-    kind: "time",
-    required: true,
-    mapsTo: "service_window_end",
-  },
-  {
-    key: "service_window_notes",
-    label: "Service window notes",
-    kind: "textarea",
-    mapsTo: "service_window_notes",
-  },
-  {
-    key: "parking_loading",
-    label: "Parking / loading for the crew",
-    help: "Distance from entry to the work area.",
-    kind: "textarea",
-    mapsTo: "loading_dock_notes",
-  },
-  {
-    key: "floor_count",
-    label: "Floor count",
-    kind: "integer",
-    required: true,
-    mapsTo: "floor_count",
-  },
-  {
-    key: "elevator_stairs",
-    label: "Elevator / stairs",
-    help: "Whether equipment can be moved between floors.",
-    kind: "textarea",
-  },
-  {
     key: "condition_rating",
     label: "Current condition rating",
     help: "Feeds the scope-level recommendation.",
@@ -326,12 +233,6 @@ const UNIVERSAL: ChecklistItem[] = [
     mapsTo: "obstacle_density",
   },
   {
-    key: "obstacles",
-    label: "Obstacles / complexity notes",
-    kind: "textarea",
-    mapsTo: "obstacles",
-  },
-  {
     key: "exclusion_check",
     label: "Exclusion check",
     help: "Mold, pest, biohazard, or structural hazard stops pricing and routes to existing exclusion handling. NovaraCleaning does not handle biohazard.",
@@ -345,6 +246,21 @@ const UNIVERSAL: ChecklistItem[] = [
     kind: "textarea",
   },
   {
+    key: "service_window_start",
+    label: "Service window starts",
+    help: "Hours the space is realistically available.",
+    kind: "time",
+    required: true,
+    mapsTo: "service_window_start",
+  },
+  {
+    key: "service_window_end",
+    label: "Service window ends",
+    kind: "time",
+    required: true,
+    mapsTo: "service_window_end",
+  },
+  {
     key: "recommended_scope",
     label: "Recommended scope level",
     kind: "select",
@@ -353,19 +269,11 @@ const UNIVERSAL: ChecklistItem[] = [
     mapsTo: "scope_level",
   },
   {
-    key: "recommended_crew_size",
-    label: "Recommended crew size",
-    kind: "integer",
+    key: "badge_required",
+    label: "Badge or keycard required",
+    kind: "yesno",
     required: true,
-    mapsTo: "recommended_crew_size",
-  },
-  {
-    key: "breakroom_count",
-    label: "Breakroom / kitchen count",
-    help: "Use 0 if the site has none.",
-    kind: "integer",
-    required: true,
-    mapsTo: "breakroom_count",
+    mapsTo: "badge_required",
   },
   {
     key: "photos",
@@ -375,7 +283,136 @@ const UNIVERSAL: ChecklistItem[] = [
     required: true,
     mapsTo: "photos",
   },
+  {
+    key: "access_procedure",
+    label: "Access / alarm procedure",
+    help: "Optional. Keys, codes, badge, lockbox, on-site contact, alarm arm/disarm.",
+    kind: "textarea",
+    mapsTo: "after_hours_access_notes",
+  },
+  {
+    key: "parking_loading",
+    label: "Parking / loading for the crew",
+    help: "Optional. Distance from entry to the work area.",
+    kind: "textarea",
+    mapsTo: "loading_dock_notes",
+  },
+  {
+    key: "service_window_notes",
+    label: "Service window notes",
+    help: "Optional. Anything the start/end times do not capture.",
+    kind: "textarea",
+    mapsTo: "service_window_notes",
+  },
+  {
+    key: "obstacles",
+    label: "Obstacles / complexity notes",
+    help: "Optional. What the crew will work around.",
+    kind: "textarea",
+    mapsTo: "obstacles",
+  },
+  {
+    key: "trash_volume",
+    label: "Trash / waste notes",
+    help: "Optional. Receptacle count, dumpster, compactor, haul distance.",
+    kind: "textarea",
+  },
+  {
+    key: "janitor_closet",
+    label: "Water source / janitor closet",
+    help: "Optional. Note where it is — or that there isn't one.",
+    kind: "textarea",
+  },
+  {
+    key: "restroom_fixtures",
+    label: "Restroom fixture notes",
+    help: "Optional. Toilets, urinals, sinks — anything unusual.",
+    kind: "textarea",
+  },
+  {
+    key: "floor_count",
+    label: "Floor count",
+    help: "Optional. Defaults to 1 if blank.",
+    kind: "integer",
+    mapsTo: "floor_count",
+  },
+  {
+    key: "breakroom_count",
+    label: "Breakroom / kitchen count",
+    help: "Optional. Use 0 if the site has none.",
+    kind: "integer",
+    mapsTo: "breakroom_count",
+  },
+  {
+    key: "recommended_crew_size",
+    label: "Recommended crew size",
+    help: "Optional. Defaults to 2 if blank.",
+    kind: "integer",
+    mapsTo: "recommended_crew_size",
+  },
+  {
+    key: "elevator_stairs",
+    label: "Elevator / stairs",
+    help: "Optional. Whether equipment can move between floors.",
+    kind: "textarea",
+  },
 ];
+
+/** Dropped from the walkthrough so a saved admin catalog cannot put them back. */
+export const RETIRED_FINDING_KEYS = new Set([
+  "on_site_storage",
+  "on_site_storage_notes",
+  "access_method",
+  "bed_count_sizes",
+  "washer_dryer",
+  "consumables",
+  "staging",
+  "inventory_damage",
+  "guest_capacity",
+  "extras_on_property",
+  "trash_recycling_schedule",
+  "str_access",
+  "private_office_count",
+  "open_vs_enclosed",
+  "conference_rooms",
+  "breakroom_kitchen",
+  "reception_glass",
+  "confidential_waste",
+  "after_hours_alarm",
+  "interior_glass",
+  "stockroom_sqft",
+  "fitting_room_count",
+  "customer_vs_employee_restrooms",
+  "storefront_glass",
+  "fixture_density",
+  "pos_count",
+  "foot_traffic",
+  "internal_office_sqft",
+  "dock_doors",
+  "machinery_on_floor",
+  "ceiling_height_high_dusting",
+  "forklift_traffic",
+  "required_ppe",
+  "breakroom_restroom_locations",
+  "kitchen_equipment",
+  "grease_floor_drains",
+  "dining_seats",
+  "dining_sqft",
+  "bar_area",
+  "walk_in_scope",
+  "customer_vs_staff_restrooms",
+  "health_code_notes",
+  "equipment_count_type",
+  "shower_count",
+  "sauna_steam",
+  "studio_count",
+  "turf_mat",
+  "bottle_fill",
+  "high_touch_sanitization",
+  "waiting_reception",
+  "compliance_standards",
+  "after_hours_escort",
+]);
 
 const INTAKE: Record<string, ChecklistItem[]> = {
   str: [
@@ -452,7 +489,6 @@ const INTAKE: Record<string, ChecklistItem[]> = {
 const BY_TYPE: Record<string, ChecklistItem[]> = {
   str: [
     { key: "bedroom_count", label: "Bedroom count", kind: "integer", required: true },
-    { key: "bed_count_sizes", label: "Bed count and sizes", help: "Drives linen volume.", kind: "textarea", required: true },
     { key: "bathroom_count", label: "Bathroom count", kind: "integer", required: true },
     {
       key: "linen_handling",
@@ -466,24 +502,41 @@ const BY_TYPE: Record<string, ChecklistItem[]> = {
         { value: "linen_service", label: "Linen service" },
       ],
     },
-    { key: "washer_dryer", label: "Washer-dryer presence and capacity", kind: "textarea" },
-    { key: "turnover_window", label: "Turnover window", help: "Standard checkout and check-in times — the hard deadline for every future job.", kind: "textarea", required: true },
-    { key: "consumables", label: "Consumables restocking", help: "What's replenished, who supplies it, where it's stored.", kind: "textarea", required: true },
-    { key: "staging", label: "Staging / presentation requirements", help: "Towel folds, welcome setup, host's 'correct final state' reference photos if any.", kind: "textarea" },
-    { key: "inventory_damage", label: "Inventory / damage check expectations", help: "What the cleaner reports after each stay.", kind: "textarea" },
-    { key: "guest_capacity", label: "Guest capacity", help: "Predicts mess volume.", kind: "integer" },
-    { key: "extras_on_property", label: "Extras on property", help: "Hot tub, pool, grill, patio furniture, garage.", kind: "textarea" },
-    { key: "trash_recycling_schedule", label: "Trash / recycling schedule and collection point", kind: "textarea" },
-    { key: "str_access", label: "Access: lockbox / smart lock / keypad, and code-change procedure", kind: "textarea" },
+    {
+      key: "turnover_window",
+      label: "Turnover window",
+      help: "Checkout → check-in — the hard deadline for every future job.",
+      kind: "select",
+      required: true,
+      options: [
+        { value: "under_4h", label: "Under 4 hours" },
+        { value: "same_day", label: "Same day (4+ hours)" },
+        { value: "next_day", label: "Next-day / overnight" },
+        { value: "flexible", label: "Flexible / no same-day turn" },
+      ],
+    },
+    {
+      key: "linen_notes",
+      label: "Linen / staging notes",
+      help: "Optional. Washer-dryer, par levels, towel fold, welcome setup.",
+      kind: "textarea",
+    },
+    {
+      key: "guest_notes",
+      label: "Unit notes",
+      help: "Optional. Extras (hot tub, grill), inventory expectations, trash day.",
+      kind: "textarea",
+    },
   ],
   office: [
     { key: "desk_count", label: "Workstation / desk count", kind: "integer", required: true },
-    { key: "private_office_count", label: "Private office count", kind: "integer" },
-    { key: "open_vs_enclosed", label: "Open-plan vs. enclosed ratio", kind: "text" },
-    { key: "conference_rooms", label: "Conference / meeting room count", kind: "integer", required: true },
-    { key: "breakroom_kitchen", label: "Breakroom / kitchen", help: "Appliances present, dishwasher, whether dishes are in scope.", kind: "textarea", required: true },
-    { key: "reception_glass", label: "Reception / lobby and entry glass", kind: "textarea" },
-    { key: "employee_headcount", label: "Employee headcount", help: "Drives restroom and breakroom load far more than sqft.", kind: "integer", required: true },
+    {
+      key: "employee_headcount",
+      label: "Employee headcount",
+      help: "Drives restroom and breakroom load far more than sqft.",
+      kind: "integer",
+      required: true,
+    },
     {
       key: "desk_policy",
       label: "Desk policy",
@@ -495,26 +548,51 @@ const BY_TYPE: Record<string, ChecklistItem[]> = {
         { value: "mixed", label: "Mixed / depends on area" },
       ],
     },
-    { key: "restricted_areas", label: "Restricted areas", help: "Server/IT rooms, executive offices, secure storage.", kind: "textarea", required: true },
-    { key: "confidential_waste", label: "Confidential waste handling", help: "Shredding, separate disposal.", kind: "textarea" },
-    { key: "after_hours_alarm", label: "After-hours access, alarm arm/disarm, badge / security check-in", kind: "textarea" },
-    { key: "interior_glass", label: "Interior glass / partition volume", kind: "textarea" },
+    {
+      key: "restricted_areas",
+      label: "Restricted areas",
+      help: "Server/IT rooms, executive offices, secure storage.",
+      kind: "textarea",
+      required: true,
+    },
+    {
+      key: "office_notes",
+      label: "Office notes",
+      help: "Optional. Conference rooms, kitchenette, glass, confidential waste.",
+      kind: "textarea",
+    },
   ],
   retail: [
-    { key: "sales_floor_sqft", label: "Sales floor sqft", help: "Priced differently from stockroom / back-of-house.", kind: "integer", required: true },
-    { key: "stockroom_sqft", label: "Stockroom / back-of-house sqft", kind: "integer" },
-    { key: "fitting_room_count", label: "Fitting room count", kind: "integer" },
-    { key: "customer_vs_employee_restrooms", label: "Customer restrooms vs. employee restrooms", kind: "textarea" },
-    { key: "storefront_glass", label: "Storefront glass", help: "Linear footage, interior and exterior expectations.", kind: "textarea", required: true },
-    { key: "fixture_density", label: "Display cases, fixtures, shelving density", kind: "textarea" },
-    { key: "pos_count", label: "Checkout / POS area count", kind: "integer" },
-    { key: "operating_hours_confirmed", label: "Operating hours (cleaning window is outside them)", kind: "textarea", required: true },
-    { key: "foot_traffic", label: "Foot-traffic volume estimate", kind: "text" },
+    {
+      key: "sales_floor_sqft",
+      label: "Sales floor sqft",
+      help: "Priced differently from stockroom / back-of-house.",
+      kind: "integer",
+      required: true,
+    },
+    {
+      key: "operating_hours_confirmed",
+      label: "Operating hours",
+      help: "Cleaning window is outside them.",
+      kind: "textarea",
+      required: true,
+    },
+    {
+      key: "retail_notes",
+      label: "Retail notes",
+      help: "Optional. Stockroom, fitting rooms, storefront glass, POS count.",
+      kind: "textarea",
+    },
   ],
   warehouse: [
-    { key: "open_floor_sqft", label: "Open floor sqft", help: "Labor differs dramatically from racking-dense sqft.", kind: "integer", required: true },
+    {
+      key: "open_floor_sqft",
+      label: "Open floor sqft",
+      help: "Labor differs dramatically from racking-dense sqft.",
+      kind: "integer",
+      required: true,
+    },
     { key: "racking_dense_sqft", label: "Racking-dense sqft", kind: "integer", required: true },
-    { key: "internal_office_sqft", label: "Office / admin space within the facility", help: "Separate sqft, priced at office rates — not warehouse rates.", kind: "integer" },
     {
       key: "warehouse_floor_type",
       label: "Floor type",
@@ -527,17 +605,16 @@ const BY_TYPE: Record<string, ChecklistItem[]> = {
         { value: "mixed", label: "Mixed" },
       ],
     },
-    { key: "auto_scrubber_suitable", label: "Auto-scrubber suitable and can access the space?", kind: "yesno", required: true },
-    { key: "dock_doors", label: "Dock doors and loading areas", kind: "textarea" },
-    { key: "machinery_on_floor", label: "Machinery / equipment occupying floor space", kind: "textarea" },
-    { key: "ceiling_height_high_dusting", label: "Ceiling height and high-dusting expectations", help: "Racking tops, beams, light fixtures.", kind: "textarea" },
-    { key: "forklift_traffic", label: "Forklift / vehicle traffic during the service window", kind: "yesno" },
-    { key: "required_ppe", label: "Required PPE or safety orientation for crew access", kind: "textarea" },
-    { key: "breakroom_restroom_locations", label: "Breakroom and restroom locations relative to the floor", kind: "textarea" },
+    { key: "auto_scrubber_suitable", label: "Auto-scrubber can access the floor?", kind: "yesno", required: true },
+    {
+      key: "warehouse_notes",
+      label: "Warehouse notes",
+      help: "Optional. Docks, machinery, high dusting, PPE, forklift traffic.",
+      kind: "textarea",
+    },
   ],
   restaurant: [
     { key: "kitchen_sqft", label: "Kitchen sqft", kind: "integer", required: true },
-    { key: "kitchen_equipment", label: "Kitchen equipment inventory", help: "Fryers, grills, hood.", kind: "textarea", required: true },
     {
       key: "hood_exhaust_scope",
       label: "Hood / exhaust",
@@ -549,43 +626,62 @@ const BY_TYPE: Record<string, ChecklistItem[]> = {
         { value: "in_scope", label: "In our scope" },
       ],
     },
-    { key: "grease_floor_drains", label: "Grease conditions and floor drain count", kind: "textarea" },
-    { key: "dining_seats", label: "Dining room seat count", kind: "integer" },
-    { key: "dining_sqft", label: "Dining room sqft", kind: "integer" },
-    { key: "bar_area", label: "Bar area", kind: "yesno" },
-    { key: "walk_in_scope", label: "Walk-in cooler / freezer in scope?", kind: "yesno" },
-    { key: "customer_vs_staff_restrooms", label: "Customer vs. staff restrooms", kind: "textarea" },
-    { key: "after_close_window", label: "Service window — after-close only, and how late close actually runs", kind: "textarea", required: true },
-    { key: "health_code_notes", label: "Health-code sensitivities the client wants respected", kind: "textarea" },
-  ],
-  gym: [
-    { key: "equipment_count_type", label: "Equipment count and type", help: "Cardio vs. strength — wipe-down volume.", kind: "textarea", required: true },
-    { key: "locker_room_count", label: "Locker room count", kind: "integer", required: true },
-    { key: "shower_count", label: "Shower count", kind: "integer" },
-    { key: "sauna_steam", label: "Sauna / steam present?", help: "Highest-labor area by far.", kind: "yesno" },
-    { key: "studio_count", label: "Studio / class room count — mirror and floor square footage", kind: "textarea" },
-    { key: "turf_mat", label: "Turf / mat areas", kind: "textarea" },
-    { key: "bottle_fill", label: "Water fountains / bottle-fill stations", kind: "integer" },
-    { key: "operating_hours_24", label: "Operating hours", help: "Many are 24-hour, meaning no closed window. Confirm how service is expected to happen around members.", kind: "textarea", required: true },
-    { key: "high_touch_sanitization", label: "High-touch sanitization expectations", kind: "textarea" },
-  ],
-  medical: [
-    { key: "exam_room_count", label: "Exam / treatment room count", kind: "integer", required: true },
-    { key: "waiting_reception", label: "Waiting area and reception", kind: "textarea" },
-    { key: "restricted_compliance_areas", label: "Restricted or compliance-governed areas", help: "What the cleaner may and may not enter.", kind: "textarea", required: true },
     {
-      key: "biohazard_sharps",
-      label: "Biohazard / sharps handling",
-      help: "Confirm this is client-managed. NovaraCleaning does not handle biohazard — the existing exclusion applies and must be stated if found.",
+      key: "after_close_window",
+      label: "After-close window",
+      help: "How late close actually runs.",
       kind: "textarea",
       required: true,
     },
-    { key: "compliance_standards", label: "Required compliance standards the client expects", kind: "textarea" },
-    { key: "after_hours_escort", label: "After-hours access and escort requirements", kind: "textarea" },
+    {
+      key: "restaurant_notes",
+      label: "Restaurant notes",
+      help: "Optional. Grease, drains, dining, bar, walk-in, health-code notes.",
+      kind: "textarea",
+    },
+  ],
+  gym: [
+    { key: "locker_room_count", label: "Locker room count", kind: "integer", required: true },
+    {
+      key: "operating_hours_24",
+      label: "24-hour facility?",
+      help: "If yes, there is no closed window — note how service happens around members.",
+      kind: "yesno",
+      required: true,
+    },
+    {
+      key: "gym_notes",
+      label: "Gym notes",
+      help: "Optional. Equipment mix, showers, sauna, studios, turf.",
+      kind: "textarea",
+    },
+  ],
+  medical: [
+    { key: "exam_room_count", label: "Exam / treatment room count", kind: "integer", required: true },
+    {
+      key: "restricted_compliance_areas",
+      label: "Restricted or compliance-governed areas",
+      help: "What the cleaner may and may not enter.",
+      kind: "textarea",
+      required: true,
+    },
+    {
+      key: "biohazard_sharps",
+      label: "Biohazard / sharps handling",
+      help: "Confirm this is client-managed. NovaraCleaning does not handle biohazard.",
+      kind: "textarea",
+      required: true,
+    },
+    {
+      key: "medical_notes",
+      label: "Medical notes",
+      help: "Optional. Waiting area, escort, compliance standards the client expects.",
+      kind: "textarea",
+    },
   ],
   other: [
     { key: "other_layout_notes", label: "Layout and use of the space", kind: "textarea", required: true },
-    { key: "other_special_requirements", label: "Special requirements for this property type", kind: "textarea" },
+    { key: "other_special_requirements", label: "Special requirements", help: "Optional.", kind: "textarea" },
   ],
 };
 
@@ -634,9 +730,10 @@ export const DEFAULT_PROPOSAL_SETTINGS: ProposalRequestSettings = {
   agentEmailSubject: "Walkthrough assignment — [property/address]",
   agentEmailBody:
     "Hi [Agent name], you've been assigned a paid walkthrough at [property/address] on [date] " +
-    "at [time]. Open the checklist for this property type (it auto-saves):\n\n[link]\n\n" +
-    "Capture confirmed sqft, floor types, access, exclusions, photos, and the type-specific " +
-    "items. You are paid for this visit whether or not the proposal converts.",
+    "at [time]. Open the site findings form (it auto-saves — this is not the crew job list):\n\n[link]\n\n" +
+    "Confirm sqft, floors, restrooms, condition, the service window, exclusions, photos, and " +
+    "the few type-specific items. Notes fields are optional. You are paid for this visit " +
+    "whether or not the proposal converts.",
 };
 
 function cloneItem(item: ChecklistItem): ChecklistItem {
@@ -658,30 +755,34 @@ function indexByKey(items: ChecklistItem[]): Map<string, ChecklistItem> {
   return map;
 }
 
-/** Saved items override defaults by key; default keys the admin hasn't touched still appear. */
+/**
+ * Saved items overlay labels on the shipped list. Required/kind/mapsTo stay
+ * on the default so we can narrow the walkthrough without a catalog reset.
+ * Retired keys never come back from an older saved copy. Admin-added keys
+ * that are not retired still append.
+ */
 export function mergeItemLists(defaults: ChecklistItem[], saved?: ChecklistItem[] | null): ChecklistItem[] {
-  if (!saved || saved.length === 0) return cloneList(defaults);
+  const base = defaults.filter((item) => item.key && !RETIRED_FINDING_KEYS.has(item.key));
+  if (!saved || saved.length === 0) return cloneList(base);
   const savedMap = indexByKey(saved);
   const used = new Set<string>();
   const out: ChecklistItem[] = [];
-  // Preserve admin order when they have fully replaced the list; otherwise
-  // default order with overrides, then any extra admin-added keys.
-  const savedHasAllDefaults = defaults.every((d) => savedMap.has(d.key));
-  if (savedHasAllDefaults) {
-    for (const item of saved) {
-      if (!item.key || used.has(item.key)) continue;
-      used.add(item.key);
-      out.push(cloneItem(item));
-    }
-    return out;
-  }
-  for (const item of defaults) {
-    const override = savedMap.get(item.key);
+  for (const item of base) {
     used.add(item.key);
-    out.push(override ? cloneItem(override) : cloneItem(item));
+    const override = savedMap.get(item.key);
+    if (!override) {
+      out.push(cloneItem(item));
+      continue;
+    }
+    out.push({
+      ...cloneItem(item),
+      label: override.label || item.label,
+      help: override.help !== undefined ? override.help : item.help,
+      options: override.options || item.options,
+    });
   }
   for (const item of saved) {
-    if (!item.key || used.has(item.key)) continue;
+    if (!item.key || used.has(item.key) || RETIRED_FINDING_KEYS.has(item.key)) continue;
     used.add(item.key);
     out.push(cloneItem(item));
   }
@@ -771,7 +872,10 @@ export function propertyTypeByKey(catalog: ProposalChecklists, key: string): Pro
   return catalog.types.find((t) => t.key === key) || null;
 }
 
-/** Universal items plus that property type's items only — never another type's. */
+/**
+ * Site findings for the walkthrough token only.
+ * Crew scope lists stay on `/cleaner/job-checklist/<token>` after dispatch.
+ */
 export function walkthroughChecklistFor(
   catalog: ProposalChecklists,
   typeKey: string,
@@ -787,14 +891,11 @@ export function walkthroughChecklistFor(
   const scopeTemplate =
     catalog.scopeTemplateByType?.[typeKey]
     || defaultScopeTemplateForType(typeKey, type?.accountKind);
-  const scope = catalog.scopeByType?.[typeKey]?.length
-    ? cloneScopeSections(catalog.scopeByType[typeKey])
-    : scopeSectionsFromTemplate(scopeTemplate);
   return {
     universal: catalog.universal,
     typeSpecific,
     all: [...catalog.universal, ...typeSpecific],
-    scope,
+    scope: [],
     scopeTemplate,
   };
 }
@@ -980,6 +1081,10 @@ export function mapAnswersToConduct(
 
   if (conduct.badgeRequired == null) conduct.badgeRequired = answers.access_method === "badge";
   if (conduct.breakroomCount == null) conduct.breakroomCount = intVal(answers.breakroom_count) ?? 0;
+  if (conduct.floorCount == null) conduct.floorCount = intVal(answers.floor_count) ?? 1;
+  if (conduct.recommendedCrewSize == null) {
+    conduct.recommendedCrewSize = intVal(answers.recommended_crew_size) ?? 2;
+  }
   if (!conduct.facilityTypeKey) conduct.facilityTypeKey = type.facilityTypeKey;
 
   const extraBits = [

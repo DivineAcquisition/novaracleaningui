@@ -31,7 +31,7 @@ const TABS = [
   { id: "price", label: "Firm price", icon: RiRulerLine },
   { id: "send", label: "Send", icon: RiMailSendLine },
   { id: "pipeline", label: "Pipeline", icon: RiFileTextLine },
-  { id: "checklists", label: "Checklists", icon: RiFileList3Line },
+  { id: "checklists", label: "Site findings", icon: RiFileList3Line },
   { id: "settings", label: "Settings", icon: RiSettings3Line },
 ] as const;
 type Tab = (typeof TABS)[number]["id"];

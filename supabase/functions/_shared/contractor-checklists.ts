@@ -521,9 +521,19 @@ export function normalizeServiceType(serviceType: string | null | undefined): st
   if (raw === "membership" || raw === "recurring" || raw === "maintenance") return "recurring";
   if (raw === "deep") return "deep";
   if (raw === "combo" || raw === "deep_standard" || raw === "deep_+_standard") return "combo";
-  if (raw === "turnover" || raw === "str_turnover" || raw === "str") return "turnover";
-  if (raw === "commercial") return "commercial";
+  if (raw === "turnover" || raw === "str_turnover" || raw === "str" || raw.includes("airbnb")) return "turnover";
   if (raw === "office") return "office";
+  if (
+    raw === "commercial" ||
+    raw === "retail" ||
+    raw === "warehouse" ||
+    raw === "restaurant" ||
+    raw === "gym" ||
+    raw === "medical" ||
+    raw === "business"
+  ) {
+    return "commercial";
+  }
   if (raw === "focused" || raw === "single_area" || raw === "singlearea") return "focused";
   return CHECKLISTS[raw] ? raw : "standard";
 }
@@ -593,13 +603,13 @@ export function getContractorChecklist(
       .map((s) => ({ ...s, photoRequired: true }));
     return { key: "focused", name: "Focused / Single-Area Clean", sections };
   }
-  if ((key === "commercial" || key === "office") && (commercial?.scopeLevel || commercial?.photoZones?.length)) {
+  if (key === "commercial" || key === "office") {
     const sections = commercialChecklistSections(
-      commercial.scopeLevel,
-      commercial.photoZones,
+      commercial?.scopeLevel ?? "standard",
+      commercial?.photoZones,
       key === "office",
     );
-    const label = COMMERCIAL_SCOPE_LABEL[String(commercial.scopeLevel || "").toLowerCase()];
+    const label = COMMERCIAL_SCOPE_LABEL[String(commercial?.scopeLevel || "standard").toLowerCase()];
     const base = key === "office" ? "Office Clean (After-Hours)" : "Commercial Site Service";
     return { key, name: label ? `${base} — ${label}` : base, sections };
   }

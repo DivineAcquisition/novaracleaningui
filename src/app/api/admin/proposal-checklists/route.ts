@@ -106,7 +106,7 @@ export async function PUT(req: Request): Promise<NextResponse> {
       key: PROPOSAL_CHECKLISTS_KEY,
       value: next,
       description:
-        "Property-type walkthrough checklists and light intake questions. Admin-editable from the Proposals tab; no deploy needed.",
+        "Property-type site findings and light intake. Crew execution lists live on the job-checklist token after dispatch.",
       updated_at: new Date().toISOString(),
     },
     { onConflict: "key" },

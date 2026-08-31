@@ -541,7 +541,7 @@ export default function CleanerJobChecklistPage() {
           style={{ background: "linear-gradient(135deg,#5C0FFE 0%,#8F7BFD 100%)" }}
         >
           <p className="text-[11px] uppercase tracking-wider font-semibold text-white/70">
-            Novara · Contractor checklist{booking ? ` · ${booking.ref}` : ""}
+            Novara · Job checklist{booking ? ` · ${booking.ref}` : ""}
           </p>
           <h1 className="text-xl font-bold text-white flex items-center gap-2">
             <RiSparklingLine className="w-5 h-5" /> {checklist.name}

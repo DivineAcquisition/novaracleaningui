@@ -26,10 +26,19 @@ export function publicChecklistPath(
     t === "commercial_standard" ||
     t === "commercial_detailed" ||
     t === "light" ||
-    t === "detailed"
+    t === "detailed" ||
+    t === "retail" ||
+    t === "warehouse" ||
+    t === "restaurant" ||
+    t === "gym" ||
+    t === "medical" ||
+    t === "business"
   ) {
     const fromType = t.replace(/^commercial_?/, "");
-    return `/checklist/${commercialSlug(scopeLevel || fromType)}`;
+    const knownScope = fromType === "light" || fromType === "detailed" || fromType === "standard"
+      ? fromType
+      : scopeLevel;
+    return `/checklist/${commercialSlug(knownScope)}`;
   }
   if (t === "deep" || t === "combo") return "/checklist/deep-clean";
   if (t === "moveinout" || t === "move_in_out") return "/checklist/move-in-out";
@@ -41,6 +50,9 @@ export function publicChecklistPath(
     t === "recurring"
   ) {
     return "/checklist/recurring";
+  }
+  if (t === "turnover" || t === "str_turnover" || t === "str") {
+    return "/checklist";
   }
   return "/checklist/standard-clean";
 }

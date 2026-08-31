@@ -384,7 +384,19 @@ function normalizeServiceType(serviceType: string | null | undefined): string {
   if (s === "office") return "office";
   if (s === "commercial_light" || s === "light") return "commercial_light";
   if (s === "commercial_detailed" || s === "detailed") return "commercial_detailed";
-  if (s === "commercial" || s === "commercial_standard") return "commercial_standard";
+  if (
+    s === "commercial" ||
+    s === "commercial_standard" ||
+    s === "retail" ||
+    s === "warehouse" ||
+    s === "restaurant" ||
+    s === "gym" ||
+    s === "medical" ||
+    s === "business"
+  ) {
+    return "commercial_standard";
+  }
+  if (s === "turnover" || s === "str_turnover" || s === "str") return "standard";
   return "standard";
 }
 

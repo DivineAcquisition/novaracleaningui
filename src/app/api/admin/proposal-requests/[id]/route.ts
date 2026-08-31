@@ -131,7 +131,7 @@ export async function PATCH(
       });
       agentEmailed = mail.ok;
       const sms =
-        `Novara: walkthrough docs for ${address}. Open the checklist (auto-saves; office can add too): ${links[0]}`;
+        `Novara: walkthrough docs for ${address}. Open the site findings form (auto-saves; office can add too): ${links[0]}`;
       agentTexted = await sendProposalSms(supabase, c.phone, sms);
     }
 

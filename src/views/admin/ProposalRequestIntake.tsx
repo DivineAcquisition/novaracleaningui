@@ -161,7 +161,7 @@ export default function ProposalRequestIntake({
       <div className="space-y-4">
         <Section n={1} title="Property type">
           <p className="text-xs text-slate-500 -mt-1">
-            Routes the walkthrough checklist (residential-style sections plus findings). Intake stays light — the on-site visit captures the rest.
+            Routes the walkthrough agent&apos;s site findings (not the crew job list). Intake stays light — the on-site visit captures the rest.
           </p>
           <div className="grid sm:grid-cols-2 gap-2">
             {types.map((t) => {

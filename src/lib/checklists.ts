@@ -558,7 +558,13 @@ export function checklistPathForServiceType(
     t === "commercial_standard" ||
     t === "commercial_detailed" ||
     t === "light" ||
-    t === "detailed"
+    t === "detailed" ||
+    t === "retail" ||
+    t === "warehouse" ||
+    t === "restaurant" ||
+    t === "gym" ||
+    t === "medical" ||
+    t === "business"
   ) {
     return commercialChecklistPath(serviceType, scopeLevel);
   }

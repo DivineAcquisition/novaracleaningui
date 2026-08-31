@@ -267,7 +267,7 @@ export async function POST(
 
     const sms =
       `Novara: paid walkthrough ${when.label} at ${address}. ` +
-      `Open the ${reqRow.property_type_key} checklist (auto-saves): ${link}`;
+      `Open the site findings form (auto-saves): ${link}`;
     await sendProposalSms(supabase, c.phone, sms);
   }
 
