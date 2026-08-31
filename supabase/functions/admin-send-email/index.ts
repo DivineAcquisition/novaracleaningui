@@ -10,6 +10,10 @@
 //     subject: string;
 //     html: string;                // already-formatted HTML body
 //     from?: string;               // defaults to "Novara Cleaning <hello@novaracleaning.com>"
+//     replyTo?: string;            // Reply-To (partnership sends route replies to support/ops)
+//     headers?: Record<string,string>; // List-Unsubscribe, etc.
+//     idempotencyKey?: string;     // Resend Idempotency-Key
+//     attachments?: Array<{ filename: string; content: string }>;
 //   }
 //
 // Returns 200 with { success: true, id } when Resend accepts.
@@ -39,6 +43,19 @@ serve(async (req) => {
     const subject = String(body.subject || "").trim();
     const html = String(body.html || "");
     const from = String(body.from || "Novara Cleaning <hello@novaracleaning.com>");
+    const replyTo = typeof body.replyTo === "string" && body.replyTo.trim()
+      ? body.replyTo.trim()
+      : "";
+    const extraHeaders = body.headers && typeof body.headers === "object" && !Array.isArray(body.headers)
+      ? Object.fromEntries(
+        Object.entries(body.headers as Record<string, unknown>)
+          .filter(([, v]) => typeof v === "string" && String(v).trim())
+          .map(([k, v]) => [k, String(v)]),
+      )
+      : undefined;
+    const idempotencyKey = typeof body.idempotencyKey === "string" && body.idempotencyKey.trim()
+      ? body.idempotencyKey.trim().slice(0, 256)
+      : "";
     // Optional file attachments: [{ filename, content }] where content is
     // base64 (Resend's format). Passed straight through when provided.
     const attachments = Array.isArray(body.attachments) && body.attachments.length > 0
@@ -60,8 +77,17 @@ serve(async (req) => {
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
+        ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
       },
-      body: JSON.stringify({ from, to: [to], subject, html, ...(attachments ? { attachments } : {}) }),
+      body: JSON.stringify({
+        from,
+        to: [to],
+        subject,
+        html,
+        ...(replyTo ? { reply_to: replyTo } : {}),
+        ...(extraHeaders && Object.keys(extraHeaders).length ? { headers: extraHeaders } : {}),
+        ...(attachments ? { attachments } : {}),
+      }),
     });
     const text = await res.text();
     if (!res.ok) {

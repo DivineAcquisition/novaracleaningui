@@ -5,6 +5,7 @@
 import { resolveSecret } from "./app-secrets.ts";
 import { sendSms, formatServiceDate } from "./sms.ts";
 import { notifyDiscord } from "./discord.ts";
+import { sendHostPartnership } from "./partnership-comms.ts";
 
 // deno-lint-ignore no-explicit-any
 export type SB = any;
@@ -27,13 +28,23 @@ export function fmtWindow(start?: string | null, end?: string | null): string {
   return a || b || "";
 }
 
-// Fire a branded host/cleaner email (best-effort).
-export async function sendPartnerEmail(admin: SB, type: string, email: string | null | undefined, data: Record<string, unknown>) {
-  if (!email) return;
+/** Host-facing notice through the partnership layer. Never used for cleaner traffic. */
+export async function sendPartnerEmail(
+  admin: SB,
+  type: string,
+  email: string | null | undefined,
+  data: Record<string, unknown>,
+  extras?: { phone?: string | null; hostId?: string | null; sms?: string | null; channels?: Array<"email" | "sms"> },
+) {
   try {
-    await admin.functions.invoke("send-partner-email", { body: { type, email, data } });
+    await sendHostPartnership(admin, type, email, extras?.phone ?? null, data, {
+      hostId: extras?.hostId,
+      trigger: `turnover-engine.${type}`,
+      sms: extras?.sms,
+      channels: extras?.channels,
+    });
   } catch (e) {
-    console.warn("[turnover-engine] email failed", type, e instanceof Error ? e.message : String(e));
+    console.warn("[turnover-engine] partnership send failed", type, e instanceof Error ? e.message : String(e));
   }
 }
 
@@ -75,24 +86,13 @@ export async function notifyAssignment(admin: SB, tr: Record<string, unknown>) {
     ],
   });
 
-  if (hostRow?.phone) {
-    await sendSms(admin, {
-      toPhone: hostRow.phone,
-      type: "confirmation",
-      message: `Your turnover for ${nickname} on ${dateLabel} is confirmed and assigned. We'll have it guest-ready${windowLabel ? ` by the end of your ${windowLabel} window` : ""}. - NovaraCleaning`,
-    });
-  }
   await sendPartnerEmail(admin, "turnover_assigned", hostRow?.email, {
     name: (hostRow?.name || "").split(" ")[0] || "",
-    property: nickname, address: property?.address || "",
-    date: dateLabel, window: windowLabel, cleaner: cleaner?.first_name || "Your cleaner",
-  });
-  if (cleaner?.email) {
-    await sendPartnerEmail(admin, "turnover_assigned", cleaner.email, {
-      name: cleaner.first_name || "", property: nickname, address: property?.address || "",
-      date: dateLabel, window: windowLabel, cleaner: cleaner.first_name || "you",
-    });
-  }
+    property: nickname,
+    address: property?.address || "",
+    date: dateLabel,
+    window: windowLabel,
+  }, { phone: hostRow?.phone, hostId: hostRow?.id });
 }
 
 // Assignment engine: property-preferred crew -> global crew by priority ->
@@ -176,7 +176,7 @@ export async function finalizeBatch(admin: SB, batchId: string) {
     property: `${batch.turnover_count} turnovers (week of ${batch.week_start})`,
     date: `Week of ${formatServiceDate(batch.week_start as string)}`,
     price: money(Number(batch.total_amount || 0)),
-  });
+  }, { phone: hostRow?.phone, hostId: hostRow?.id });
 
   for (const tr of list) {
     if (tr.status !== "pending_payment") continue;

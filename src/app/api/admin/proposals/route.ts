@@ -34,6 +34,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin, AdminAuthError } from "@/lib/admin-auth";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
+import { sendPartnershipMessage } from "@/lib/partnership-comms";
 import { loadCommercialConfigServer } from "@/lib/commercial-pricing-server";
 import { computeCommercialQuote } from "@/lib/commercial-pricing";
 import {
@@ -146,12 +147,35 @@ function mergeSiteFromWalkthrough(
 
 async function emailOut(
   supabase: Supa,
-  args: { to: string; subject: string; html: string },
+  args: {
+    to: string;
+    subject: string;
+    html: string;
+    templateKey?: string;
+    role?: "partner" | "walkthrough_agent" | "admin";
+    accountId?: string | null;
+    trigger?: string;
+    firstName?: string;
+    businessName?: string;
+    link?: string;
+  },
 ): Promise<{ ok: boolean; error?: string }> {
-  const { error } = await supabase.functions.invoke("admin-send-email", {
-    body: { to: args.to, subject: args.subject, html: args.html },
+  const result = await sendPartnershipMessage(supabase, {
+    templateKey: args.templateKey || "commercial_proposal_link",
+    trigger: args.trigger || "commercial-proposal.email",
+    email: args.to,
+    role: args.role || "partner",
+    accountId: args.accountId,
+    subject: args.subject,
+    html: args.html,
+    vars: {
+      first_name: args.firstName || "there",
+      business_name: args.businessName || "",
+      link: args.link || "",
+    },
   });
-  return error ? { ok: false, error: error.message } : { ok: true };
+  const err = result.results.find((r) => r.error)?.error;
+  return result.ok ? { ok: true } : { ok: false, error: err || "send failed" };
 }
 
 function paragraphs(lines: string[]): string {
@@ -238,6 +262,12 @@ async function sendProposal(
       `This proposal is open until ${new Date(expiresAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}.`,
       EMAIL_SIGN,
     ]),
+    templateKey: "commercial_proposal_link",
+    accountId: String(p.business_account_id || "") || null,
+    trigger: "commercial-proposal.send",
+    firstName: name,
+    businessName: business,
+    link,
   });
 
   await supabase.from("events").insert({
@@ -846,6 +876,12 @@ export async function POST(req: Request): Promise<NextResponse> {
           : `After signing you'll confirm the billing contact and invoicing terms. No payment details are collected.`,
         EMAIL_SIGN,
       ]),
+      templateKey: "commercial_onboarding_link",
+      accountId: String(a.business_account_id || "") || null,
+      trigger: "commercial-agreement.send",
+      firstName: (a.signer_name as string | null) || "there",
+      businessName: (account as { business_name?: string } | null)?.business_name || "",
+      link: agreementUrl(String(a.token)),
     });
 
     await supabase.from("commercial_agreements").update({
@@ -967,6 +1003,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       billingMethod: session.billing_method === "auto_pay" ? "auto_pay" : "invoiced",
       link: onboardingUrl(String(session.token)),
       reminder: body.reminder !== false,
+      accountId: String(session.business_account_id || "") || null,
     });
     return NextResponse.json({ ok: true, ...sent, link: onboardingUrl(String(session.token)) });
   }

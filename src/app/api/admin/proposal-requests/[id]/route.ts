@@ -127,12 +127,19 @@ export async function PATCH(
         to: String(c.email || ""),
         subject: settings.agentEmailSubject,
         body: settings.agentEmailBody + (links.length > 1 ? `\n\nAll site links:\n${links.join("\n")}` : ""),
-        vars: { agentName, address, date: when.date, time: when.time, link: links[0] },
+        vars: { agentName, name: agentName, address, date: when.date, time: when.time, link: links[0] },
+        templateKey: "walkthrough_agent_assignment",
+        role: "walkthrough_agent",
+        priority: "urgent",
+        trigger: "proposal-request.resend_docs",
       });
       agentEmailed = mail.ok;
       const sms =
         `Novara: walkthrough docs for ${address}. Open the site findings form (auto-saves; office can add too): ${links[0]}`;
-      agentTexted = await sendProposalSms(supabase, c.phone, sms);
+      agentTexted = await sendProposalSms(supabase, c.phone, sms, {
+        email: c.email ? String(c.email) : null,
+        trigger: "proposal-request.resend_docs_sms",
+      });
     }
 
     return NextResponse.json({ ok: true, links, agentEmailed, agentTexted });

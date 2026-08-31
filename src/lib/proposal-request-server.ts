@@ -4,6 +4,7 @@
 // through admin-send-email, and creates proposal requests without ever
 // inserting a booking.
 
+import { sendPartnershipMessage } from "@/lib/partnership-comms";
 import { randomBytes } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
@@ -44,33 +45,81 @@ export async function loadProposalChecklists(supabase: SB): Promise<ProposalChec
 
 export async function sendProposalEmail(
   supabase: SB,
-  args: { to: string; subject: string; body: string; vars: EmailVars },
-): Promise<{ ok: boolean; error?: string }> {
+  args: {
+    to: string;
+    subject: string;
+    body: string;
+    vars: EmailVars;
+    templateKey?: string;
+    role?: "partner" | "walkthrough_agent" | "admin";
+    priority?: "urgent" | "standard" | "routine";
+    phone?: string | null;
+    sms?: string | null;
+    trigger?: string;
+    accountId?: string | null;
+    walkthroughId?: string | null;
+    hostId?: string | null;
+  },
+): Promise<{ ok: boolean; error?: string; emailed?: boolean; texted?: boolean }> {
   const to = args.to.trim();
   if (!to || !/.+@.+\..+/.test(to)) return { ok: false, error: "No email" };
   const subject = interpolateTemplate(args.subject, args.vars);
   const html = emailToHtml(interpolateTemplate(args.body, args.vars));
-  const { error } = await supabase.functions.invoke("admin-send-email", {
-    body: { to, subject, html },
+  const sms = args.sms ? interpolateTemplate(args.sms, args.vars) : undefined;
+  const result = await sendPartnershipMessage(supabase, {
+    templateKey: args.templateKey || "commercial_proposal_intake",
+    trigger: args.trigger || "proposal-request",
+    email: to,
+    phone: args.phone,
+    role: args.role || "partner",
+    priority: args.priority,
+    subject,
+    html,
+    sms,
+    channels: sms ? ["email", "sms"] : ["email"],
+    accountId: args.accountId,
+    walkthroughId: args.walkthroughId,
+    hostId: args.hostId,
+    vars: {
+      first_name: args.vars.name || args.vars.agentName || "there",
+      name: args.vars.name || "",
+      address: args.vars.address || "",
+      date: args.vars.date || "",
+      time: args.vars.time || "",
+      agent_name: args.vars.agentName || "",
+      link: args.vars.link || "",
+    },
   });
-  return error ? { ok: false, error: error.message } : { ok: true };
+  const err = result.results.find((r) => r.error)?.error;
+  return {
+    ok: result.ok,
+    error: result.ok ? undefined : err || "send failed",
+    emailed: result.emailed,
+    texted: result.texted,
+  };
 }
 
 export async function sendProposalSms(
   supabase: SB,
   toPhone: string | null | undefined,
   message: string,
+  extras?: { email?: string | null; walkthroughId?: string | null; trigger?: string },
 ): Promise<boolean> {
   const phone = String(toPhone || "").replace(/\D/g, "");
   if (phone.length < 10 || !message.trim()) return false;
-  const { error } = await supabase.functions.invoke("send-ghl-sms", {
-    body: { phone, message, type: "confirmation" },
+  const result = await sendPartnershipMessage(supabase, {
+    templateKey: "walkthrough_agent_assignment",
+    trigger: extras?.trigger || "proposal-request.sms",
+    email: extras?.email,
+    phone,
+    role: "walkthrough_agent",
+    priority: "urgent",
+    channels: ["sms"],
+    sms: message,
+    walkthroughId: extras?.walkthroughId,
+    vars: {},
   });
-  if (!error) return true;
-  await supabase.functions.invoke("send-sms-notification", {
-    body: { phone, message, type: "confirmation" },
-  });
-  return !error;
+  return result.texted;
 }
 
 export function mintAssignmentToken(): string {

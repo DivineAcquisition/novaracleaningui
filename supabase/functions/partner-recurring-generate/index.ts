@@ -16,7 +16,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { resolveSecret } from "../_shared/app-secrets.ts";
-import { sendSms, formatServiceDate } from "../_shared/sms.ts";
+import { formatServiceDate } from "../_shared/sms.ts";
 import { notifyDiscord } from "../_shared/discord.ts";
 import { type SB, money, finalizeBatch, sendPartnerEmail } from "../_shared/turnover-engine.ts";
 
@@ -141,13 +141,12 @@ serve(async (req) => {
         : String(sch.heads_up_week || "") === nextWeek;
       if (already) { results.push({ id: sch.id, skipped: "heads_up_sent" }); continue; }
       const msg = `Novara: your recurring turnover${dates.length === 1 ? "" : "s"} for the ${periodLabel} (${dates.length} clean${dates.length === 1 ? "" : "s"}, ${money(total)}) will be scheduled and charged tomorrow. Log in to change or skip.`;
-      if (hostRow.phone) await sendSms(admin, { toPhone: hostRow.phone, type: "reminder", message: msg });
       await sendPartnerEmail(admin, "turnover_confirmed", hostRow.email, {
         name: (hostRow.name || "").split(" ")[0] || "",
         property: `${dates.length} recurring turnover${dates.length === 1 ? "" : "s"} - ${property.nickname || property.address || ""}`,
         date: `${periodLabel} (heads-up - charges tomorrow)`,
         price: money(total),
-      });
+      }, { phone: hostRow.phone, hostId: hostRow.id, sms: msg });
       await admin.from("recurring_schedules").update({ heads_up_week: frequency === "monthly" ? `m:${monthKey}` : nextWeek }).eq("id", sch.id);
       results.push({ id: sch.id, headsUp: true, count: dates.length, total });
       continue;
@@ -216,14 +215,12 @@ serve(async (req) => {
       await admin.from("turnover_requests").delete().eq("batch_id", batch.id);
       await admin.from("booking_batches").update({ status: "payment_failed" }).eq("id", batch.id);
       const reason = !customerId || !pmId ? "no saved card" : "card declined";
-      if (hostRow.phone) {
-        await sendSms(admin, { toPhone: hostRow.phone, type: "reminder", message: `Novara: we couldn't charge your recurring turnover${dates.length === 1 ? "" : "s"} for the ${periodLabel} (${reason}). Log in to update your card and rebook.` });
-      }
+      const failSms = `Novara: we couldn't charge your recurring turnover${dates.length === 1 ? "" : "s"} for the ${periodLabel} (${reason}). Log in to update your card and rebook.`;
       await sendPartnerEmail(admin, "turnover_cancelled", hostRow.email, {
         name: (hostRow.name || "").split(" ")[0] || "",
         property: `${dates.length} recurring turnover${dates.length === 1 ? "" : "s"} - ${property.nickname || property.address || ""}`,
         date: `${periodLabel} (payment failed - ${reason})`,
-      });
+      }, { phone: hostRow.phone, hostId: hostRow.id, sms: failSms });
       await notifyDiscord(admin, {
         title: "Recurring turnover charge FAILED",
         color: 15158332,

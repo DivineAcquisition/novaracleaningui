@@ -161,6 +161,10 @@ export async function POST(req: Request): Promise<NextResponse> {
     subject: settings.pendingEmailSubject,
     body: settings.pendingEmailBody,
     vars: { name: String(request.requester_name || ""), address },
+    templateKey: "commercial_proposal_intake",
+    trigger: "proposal-request.intake",
+    accountId: String(request.business_account_id || "") || null,
+    hostId: request.host_id ? String(request.host_id) : null,
   });
   if (mail.ok) {
     await supabase.from("proposal_requests").update({
@@ -177,6 +181,10 @@ export async function POST(req: Request): Promise<NextResponse> {
         `A proposal request was submitted for ${address} (${request.property_type_key}). ` +
         `Status: Pending — Assigning Walkthrough Agent. This is not a booking.`,
       vars: { name: "team", address },
+      templateKey: "commercial_proposal_intake",
+      role: "admin",
+      trigger: "proposal-request.admin_notify",
+      accountId: String(request.business_account_id || "") || null,
     });
   }
 

@@ -6,6 +6,7 @@
 
 import { onboardingUrl } from "./session";
 import type { SnapshotProperty } from "./session";
+import { sendPartnershipMessage } from "@/lib/partnership-comms";
 
 // eslint-disable-next-line
 type Admin = any;
@@ -162,6 +163,7 @@ export async function startHostOnboardingSession(
       recipientEmail,
       recipientPhone,
       link,
+      hostId: input.hostId,
       rateSummary: snapshot
         .map((p) => `${p.nickname || p.address || "Property"}: $${p.turnover_price.toFixed(0)}/turnover`)
         .join("; "),
@@ -191,72 +193,39 @@ export async function sendHostOnboardingLink(
     link: string;
     rateSummary?: string;
     reminder?: boolean;
+    hostId?: string | null;
   },
 ): Promise<{ emailed: boolean; texted: boolean }> {
   const name = (input.recipientName || "there").split(" ")[0];
-
-  const emailRes = await supabase.functions
-    .invoke("send-partner-email", {
-      body: {
-        type: "agreement_sent",
-        email: input.recipientEmail,
-        data: {
-          name,
-          rateSummary: input.rateSummary || "",
-          agreementUrl: input.link,
-        },
-      },
-    })
-    .catch(() => ({ error: true }));
-  let emailed = !(emailRes as { error?: unknown })?.error;
-
-  if (!emailed) {
-    const html = [
-      `<p>Hi ${name},</p>`,
-      input.reminder
-        ? `<p>Just a nudge — your Host Partnership setup is part-finished and picks up exactly where you left off.</p>`
-        : `<p>Your per-turnover rates are set. Everything to finish setup is on one page:</p>`,
-      `<ol>`,
-      `<li>Review and sign the Host Partnership Agreement</li>`,
-      `<li>Confirm each property and its Company-set rate</li>`,
-      `<li>Choose a payment option and save a card</li>`,
-      `</ol>`,
-      input.rateSummary
-        ? `<p style="background:#EDE9FE;border-radius:8px;padding:12px 14px;"><strong>Your rate schedule:</strong><br/>${input.rateSummary.replace(/</g, "&lt;")}</p>`
-        : "",
-      `<p><a href="${input.link}">Open your setup page</a></p>`,
-      `<p>You don't have to do it all at once. The same link brings you back to where you stopped.</p>`,
-      `<p>— Novara Cleaning</p>`,
-    ].join("");
-    const fallback = await supabase.functions
-      .invoke("admin-send-email", {
-        body: {
-          to: input.recipientEmail,
-          subject: input.reminder
-            ? "Finishing your Novara host setup"
-            : "Action needed: sign your Novara Host Partnership Agreement",
-          html,
-        },
-      })
-      .catch(() => ({ error: true }));
-    emailed = !(fallback as { error?: unknown })?.error;
-  }
-
-  let texted = false;
-  if (input.recipientPhone) {
-    const smsRes = await supabase.functions
-      .invoke("send-ghl-sms", {
-        body: {
-          phone: input.recipientPhone,
-          type: "confirmation",
-          message: input.reminder
-            ? `Novara Cleaning: your host setup is part-finished — pick up where you left off: ${input.link}`
-            : `${name}, your Novara Host Partnership Agreement (with your rates) is ready. Review, sign, and finish payment setup: ${input.link}`,
-        },
-      })
-      .catch(() => ({ error: true }));
-    texted = !(smsRes as { error?: unknown })?.error;
-  }
+  const rateHtml = input.rateSummary
+    ? `<p style="background:#EDE9FE;border-radius:8px;padding:12px 14px;"><strong>Your rate schedule:</strong><br/>${input.rateSummary.replace(/</g, "&lt;")}</p>`
+    : "";
+  const sent = await sendPartnershipMessage(supabase, {
+    templateKey: "host_onboarding_link",
+    trigger: input.reminder ? "host-onboarding.reminder" : "host-onboarding.send",
+    email: input.recipientEmail,
+    phone: input.recipientPhone,
+    hostId: input.hostId,
+    vars: {
+      first_name: name,
+      link: input.link,
+      rate_summary_html: rateHtml,
+    },
+    html: input.reminder
+      ? [
+        `<p>Hi ${name},</p>`,
+        `<p>Just a nudge — your Host Partnership setup is part-finished and picks up exactly where you left off.</p>`,
+        rateHtml,
+        `<p><a href="${input.link}">Open your setup page</a></p>`,
+        `<p>You don't have to do it all at once. The same link brings you back to where you stopped.</p>`,
+      ].join("")
+      : undefined,
+    sms: input.reminder
+      ? `Novara Cleaning: your host setup is part-finished — pick up where you left off: ${input.link}`
+      : undefined,
+  });
+  const emailed = sent.emailed;
+  const texted = sent.texted;
 
   const { data } = await supabase
     .from("host_onboarding_sessions")

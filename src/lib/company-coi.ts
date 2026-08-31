@@ -19,6 +19,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
+import { sendPartnershipMessage } from "@/lib/partnership-comms";
 import {
   COMPANY_COI_CARRIER,
   COMPANY_COI_COVERAGE_NOTES,
@@ -279,19 +280,27 @@ export async function sendCompanyCoi(
     `— Novara Cleaning`,
   ].filter(Boolean);
 
-  const { error: mailError } = await supabase.functions.invoke("admin-send-email", {
-    body: {
-      to,
-      subject: `Certificate of insurance — NovaraCleaning LLC`,
-      html: lines.map((l) => `<p>${l}</p>`).join(""),
-      attachments: [
-        {
-          filename: doc.document_name || "novara-certificate-of-insurance.pdf",
-          content: base64,
-        },
-      ],
+  const sent = await sendPartnershipMessage(supabase, {
+    templateKey: "coi_delivery_client",
+    trigger: `company-coi.${trigger}`,
+    email: to,
+    accountId: args.accountId,
+    vars: {
+      first_name: acct.contact_name || "there",
+      business_name: acct.business_name,
+      expires,
     },
+    html: lines.map((l) => `<p>${l}</p>`).join(""),
+    attachments: [
+      {
+        filename: doc.document_name || "novara-certificate-of-insurance.pdf",
+        content: base64,
+      },
+    ],
   });
+  const mailError = sent.emailed || sent.results.some((r) => r.channel === "email" && r.status === "sent")
+    ? null
+    : sent.results.find((r) => r.error)?.error || (sent.ok ? null : "Could not send the certificate");
 
   if (mailError) {
     await supabase.from("company_coi_deliveries").insert({
@@ -302,10 +311,10 @@ export async function sendCompanyCoi(
       sent_by_name: args.sentByName || "System",
       trigger_source: trigger,
       status: "failed",
-      failure_reason: mailError.message,
+      failure_reason: mailError,
       certificate_expires_at: doc.expiration_date,
     });
-    return { ok: false, status: 502, error: `Could not send the certificate: ${mailError.message}` };
+    return { ok: false, status: 502, error: `Could not send the certificate: ${mailError}` };
   }
 
   await supabase.from("company_coi_deliveries").insert({

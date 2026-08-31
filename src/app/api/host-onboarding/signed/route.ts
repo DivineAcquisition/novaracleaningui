@@ -10,6 +10,7 @@
 
 import { NextResponse } from "next/server";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
+import { sendPartnershipMessage } from "@/lib/partnership-comms";
 import { markHostAgreementSigned } from "@/lib/airtable";
 import { invokeHostOnboardingGhl } from "@/lib/host-onboarding/ghl";
 
@@ -85,21 +86,18 @@ export async function POST(req: Request): Promise<NextResponse> {
   // Lifecycle comms — "you're active" (email via Resend + SMS via GHL).
   const firstName = (submission.full_name || "").split(" ")[0] || "there";
   try {
-    await supabase.functions.invoke("send-partner-email", {
-      body: { type: "agreement_signed", email: submission.email, data: { name: firstName } },
+    await sendPartnershipMessage(supabase, {
+      templateKey: "host_agreement_signed",
+      trigger: "host-onboarding.agreement_signed",
+      email: submission.email,
+      phone: submission.phone,
+      hostId: submission.host_id || null,
+      vars: {
+        first_name: firstName,
+        link: "https://partners.novaracleaning.com/partner",
+      },
     });
   } catch { /* best-effort */ }
-  if (submission.phone) {
-    try {
-      await supabase.functions.invoke("send-ghl-sms", {
-        body: {
-          phone: submission.phone,
-          message: `You're all set, ${firstName}! Your Novara Host Partnership Agreement is signed and your properties are active. Request a turnover anytime: https://partner.novaracleaning.com/partner/dashboard - NovaraCleaning`,
-          type: "confirmation",
-        },
-      });
-    } catch { /* best-effort */ }
-  }
 
   return NextResponse.json({ ok: true, signed: true, warnings: warnings.length ? warnings : undefined });
 }
