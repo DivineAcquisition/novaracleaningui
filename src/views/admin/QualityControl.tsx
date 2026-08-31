@@ -1003,7 +1003,9 @@ function CreateIssueDialog({ onClose, reload }: { onClose: () => void; reload: (
         sel = sel.or(`email.ilike.%${q}%,first_name.ilike.%${q}%,last_name.ilike.%${q}%`);
       }
       const { data } = await sel;
-      setResults((data || []) as BookingPick[]);
+      // photo_zones is stamped on bookings at dispatch; generated Database
+      // types still lag that column, so the result is asserted through unknown.
+      setResults((data || []) as unknown as BookingPick[]);
     } finally {
       setSearching(false);
     }
