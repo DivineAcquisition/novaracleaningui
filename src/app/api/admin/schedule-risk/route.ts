@@ -24,6 +24,7 @@ import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireAdmin, AdminAuthError } from "@/lib/admin-auth";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
+import { sendPartnershipMessage } from "@/lib/partnership-comms/server";
 import {
   SCHEDULE_GUARD_SETTINGS_KEY,
   mergeScheduleGuardSettings,
@@ -429,7 +430,7 @@ export async function POST(req: Request): Promise<NextResponse> {
 
         const { data: booking } = await supabase
           .from("bookings")
-          .select("id, booking_number, first_name, last_name, phone, email, service_date, time_slot, address, city, state")
+          .select("id, booking_number, first_name, last_name, phone, email, service_date, time_slot, address, city, state, business_account_id")
           .eq("id", msg.booking_id)
           .maybeSingle();
         if (!booking) return NextResponse.json({ error: "Booking not found." }, { status: 404 });
@@ -442,8 +443,30 @@ export async function POST(req: Request): Promise<NextResponse> {
 
         const sentVia: string[] = [];
         let lastError: string | null = null;
+        const commercialAccountId = (booking as { business_account_id?: string | null }).business_account_id || null;
 
-        if ((channel === "sms" || channel === "both") && booking.phone) {
+        if (commercialAccountId) {
+          const result = await sendPartnershipMessage(supabase, {
+            templateKey: "crew_lead_heads_up",
+            trigger: "schedule-risk.crew_lead_heads_up",
+            email: booking.email,
+            phone: booking.phone,
+            accountId: commercialAccountId,
+            priority: "urgent",
+            vars: {
+              first_name: booking.first_name || "there",
+              message: text.replace(/\n/g, "<br/>"),
+            },
+            html: `<p>Hi ${booking.first_name || "there"},</p><p>${text.replace(/\n/g, "<br/>")}</p><p>Reply to this email and it reaches the conversation on your account.</p>`,
+            sms: text,
+            channels: channel === "both" ? ["email", "sms"] : [channel],
+          });
+          for (const r of result.results) {
+            if (r.status === "sent" || r.status === "queued" || r.status === "retry") sentVia.push(r.channel);
+            else if (r.error) lastError = r.error;
+          }
+        } else {
+          if ((channel === "sms" || channel === "both") && booking.phone) {
           try {
             const { error } = await supabase.functions.invoke("send-ghl-sms", {
               body: {
@@ -474,6 +497,7 @@ export async function POST(req: Request): Promise<NextResponse> {
           } catch (e) {
             lastError = (e as Error).message;
           }
+        }
         }
 
         if (sentVia.length === 0) {

@@ -10,6 +10,7 @@ import { resolveAppSecret, stripeCall } from "@/lib/stripe-rest";
 import { MIN_PASSWORD_LENGTH } from "./types";
 import type { PaymentOptionKey } from "./agreement";
 import { parseSnapshot, portalUrl } from "./session";
+import { sendPartnershipMessage } from "@/lib/partnership-comms/server";
 
 // eslint-disable-next-line
 type Admin = any;
@@ -626,9 +627,16 @@ async function notifyAdmin(
     process.env.HOST_ONBOARDING_NOTIFY_EMAIL ||
     null;
   if (!notify) return;
-  await supabase.functions
-    .invoke("admin-send-email", {
-      body: { to: notify, subject: input.subject, html: input.html },
-    })
-    .catch(() => null);
+  await sendPartnershipMessage(supabase, {
+    templateKey: "admin_internal_notice",
+    trigger: input.eventType,
+    role: "admin",
+    email: notify,
+    subject: input.subject,
+    html: input.html,
+    vars: {
+      subject_line: input.subject,
+      body_html: input.html,
+    },
+  }).catch(() => null);
 }

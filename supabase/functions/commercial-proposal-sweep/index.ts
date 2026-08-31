@@ -21,6 +21,7 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { sendPartnership } from "../_shared/partnership-comms.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -51,10 +52,33 @@ async function setting(admin: SB, key: string, fallback: number): Promise<number
   return Number.isFinite(n) ? n : fallback;
 }
 
-async function emailOut(admin: SB, to: string, subject: string, html: string): Promise<boolean> {
-  const { error } = await admin.functions.invoke("admin-send-email", { body: { to, subject, html } });
-  if (error) log("email failed", { to, error: error.message });
-  return !error;
+async function emailOut(
+  admin: SB,
+  args: {
+    to: string;
+    subject: string;
+    html: string;
+    templateKey: string;
+    trigger: string;
+    role?: "partner" | "admin";
+    vars?: Record<string, string>;
+    accountId?: string | null;
+    idempotencyKey?: string;
+  },
+): Promise<boolean> {
+  const sent = await sendPartnership(admin, {
+    templateKey: args.templateKey,
+    trigger: args.trigger,
+    email: args.to,
+    role: args.role || "partner",
+    subject: args.subject,
+    html: args.html,
+    vars: args.vars,
+    accountId: args.accountId,
+    idempotencyKey: args.idempotencyKey,
+  });
+  if (!sent.ok) log("email failed", { to: args.to, results: sent.results });
+  return sent.ok;
 }
 
 serve(async (req) => {
@@ -114,18 +138,27 @@ serve(async (req) => {
 
       const to = (p.sent_to as string) || (p.recipient_email as string) || "";
       if (to && p.token) {
-        await emailOut(
-          admin,
+        await emailOut(admin, {
           to,
-          `Your cleaning proposal for ${business} expires soon`,
-          [
+          subject: `Your cleaning proposal for ${business} expires soon`,
+          html: [
             `<p>Hi ${(p.recipient_name as string) || "there"},</p>`,
             `<p>Your proposal for <strong>${business}</strong> is open for ${days} more day${days === 1 ? "" : "s"}.</p>`,
             `<p><a href="https://commercial.novaracleaning.com/proposal/${String(p.token)}">Review the proposal</a></p>`,
             `<p>If the pricing or scope needs adjusting, use "Request changes" on the page and we'll send a revised version — no need to start over.</p>`,
             `<p>— Novara Cleaning</p>`,
           ].join(""),
-        );
+          templateKey: "commercial_proposal_expiry",
+          trigger: "commercial-proposal-sweep.client",
+          role: "partner",
+          accountId: String(p.business_account_id || "") || null,
+          vars: {
+            first_name: String(p.recipient_name || "there").split(" ")[0],
+            business_name: business,
+            link: `https://commercial.novaracleaning.com/proposal/${String(p.token)}`,
+          },
+          idempotencyKey: `proposal-expiry-client:${String(p.id)}`,
+        });
       }
 
       const owner =
@@ -133,17 +166,25 @@ serve(async (req) => {
         (account as { assigned_va_email?: string } | null)?.assigned_va_email ||
         "";
       if (owner) {
-        await emailOut(
-          admin,
-          owner,
-          `Proposal expiring — ${business} (v${p.version})`,
-          [
+        await emailOut(admin, {
+          to: owner,
+          subject: `Proposal expiring — ${business} (v${p.version})`,
+          html: [
             `<p>Proposal v${p.version} for <strong>${business}</strong> (${money(Number(p.total_per_visit_cents || 0))} per visit) expires in ${days} day${days === 1 ? "" : "s"}.</p>`,
             opened
               ? `<p>They've opened it but haven't responded. That's usually a question they haven't asked — worth a call.</p>`
               : `<p><strong>They've never opened it.</strong> Check the address, or reach them another way before it lapses.</p>`,
           ].join(""),
-        );
+          templateKey: "admin_internal_notice",
+          trigger: "commercial-proposal-sweep.owner",
+          role: "admin",
+          accountId: String(p.business_account_id || "") || null,
+          vars: {
+            subject_line: `Proposal expiring — ${business} (v${p.version})`,
+            body_html: "",
+          },
+          idempotencyKey: `proposal-expiry-owner:${String(p.id)}`,
+        });
       }
 
       await admin.from("events").insert({

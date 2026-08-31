@@ -28,6 +28,10 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { sendSms, formatServiceDate, formatTimeSlot } from "../_shared/sms.ts";
 import {
+  recordPartnershipOptOut,
+  revokePartnershipOptOut,
+} from "../_shared/partnership-comms.ts";
+import {
   decideCancelFee,
   decideRescheduleFee,
   toE164,
@@ -56,6 +60,7 @@ const TOKEN_YES = new Set(["YES", "Y", "CONFIRM"]);
 const TOKEN_NO = new Set(["NO", "N", "KEEP", "NEVERMIND"]);
 const TOKEN_HELP = new Set(["HELP", "INFO", "SUPPORT"]);
 const TOKEN_STOP = new Set(["STOP", "STOPALL", "UNSUBSCRIBE", "CANCELSMS", "END", "QUIT"]);
+const TOKEN_SMS_OPT_IN = new Set(["START", "UNSTOP"]);
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -169,9 +174,27 @@ serve(async (req) => {
         body: { phone: fromPhone, message: text },
       });
     } catch (e) { log("optout invoke failed", { error: e instanceof Error ? e.message : String(e) }); }
+    try {
+      await recordPartnershipOptOut(supabase, {
+        phone: fromPhone,
+        channel: "sms",
+        source: "sms_stop",
+      });
+    } catch (e) { log("partnership opt-out failed", { error: e instanceof Error ? e.message : String(e) }); }
     return finalize(
       "stop",
       `Novara Cleaning: You have been opted out of texts. Reply START to opt back in. Help? Call ${SUPPORT_PHONE_DISPLAY}.`,
+    );
+  }
+  // Exact START / UNSTOP re-enables partnership SMS. START JOB is a
+  // different token handled later on the cleaner turnover path.
+  if (TOKEN_SMS_OPT_IN.has(upper)) {
+    try {
+      await revokePartnershipOptOut(supabase, { phone: fromPhone, channel: "sms" });
+    } catch (e) { log("partnership opt-in failed", { error: e instanceof Error ? e.message : String(e) }); }
+    return finalize(
+      "start_optin",
+      `Novara Cleaning: You are opted back in to texts. Reply STOP to opt out. Help? Call ${SUPPORT_PHONE_DISPLAY}.`,
     );
   }
   if (TOKEN_HELP.has(upper)) {

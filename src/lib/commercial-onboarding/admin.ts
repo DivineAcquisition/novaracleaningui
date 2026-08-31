@@ -12,6 +12,7 @@
 // targeted re-setup if it later changes.
 
 import { onboardingUrl } from "./session";
+import { sendPartnershipMessage } from "@/lib/partnership-comms/server";
 
 // eslint-disable-next-line
 type Admin = any;
@@ -196,6 +197,7 @@ export async function startOnboardingSession(
       recipientPhone: input.recipientPhone || (account.phone as string) || null,
       billingMethod: input.billingMethod,
       link,
+      accountId: input.accountId,
     });
     result.emailed = sent.emailed;
     result.texted = sent.texted;
@@ -237,6 +239,7 @@ export interface SendLinkInput {
   link: string;
   /** Wording for a nudge rather than a first send. */
   reminder?: boolean;
+  accountId?: string | null;
 }
 
 /** Email and, when we have a number, text the link. Same pattern as everywhere else. */
@@ -244,56 +247,31 @@ export async function sendOnboardingLink(
   supabase: Admin,
   input: SendLinkInput,
 ): Promise<{ emailed: boolean; texted: boolean }> {
-  const name = input.recipientName || "there";
-  const billingLine =
-    input.billingMethod === "auto_pay"
-      ? "adding a card or bank account for Auto-Pay (nothing is charged when you do)"
-      : "confirming where your invoices should go (no payment details needed)";
-
-  const html = [
-    `<p>Hi ${name},</p>`,
-    input.reminder
-      ? `<p>Just a nudge — setting up <strong>${input.accountName}</strong> is part-finished and picks up exactly where you left off.</p>`
-      : `<p>Everything to get <strong>${input.accountName}</strong> started is on one page:</p>`,
-    `<ol>`,
-    `<li>Review your pricing and terms</li>`,
-    `<li>Sign the services agreement</li>`,
-    `<li>Finish billing — ${billingLine}</li>`,
-    `<li>Create your portal login</li>`,
-    `</ol>`,
-    `<p><a href="${input.link}">Open your setup page</a></p>`,
-    `<p>You don't have to do it all at once. The same link brings you back to where you stopped.</p>`,
-    `<p>— Novara Cleaning</p>`,
-  ].join("");
-
-  const emailRes = await supabase.functions
-    .invoke("admin-send-email", {
-      body: {
-        to: input.recipientEmail,
-        subject: input.reminder
-          ? `Finishing setup for ${input.accountName}`
-          : `Getting ${input.accountName} set up — Novara Cleaning`,
-        html,
-      },
-    })
-    .catch(() => ({ error: true }));
-  const emailed = !(emailRes as { error?: unknown })?.error;
-
-  let texted = false;
-  if (input.recipientPhone) {
-    const smsRes = await supabase.functions
-      .invoke("send-ghl-sms", {
-        body: {
-          phone: input.recipientPhone,
-          type: "confirmation",
-          message: input.reminder
-            ? `Novara Cleaning: your setup for ${input.accountName} is part-finished — pick up where you left off: ${input.link}`
-            : `Novara Cleaning: here's everything to get ${input.accountName} started, on one page: ${input.link}`,
-        },
-      })
-      .catch(() => ({ error: true }));
-    texted = !(smsRes as { error?: unknown })?.error;
-  }
+  const name = (input.recipientName || "there").split(" ")[0];
+  const sent = await sendPartnershipMessage(supabase, {
+    templateKey: "commercial_onboarding_link",
+    trigger: input.reminder ? "commercial-onboarding.reminder" : "commercial-onboarding.send",
+    email: input.recipientEmail,
+    phone: input.recipientPhone,
+    accountId: input.accountId,
+    vars: {
+      first_name: name,
+      business_name: input.accountName,
+      link: input.link,
+    },
+    html: input.reminder
+      ? [
+        `<p>Hi ${name},</p>`,
+        `<p>Just a nudge — setting up <strong>${input.accountName}</strong> is part-finished and picks up exactly where you left off.</p>`,
+        `<p><a href="${input.link}">Open your setup page</a></p>`,
+      ].join("")
+      : undefined,
+    sms: input.reminder
+      ? `Novara Cleaning: your setup for ${input.accountName} is part-finished — pick up where you left off: ${input.link}`
+      : undefined,
+  });
+  const emailed = sent.emailed;
+  const texted = sent.texted;
 
   await supabase
     .from("commercial_onboarding_sessions")

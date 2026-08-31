@@ -6,7 +6,7 @@
 // in one wrapping tab strip; that is too many things competing for the same
 // row. They are grouped into five workspaces:
 //
-//   Home        — Overview, Accounts
+//   Home        — Overview, Accounts, Comms
 //   Deals       — Walkthroughs (findings → firm price). Send and pipeline
 //                 live on the dedicated Proposals tab so VA and admin share
 //                 one quote path.
@@ -14,7 +14,7 @@
 //   Compliance  — COI (client certs + Novara's own)
 //   STR         — turnovers / hosts
 //
-// Deep links still use ?tab=overview|accounts|walkthroughs|send|pipeline|
+// Deep links still use ?tab=overview|accounts|comms|walkthroughs|send|pipeline|
 // book|recurring|checklists|compliance|str. Old Partnerships Hub aliases keep working.
 // ?tab=send and ?tab=pipeline redirect to /admin/proposals.
 
@@ -29,6 +29,7 @@ import {
   RiFileTextLine,
   RiHotelLine,
   RiLoader4Line,
+  RiMailLine,
   RiMailSendLine,
   RiRefreshLine,
   RiRulerLine,
@@ -49,11 +50,13 @@ import PartnerRecurringSchedules from "@/views/admin/PartnerRecurringSchedules";
 import CommercialWalkthroughs from "@/views/admin/CommercialWalkthroughs";
 import CommercialChecklists from "@/views/admin/CommercialChecklists";
 import CoiCompliance from "@/views/admin/CoiCompliance";
+import PartnershipComms from "@/views/admin/PartnershipComms";
 import { syncPartners, syncContractors } from "@/lib/partner-admin-api";
 
 const VALID_TABS = [
   "overview",
   "accounts",
+  "comms",
   "walkthroughs",
   "send",
   "pipeline",
@@ -74,6 +77,7 @@ const TAB_ALIASES: Record<string, Tab> = {
   ops: "str",
   proposals: "pipeline",
   partner: "overview",
+  communications: "comms",
 };
 
 function isTab(v: string): v is Tab {
@@ -86,6 +90,7 @@ const SCREENS: Record<
 > = {
   overview: { label: "Overview", icon: RiDashboardLine },
   accounts: { label: "Accounts", icon: RiHotelLine },
+  comms: { label: "Comms", icon: RiMailLine },
   walkthroughs: { label: "Walkthroughs", icon: RiRulerLine },
   send: { label: "Send proposal", icon: RiMailSendLine },
   pipeline: { label: "Pipeline", icon: RiFileTextLine },
@@ -106,8 +111,8 @@ const WORKSPACES: Array<{
   {
     id: "home",
     label: "Home",
-    description: "Pipeline snapshot and the account list.",
-    tabs: ["overview", "accounts"],
+    description: "Pipeline snapshot, the account list, and partnership communications.",
+    tabs: ["overview", "accounts", "comms"],
     fallback: "overview",
   },
   {
@@ -143,6 +148,7 @@ const WORKSPACES: Array<{
 const TAB_WORKSPACE: Record<Tab, WorkspaceId> = {
   overview: "home",
   accounts: "home",
+  comms: "home",
   walkthroughs: "deals",
   send: "deals",
   pipeline: "deals",
@@ -330,6 +336,7 @@ export default function CommercialHub() {
 
       <div className="pt-1">
         {tab === "overview" && <PartnershipsOverview />}
+        {tab === "comms" && <PartnershipComms />}
         {tab === "accounts" && (
           <div className="space-y-4">
             <PartnershipAccounts />

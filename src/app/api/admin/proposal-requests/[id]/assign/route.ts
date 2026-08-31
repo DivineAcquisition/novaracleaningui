@@ -268,7 +268,11 @@ export async function POST(
     const sms =
       `Novara: paid walkthrough ${when.label} at ${address}. ` +
       `Open the site findings form (auto-saves): ${link}`;
-    await sendProposalSms(supabase, c.phone, sms);
+    await sendProposalSms(supabase, c.phone, sms, {
+      email: c.email ? String(c.email) : null,
+      walkthroughId: wtId,
+      trigger: "proposal-request.assign_agent_sms",
+    });
   }
 
   await supabase.from("proposal_requests").update({
@@ -287,11 +291,16 @@ export async function POST(
     body: settings.agentEmailBody + (links.length > 1 ? `\n\nAll site links:\n${links.join("\n")}` : ""),
     vars: {
       agentName,
+      name: agentName,
       address: addressLabel,
       date: when.date,
       time: when.time,
       link: firstLink,
     },
+    templateKey: "walkthrough_agent_assignment",
+    role: "walkthrough_agent",
+    priority: "urgent",
+    trigger: "proposal-request.assign_agent_summary",
   });
 
   const requesterMail = await sendProposalEmail(supabase, {
@@ -305,6 +314,9 @@ export async function POST(
       time: when.time,
       agentName,
     },
+    templateKey: "walkthrough_scheduled",
+    trigger: "proposal-request.walkthrough_scheduled",
+    accountId: String(reqRow.business_account_id || "") || null,
   });
   if (requesterMail.ok) {
     await supabase.from("proposal_requests").update({

@@ -639,6 +639,9 @@ verify_jwt = false
 [functions.partner-turnover]
 verify_jwt = false
 
+[functions.partnership-comms-sweep]
+verify_jwt = false
+
 [functions.payroll-admin]
 verify_jwt = false
 

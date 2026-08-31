@@ -26,7 +26,7 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-import { resolveSecret } from "../_shared/app-secrets.ts";
+import { sendPartnership } from "../_shared/partnership-comms.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -100,21 +100,20 @@ async function emailOwner(
   to: string,
   subject: string,
   body: string,
+  vars: { business_name: string; milestone: string; detail: string; account_id?: string },
 ): Promise<boolean> {
   try {
-    const key = (await resolveSecret(admin, "RESEND_API_KEY")).trim();
-    if (!key) return false;
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        from: "Novara Cleaning <ops@novaracleaning.com>",
-        to: [to],
-        subject,
-        html: body.split("\n").map((l) => `<p>${l}</p>`).join(""),
-      }),
+    const sent = await sendPartnership(admin, {
+      templateKey: "coi_expiry_admin",
+      trigger: "coi-expiry-monitor",
+      role: "admin",
+      email: to,
+      accountId: vars.account_id || null,
+      subject,
+      html: body.split("\n").map((l) => `<p>${l}</p>`).join(""),
+      vars,
     });
-    return res.ok;
+    return sent.ok;
   } catch (e) {
     log("owner email failed (non-blocking)", { error: String(e) });
     return false;
@@ -226,6 +225,12 @@ serve(async (req) => {
             ? `COI expired — ${row.business_name} is blocked`
             : `COI renewal needed — ${row.business_name} (${days} days)`,
           `${detail}\n\nUpload the renewed certificate in the admin console under Commercial → Compliance. A valid expiry date lifts the block immediately.`,
+          {
+            business_name: String(row.business_name || ""),
+            milestone,
+            detail,
+            account_id: String(row.account_id || ""),
+          },
         );
         if (ok) channel = "events+email";
       }

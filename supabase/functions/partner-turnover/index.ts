@@ -3,6 +3,7 @@ import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { resolveSecret } from "../_shared/app-secrets.ts";
 import { sendSms, formatServiceDate } from "../_shared/sms.ts";
+import { sendHostPartnership } from "../_shared/partnership-comms.ts";
 import { notifyDiscord } from "../_shared/discord.ts";
 import { syncTurnoverToGhl, upsertHostContact } from "../_shared/ghl-partner-sync.ts";
 import { sendHostAgreement } from "../_shared/host-onboarding-ghl.ts";
@@ -47,12 +48,23 @@ function targetCrewSize(sqft: number | null): number | null {
 }
 
 // Fire a branded host email (best-effort).
-async function sendHostEmail(admin: SB, type: string, email: string | null | undefined, data: Record<string, unknown>) {
-  if (!email) return;
+async function sendHostEmail(
+  admin: SB,
+  type: string,
+  email: string | null | undefined,
+  data: Record<string, unknown>,
+  phone?: string | null,
+  hostId?: string | null,
+  channels?: Array<"email" | "sms">,
+) {
   try {
-    await admin.functions.invoke("send-partner-email", { body: { type, email, data } });
+    await sendHostPartnership(admin, type, email, phone, data, {
+      hostId,
+      trigger: `partner-turnover.${type}`,
+      channels,
+    });
   } catch (e) {
-    console.warn("[partner-turnover] email failed", type, e instanceof Error ? e.message : String(e));
+    console.warn("[partner-turnover] partnership send failed", type, e instanceof Error ? e.message : String(e));
   }
 }
 function fmtWindow(start?: string | null, end?: string | null): string {
@@ -179,7 +191,7 @@ serve(async (req) => {
         // First-time host -> welcome email.
         await sendHostEmail(admin, "welcome", userEmail, {
           name: (resolvedName || "").split(" ")[0] || "",
-        });
+        }, resolvedPhone, host.id);
       } else if (body.name || body.phone || (!host.name && metaName) || (!host.phone && metaPhone)) {
         await admin.from("hosts").update({
           name: body.name?.trim() || host.name || metaName || null,
@@ -588,14 +600,7 @@ serve(async (req) => {
         address: rProp?.address || "",
         date: formatServiceDate(body.requested_date as string),
         window: fmtWindow(body.window_start || fresh.window_start, body.window_end || fresh.window_end),
-      });
-      if (rHost?.phone) {
-        await sendSms(admin, {
-          toPhone: rHost.phone,
-          message: `Your turnover at ${rProp?.nickname || rProp?.address || "your property"} is moved to ${formatServiceDate(body.requested_date as string)}. We're re-assigning a vetted cleaner. - NovaraCleaning`,
-          type: "confirmation",
-        });
-      }
+      }, rHost?.phone, rHost?.id);
       const { data: after } = await admin.from("turnover_requests").select("status, assignment_type").eq("id", tr.id).single();
       return json({ ok: true, status: after?.status, assignment_type: after?.assignment_type });
     }
@@ -639,14 +644,7 @@ serve(async (req) => {
         name: (host.name || "").split(" ")[0] || "",
         property: cProp?.nickname || cProp?.address || "",
         date: formatServiceDate(tr.requested_date as string),
-      });
-      if (host.phone) {
-        await sendSms(admin, {
-          toPhone: host.phone,
-          message: `Your turnover at ${cProp?.nickname || cProp?.address || "your property"} on ${formatServiceDate(tr.requested_date as string)} is cancelled. Rebook anytime in your portal. - NovaraCleaning`,
-          type: "confirmation",
-        });
-      }
+      }, host.phone, host.id);
       // Reflect the cancellation in GHL (opportunity → lost).
       try {
         await syncTurnoverToGhl(admin, { host, property: cProp, turnover: { ...tr, status: "cancelled" } });
@@ -786,16 +784,7 @@ serve(async (req) => {
         name: firstName,
         rateSummary,
         agreementUrl: onboardingLink,
-      });
-      if (targetHost.phone) {
-        await sendSms(admin, {
-          toPhone: targetHost.phone,
-          type: "confirmation",
-          message: onboardingLink
-            ? `${firstName}, your Novara Host Partnership Agreement (with your rates) is ready. Review, sign, and finish payment setup: ${onboardingLink}`
-            : `${firstName}, your Novara Host Partnership Agreement (with your rates) is ready to e-sign. Check your email. - NovaraCleaning`,
-        });
-      }
+      }, targetHost.phone, targetHost.id);
 
       // Advance the onboarding submission lifecycle.
       if (sub?.id) {
@@ -897,14 +886,7 @@ serve(async (req) => {
         window: windowLabel,
         price: money(Number(property.turnover_price)),
         checkoutUrl: session.url || "",
-      });
-      if (payHost.phone && session.url) {
-        await sendSms(admin, {
-          toPhone: payHost.phone,
-          type: "confirmation",
-          message: `${firstName}, your Novara turnover for ${propLabel} on ${dateLabel} is ready. Pay ${money(Number(property.turnover_price))} to confirm: ${session.url} - NovaraCleaning`,
-        });
-      }
+      }, payHost.phone, payHost.id);
 
       return json({ ok: true, url: session.url, turnoverId: tr.id });
     }
@@ -1169,14 +1151,7 @@ async function markPaidAndAssign(admin: SB, trId: string, paymentIntentId: strin
     date: formatServiceDate(tr.requested_date as string),
     window: fmtWindow(tr.window_start as string, tr.window_end as string),
     price: money(Number(tr.price || 0)),
-  });
-  if (paidHost?.phone) {
-    await sendSms(admin, {
-      toPhone: paidHost.phone,
-      message: `Payment received — your ${formatServiceDate(tr.requested_date as string)} turnover at ${paidProp?.nickname || paidProp?.address || "your property"} is booked. We're assigning your cleaner now. - NovaraCleaning`,
-      type: "confirmation",
-    });
-  }
+  }, paidHost?.phone, paidHost?.id);
   try {
     await syncTurnoverToGhl(admin, { host: paidHost, property: paidProp, turnover: { ...tr, status: "paid" } });
   } catch (e) {
@@ -1231,18 +1206,12 @@ async function handleCleanerLifecycle(admin: SB, action: string, body: Record<st
       await admin.from("turnover_requests").update({ before_photos: body.before_photos }).eq("id", tr.id);
     }
     const { property, hostRow } = await loadContext(admin, tr);
-    if (hostRow?.phone) {
-      await sendSms(admin, {
-        toPhone: hostRow.phone, type: "confirmation",
-        message: `Your cleaner has started the turnover at ${property?.nickname || property?.address || "your property"}. We'll let you know the moment it's guest-ready. - NovaraCleaning`,
-      });
-    }
     await sendHostEmail(admin, "turnover_in_progress", hostRow?.email, {
       name: (hostRow?.name || "").split(" ")[0] || "",
       property: property?.nickname || property?.address || "",
       address: property?.address || "",
       date: formatServiceDate(tr.requested_date as string),
-    });
+    }, hostRow?.phone, hostRow?.id, ["email"]);
     return json({ ok: true, status: "in_progress" });
   }
 
@@ -1395,36 +1364,16 @@ async function notifyAssignment(admin: SB, tr: Record<string, unknown>) {
     ],
   });
 
-  // 3. Host SMS + email.
-  if (hostRow?.phone) {
-    await sendSms(admin, {
-      toPhone: hostRow.phone,
-      type: "confirmation",
-      message: `Your turnover for ${nickname} on ${dateLabel} is confirmed and assigned. We'll have it guest-ready${windowLabel ? ` by the end of your ${windowLabel} window` : ""}. - NovaraCleaning`,
-    });
-  }
+  // 3. Host notice through the partnership layer — no crew contact.
   await sendHostEmail(admin, "turnover_assigned", hostRow?.email, {
     name: (hostRow?.name || "").split(" ")[0] || "",
     property: nickname,
     address: property?.address || "",
     date: dateLabel,
     window: windowLabel,
-    cleaner: cleaner?.first_name || "Your cleaner",
-  });
+  }, hostRow?.phone, hostRow?.id);
 
-  // 4. Cleaner email (if on file) - SMS already sent above.
-  if (cleaner?.email) {
-    await sendHostEmail(admin, "turnover_assigned", cleaner.email, {
-      name: cleaner.first_name || "",
-      property: nickname,
-      address: property?.address || "",
-      date: dateLabel,
-      window: windowLabel,
-      cleaner: cleaner.first_name || "you",
-    });
-  }
-
-  // 5. Patch the GHL opportunity with the assigned cleaner + assigned status.
+  // 4. Patch the GHL opportunity with the assigned cleaner + assigned status.
   try {
     await syncTurnoverToGhl(admin, { host: hostRow, property, turnover: tr, cleaner });
   } catch (e) {
@@ -1451,20 +1400,13 @@ async function notifyCleanerConfirmed(admin: SB, tr: Record<string, unknown>) {
       { name: "Cleaner", value: cleaner?.first_name || "Cleaner", inline: true },
     ],
   });
-  if (hostRow?.phone) {
-    await sendSms(admin, {
-      toPhone: hostRow.phone, type: "confirmation",
-      message: `Good news — ${cleaner?.first_name || "your cleaner"} confirmed your ${dateLabel} turnover at ${nickname}. - NovaraCleaning`,
-    });
-  }
   await sendHostEmail(admin, "turnover_cleaner_confirmed", hostRow?.email, {
     name: (hostRow?.name || "").split(" ")[0] || "",
     property: nickname,
     address: property?.address || "",
     date: dateLabel,
     window: fmtWindow(tr.window_start as string, tr.window_end as string),
-    cleaner: cleaner?.first_name || "Your cleaner",
-  });
+  }, hostRow?.phone, hostRow?.id);
 }
 
 // Turnover marked complete → tell the host it's guest-ready + invite a rating.
@@ -1501,15 +1443,9 @@ async function notifyTurnoverCompleted(admin: SB, tr: Record<string, unknown>) {
       { name: "Photos", value: String(photos.length), inline: true },
     ],
   });
-  if (hostRow?.phone) {
-    const photoLine = photos.length
-      ? ` View the ${photos.length} before/after photo${photos.length === 1 ? "" : "s"}: ${galleryUrl}`
-      : "";
-    await sendSms(admin, {
-      toPhone: hostRow.phone, type: "confirmation",
-      message: `${nickname} is guest-ready! Your ${dateLabel} turnover is complete.${photoLine} Rate your clean: https://partner.novaracleaning.com/partner/dashboard - NovaraCleaning`,
-    });
-  }
+  const photoLine = photos.length
+    ? ` View the ${photos.length} before/after photo${photos.length === 1 ? "" : "s"}: ${galleryUrl}`
+    : "";
   await sendHostEmail(admin, "turnover_completed", hostRow?.email, {
     name: (hostRow?.name || "").split(" ")[0] || "",
     property: nickname,
@@ -1517,7 +1453,8 @@ async function notifyTurnoverCompleted(admin: SB, tr: Record<string, unknown>) {
     date: dateLabel,
     photos,
     galleryUrl,
-  });
+    smsOverride: `${nickname} is guest-ready! Your ${dateLabel} turnover is complete.${photoLine} Rate your clean: https://partner.novaracleaning.com/partner/dashboard - NovaraCleaning`,
+  }, hostRow?.phone, hostRow?.id);
   try {
     await syncTurnoverToGhl(admin, { host: hostRow, property, turnover: { ...tr, status: "completed" } });
   } catch (e) {

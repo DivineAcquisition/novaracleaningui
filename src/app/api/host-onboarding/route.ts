@@ -11,6 +11,7 @@
 
 import { NextResponse } from "next/server";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
+import { sendPartnershipMessage } from "@/lib/partnership-comms/server";
 import { syncHostOnboardingToAirtable } from "@/lib/airtable";
 import { invokeHostOnboardingGhl } from "@/lib/host-onboarding/ghl";
 import { provisionHostAccount } from "@/lib/host-onboarding/provision";
@@ -146,20 +147,15 @@ export async function POST(req: Request): Promise<NextResponse> {
   // Best-effort: a comms hiccup never fails the submission.
   const firstName = payload.fullName.split(" ")[0] || "there";
   try {
-    await supabase.functions.invoke("send-partner-email", {
-      body: {
-        type: "application_received",
-        email: payload.email,
-        data: { name: firstName, propertyCount: payload.properties.length },
-      },
-    });
-  } catch { /* best-effort */ }
-  try {
-    await supabase.functions.invoke("send-ghl-sms", {
-      body: {
-        phone: payload.phone,
-        message: `Thanks ${firstName} — we received your Novara host application. We'll set your per-turnover rates and send your Host Partnership Agreement to e-sign within 24 hours. - NovaraCleaning`,
-        type: "confirmation",
+    await sendPartnershipMessage(supabase, {
+      templateKey: "host_application_received",
+      trigger: "host-onboarding.application_received",
+      email: payload.email,
+      phone: payload.phone,
+      hostId: provision.hostId || null,
+      vars: {
+        first_name: firstName,
+        propertyCount: String(payload.properties.length),
       },
     });
   } catch { /* best-effort */ }

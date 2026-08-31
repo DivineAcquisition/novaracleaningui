@@ -19,7 +19,7 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-import { sendSms } from "../_shared/sms.ts";
+import { sendPartnership } from "../_shared/partnership-comms.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -89,33 +89,60 @@ serve(async (req) => {
 
       const label = `${account?.business_name || "Commercial account"} — ${site?.nickname || "site"}`;
       const when = whenLabel(String(wt.scheduled_at));
+      const tokenLink = wt.assignment_token
+        ? `https://contractor.novaracleaning.com/cleaner/walkthrough/${wt.assignment_token}`
+        : "";
 
-      // The person walking the building.
-      if (wt.conductor_phone) {
-        const tokenLink = wt.assignment_token
-          ? ` Site findings: https://contractor.novaracleaning.com/cleaner/walkthrough/${wt.assignment_token}`
+      // The person walking the building — urgent, email + SMS.
+      if (wt.conductor_phone || wt.conductor_email) {
+        const accessBit = wt.access_contact_name
+          ? ` Access contact: ${wt.access_contact_name}${wt.access_contact_phone ? ` ${wt.access_contact_phone}` : ""}.`
           : "";
-        await sendSms(admin, {
-          toPhone: String(wt.conductor_phone),
-          message:
-            `Novara: walkthrough reminder — ${label}, ${when}. ${wt.site_address || ""}. ` +
-            `Access contact: ${wt.access_contact_name || "not named"}` +
-            `${wt.access_contact_phone ? ` ${wt.access_contact_phone}` : ""}. ` +
-            `Bring the findings form — confirmed sqft, condition, counts, window, equipment, and photos are all required.` +
-            tokenLink,
-          type: "reminder",
-        }).catch(() => false);
+        await sendPartnership(admin, {
+          templateKey: "walkthrough_agent_reminder",
+          trigger: "walkthrough-pipeline-sweep.agent_reminder",
+          role: "walkthrough_agent",
+          priority: "urgent",
+          email: wt.conductor_email,
+          phone: wt.conductor_phone,
+          walkthroughId: String(wt.id),
+          accountId: site?.business_account_id || null,
+          vars: {
+            first_name: String(wt.conducted_by || "there").split(" ")[0],
+            address: wt.site_address || site?.nickname || "the site",
+            when,
+            link: tokenLink,
+          },
+          sms:
+            `Novara: walkthrough reminder — ${label}, ${when}. ${wt.site_address || ""}.` +
+            accessBit +
+            ` Bring the findings form — confirmed sqft, condition, counts, window, equipment, and photos are all required.` +
+            (tokenLink ? ` ${tokenLink}` : ""),
+          idempotencyKey: `walkthrough-reminder-agent:${wt.id}`,
+        }).catch(() => null);
       }
 
-      // The client contact who has to let them in.
+      // The client contact who has to let them in. Standard — no crew phones.
       if (wt.access_contact_phone) {
-        await sendSms(admin, {
-          toPhone: String(wt.access_contact_phone),
-          message:
+        await sendPartnership(admin, {
+          templateKey: "walkthrough_scheduled",
+          trigger: "walkthrough-pipeline-sweep.access_reminder",
+          role: "partner",
+          email: null,
+          phone: wt.access_contact_phone,
+          walkthroughId: String(wt.id),
+          accountId: site?.business_account_id || null,
+          channels: ["sms"],
+          vars: {
+            first_name: String(wt.access_contact_name || "there").split(" ")[0],
+            address: site?.nickname || "your site",
+            when,
+          },
+          sms:
             `Novara Cleaning: reminder that our walkthrough at ${site?.nickname || "your site"} is ${when}. ` +
-            `${wt.conducted_by || "Our team"} will need access to the areas in scope. Reply here if the time no longer works.`,
-          type: "walkthrough_reminder",
-        }).catch(() => false);
+            `Our team will need access to the areas in scope. Reply here if the time no longer works.`,
+          idempotencyKey: `walkthrough-reminder-access:${wt.id}`,
+        }).catch(() => null);
       }
 
       await admin.from("commercial_walkthroughs")

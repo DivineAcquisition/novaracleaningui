@@ -14,6 +14,7 @@
 // different — one link, one meaning, checked where it is read.
 
 import { sendCompanyCoi } from "@/lib/company-coi";
+import { sendPartnershipMessage } from "@/lib/partnership-comms/server";
 import { sendAgreement, buildCommercialValues } from "@/lib/docuseal";
 import { resolveAppSecret, stripeCall, ensureCommercialCustomer } from "@/lib/stripe-rest";
 import { money, type ProposalSite } from "@/lib/commercial-proposal";
@@ -95,16 +96,23 @@ export async function requestProposalChanges(
     (account.assigned_va_email as string | null) ||
     null;
   if (owner) {
-    await supabase.functions.invoke("admin-send-email", {
-      body: {
-        to: owner,
-        subject: `Changes requested — ${String(account.business_name || "commercial proposal")} (v${proposal.version})`,
-        html: [
-          `<p><strong>${byName}</strong> asked for changes to proposal v${proposal.version} for <strong>${String(account.business_name || "")}</strong>.</p>`,
-          `<p style="border-left:3px solid #7c3aed;padding-left:12px;margin:16px 0;white-space:pre-wrap">${note.replace(/</g, "&lt;")}</p>`,
-          `<p>Build the revised version in Commercial → Send Proposal. The current version has been retained and its link retired.</p>`,
-        ].join(""),
+    await sendPartnershipMessage(supabase, {
+      templateKey: "commercial_request_changes",
+      trigger: "commercial-proposal.changes_requested",
+      email: owner,
+      role: "admin",
+      accountId: String(proposal.business_account_id || "") || null,
+      vars: {
+        first_name: byName,
+        business_name: String(account.business_name || "commercial proposal"),
+        note,
       },
+      subject: `Changes requested — ${String(account.business_name || "commercial proposal")} (v${proposal.version})`,
+      html: [
+        `<p><strong>${byName}</strong> asked for changes to proposal v${proposal.version} for <strong>${String(account.business_name || "")}</strong>.</p>`,
+        `<p style="border-left:3px solid #7c3aed;padding-left:12px;margin:16px 0;white-space:pre-wrap">${note.replace(/</g, "&lt;")}</p>`,
+        `<p>Build the revised version in Commercial → Send Proposal. The current version has been retained and its link retired.</p>`,
+      ].join(""),
     });
   }
 

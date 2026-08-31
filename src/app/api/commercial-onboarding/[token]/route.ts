@@ -29,6 +29,7 @@
 import { NextResponse } from "next/server";
 
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
+import { sendPartnershipMessage } from "@/lib/partnership-comms/server";
 import { AGREEMENT_COLS, PROPOSAL_COLS } from "@/lib/commercial-agreement-server";
 import {
   acceptProposal,
@@ -233,23 +234,30 @@ export async function POST(
     // requested site is a lead for a walkthrough, not a priced site.
     const owner = (account.assigned_va_email as string) || null;
     if (owner) {
-      await supabase.functions.invoke("admin-send-email", {
-        body: {
-          to: owner,
-          subject: `Onboarding submission — ${String(account.business_name || "commercial account")}`,
-          html: [
-            `<p><strong>${submittedBy}</strong> sent something during onboarding for <strong>${String(account.business_name || "")}</strong>.</p>`,
-            kind === "site_request"
-              ? `<p>They'd like a site added: <strong>${clip(body.siteAddress, 300).replace(/</g, "&lt;")}</strong>. This has NOT been priced or added — it needs its own walkthrough.</p>`
-              : kind === "document"
-                ? `<p>They uploaded a document: <strong>${clip(body.documentName, 200).replace(/</g, "&lt;")}</strong>.</p>`
-                : `<p>They left a note.</p>`,
-            record.note
-              ? `<p style="border-left:3px solid #7c3aed;padding-left:12px;white-space:pre-wrap">${String(record.note).replace(/</g, "&lt;")}</p>`
-              : "",
-            `<p>Review it in Commercial → the account's onboarding panel.</p>`,
-          ].join(""),
+      await sendPartnershipMessage(supabase, {
+        templateKey: "commercial_request_changes",
+        trigger: "commercial-onboarding.submission",
+        email: owner,
+        role: "admin",
+        accountId: String(account.id || "") || null,
+        vars: {
+          first_name: submittedBy,
+          business_name: String(account.business_name || "commercial account"),
+          note: String(record.note || ""),
         },
+        subject: `Onboarding submission — ${String(account.business_name || "commercial account")}`,
+        html: [
+          `<p><strong>${submittedBy}</strong> sent something during onboarding for <strong>${String(account.business_name || "")}</strong>.</p>`,
+          kind === "site_request"
+            ? `<p>They'd like a site added: <strong>${clip(body.siteAddress, 300).replace(/</g, "&lt;")}</strong>. This has NOT been priced or added — it needs its own walkthrough.</p>`
+            : kind === "document"
+              ? `<p>They uploaded a document: <strong>${clip(body.documentName, 200).replace(/</g, "&lt;")}</strong>.</p>`
+              : `<p>They left a note.</p>`,
+          record.note
+            ? `<p style="border-left:3px solid #7c3aed;padding-left:12px;white-space:pre-wrap">${String(record.note).replace(/</g, "&lt;")}</p>`
+            : "",
+          `<p>Review it in Commercial → the account's onboarding panel.</p>`,
+        ].join(""),
       });
     }
 
