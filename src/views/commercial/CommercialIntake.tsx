@@ -61,6 +61,7 @@ import { SEO } from "@/components/SEO";
 import { BrandAtmosphere } from "@/components/brand/atmosphere";
 import { BRAND } from "@/lib/brand";
 import { cn } from "@/lib/utils";
+import { CompanyCoiDownloadLink } from "@/components/commercial/CompanyCoiDownloadLink";
 
 const PURPLE_GRADIENT = BRAND.gradient;
 
@@ -137,7 +138,7 @@ const ASSURANCES: Array<{ title: string; body: string; icon: typeof RiShieldChec
     icon: RiShieldCheckLine,
     title: "Insured, and we prove it",
     body:
-      "Our certificate of insurance goes to you automatically when you sign — you don't have to chase it. If your building needs us named as an additional insured, tell us on the form.",
+      "Our certificate of insurance is on this page, and the same file goes to you automatically when you sign — you don't have to chase it. If your building needs us named as an additional insured, tell us on the form.",
   },
   {
     icon: RiCameraLine,
@@ -187,6 +188,10 @@ const FAQ: Array<{ q: string; a: string }> = [
   {
     q: "Do you supply everything?",
     a: "Yes, unless you'd rather we use your products — some medical and food-service clients do. Either way it's agreed up front and written into your scope.",
+  },
+  {
+    q: "Can I see your insurance certificate?",
+    a: "Yes — download it from this page. We carry commercial general liability with Spinnaker Insurance Company (policy CSG-00519113-00), current through July 21, 2027. The same certificate is emailed to you automatically when you sign.",
   },
 ];
 
@@ -424,6 +429,11 @@ export default function CommercialIntake() {
                     </span>
                     <p className="mt-3 font-heading font-semibold tracking-tight">{a.title}</p>
                     <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{a.body}</p>
+                    {a.title === "Insured, and we prove it" && (
+                      <div className="mt-3">
+                        <CompanyCoiDownloadLink showMeta />
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -475,6 +485,10 @@ export default function CommercialIntake() {
               </div>
 
               <p className="mt-6 text-xs text-muted-foreground">
+                <CompanyCoiDownloadLink tone="quiet">
+                  Current certificate of insurance
+                </CompanyCoiDownloadLink>
+                {" · "}
                 See exactly what&apos;s included —{" "}
                 <a href="https://try.novaracleaning.com/checklist/commercial-standard" className="font-semibold text-primary hover:underline">
                   commercial checklists

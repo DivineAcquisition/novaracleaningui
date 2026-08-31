@@ -220,6 +220,10 @@ const GLOBAL_ALLOWLIST = [
   // subdomain that renders PDFs (browsers refuse cross-origin workers,
   // so a 308 to try.* would break the in-page agreement viewer).
   "/pdf.worker.min.mjs",
+  // Novara's own COI — commercial pages, admin Compliance, and emails all
+  // link this same file. Host-agnostic so an admin on admin.* can open it
+  // without a 308 to commercial.*.
+  "/commercial/novara-certificate-of-insurance.pdf",
 ];
 
 function ownerOf(pathname: string): SubdomainKey {

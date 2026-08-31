@@ -44,6 +44,7 @@ import {
 import { buildCommercialAgreementBase64 } from "@/lib/commercial-agreement-pdf";
 import { CommercialScopePreview } from "@/components/checklists/CommercialScopePreview";
 import { uniqueScopeKeysFromSites } from "@/lib/commercial-checklists";
+import { CompanyCoiDownloadLink } from "@/components/commercial/CompanyCoiDownloadLink";
 import {
   INVOICE_CYCLE_LABELS,
   NET_TERMS_LABELS,
@@ -350,6 +351,11 @@ export default function CommercialAgreementSign() {
             A copy of the executed agreement and our current certificate of insurance have been
             emailed to you.
           </p>
+          <div className="mt-4 flex justify-center">
+            <CompanyCoiDownloadLink tone="button" showMeta>
+              Download our certificate of insurance
+            </CompanyCoiDownloadLink>
+          </div>
         </Card>
       </Shell>
     );
@@ -463,7 +469,8 @@ export default function CommercialAgreementSign() {
             <p className="mb-2">
               <strong>Insurance (8.1).</strong> Company maintains commercial general liability
               insurance and will furnish Client with a current certificate on execution of this
-              Agreement and on each renewal for as long as it remains in force.
+              Agreement and on each renewal for as long as it remains in force.{" "}
+              <CompanyCoiDownloadLink tone="quiet">View the current certificate</CompanyCoiDownloadLink>.
             </p>
             <p>
               <strong>Entire agreement.</strong> This Agreement, including Exhibit A, is the entire

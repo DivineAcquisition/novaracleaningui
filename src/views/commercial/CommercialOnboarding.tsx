@@ -38,6 +38,7 @@ import {
 } from "@remixicon/react";
 
 import { SignaturePad } from "@/components/booking/SignaturePad";
+import { CompanyCoiDownloadLink } from "@/components/commercial/CompanyCoiDownloadLink";
 import { buildCommercialAgreementBase64 } from "@/lib/commercial-agreement-pdf";
 import {
   money,
@@ -820,6 +821,11 @@ function DoneCard({ data }: { data: Payload }) {
             Open your portal
             <RiExternalLinkLine className="h-4 w-4" />
           </a>
+          <div className="mt-3">
+            <CompanyCoiDownloadLink showMeta>
+              Download our certificate of insurance
+            </CompanyCoiDownloadLink>
+          </div>
         </div>
       </div>
     </Card>

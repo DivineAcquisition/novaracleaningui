@@ -24,6 +24,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { COMPANY_COI_PUBLIC_HREF } from "@/lib/company-coi-public";
 
 const COMPANY_COI_BUCKET = "company-coi";
 
@@ -155,13 +156,23 @@ export default function CompanyCoiPanel() {
         {loading ? (
           <p className="text-xs text-slate-500">Loading…</p>
         ) : current ? (
-          <p className="text-xs text-slate-600">
-            {current.carrier || "Carrier not recorded"}
-            {current.policy_number ? ` · Policy ${current.policy_number}` : ""}
-            {typeof current.daysRemaining === "number"
-              ? ` · ${current.daysRemaining} day${current.daysRemaining === 1 ? "" : "s"} remaining`
-              : ""}
-          </p>
+          <div className="space-y-1.5">
+            <p className="text-xs text-slate-600">
+              {current.carrier || "Carrier not recorded"}
+              {current.policy_number ? ` · Policy ${current.policy_number}` : ""}
+              {typeof current.daysRemaining === "number"
+                ? ` · ${current.daysRemaining} day${current.daysRemaining === 1 ? "" : "s"} remaining`
+                : ""}
+            </p>
+            <a
+              href={String(current.url || COMPANY_COI_PUBLIC_HREF)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex text-xs font-semibold text-violet-700 hover:underline"
+            >
+              View the certificate on file
+            </a>
+          </div>
         ) : (
           <p className="text-xs text-amber-800 flex items-start gap-1.5">
             <RiErrorWarningLine className="w-3.5 h-3.5 mt-0.5 shrink-0" />

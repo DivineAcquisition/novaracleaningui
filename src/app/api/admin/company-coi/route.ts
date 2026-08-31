@@ -20,7 +20,8 @@ import { NextResponse } from "next/server";
 import { requireAdmin, AdminAuthError } from "@/lib/admin-auth";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import { rows } from "@/lib/commercial-agreement-server";
-import { COMPANY_COI_BUCKET, sendCompanyCoi, currentCompanyCoi, coiIsExpired } from "@/lib/company-coi";
+import { companyCoiFileUrl } from "@/lib/company-coi-public";
+import { COMPANY_COI_BUCKET, sendCompanyCoi, currentCompanyCoi, coiIsExpired, bundledCompanyCoi } from "@/lib/company-coi";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -65,7 +66,7 @@ export async function GET(req: Request): Promise<NextResponse> {
       .limit(200),
   ]);
 
-  const current = await currentCompanyCoi(supabase, null);
+  const current = (await currentCompanyCoi(supabase, null)) || bundledCompanyCoi();
 
   // Signed URLs so an admin can actually open what is on file rather than
   // trusting a row that says a document exists.
@@ -73,10 +74,16 @@ export async function GET(req: Request): Promise<NextResponse> {
   for (const doc of rows<Record<string, unknown>>(docs)) {
     let url: string | null = null;
     if (doc.document_path) {
-      const { data: signed } = await supabase.storage
-        .from(COMPANY_COI_BUCKET)
-        .createSignedUrl(String(doc.document_path), 3600);
-      url = signed?.signedUrl || null;
+      const path = String(doc.document_path);
+      const publicUrl = companyCoiFileUrl(path);
+      if (publicUrl) {
+        url = publicUrl;
+      } else {
+        const { data: signed } = await supabase.storage
+          .from(COMPANY_COI_BUCKET)
+          .createSignedUrl(path, 3600);
+        url = signed?.signedUrl || null;
+      }
     }
     documents.push({ ...doc, url });
   }
@@ -104,6 +111,9 @@ export async function GET(req: Request): Promise<NextResponse> {
     current: current
       ? {
         ...current,
+        url: companyCoiFileUrl(current.document_path) ||
+          documents.find((d) => d.id === current.id)?.url ||
+          null,
         expired: coiIsExpired(current),
         daysRemaining: current.expiration_date
           ? Math.ceil(

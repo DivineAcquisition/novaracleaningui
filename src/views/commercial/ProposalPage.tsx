@@ -45,6 +45,7 @@ import {
 } from "@/lib/commercial-proposal";
 import { CommercialScopePreview } from "@/components/checklists/CommercialScopePreview";
 import { uniqueScopeKeysFromSites } from "@/lib/commercial-checklists";
+import { CompanyCoiDownloadLink } from "@/components/commercial/CompanyCoiDownloadLink";
 
 interface Payload {
   ok: true;
@@ -364,6 +365,11 @@ export default function ProposalPage() {
               <div>
                 <p className="text-sm font-medium text-foreground">{item.title}</p>
                 <p className="text-xs leading-relaxed text-muted-foreground">{item.detail}</p>
+                {item.title === "Fully insured, and you hold the certificate" && (
+                  <div className="mt-1.5">
+                    <CompanyCoiDownloadLink showMeta />
+                  </div>
+                )}
               </div>
             </div>
           ))}

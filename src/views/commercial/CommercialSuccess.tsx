@@ -6,6 +6,7 @@
 import { useSearchParams } from "next/navigation";
 import { RiCheckboxCircleFill, RiTimeLine, RiFileList3Line, RiTeamLine } from "@remixicon/react";
 import { SEO } from "@/components/SEO";
+import { CompanyCoiDownloadLink } from "@/components/commercial/CompanyCoiDownloadLink";
 
 const PURPLE_GRADIENT = "linear-gradient(135deg,#5C0FFE 0%,#8F7BFD 100%)";
 
@@ -51,6 +52,10 @@ export default function CommercialSuccess() {
             </div>
           ))}
         </div>
+        <p className="text-sm text-slate-600">
+          Need our certificate of insurance for your building manager in the meantime?{" "}
+          <CompanyCoiDownloadLink tone="quiet" />
+        </p>
         <p className="text-xs text-slate-400">
           Questions in the meantime? Email <a href="mailto:contact@novaracleaning.com" className="text-violet-600 font-semibold">contact@novaracleaning.com</a> or call +1 (844) 735-2070.
         </p>

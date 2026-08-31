@@ -83,6 +83,12 @@ The **Our certificate of insurance** panel holds Novara's own. It shows **Not on
 **Expired** or **Current through {date}**, and lets you upload or replace it and resend it to
 clients holding an older copy.
 
+The certificate in force (Spinnaker Insurance Company, policy CSG-00519113-00, effective
+July 21, 2026 through July 21, 2027) is also at
+`/commercial/novara-certificate-of-insurance.pdf` on the commercial host, so a client can
+download it from intake, the proposal, the agreement and onboarding. Signature-time delivery
+still emails the PDF.
+
 Remember the fourth dispatch requirement from [Proposals](/docs/proposals): *our* certificate
 must have been sent to the client. A deal can be fully priced, signed and billed and still not
 dispatch because of that.

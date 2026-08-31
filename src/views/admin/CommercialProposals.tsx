@@ -71,6 +71,7 @@ import {
   type ProposalSite,
   type ProposalStatus,
 } from "@/lib/commercial-proposal";
+import { COMPANY_COI_PUBLIC_HREF } from "@/lib/company-coi-public";
 
 interface Deal {
   account_id: string;
@@ -767,16 +768,22 @@ function DealSheet({
                   ))}
                 </ul>
               )}
-              <Button
-                size="sm"
-                variant="outline"
-                className="mt-3"
-                disabled={busy !== null}
-                onClick={() => void run("coi", { action: "send_company_coi", accountId: deal.account_id }, "Certificate sent.")}
-              >
-                {busy === "coi" ? <RiLoader4Line className="mr-1.5 h-4 w-4 animate-spin" /> : null}
-                Send our certificate
-              </Button>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy !== null}
+                  onClick={() => void run("coi", { action: "send_company_coi", accountId: deal.account_id }, "Certificate sent.")}
+                >
+                  {busy === "coi" ? <RiLoader4Line className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+                  Send our certificate
+                </Button>
+                <Button size="sm" variant="ghost" asChild>
+                  <a href={COMPANY_COI_PUBLIC_HREF} target="_blank" rel="noopener noreferrer">
+                    View certificate
+                  </a>
+                </Button>
+              </div>
             </div>
 
             {/* History */}

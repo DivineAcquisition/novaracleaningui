@@ -245,7 +245,7 @@ export const VALUE_STACK: ValueStackItem[] = [
   {
     title: "Fully insured, and you hold the certificate",
     detail:
-      "General liability coverage is in force before the first visit, and a current certificate of insurance is sent to you on signature — not promised and chased later.",
+      "General liability coverage is in force before the first visit. A current certificate of insurance is on this page for you to download, and the same file is emailed to you on signature — not promised and chased later.",
   },
   {
     title: "Background-checked, W-9'd personnel",
