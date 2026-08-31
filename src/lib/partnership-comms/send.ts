@@ -20,7 +20,6 @@ import type {
 } from "./types";
 import { DEFAULT_PARTNERSHIP_COMMS_SETTINGS } from "./types";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SB = SupabaseClient | any;
 
 export async function loadPartnershipSettings(supabase: SB): Promise<PartnershipCommsSettings> {
