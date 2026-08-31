@@ -27,6 +27,7 @@ type PreviewMem = {
   paymentOption: string | null;
   card: boolean;
   portal: boolean;
+  payAfter: boolean;
 };
 
 const previewMem: PreviewMem = {
@@ -36,6 +37,7 @@ const previewMem: PreviewMem = {
   paymentOption: null,
   card: false,
   portal: false,
+  payAfter: true,
 };
 
 export function resetHostOnboardingPreview(): void {
@@ -45,6 +47,7 @@ export function resetHostOnboardingPreview(): void {
   previewMem.paymentOption = null;
   previewMem.card = false;
   previewMem.portal = false;
+  previewMem.payAfter = true;
 }
 
 export function applyHostOnboardingPreviewAction(action: string, body: Record<string, unknown>): {
@@ -80,6 +83,9 @@ export function applyHostOnboardingPreviewAction(action: string, body: Record<st
     if (!["full", "split", "pay_after"].includes(option)) {
       return { ok: false, status: 400, message: "Choose a payment option." };
     }
+    if (option === "pay_after" && !previewMem.payAfter) {
+      return { ok: false, status: 409, message: "Pay After isn't available for this account. Choose Pay in Full or Split Payment." };
+    }
     previewMem.paymentOption = option;
     previewMem.card = true;
     return { ok: true, status: 200, outcome: "payment_ready", message: "Payment method on file (preview)." };
@@ -111,6 +117,7 @@ export function hostOnboardingPreviewPayload(step?: string) {
     previewMem.card = false;
     previewMem.portal = false;
     previewMem.paymentOption = null;
+    previewMem.payAfter = step !== "no-pay-after";
   }
   if (step === "done") {
     previewMem.signed = true;
@@ -123,7 +130,8 @@ export function hostOnboardingPreviewPayload(step?: string) {
     previewMem.portal = true;
   }
 
-  const payAfter = step !== "no-pay-after";
+  if (step === "no-pay-after") previewMem.payAfter = false;
+  const payAfter = previewMem.payAfter;
   const d1 = previewMem.decisions.find((d) => d.propertyId === "preview-1");
   const d2 = previewMem.decisions.find((d) => d.propertyId === "preview-2");
   const properties = [
