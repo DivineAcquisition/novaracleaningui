@@ -45,6 +45,11 @@ import {
 } from "@/lib/commercial-onboarding/operations";
 import { provisionCommercialPortalUser } from "@/lib/commercial-onboarding/portal";
 import {
+  applyCommercialOnboardingPreviewAction,
+  commercialOnboardingPreviewPayload,
+  isLocalCommercialOnboardingPreview,
+} from "@/lib/commercial-onboarding/preview";
+import {
   closeIfComplete,
   loadProgress,
   onboardingUrl,
@@ -90,10 +95,20 @@ async function loadContext(supabase: ReturnType<typeof getAdminSupabase>, sessio
 }
 
 export async function GET(
-  _req: Request,
+  req: Request,
   ctx: { params: Promise<{ token: string }> },
 ): Promise<NextResponse> {
   const { token } = await ctx.params;
+  if (isLocalCommercialOnboardingPreview(req, token)) {
+    const url = new URL(req.url);
+    return NextResponse.json(
+      commercialOnboardingPreviewPayload(
+        token,
+        url.searchParams.get("step") || undefined,
+        url.searchParams.get("billing"),
+      ),
+    );
+  }
   const supabase = getAdminSupabase();
   const resolved = await resolveSession(supabase, token);
   if (!resolved.ok || !resolved.session) {
@@ -123,6 +138,17 @@ export async function POST(
   ctx: { params: Promise<{ token: string }> },
 ): Promise<NextResponse> {
   const { token } = await ctx.params;
+  if (isLocalCommercialOnboardingPreview(req, token)) {
+    const url = new URL(req.url);
+    const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+    const result = applyCommercialOnboardingPreviewAction(
+      token,
+      String(body.action || ""),
+      body,
+      url.searchParams.get("billing"),
+    );
+    return NextResponse.json(result, { status: result.status });
+  }
   const supabase = getAdminSupabase();
   const resolved = await resolveSession(supabase, token);
   if (!resolved.ok || !resolved.session) {

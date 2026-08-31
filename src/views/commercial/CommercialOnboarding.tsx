@@ -141,7 +141,8 @@ export default function CommercialOnboarding({ token }: { token: string }) {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch(`/api/commercial-onboarding/${token}`);
+      const qs = typeof window !== "undefined" ? window.location.search : "";
+      const res = await fetch(`/api/commercial-onboarding/${token}${qs}`);
       const json = await res.json();
       if (!res.ok || !json?.ok) {
         setState({ kind: "error", message: json?.message || "This link isn't valid." });
@@ -197,6 +198,11 @@ export default function CommercialOnboarding({ token }: { token: string }) {
         return null;
       }
       if (json.message) setNotice(json.message as string);
+      if (typeof window !== "undefined") {
+        const next = new URL(window.location.href);
+        next.searchParams.delete("step");
+        window.history.replaceState({}, "", next.pathname + (next.search || ""));
+      }
       await load();
       noticeRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
       return json;

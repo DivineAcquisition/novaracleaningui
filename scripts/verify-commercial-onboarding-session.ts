@@ -8,6 +8,13 @@
 //   Run:  npm run commercial-onboarding:verify
 
 import {
+  applyCommercialOnboardingPreviewAction,
+  commercialOnboardingPreviewMethod,
+  commercialOnboardingPreviewPayload,
+  isCommercialOnboardingPreviewToken,
+  resetCommercialOnboardingPreview,
+} from "../src/lib/commercial-onboarding/preview";
+import {
   billingStepLabel,
   deriveCommercialOnboardingProgress,
 } from "../src/lib/commercial-onboarding/progress";
@@ -102,6 +109,90 @@ check(
   deriveCommercialOnboardingProgress({ billingMethod: "auto_pay" }).steps.length,
   3,
 );
+
+console.log("\nLocalhost preview tokens:");
+check("auto_pay token", isCommercialOnboardingPreviewToken("preview-commercial"), true);
+check("invoiced token", isCommercialOnboardingPreviewToken("preview-commercial-invoiced"), true);
+check("production-looking token is not preview", isCommercialOnboardingPreviewToken("a".repeat(64)), false);
+check(
+  "invoiced token selects invoice method",
+  commercialOnboardingPreviewMethod("preview-commercial-invoiced"),
+  "invoiced",
+);
+check(
+  "billing=invoiced overrides auto_pay token",
+  commercialOnboardingPreviewMethod("preview-commercial", "invoiced"),
+  "invoiced",
+);
+
+resetCommercialOnboardingPreview();
+const refuseSign = applyCommercialOnboardingPreviewAction("preview-commercial", "sign", {
+  signerName: "Nadia Okonkwo",
+  agreedToTerms: true,
+});
+check("sign is refused before pricing is accepted", refuseSign.status, 409);
+
+const accept = applyCommercialOnboardingPreviewAction("preview-commercial", "accept_pricing", {
+  name: "Nadia Okonkwo",
+});
+check("accept pricing succeeds", accept.ok, true);
+const afterAccept = commercialOnboardingPreviewPayload("preview-commercial");
+check("accept advances to agreement", afterAccept.progress.current_step, "agreement");
+check("three pages after accept", afterAccept.progress.steps.map((s) => s.key), [
+  "pricing",
+  "agreement",
+  "billing",
+]);
+
+const sign = applyCommercialOnboardingPreviewAction("preview-commercial", "sign", {
+  signerName: "Nadia Okonkwo",
+  agreedToTerms: true,
+});
+check("sign succeeds after accept", sign.ok, true);
+const afterSign = commercialOnboardingPreviewPayload("preview-commercial");
+check("sign advances to billing", afterSign.progress.current_step, "billing");
+check("auto_pay billing copy mentions Stripe Pre-Auth", afterSign.progress.steps[2].label.includes("Stripe Pre-Auth"), true);
+check("auto_pay page has no invoice contact yet", afterSign.session.billingMethod, "auto_pay");
+
+const extra = applyCommercialOnboardingPreviewAction("preview-commercial", "submit_info", {
+  kind: "site_request",
+  siteAddress: "200 E Pratt Street, Baltimore, MD",
+});
+check("additional site is accepted", extra.ok, true);
+const afterExtra = commercialOnboardingPreviewPayload("preview-commercial");
+check("additional site does not complete billing", afterExtra.progress.complete, false);
+check("additional site does not mark billing done", afterExtra.progress.steps[2].done, false);
+check("still on billing after extra site", afterExtra.progress.current_step, "billing");
+
+const billed = applyCommercialOnboardingPreviewAction("preview-commercial", "setup_billing", {});
+check("preview auto_pay setup does not redirect to Stripe", Boolean(billed.url), false);
+check("billing setup completes the preview session", billed.ok, true);
+const afterBill = commercialOnboardingPreviewPayload("preview-commercial");
+check("portal is the conclusion of billing", afterBill.progress.current_step, "done");
+check("handoff goes to commercial portal preview", afterBill.handoffUrl, "/partner/enter/preview-commercial");
+
+resetCommercialOnboardingPreview();
+const invoicedPage = commercialOnboardingPreviewPayload("preview-commercial-invoiced", "billing");
+check("invoiced jump lands on billing", invoicedPage.progress.current_step, "billing");
+check("invoiced label", invoicedPage.progress.steps[2].label.includes("Invoice"), true);
+check("invoiced session method", invoicedPage.session.billingMethod, "invoiced");
+const badInvoice = applyCommercialOnboardingPreviewAction("preview-commercial-invoiced", "setup_billing", {});
+check("invoiced billing refuses without email", badInvoice.status, 400);
+const goodInvoice = applyCommercialOnboardingPreviewAction("preview-commercial-invoiced", "setup_billing", {
+  billingContactEmail: "ap@harboreast.example",
+});
+check("invoiced billing accepts a contact", goodInvoice.ok, true);
+const invoicedDone = commercialOnboardingPreviewPayload("preview-commercial-invoiced");
+check(
+  "invoiced handoff opens invoiced portal preview",
+  invoicedDone.handoffUrl,
+  "/partner?preview=commercial&billing=invoiced",
+);
+
+resetCommercialOnboardingPreview();
+const pausedJump = commercialOnboardingPreviewPayload("preview-commercial", "paused");
+check("paused jump shows the pause card", pausedJump.progress.current_step, "paused");
+check("paused is not complete", pausedJump.progress.complete, false);
 
 if (failures) {
   console.error(`\n${failures} check(s) failed.`);
