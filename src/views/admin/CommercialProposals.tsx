@@ -59,11 +59,10 @@ import {
   BILLING_METHOD_LABELS,
   INVOICE_CYCLE_LABELS,
   NET_TERMS_LABELS,
-  PORTAL_ACCOUNT_REQUIRED_MESSAGE,
   PROPOSAL_STATUS_LABELS,
   STAGE_LABELS,
   money,
-  portalAccountRequired,
+  proposalPrefillFromWalkthrough,
   titleCase,
   commercialTab,
   type InvoiceCycle,
@@ -402,9 +401,18 @@ function DealSheet({
       const out = await commercialProposalApi("GET", undefined, `?accountId=${deal.account_id}`);
       const d = out as unknown as Detail;
       setDetail(d);
-      setRecipientName((p) => p || d.account?.contact_name || "");
-      setRecipientEmail((p) => p || d.account?.email || "");
-      setFrequency((p) => p || d.account?.recurring_frequency || "weekly");
+      const prefill = proposalPrefillFromWalkthrough({
+        account: d.account,
+        request: (out as { walkthroughSource?: { request?: {
+          requester_name?: string | null;
+          requester_email?: string | null;
+          requester_phone?: string | null;
+          desired_frequency?: string | null;
+        } } }).walkthroughSource?.request,
+      });
+      setRecipientName((p) => p || prefill.name);
+      setRecipientEmail((p) => p || prefill.email);
+      setFrequency((p) => p || prefill.frequency || "weekly");
     } catch (err) {
       toast.error((err as Error).message);
     }
@@ -626,35 +634,10 @@ function DealSheet({
                     {latest.expires_at ? ` · expires ${shortDate(latest.expires_at)}` : ""}
                   </p>
                 )}
-                {portalAccountRequired(detail.account) && (
-                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-[11px] text-amber-950">
-                    <p>{PORTAL_ACCOUNT_REQUIRED_MESSAGE}</p>
-                    <Button
-                      size="sm"
-                      className="mt-2"
-                      disabled={busy !== null || !recipientEmail.includes("@")}
-                      onClick={() =>
-                        void run(
-                          "invite",
-                          {
-                            action: "invite_portal",
-                            accountId: deal.account_id,
-                            email: recipientEmail,
-                            fullName: recipientName,
-                          },
-                          `Client account invite sent to ${recipientEmail}.`,
-                        )
-                      }
-                    >
-                      {busy === "invite" ? <RiLoader4Line className="mr-1.5 h-4 w-4 animate-spin" /> : null}
-                      Create client account
-                    </Button>
-                  </div>
-                )}
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button
                     size="sm"
-                    disabled={busy !== null || portalAccountRequired(detail.account)}
+                    disabled={busy !== null}
                     onClick={() =>
                       void run(
                         "send",

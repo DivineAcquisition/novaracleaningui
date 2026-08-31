@@ -29,7 +29,7 @@ import {
   walkthroughStaffPath,
 } from "../src/lib/proposal-request";
 import { checklistPathForServiceType } from "../src/lib/checklists";
-import { portalAccountRequired, PORTAL_ACCOUNT_REQUIRED_MESSAGE } from "../src/lib/commercial-proposal";
+import { proposalPrefillFromWalkthrough, siteRateCentsFromWalkthrough } from "../src/lib/commercial-proposal";
 import {
   walkthroughPreviewPayload,
   walkthroughPreviewTypeKey,
@@ -159,11 +159,25 @@ check("office copy of the same doc is under Proposals", walkthroughStaffPath("ab
 check("email HTML does not execute tags from the body", emailToHtml("Hi <script>").includes("&lt;script&gt;"), true);
 check("settings merge keeps unknown keys from wiping templates", mergeProposalSettings({ walkthroughPayCents: 9000 }).pendingEmailSubject, DEFAULT_PROPOSAL_SETTINGS.pendingEmailSubject);
 
-console.log("\nPortal account required to send:");
-check("missing portal_user_id blocks send", portalAccountRequired({ portal_user_id: null }), true);
-check("empty portal_user_id blocks send", portalAccountRequired({ portal_user_id: "" }), true);
-check("linked portal_user_id allows send", portalAccountRequired({ portal_user_id: "user-1" }), false);
-check("refusal names the client account", /portal account is required/i.test(PORTAL_ACCOUNT_REQUIRED_MESSAGE), true);
+console.log("\nSend pulls walkthrough data; no portal login required:");
+const fromWalkthrough = proposalPrefillFromWalkthrough({
+  account: { contact_name: null, email: null, phone: null, recurring_frequency: null },
+  request: {
+    requester_name: "Alex Host",
+    requester_email: "alex@harbor.test",
+    requester_phone: "410-555-0100",
+    desired_frequency: "weekly",
+  },
+});
+check("empty account uses walkthrough requester name", fromWalkthrough.name, "Alex Host");
+check("empty account uses walkthrough requester email", fromWalkthrough.email, "alex@harbor.test");
+check("account contact wins over walkthrough request", proposalPrefillFromWalkthrough({
+  account: { contact_name: "Jordan Lee", email: "jordan@co.test", phone: null, recurring_frequency: "monthly" },
+  request: { requester_name: "Alex Host", requester_email: "alex@harbor.test", requester_phone: null, desired_frequency: "weekly" },
+}).email, "jordan@co.test");
+check("walkthrough firm price is the rate", siteRateCentsFromWalkthrough({ firm_price_cents: 18500, formula_price_cents: 12000 }), 18500);
+check("formula price fills when no firm price", siteRateCentsFromWalkthrough({ firm_price_cents: null, formula_price_cents: 12000 }), 12000);
+check("no walkthrough price means admin must type one", siteRateCentsFromWalkthrough({ firm_price_cents: null, formula_price_cents: null }), null);
 
 console.log("\nLocal walkthrough preview fixture:");
 check("preview-str maps to STR", walkthroughPreviewTypeKey("preview-str"), "str");

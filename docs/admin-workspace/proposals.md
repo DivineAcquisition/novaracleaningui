@@ -166,16 +166,11 @@ as fast.
 The Send tab builds the document: the account, the sites and their rates, the terms, and the
 recipient.
 
-:::gate A client portal account is required before a proposal can go out
-The decision-maker must have a portal login on the business account. The Send tab
-shows **Create client account** — that emails them an invite to set a password at
-partner.novaracleaning.com. Drafts can still be saved without it. The send button
-stays disabled, and the API refuses with *"A client portal account is required
-before this proposal can go out."*
-
-This is separate from onboarding: they get the login first so the proposal is
-tied to an account, not only a forwarded token.
-:::
+Recipient, cadence, and per-visit rates **pull from the walkthrough** (and the
+proposal request behind it). A client portal login is **not** required to send.
+If a field is empty — no firm price yet, no requester email on the account —
+type it on the Send tab. That override goes on this proposal; the walkthrough
+record is left as it was.
 
 **Frequency** options are Weekly (~4.3 visits a month), Twice a week (~8.7), 3× a week (~13),
 Monthly, or a custom cadence. **Term** is month-to-month or a 12-month locked rate. **Billing**
@@ -184,12 +179,12 @@ after signing and never charged before.
 
 The rail shows per-visit and estimated monthly, and lists what's **Still needed**.
 
-:::gate Every site needs a firm price before anything can go out
-If any active site lacks a firm price, the send button stays disabled and the screen says
-*"Every site needs a firm price before this can go out"* with the blocking sites listed.
+:::gate Every site on the proposal needs a rate
+The walkthrough (or the rate engine, under the threshold) fills the box. If a site
+still has no number, type one. Send stays disabled until every non-excluded site
+has a rate, plus the decision-maker's name and email.
 
-There's no override. A proposal with a guessed rate on one site is a proposal we'll have to
-retract.
+Excluded sites stay off the proposal.
 :::
 
 Sent proposals expire after **14 days**, with a reminder **3 days** before.
@@ -247,5 +242,6 @@ version rather than reviving the old one.
 Yes. $75 flat by default, owed regardless.
 
 **"Why can't I send this proposal?"**
-Either a site has no firm price, or the account has no client portal login.
-The screen lists which. Use **Create client account** if the login is missing.
+A site still has no rate, or the decision-maker's name/email is blank. The rail
+lists which. Pull them from the walkthrough or type them — a portal login is not
+required to send.

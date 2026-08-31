@@ -10,13 +10,11 @@
 //        ?proposalId=…       one proposal with its snapshot rows
 //
 //   POST { action: … }
-//     create_draft        build the next version from the account's priced
-//                         sites. Pass send:true to mint the link and email
-//                         in the same click (Internal Booking's submit).
-//                         Refuses outright if any active site lacks a
-//                         firm price, or if the account has no portal login.
-//     invite_portal       create / link the client portal login (required
-//                         before send)
+//     create_draft        build the next version from walkthrough-priced
+//                         sites (admin can type a rate when a site has none).
+//                         Pass send:true to mint the link and email in the
+//                         same click. A portal login is not required to send.
+//     invite_portal       optional — create / link a client portal login
 //     update_draft        edit recipient, cadence, billing method, sites
 //     send                mint the link and email the decision-maker
 //     resend              same link, fresh expiry
@@ -41,10 +39,10 @@ import { computeCommercialQuote } from "@/lib/commercial-pricing";
 import {
   estimatedMonthlyCents,
   money,
-  portalAccountRequired,
-  PORTAL_ACCOUNT_REQUIRED_MESSAGE,
+  proposalPrefillFromWalkthrough,
   proposalUrl,
   agreementUrl,
+  siteRateCentsFromWalkthrough,
   totalPerVisitCents,
   visitsPerMonth,
   type ProposalSite,
@@ -90,6 +88,61 @@ const int = (v: unknown): number | null => {
 };
 
 type Supa = ReturnType<typeof getAdminSupabase>;
+
+async function loadProposalSource(supabase: Supa, accountId: string): Promise<{
+  request: Record<string, unknown> | null;
+  walkthroughsBySite: Map<string, Record<string, unknown>>;
+}> {
+  const walkthroughsBySite = new Map<string, Record<string, unknown>>();
+  let request: Record<string, unknown> | null = null;
+  try {
+    const [{ data: reqRow }, { data: walkthroughs }] = await Promise.all([
+      supabase
+        .from("proposal_requests")
+        .select("id, requester_name, requester_email, requester_phone, desired_frequency, notes, property_type_key")
+        .eq("business_account_id", accountId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("commercial_walkthroughs")
+        .select(
+          "id, business_site_id, sqft, scope_level, facility_type_key, formula_price_cents, " +
+          "recommended_crew_size, service_window_start, service_window_end, status, conducted_at",
+        )
+        .eq("business_account_id", accountId)
+        .order("conducted_at", { ascending: false }),
+    ]);
+    request = reqRow as Record<string, unknown> | null;
+    for (const wt of (walkthroughs || []) as Array<Record<string, unknown>>) {
+      const sid = String(wt.business_site_id || "");
+      if (!sid || walkthroughsBySite.has(sid)) continue;
+      walkthroughsBySite.set(sid, wt);
+    }
+  } catch {
+    // Hosted environments without the proposal-request tables still send.
+  }
+  return { request, walkthroughsBySite };
+}
+
+function mergeSiteFromWalkthrough(
+  site: Record<string, unknown>,
+  wt: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  if (!wt) return site;
+  return {
+    ...site,
+    walkthrough_id: site.walkthrough_id || wt.id,
+    sqft: site.sqft ?? wt.sqft,
+    scope_level: site.scope_level || wt.scope_level,
+    facility_type: site.facility_type || wt.facility_type_key,
+    crew_size: site.crew_size ?? wt.recommended_crew_size,
+    service_window_start: site.service_window_start ?? wt.service_window_start,
+    service_window_end: site.service_window_end ?? wt.service_window_end,
+    formula_price_cents: wt.formula_price_cents ?? null,
+    walkthrough_status: wt.status ?? null,
+  };
+}
 
 async function emailOut(
   supabase: Supa,
@@ -138,14 +191,7 @@ async function sendProposal(
   }
 
   const { data: account } = await supabase.from("business_accounts")
-    .select("business_name, portal_user_id").eq("id", p.business_account_id as string).maybeSingle();
-  if (portalAccountRequired(account as { portal_user_id?: string | null } | null)) {
-    return {
-      ok: false,
-      error: PORTAL_ACCOUNT_REQUIRED_MESSAGE,
-      status: 409,
-    };
-  }
+    .select("business_name").eq("id", p.business_account_id as string).maybeSingle();
 
   const { data: days } = await supabase.rpc("commercial_proposal_setting_int", {
     p_key: "proposal_expiry_days", p_default: 14,
@@ -306,6 +352,30 @@ export async function GET(req: Request): Promise<NextResponse> {
 
   if (!account) return NextResponse.json({ error: "Account not found." }, { status: 404 });
 
+  const source = await loadProposalSource(supabase, accountId);
+  const readinessSites = Array.isArray((readiness as { sites?: unknown[] } | null)?.sites)
+    ? ((readiness as { sites: Array<Record<string, unknown>> }).sites || []).map((site) =>
+      mergeSiteFromWalkthrough(site, source.walkthroughsBySite.get(String(site.site_id))),
+    )
+    : [];
+  const readinessOut = readiness
+    ? { ...(readiness as Record<string, unknown>), sites: readinessSites }
+    : null;
+  const prefill = proposalPrefillFromWalkthrough({
+    account: account as {
+      contact_name?: string | null;
+      email?: string | null;
+      phone?: string | null;
+      recurring_frequency?: string | null;
+    },
+    request: source.request as {
+      requester_name?: string | null;
+      requester_email?: string | null;
+      requester_phone?: string | null;
+      desired_frequency?: string | null;
+    } | null,
+  });
+
   // Every version's snapshot rows in one round trip — the history is the
   // point of keeping them, so it should not take a click per version to read.
   const proposalRows = rows<{ id: string; token: string | null }>(proposals);
@@ -322,7 +392,7 @@ export async function GET(req: Request): Promise<NextResponse> {
   return NextResponse.json({
     ok: true,
     account,
-    readiness: readiness || null,
+    readiness: readinessOut,
     proposals: proposalRows.map((p) => ({
       ...p,
       sites: sitesByProposal[p.id] || [],
@@ -336,6 +406,10 @@ export async function GET(req: Request): Promise<NextResponse> {
     coiDeliveries: deliveries || [],
     onboarding: onboardingSession || null,
     onboardingSubmissions: onboardingSubmissions || [],
+    walkthroughSource: {
+      request: source.request,
+      prefill,
+    },
   });
 }
 
@@ -350,7 +424,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   const action = String(body.action || "");
   const actorName = s(body.actorName, 120) || principal?.email || "Admin";
 
-  // ── Create / link the client portal login (required before send) ──────
+  // ── Create / link the client portal login (optional — not required to send)
   if (action === "invite_portal") {
     const accountId = s(body.accountId, 60);
     if (!accountId) return NextResponse.json({ error: "accountId is required." }, { status: 400 });
@@ -360,7 +434,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       .eq("id", accountId)
       .maybeSingle();
     if (!account) return NextResponse.json({ error: "Account not found." }, { status: 404 });
-    if (!portalAccountRequired(account as { portal_user_id?: string | null })) {
+    if (String((account as { portal_user_id?: string | null }).portal_user_id || "").trim()) {
       return NextResponse.json({
         ok: true,
         alreadyLinked: true,
@@ -400,15 +474,9 @@ export async function POST(req: Request): Promise<NextResponse> {
 
     const { data: account } = await supabase
       .from("business_accounts")
-      .select("id, business_name, contact_name, email, phone, recurring_frequency, billing_terms, assigned_va_email, portal_user_id")
+      .select("id, business_name, contact_name, email, phone, recurring_frequency, billing_terms, assigned_va_email")
       .eq("id", accountId).maybeSingle();
     if (!account) return NextResponse.json({ error: "Account not found." }, { status: 404 });
-    if (body.send === true && portalAccountRequired(account as { portal_user_id?: string | null })) {
-      return NextResponse.json(
-        { error: PORTAL_ACCOUNT_REQUIRED_MESSAGE, code: "portal_account_required" },
-        { status: 409 },
-      );
-    }
 
     const { data: readiness } = await supabase.rpc("commercial_proposal_readiness", {
       p_account_id: accountId,
@@ -418,28 +486,28 @@ export async function POST(req: Request): Promise<NextResponse> {
       reason?: string;
       sites?: Array<Record<string, unknown>>;
     };
-
-    // The gate. A proposal against an estimate range is the thing this whole
-    // pipeline exists to prevent, so it is refused here and again by the
-    // NOT NULL price column below.
-    if (!ready.can_propose) {
-      return NextResponse.json(
-        {
-          error:
-            ready.reason ||
-            "Every site on the account needs a firm price before a proposal can go out.",
-          code: "firm_price_required",
-          readiness,
-        },
-        { status: 409 },
-      );
-    }
+    const source = await loadProposalSource(supabase, accountId);
+    const prefill = proposalPrefillFromWalkthrough({
+      account: account as {
+        contact_name?: string | null;
+        email?: string | null;
+        phone?: string | null;
+        recurring_frequency?: string | null;
+      },
+      request: source.request as {
+        requester_name?: string | null;
+        requester_email?: string | null;
+        requester_phone?: string | null;
+        desired_frequency?: string | null;
+      } | null,
+    });
 
     // Sites under the walkthrough threshold carry no stored firm price — the
     // engine prices them. Resolve that now so the proposal records a real
-    // number rather than a promise to compute one later.
+    // number rather than a promise to compute one later. Admin overrides
+    // cover any site the walkthrough has not priced yet.
     const config = await loadCommercialConfigServer(supabase);
-    const defaultFrequency = s(body.frequency, 80) || account.recurring_frequency || "weekly";
+    const defaultFrequency = s(body.frequency, 80) || prefill.frequency || "weekly";
 
     // Per-site rate / cadence overrides from the send workspace. Same idea as
     // Internal Booking's price override: the formula (or walkthrough) fills
@@ -457,43 +525,39 @@ export async function POST(req: Request): Promise<NextResponse> {
     }
 
     const siteRows: Array<Record<string, unknown>> = [];
+    const missingRates: string[] = [];
     let order = 0;
     for (const raw of ready.sites || []) {
-      const site = raw as Record<string, unknown>;
-      if (site.ready !== true) continue;
+      const site = mergeSiteFromWalkthrough(
+        raw as Record<string, unknown>,
+        source.walkthroughsBySite.get(String((raw as Record<string, unknown>).site_id)),
+      );
+      if (String(site.stage || "") === "excluded") continue;
 
-      let cents = int(site.firm_price_cents);
-      let source: "formula" | "walkthrough" = "walkthrough";
+      const ov = overrideMap.get(String(site.site_id));
+      let cents = ov?.cents ?? siteRateCentsFromWalkthrough({
+        firm_price_cents: site.firm_price_cents as number | null,
+        formula_price_cents: site.formula_price_cents as number | null,
+      });
+      let priceSource: "formula" | "walkthrough" = Number(site.firm_price_cents) > 0
+        ? "walkthrough"
+        : "formula";
+
       if (cents == null || cents <= 0) {
         const quote = computeCommercialQuote(config, {
           sqft: Number(site.sqft) || 0,
           facilityTypeKey: String(site.facility_type || "other"),
           scopeLevel: String(site.scope_level || "standard"),
         });
-        if (!quote.ok || quote.requiresWalkthrough || quote.formulaCents <= 0) {
-          return NextResponse.json(
-            {
-              error:
-                `${site.nickname} could not be priced from the rate engine — ` +
-                `it needs a walkthrough before it can go on a proposal.`,
-              code: "firm_price_required",
-            },
-            { status: 409 },
-          );
+        if (quote.ok && !quote.requiresWalkthrough && quote.formulaCents > 0) {
+          cents = quote.formulaCents;
+          priceSource = "formula";
         }
-        cents = quote.formulaCents;
-        source = "formula";
       }
 
-      const ov = overrideMap.get(String(site.site_id));
-      if (ov?.cents != null) {
-        if (ov.cents <= 0) {
-          return NextResponse.json(
-            { error: `${site.nickname} needs a rate above zero.` },
-            { status: 400 },
-          );
-        }
-        cents = ov.cents;
+      if (cents == null || cents <= 0) {
+        missingRates.push(String(site.nickname || "Site"));
+        continue;
       }
 
       siteRows.push({
@@ -508,16 +572,29 @@ export async function POST(req: Request): Promise<NextResponse> {
         service_window_end: site.service_window_end ?? null,
         frequency: ov?.frequency || defaultFrequency,
         per_visit_price_cents: cents,
-        price_source: source,
+        price_source: priceSource,
         walkthrough_id: site.walkthrough_id ?? null,
         pricing_confirmed_at: site.pricing_confirmed_at ?? null,
         sort_order: order++,
       });
     }
 
+    if (missingRates.length) {
+      return NextResponse.json(
+        {
+          error:
+            `Type a per-visit rate for ${missingRates.join(", ")} — ` +
+            `the walkthrough has no firm price yet, and the rate engine could not fill it.`,
+          code: "rate_required",
+          missing: missingRates,
+        },
+        { status: 409 },
+      );
+    }
+
     if (!siteRows.length) {
       return NextResponse.json(
-        { error: "This account has no priced sites to propose." },
+        { error: "This account has no sites to propose. Add a site or record walkthrough findings first." },
         { status: 409 },
       );
     }
@@ -541,9 +618,9 @@ export async function POST(req: Request): Promise<NextResponse> {
       version,
       supersedes_id: supersedesId,
       status: "draft",
-      recipient_name: s(body.recipientName, 120) || account.contact_name,
-      recipient_email: s(body.recipientEmail, 200) || account.email,
-      recipient_phone: s(body.recipientPhone, 40) || account.phone,
+      recipient_name: s(body.recipientName, 120) || prefill.name || account.contact_name,
+      recipient_email: s(body.recipientEmail, 200) || prefill.email || account.email,
+      recipient_phone: s(body.recipientPhone, 40) || prefill.phone || account.phone,
       proposed_frequency: defaultFrequency,
       term: s(body.term, 40) || "month_to_month",
       billing_method: body.billingMethod === "auto_pay" ? "auto_pay" : "invoiced",

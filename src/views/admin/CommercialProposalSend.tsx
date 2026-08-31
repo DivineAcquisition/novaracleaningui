@@ -60,13 +60,13 @@ import {
   FREQUENCY_OPTIONS,
   INVOICE_CYCLE_LABELS,
   NET_TERMS_LABELS,
-  PORTAL_ACCOUNT_REQUIRED_MESSAGE,
   STAGE_LABELS,
   TERM_OPTIONS,
   commercialTab,
   estimatedMonthlyCents,
   money,
-  portalAccountRequired,
+  proposalPrefillFromWalkthrough,
+  siteRateCentsFromWalkthrough,
   titleCase,
   totalPerVisitCents,
   type BillingMethod,
@@ -101,9 +101,12 @@ interface ReadySite {
   sqft?: number | null;
   crew_size?: number | null;
   firm_price_cents?: number | null;
+  formula_price_cents?: number | null;
   price_source?: string | null;
   ready: boolean;
   reason?: string | null;
+  stage?: string | null;
+  walkthrough_status?: string | null;
 }
 
 interface SendResult {
@@ -157,7 +160,7 @@ export default function CommercialProposalSend({
   const [sitePrices, setSitePrices] = useState<Record<string, string>>({});
   const [priceTouched, setPriceTouched] = useState<Record<string, boolean>>({});
 
-  const [busy, setBusy] = useState<"send" | "draft" | "invite" | null>(null);
+  const [busy, setBusy] = useState<"send" | "draft" | null>(null);
   const [result, setResult] = useState<SendResult | null>(null);
 
   const loadDeals = useCallback(async () => {
@@ -185,16 +188,22 @@ export default function CommercialProposalSend({
     try {
       const out = await commercialProposalApi("GET", undefined, `?accountId=${id}`);
       setDetail(out);
-      setRecipientName(out.account?.contact_name || "");
-      setRecipientEmail(out.account?.email || "");
-      setRecipientPhone(out.account?.phone || "");
-      const freq = String(out.account?.recurring_frequency || "weekly");
+      const prefill = out.walkthroughSource?.prefill || proposalPrefillFromWalkthrough({
+        account: out.account,
+        request: out.walkthroughSource?.request,
+      });
+      setRecipientName(prefill.name);
+      setRecipientEmail(prefill.email);
+      setRecipientPhone(prefill.phone);
+      const freq = String(prefill.frequency || "weekly");
       const known = FREQUENCY_OPTIONS.some((o) => o.id === freq);
       setFrequency(known ? freq : "custom");
       if (!known) setCustomFrequency(freq);
       const prices: Record<string, string> = {};
       for (const site of (out.readiness?.sites || []) as ReadySite[]) {
-        if (site.ready) prices[site.site_id] = centsToDollars(site.firm_price_cents);
+        if (String(site.stage || "") === "excluded") continue;
+        const cents = siteRateCentsFromWalkthrough(site);
+        if (cents) prices[site.site_id] = centsToDollars(cents);
       }
       setSitePrices(prices);
       setPriceTouched({});
@@ -228,14 +237,16 @@ export default function CommercialProposalSend({
   }, [deals, search]);
 
   const sites = (detail?.readiness?.sites || []) as ReadySite[];
-  const readySites = sites.filter((s) => s.ready);
-  const blockedSites = sites.filter((s) => !s.ready);
-  const canPropose = detail?.readiness?.can_propose === true;
+  const excludedSites = sites.filter((s) => String(s.stage || "") === "excluded");
+  const proposalSites = sites.filter((s) => String(s.stage || "") !== "excluded");
   const resolvedFrequency = frequency === "custom" ? customFrequency.trim() : frequency;
 
-  const pricedSites = readySites.map((s) => ({
+  const pricedSites = proposalSites.map((s) => ({
     ...s,
-    per_visit_price_cents: dollarsToCents(sitePrices[s.site_id] || "") || Number(s.firm_price_cents || 0),
+    per_visit_price_cents:
+      dollarsToCents(sitePrices[s.site_id] || "")
+      || siteRateCentsFromWalkthrough(s)
+      || 0,
     frequency: resolvedFrequency,
   }));
   const perVisit = totalPerVisitCents(pricedSites);
@@ -244,58 +255,26 @@ export default function CommercialProposalSend({
     ["draft", "sent"].includes(p.status),
   );
 
-  const needsPortalAccount = portalAccountRequired(detail?.account);
   const requirements = useMemo(() => {
     const out: string[] = [];
     if (!accountId) out.push("Pick the account this proposal is for");
-    if (accountId && !canPropose) {
-      out.push(detail?.readiness?.reason || "Every site needs a firm price before this can go out");
+    if (!recipientName.trim()) out.push("Decision-maker's name (from the walkthrough, or type it)");
+    if (!recipientEmail.trim() || !recipientEmail.includes("@")) {
+      out.push("Decision-maker's email (from the walkthrough, or type it)");
     }
-    if (accountId && needsPortalAccount) {
-      out.push("Client portal account — create one before this can go out");
-    }
-    if (!recipientName.trim()) out.push("Decision-maker's name");
-    if (!recipientEmail.trim() || !recipientEmail.includes("@")) out.push("Decision-maker's email");
     if (!resolvedFrequency) out.push("Service frequency");
-    for (const s of readySites) {
-      if (!dollarsToCents(sitePrices[s.site_id] || "") && !Number(s.firm_price_cents)) {
-        out.push(`${s.nickname} still has no rate`);
+    if (accountId && proposalSites.length === 0) {
+      out.push("At least one site that is not excluded");
+    }
+    for (const s of proposalSites) {
+      if (!dollarsToCents(sitePrices[s.site_id] || "") && !siteRateCentsFromWalkthrough(s)) {
+        out.push(`${s.nickname} still needs a per-visit rate — walkthrough did not set one`);
       }
     }
     return out;
-  }, [accountId, canPropose, needsPortalAccount, detail, recipientName, recipientEmail, resolvedFrequency, readySites, sitePrices]);
+  }, [accountId, recipientName, recipientEmail, resolvedFrequency, proposalSites, sitePrices]);
 
   const canSubmit = requirements.length === 0;
-
-  const invitePortal = async () => {
-    if (!accountId) return;
-    const email = recipientEmail.trim() || String(detail?.account?.email || "");
-    if (!email.includes("@")) {
-      toast.error("Add the decision-maker's email — that's who the portal login is for.");
-      return;
-    }
-    setBusy("invite");
-    try {
-      const out = await commercialProposalApi("POST", {
-        action: "invite_portal",
-        accountId,
-        email,
-        fullName: recipientName.trim() || undefined,
-      });
-      if (out.alreadyLinked) {
-        toast.success("This account already has a portal login.");
-      } else if (out.linkedExisting) {
-        toast.success("Linked their existing portal login to this account.");
-      } else {
-        toast.success(`Invite sent to ${email}. They set a password from that email.`);
-      }
-      await loadAccount(accountId);
-    } catch (err) {
-      toast.error((err as Error).message);
-    } finally {
-      setBusy(null);
-    }
-  };
 
   const submit = async (send: boolean) => {
     if (!canSubmit && send) return;
@@ -466,9 +445,10 @@ export default function CommercialProposalSend({
           Send a commercial proposal
         </h2>
         <p className="text-sm text-slate-500 mt-1 max-w-2xl">
-          Same motion as Internal Booking: pick the account, confirm the priced sites, set terms, send a
-          tokenized link. The client can accept or request changes — nothing to sign and no payment
-          details on that page. Request intake, onsite docs, and this send live together on Proposals.
+          Same motion as Internal Booking: pick the account, confirm rates from the walkthrough
+          (or type them), set terms, send a tokenized link. No client portal login is required
+          to send. The client can accept or request changes — nothing to sign and no payment
+          details on that page.
         </p>
       </header>
 
@@ -477,7 +457,7 @@ export default function CommercialProposalSend({
           <FormSection
             number={1}
             title="Account"
-            description="Who is this proposal for? Only commercial and office accounts with a firm price on every site can go out."
+            description="Who is this proposal for? Rates pull from the walkthrough; you can type any field the visit did not fill."
             icon={<RiSearchLine className="w-4 h-4" />}
           >
             <div className="relative">
@@ -537,66 +517,84 @@ export default function CommercialProposalSend({
               <FormSection
                 number={2}
                 title="Sites & rates"
-                description="Every active site goes on the proposal. The walkthrough (or the rate engine, under the threshold) fills the rate; typing a different number is a negotiated override."
+                description="Every active site goes on the proposal. The walkthrough fills the rate when it has one; type a number to send without waiting on a firm-price step."
                 icon={<RiBuilding2Line className="w-4 h-4" />}
               >
                 {loadingDetail ? (
                   <Skeleton className="h-24 w-full" />
                 ) : (
                   <div className="space-y-3">
-                    {blockedSites.length > 0 && (
-                      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-                        <p className="font-semibold mb-1">These sites still need a firm price</p>
+                    {excludedSites.length > 0 && (
+                      <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-900">
+                        <p className="font-semibold mb-1">Excluded — not on this proposal</p>
                         <ul className="space-y-1">
-                          {blockedSites.map((s) => (
+                          {excludedSites.map((s) => (
                             <li key={s.site_id}>
-                              {s.nickname} — {s.reason || "no firm price yet"}
+                              {s.nickname} — {s.reason || "outside what we service"}
                             </li>
                           ))}
                         </ul>
-                        <a
-                          href={walkthroughsHref || commercialTab("walkthroughs")}
-                          className="inline-flex items-center gap-1 mt-2 font-semibold underline"
-                        >
-                          Open walkthroughs
-                          <RiArrowRightLine className="w-3.5 h-3.5" />
-                        </a>
                       </div>
                     )}
-                    {readySites.length === 0 && blockedSites.length === 0 && (
+                    {proposalSites.length === 0 && excludedSites.length === 0 && (
                       <p className="text-xs text-slate-500">This account has no active sites.</p>
                     )}
-                    {readySites.map((s) => (
-                      <div key={s.site_id} className="rounded-xl border border-slate-200 p-3 grid sm:grid-cols-12 gap-3 items-end">
-                        <div className="sm:col-span-7 min-w-0">
-                          <p className="text-sm font-semibold text-slate-900 truncate">{s.nickname}</p>
-                          <p className="text-[11px] text-slate-500 truncate">
-                            {[s.address, s.facility_type && titleCase(String(s.facility_type)), s.sqft && `${Number(s.sqft).toLocaleString()} sq ft`, s.price_source]
-                              .filter(Boolean)
-                              .join(" · ")}
-                          </p>
+                    {proposalSites.some((s) => !siteRateCentsFromWalkthrough(s)) && (
+                      <p className="text-[11px] text-slate-500">
+                        A site has no walkthrough rate yet — type one, or{" "}
+                        <a
+                          href={walkthroughsHref || commercialTab("walkthroughs")}
+                          className="font-semibold underline"
+                        >
+                          open walkthroughs
+                        </a>
+                        .
+                      </p>
+                    )}
+                    {proposalSites.map((s) => {
+                      const fromWalkthrough = Boolean(siteRateCentsFromWalkthrough(s));
+                      return (
+                        <div key={s.site_id} className="rounded-xl border border-slate-200 p-3 grid sm:grid-cols-12 gap-3 items-end">
+                          <div className="sm:col-span-7 min-w-0">
+                            <p className="text-sm font-semibold text-slate-900 truncate">{s.nickname}</p>
+                            <p className="text-[11px] text-slate-500 truncate">
+                              {[
+                                s.address,
+                                s.facility_type && titleCase(String(s.facility_type)),
+                                s.sqft && `${Number(s.sqft).toLocaleString()} sq ft`,
+                                fromWalkthrough ? "walkthrough" : (s.reason || "type a rate"),
+                              ]
+                                .filter(Boolean)
+                                .join(" · ")}
+                            </p>
+                          </div>
+                          <div className="sm:col-span-5">
+                            <Field label="Per-visit rate" required>
+                              <div className="relative">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">$</span>
+                                <Input
+                                  inputMode="decimal"
+                                  value={sitePrices[s.site_id] || ""}
+                                  onChange={(e) => {
+                                    setSitePrices((prev) => ({ ...prev, [s.site_id]: e.target.value }));
+                                    setPriceTouched((prev) => ({ ...prev, [s.site_id]: true }));
+                                  }}
+                                  placeholder={fromWalkthrough ? undefined : "Type the rate"}
+                                  className="pl-7 tabular-nums"
+                                />
+                              </div>
+                            </Field>
+                            {priceTouched[s.site_id] && (
+                              <p className="text-[10px] text-violet-700 mt-1">
+                                {fromWalkthrough
+                                  ? "Override — the walkthrough number stays on the account."
+                                  : "Admin rate — no firm walkthrough price on file."}
+                              </p>
+                            )}
+                          </div>
                         </div>
-                        <div className="sm:col-span-5">
-                          <Field label="Per-visit rate" required>
-                            <div className="relative">
-                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">$</span>
-                              <Input
-                                inputMode="decimal"
-                                value={sitePrices[s.site_id] || ""}
-                                onChange={(e) => {
-                                  setSitePrices((prev) => ({ ...prev, [s.site_id]: e.target.value }));
-                                  setPriceTouched((prev) => ({ ...prev, [s.site_id]: true }));
-                                }}
-                                className="pl-7 tabular-nums"
-                              />
-                            </div>
-                          </Field>
-                          {priceTouched[s.site_id] && (
-                            <p className="text-[10px] text-violet-700 mt-1">Negotiated override — the walkthrough number is kept on the account.</p>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </FormSection>
@@ -707,7 +705,7 @@ export default function CommercialProposalSend({
               <FormSection
                 number={4}
                 title="Recipient"
-                description="The decision-maker — often not the person who will later sign. The proposal page is non-binding on purpose."
+                description="Pulled from the walkthrough request when the account contact is empty. Type over any field."
                 icon={<RiUserLine className="w-4 h-4" />}
               >
                 <div className="grid sm:grid-cols-2 gap-4">
@@ -729,41 +727,6 @@ export default function CommercialProposalSend({
                     placeholder="A line or two on the walkthrough, the cadence, or what moved since the last version."
                   />
                 </Field>
-              </FormSection>
-
-              <FormSection
-                number={5}
-                title="Client account"
-                description="A portal login is required before the proposal can go out. They use it to review this document and later to request service."
-                icon={<RiUserLine className="w-4 h-4" />}
-              >
-                {needsPortalAccount ? (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-3">
-                    <p className="text-sm text-amber-950">{PORTAL_ACCOUNT_REQUIRED_MESSAGE}</p>
-                    <p className="text-[11px] text-amber-900/80">
-                      Invite goes to {recipientEmail.trim() || "the email above"}. They set a password from that email.
-                    </p>
-                    <Button
-                      type="button"
-                      onClick={() => void invitePortal()}
-                      disabled={busy !== null || !recipientEmail.includes("@")}
-                      className="bg-violet-600 hover:bg-violet-700 text-white"
-                    >
-                      {busy === "invite" ? (
-                        <><RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" /> Creating account…</>
-                      ) : (
-                        <>Create client account</>
-                      )}
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-                    Portal login is on this account
-                    {detail?.account?.portal_created_at
-                      ? ` · created ${new Date(String(detail.account.portal_created_at)).toLocaleDateString()}`
-                      : ""}.
-                  </div>
-                )}
               </FormSection>
             </>
           )}
@@ -788,7 +751,7 @@ export default function CommercialProposalSend({
                 ) : (
                   <p className="text-sm text-slate-400">No account selected</p>
                 )}
-                <SummaryRow label="Sites on this proposal" value={String(readySites.length)} />
+                <SummaryRow label="Sites on this proposal" value={String(proposalSites.length)} />
                 <SummaryRow label="Frequency" value={resolvedFrequency || "—"} />
                 <SummaryRow label="Billing" value={BILLING_METHOD_LABELS[billingMethod]} />
                 <div className="h-px bg-slate-100 my-1.5" />
@@ -841,7 +804,7 @@ export default function CommercialProposalSend({
                 </Button>
                 <Button
                   onClick={() => void submit(false)}
-                  disabled={!accountId || !canPropose || busy !== null}
+                  disabled={!accountId || proposalSites.length === 0 || busy !== null}
                   variant="outline"
                   size="sm"
                   className="w-full mt-2 text-slate-600"

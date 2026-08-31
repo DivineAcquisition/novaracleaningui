@@ -327,15 +327,42 @@ export function agreementUrl(token: string): string {
   return `${origin()}/commercial-agreement/${token}`;
 }
 
-/** A proposal cannot go out until the client has a portal login on the account. */
-export function portalAccountRequired(
-  account: { portal_user_id?: string | null } | null | undefined,
-): boolean {
-  return !String(account?.portal_user_id || "").trim();
+/** Recipient and cadence: account first, then the walkthrough request. */
+export function proposalPrefillFromWalkthrough(input: {
+  account?: {
+    contact_name?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    recurring_frequency?: string | null;
+  } | null;
+  request?: {
+    requester_name?: string | null;
+    requester_email?: string | null;
+    requester_phone?: string | null;
+    desired_frequency?: string | null;
+  } | null;
+}): { name: string; email: string; phone: string; frequency: string } {
+  return {
+    name: String(input.account?.contact_name || input.request?.requester_name || "").trim(),
+    email: String(input.account?.email || input.request?.requester_email || "").trim(),
+    phone: String(input.account?.phone || input.request?.requester_phone || "").trim(),
+    frequency:
+      String(input.account?.recurring_frequency || input.request?.desired_frequency || "weekly").trim()
+      || "weekly",
+  };
 }
 
-export const PORTAL_ACCOUNT_REQUIRED_MESSAGE =
-  "A client portal account is required before this proposal can go out. Create one for the decision-maker first.";
+/** Walkthrough / firm price first; admin types a rate when neither is set. */
+export function siteRateCentsFromWalkthrough(site: {
+  firm_price_cents?: number | null;
+  formula_price_cents?: number | null;
+} | null | undefined): number | null {
+  const firm = Number(site?.firm_price_cents);
+  if (Number.isFinite(firm) && firm > 0) return Math.round(firm);
+  const formula = Number(site?.formula_price_cents);
+  if (Number.isFinite(formula) && formula > 0) return Math.round(formula);
+  return null;
+}
 
 // ─── Requirement vocabulary ────────────────────────────────────────────────
 //
