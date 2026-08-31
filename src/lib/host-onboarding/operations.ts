@@ -6,7 +6,7 @@
 //
 // Step order is enforced here. Pages 2 and 3 refuse unless Page 1 is signed.
 
-import { resolveAppSecret, stripeCall } from "@/lib/stripe-rest";
+import { resolveAppSecret, stripeCall, createCardPreAuth, readPaymentIntent } from "@/lib/stripe-rest";
 import { MIN_PASSWORD_LENGTH } from "./types";
 import type { PaymentOptionKey } from "./agreement";
 import { parseSnapshot, portalUrl } from "./session";
@@ -405,7 +405,14 @@ export async function openPaymentSetup(
     paymentOption: PaymentOptionKey;
     returnUrl: string;
   },
-): Promise<{ ok: boolean; status: number; message?: string; url?: string }> {
+): Promise<{
+  ok: boolean;
+  status: number;
+  message?: string;
+  clientSecret?: string;
+  amountCents?: number;
+  alreadyHeld?: boolean;
+}> {
   const gate = requireSigned(input.session);
   if (gate) return { ok: false, status: 409, message: gate };
 
@@ -439,23 +446,57 @@ export async function openPaymentSetup(
     });
     await supabase.from("hosts").update({ stripe_customer_id: customerId }).eq("id", input.host.id as string);
 
-    const checkout = await stripeCall(stripeKey, "POST", "checkout/sessions", {
-      mode: "setup",
-      customer: customerId,
-      "payment_method_types[0]": "card",
-      success_url: `${input.returnUrl}?payment=done`,
-      cancel_url: `${input.returnUrl}?payment=cancelled`,
-      "metadata[host_id]": String(input.host.id),
-      "metadata[session_id]": String(input.session.id),
-      "metadata[kind]": "host_onboarding_setup",
-      "metadata[payment_option]": input.paymentOption,
+    const existingId = String(input.session.stripe_setup_session_id || "");
+    if (existingId.startsWith("pi_")) {
+      const existing = await readPaymentIntent(stripeKey, existingId);
+      if (existing.held && existing.paymentMethodId) {
+        await applyHostHold(supabase, {
+          session: input.session,
+          host: input.host,
+          customerId: existing.customerId || customerId,
+          paymentMethodId: existing.paymentMethodId,
+          intentId: existing.id,
+          paymentOption: input.paymentOption,
+        });
+        return { ok: true, status: 200, alreadyHeld: true, amountCents: existing.amountCents };
+      }
+      if (existing.needsCard && existing.clientSecret) {
+        await supabase
+          .from("host_onboarding_sessions")
+          .update({
+            payment_option: input.paymentOption,
+            stripe_setup_session_id: existing.id,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", input.session.id as string);
+        return {
+          ok: true,
+          status: 200,
+          clientSecret: existing.clientSecret,
+          amountCents: existing.amountCents,
+        };
+      }
+    }
+
+    const snapshot = parseSnapshot(input.session.property_snapshot);
+    const amountCents = Math.round(Number(snapshot[0]?.turnover_price || 0) * 100);
+    const hold = await createCardPreAuth(stripeKey, {
+      customerId,
+      amountCents,
+      description: `Novara host pre-auth hold — ${String(input.host.name || "host")}`,
+      metadata: {
+        host_id: String(input.host.id),
+        session_id: String(input.session.id),
+        kind: "host_onboarding_preauth",
+        payment_option: input.paymentOption,
+      },
     });
 
     await supabase
       .from("host_onboarding_sessions")
       .update({
         payment_option: input.paymentOption,
-        stripe_setup_session_id: String(checkout.id || ""),
+        stripe_setup_session_id: hold.id,
         updated_at: new Date().toISOString(),
       })
       .eq("id", input.session.id as string);
@@ -465,15 +506,57 @@ export async function openPaymentSetup(
       .update({ preferred_payment_option: input.paymentOption })
       .eq("id", input.host.id as string);
 
-    return { ok: true, status: 200, url: String(checkout.url || "") };
+    return { ok: true, status: 200, clientSecret: hold.clientSecret, amountCents: hold.amountCents };
   } catch (err) {
     return { ok: false, status: 502, message: `Could not open card setup: ${(err as Error).message}` };
   }
 }
 
+async function applyHostHold(
+  supabase: Admin,
+  input: {
+    session: Row;
+    host: Row;
+    customerId: string;
+    paymentMethodId: string;
+    intentId: string;
+    paymentOption: PaymentOptionKey;
+  },
+): Promise<void> {
+  const now = new Date().toISOString();
+  await supabase
+    .from("hosts")
+    .update({
+      stripe_customer_id: input.customerId,
+      default_payment_method_id: input.paymentMethodId,
+      preferred_payment_option: input.paymentOption,
+    })
+    .eq("id", input.host.id as string);
+  await supabase
+    .from("host_onboarding_sessions")
+    .update({
+      payment_option: input.paymentOption,
+      payment_method_id: input.paymentMethodId,
+      stripe_setup_session_id: input.intentId,
+      payment_setup_at: now,
+      updated_at: now,
+    })
+    .eq("id", input.session.id as string);
+  const stripeKey = await resolveAppSecret("STRIPE_SECRET_KEY");
+  if (stripeKey && input.customerId && input.paymentMethodId) {
+    try {
+      await stripeCall(stripeKey, "POST", `customers/${input.customerId}`, {
+        "invoice_settings[default_payment_method]": input.paymentMethodId,
+      });
+    } catch {
+      /* best-effort */
+    }
+  }
+}
+
 export async function refreshPaymentFromStripe(
   supabase: Admin,
-  input: { session: Row; host: Row },
+  input: { session: Row; host: Row; paymentIntentId?: string | null },
 ): Promise<{ ok: boolean; paymentMethodId: string | null }> {
   const stripeKey = await resolveAppSecret("STRIPE_SECRET_KEY");
   if (!stripeKey) return { ok: false, paymentMethodId: null };
@@ -481,8 +564,16 @@ export async function refreshPaymentFromStripe(
   let customerId = (input.host.stripe_customer_id as string) || null;
   let methodId: string | null = (input.host.default_payment_method_id as string) || null;
 
-  const setupId = input.session.stripe_setup_session_id as string | null;
-  if (setupId) {
+  const setupId = String(input.paymentIntentId || input.session.stripe_setup_session_id || "");
+  if (setupId.startsWith("pi_")) {
+    try {
+      const intent = await readPaymentIntent(stripeKey, setupId);
+      if (intent.customerId) customerId = intent.customerId;
+      if (intent.held && intent.paymentMethodId) methodId = intent.paymentMethodId;
+    } catch {
+      /* fall through */
+    }
+  } else if (setupId.startsWith("cs_")) {
     try {
       const checkout = await stripeCall(stripeKey, "GET", `checkout/sessions/${setupId}`);
       const setupIntentId = checkout.setup_intent as string | undefined;

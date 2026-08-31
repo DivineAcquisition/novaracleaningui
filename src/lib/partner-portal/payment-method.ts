@@ -1,10 +1,15 @@
 // Update payment method on file — Host (always) and Commercial Stripe Pre-Auth.
 // Invoiced commercial accounts pay invoices; they never get a card field here.
-// Reuses the same Stripe Checkout setup-mode path as onboarding.
+// Card collection is an in-page Payment Element + manual-capture pre-auth hold.
 
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import { ensureHostCustomer } from "@/lib/host-onboarding/operations";
-import { resolveAppSecret, stripeCall, ensureCommercialCustomer } from "@/lib/stripe-rest";
+import {
+  resolveAppSecret,
+  ensureCommercialCustomer,
+  createCardPreAuth,
+  readPaymentIntent,
+} from "@/lib/stripe-rest";
 import type { PartnerIdentity } from "./identity";
 import {
   applyDefaultPaymentMethod,
@@ -16,8 +21,7 @@ import {
 
 export async function openHostPaymentSetup(
   identity: PartnerIdentity,
-  returnUrl: string,
-): Promise<{ ok: boolean; url?: string; error?: string }> {
+): Promise<{ ok: boolean; clientSecret?: string; amountCents?: number; error?: string }> {
   const host = identity.hosts[0];
   if (!host) return { ok: false, error: "No host relationship on this account." };
   const stripeKey = await resolveAppSecret("STRIPE_SECRET_KEY");
@@ -41,16 +45,13 @@ export async function openHostPaymentSetup(
       existingId: (row.stripe_customer_id as string) || null,
     });
     await supabase.from("hosts").update({ stripe_customer_id: customerId }).eq("id", host.id);
-    const checkout = await stripeCall(stripeKey, "POST", "checkout/sessions", {
-      mode: "setup",
-      customer: customerId,
-      "payment_method_types[0]": "card",
-      success_url: returnUrl,
-      cancel_url: returnUrl.replace("payment=updated", "payment=cancelled"),
-      "metadata[host_id]": host.id,
-      "metadata[kind]": "partner_portal_host_setup",
+    const hold = await createCardPreAuth(stripeKey, {
+      customerId,
+      amountCents: 100,
+      description: "Novara host card verification hold",
+      metadata: { host_id: host.id, kind: "partner_portal_host_preauth" },
     });
-    return { ok: true, url: String(checkout.url || "") };
+    return { ok: true, clientSecret: hold.clientSecret, amountCents: hold.amountCents };
   } catch (err) {
     return { ok: false, error: `Could not open card setup: ${(err as Error).message}` };
   }
@@ -72,7 +73,14 @@ export async function refreshHostPaymentMethod(
 
   let customerId = (row.stripe_customer_id as string) || null;
   let methodId = (row.default_payment_method_id as string) || null;
-  if (checkoutSessionId) {
+  if (checkoutSessionId?.startsWith("pi_")) {
+    const stripeKey = await resolveAppSecret("STRIPE_SECRET_KEY");
+    if (stripeKey) {
+      const intent = await readPaymentIntent(stripeKey, checkoutSessionId);
+      if (intent.customerId) customerId = intent.customerId;
+      if (intent.paymentMethodId) methodId = intent.paymentMethodId;
+    }
+  } else if (checkoutSessionId) {
     const from = await paymentMethodFromSetupSession(checkoutSessionId);
     if (from.customerId) customerId = from.customerId;
     if (from.paymentMethodId) methodId = from.paymentMethodId;
@@ -97,8 +105,7 @@ function commercialMethod(identity: PartnerIdentity): BillingMethod {
 
 export async function openCommercialPaymentSetup(
   identity: PartnerIdentity,
-  returnUrl: string,
-): Promise<{ ok: boolean; url?: string; error?: string }> {
+): Promise<{ ok: boolean; clientSecret?: string; amountCents?: number; error?: string }> {
   const account = identity.accounts[0];
   if (!account) return { ok: false, error: "No commercial relationship on this account." };
   if (!portalCanUpdatePayment(commercialMethod(identity))) {
@@ -135,17 +142,13 @@ export async function openCommercialPaymentSetup(
       existingId: (row.stripe_customer_id as string) || null,
     });
     await supabase.from("business_accounts").update({ stripe_customer_id: customerId }).eq("id", account.id);
-    const checkout = await stripeCall(stripeKey, "POST", "checkout/sessions", {
-      mode: "setup",
-      customer: customerId,
-      "payment_method_types[0]": "card",
-      "payment_method_types[1]": "us_bank_account",
-      success_url: returnUrl,
-      cancel_url: returnUrl.replace("payment=updated", "payment=cancelled"),
-      "metadata[business_account_id]": account.id,
-      "metadata[kind]": "partner_portal_commercial_setup",
+    const hold = await createCardPreAuth(stripeKey, {
+      customerId,
+      amountCents: 100,
+      description: `Novara commercial card verification hold — ${String(row.business_name || "")}`,
+      metadata: { business_account_id: account.id, kind: "partner_portal_commercial_preauth" },
     });
-    return { ok: true, url: String(checkout.url || "") };
+    return { ok: true, clientSecret: hold.clientSecret, amountCents: hold.amountCents };
   } catch (err) {
     return { ok: false, error: `Could not open card setup: ${(err as Error).message}` };
   }
@@ -170,7 +173,14 @@ export async function refreshCommercialPaymentMethod(
 
   let customerId = (row.stripe_customer_id as string) || null;
   let methodId: string | null = null;
-  if (checkoutSessionId) {
+  if (checkoutSessionId?.startsWith("pi_")) {
+    const stripeKey = await resolveAppSecret("STRIPE_SECRET_KEY");
+    if (stripeKey) {
+      const intent = await readPaymentIntent(stripeKey, checkoutSessionId);
+      if (intent.customerId) customerId = intent.customerId;
+      if (intent.paymentMethodId) methodId = intent.paymentMethodId;
+    }
+  } else if (checkoutSessionId) {
     const from = await paymentMethodFromSetupSession(checkoutSessionId);
     if (from.customerId) customerId = from.customerId;
     if (from.paymentMethodId) methodId = from.paymentMethodId;

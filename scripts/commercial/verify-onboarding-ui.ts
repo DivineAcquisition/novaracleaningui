@@ -18,6 +18,7 @@
 // the promises above.
 
 import { chromium, type Page, type Route } from "playwright";
+import { deriveCommercialOnboardingProgress } from "../../src/lib/commercial-onboarding/progress";
 
 const BASE = process.env.DOCS_CAPTURE_BASE_URL || "http://localhost:3100";
 const TOKEN = "0".repeat(64);
@@ -47,15 +48,17 @@ const SITES = [
 ];
 
 function payload({ step, billingMethod, paused, billingConfigured, portalReady }: Scenario) {
-  const done = (k: string) => {
-    const order = ["pricing", "agreement", "billing"];
-    const at = order.indexOf(step);
-    if (step === "done") return true;
-    if (step === "paused") return false;
-    return order.indexOf(k) < at;
-  };
   const billed = billingConfigured === true || step === "done";
   const portal = portalReady === true || step === "done";
+  const progress = deriveCommercialOnboardingProgress({
+    proposalStatus: paused ? "changes_requested" : step === "pricing" ? "sent" : "accepted",
+    hasAgreement: step !== "pricing" && !paused,
+    agreementStatus:
+      step === "agreement" ? "pending" : step === "billing" || step === "done" ? "signed" : null,
+    billingConfigured: billed,
+    portalReady: portal,
+    billingMethod,
+  });
   return {
     ok: true,
     session: {
@@ -67,24 +70,8 @@ function payload({ step, billingMethod, paused, billingConfigured, portalReady }
       completedAt: null,
     },
     progress: {
+      ...progress,
       current_step: paused ? "paused" : step,
-      paused_for_changes: Boolean(paused),
-      complete: step === "done",
-      billing_configured: billed,
-      portal_ready: portal,
-      billing_method: billingMethod,
-      steps: [
-        { key: "pricing", label: "Pricing & Terms", done: done("pricing") },
-        { key: "agreement", label: "Agreement", done: done("agreement") },
-        {
-          key: "billing",
-          label:
-            billingMethod === "auto_pay"
-              ? "Billing setup (Stripe Pre-Auth) and portal access"
-              : "Billing setup (Invoice) and portal access",
-          done: billed && portal,
-        },
-      ],
       compliance: { blockers: [] },
       billing: null,
     },
@@ -188,6 +175,11 @@ async function main() {
 
     check("status checklist renders above the form", checklistY < formY);
     check("opens on pricing review", body.includes("Page 1 — Pricing & Terms Review"));
+    const cream = await page.evaluate(() => {
+      const el = document.querySelector(".min-h-screen");
+      return el ? getComputedStyle(el).backgroundColor : "";
+    });
+    check("cream page field", cream === "rgb(251, 246, 238)");
     check("shows the per-site rate", body.includes("$280.80"));
     check("offers Request Changes", body.includes("Request changes instead"));
     check(
@@ -260,8 +252,8 @@ async function main() {
     await open(page, { step: "billing", billingMethod: "auto_pay" });
     const body = (await page.textContent("body")) || "";
 
-    check("offers the card / bank setup", body.includes("Add a card or bank account"));
-    check("states nothing is charged now", /nothing is charged now/i.test(body));
+    check("offers the Pre-Auth card form", /pre-auth hold/i.test(body));
+    check("states it is a verification hold", /verification hold/i.test(body));
     check("names Stripe Pre-Auth", body.includes("Stripe Pre-Auth"));
     check(
       "NEVER shows invoice-contact fields to a Stripe Pre-Auth account",

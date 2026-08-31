@@ -41,6 +41,7 @@ import { SignaturePad } from "@/components/booking/SignaturePad";
 import { CompanyCoiDownloadLink } from "@/components/commercial/CompanyCoiDownloadLink";
 import { PdfViewer } from "@/components/PdfViewer";
 import { TokenPageShell, TokenPanel } from "@/components/token/TokenPageShell";
+import { EmbeddedCardForm } from "@/components/token/EmbeddedCardForm";
 import {
   money,
   BILLING_METHOD_LABELS,
@@ -84,6 +85,7 @@ interface Payload {
   portalUrl: string;
   handoffUrl?: string;
   submissions: Row[];
+  preview?: boolean;
 }
 
 type State =
@@ -186,16 +188,22 @@ export default function CommercialOnboarding({ token }: { token: string }) {
   // leaving the client on a screen that still says "add a payment method".
   const returningFromStripe = useMemo(() => {
     if (typeof window === "undefined") return false;
-    return new URLSearchParams(window.location.search).get("billing") === "done";
+    const q = new URLSearchParams(window.location.search);
+    return q.get("billing") === "done" || Boolean(q.get("payment_intent"));
   }, []);
 
   useEffect(() => {
     if (!returningFromStripe) return;
     void (async () => {
+      const q = new URLSearchParams(window.location.search);
+      const paymentIntentId = q.get("payment_intent");
       await fetch(`/api/commercial-onboarding/${token}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "billing_status" }),
+        body: JSON.stringify({
+          action: paymentIntentId ? "confirm_billing" : "billing_status",
+          paymentIntentId,
+        }),
       });
       await load();
       window.history.replaceState({}, "", window.location.pathname);
@@ -220,6 +228,9 @@ export default function CommercialOnboarding({ token }: { token: string }) {
       if (json.outcome === "redirect" && json.url) {
         window.location.href = json.url as string;
         return null;
+      }
+      if (json.outcome === "embed") {
+        return json;
       }
       if (json.message) setNotice(json.message as string);
       if (typeof window !== "undefined") {
@@ -296,7 +307,7 @@ export default function CommercialOnboarding({ token }: { token: string }) {
         <PricingStep data={d} busy={busy} onPost={post} />
       )}
       {step === "agreement" && <AgreementStep data={d} busy={busy} token={token} onDone={load} onError={setError} />}
-      {step === "billing" && <BillingStep data={d} busy={busy} onPost={post} />}
+      {step === "billing" && <BillingStep token={token} data={d} busy={busy} onPost={post} />}
       {step === "done" && <DoneCard data={d} />}
 
       <SubmitInfo busy={busy} onPost={post} submissions={d.submissions} />
@@ -637,10 +648,12 @@ function AgreementStep({
 // ─── Step 3: billing, in the pre-selected method only ──────────────────────
 
 function BillingStep({
+  token,
   data,
   busy,
   onPost,
 }: {
+  token: string;
   data: Payload;
   busy: boolean;
   onPost: (b: Record<string, unknown>) => Promise<Row | null>;
@@ -650,12 +663,15 @@ function BillingStep({
   const billed = Boolean(data.progress.billing_configured);
   const portalReady = Boolean(data.progress.portal_ready);
   const autoStarted = useRef(false);
+  const embedStarted = useRef(false);
   const onPostRef = useRef(onPost);
   onPostRef.current = onPost;
   const [contactName, setContactName] = useState(String(a.signedByName || ""));
   const [contactEmail, setContactEmail] = useState(String(data.account?.email || ""));
   const [contactPhone, setContactPhone] = useState("");
   const [poNumber, setPoNumber] = useState("");
+  const [embed, setEmbed] = useState<{ clientSecret: string; amountCents: number } | null>(null);
+  const [embedError, setEmbedError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!billed || portalReady || autoStarted.current) return;
@@ -665,6 +681,34 @@ function BillingStep({
       email: String(data.account?.email || ""),
     });
   }, [billed, portalReady, data.account?.email]);
+
+  useEffect(() => {
+    if (method !== "auto_pay" || billed || data.preview || embedStarted.current) return;
+    embedStarted.current = true;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/commercial-onboarding/${token}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "setup_billing" }),
+        });
+        const json = await res.json();
+        if (json?.outcome === "embed" && json.clientSecret) {
+          setEmbed({ clientSecret: String(json.clientSecret), amountCents: Number(json.amountCents || 50) });
+          return;
+        }
+        if (json?.outcome === "billing_configured") {
+          await onPostRef.current({ action: "billing_status" });
+          return;
+        }
+        setEmbedError(json?.message || "Could not open the card form.");
+        embedStarted.current = false;
+      } catch {
+        setEmbedError("Could not open the card form.");
+        embedStarted.current = false;
+      }
+    })();
+  }, [method, billed, data.preview, token]);
 
   if (billed && !portalReady) {
     return (
@@ -701,20 +745,37 @@ function BillingStep({
       <Card>
         <h2 className="text-base font-semibold">Page 3 — Billing Setup</h2>
         <p className="mt-1 text-sm leading-relaxed text-slate-600">
-          Your account is set up for Stripe Pre-Auth, so we&apos;ll save a card or bank account on
-          file for future automatic billing. <strong>This is a verification hold, not a charge</strong>
-          {" "}— nothing is charged now.
+          Your account is set up for Stripe Pre-Auth. Add a card here — this is a verification hold,
+          not a charge, and the agreement is not complete until the hold is submitted.
         </p>
-        <button
-          disabled={busy}
-          onClick={() => void onPost({ action: "setup_billing" })}
-          className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
-        >
-          {busy ? <RiLoader4Line className="h-4 w-4 animate-spin" /> : <RiBankCardLine className="h-4 w-4" />}
-          Add a card or bank account
-        </button>
+        {data.preview ? (
+          <button
+            disabled={busy}
+            onClick={() => void onPost({ action: "setup_billing" })}
+            className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
+          >
+            {busy ? <RiLoader4Line className="h-4 w-4 animate-spin" /> : <RiBankCardLine className="h-4 w-4" />}
+            Place the Pre-Auth hold
+          </button>
+        ) : embed ? (
+          <div className="mt-4">
+            <EmbeddedCardForm
+              clientSecret={embed.clientSecret}
+              amountCents={embed.amountCents}
+              returnUrl={typeof window !== "undefined" ? window.location.href.split("#")[0] : ""}
+              submitLabel="Submit card and place Pre-Auth hold"
+              onConfirmed={(paymentIntentId) => void onPost({ action: "confirm_billing", paymentIntentId })}
+            />
+          </div>
+        ) : (
+          <div className="mt-4 flex items-center gap-2 text-sm text-slate-500">
+            <RiLoader4Line className="h-4 w-4 animate-spin" />
+            Opening the card form…
+          </div>
+        )}
+        {embedError && <p className="mt-3 text-sm text-rose-700">{embedError}</p>}
         <p className="mt-2 text-center text-xs text-slate-400">
-          Handled by Stripe. We never see your card number.
+          The card form stays on this page. We never see the full number.
         </p>
       </Card>
     );

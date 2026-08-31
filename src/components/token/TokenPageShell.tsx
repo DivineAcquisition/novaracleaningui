@@ -5,15 +5,13 @@ import type { ReactNode } from "react";
 import { AnimatedShinyText } from "@/components/magicui/animated-shiny-text";
 import { BlurFade } from "@/components/magicui/blur-fade";
 import { BorderBeam } from "@/components/magicui/border-beam";
-import { Particles } from "@/components/magicui/particles";
 import { ShineBorder } from "@/components/magicui/shine-border";
 import { Panel } from "@/components/ui/panel";
-import { BRAND } from "@/lib/brand";
 import { cn } from "@/lib/utils";
 
 /**
  * Shared chrome for tokenized partner / commercial / walkthrough pages.
- * Particles + Coss panel + Magic shine — Novara purple, not Vistrial lavender.
+ * Cream field, Novara glow only at the top — no particle field.
  */
 export function TokenPageShell({
   eyebrow,
@@ -69,16 +67,9 @@ export function TokenPageShell({
   if (embedded) return inner;
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#f4f4f5] font-sans text-slate-900">
-      <Particles
-        className="absolute inset-0 z-0"
-        quantity={42}
-        color={BRAND.primary}
-        ease={80}
-        size={0.4}
-      />
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-primary/[0.05] via-transparent to-transparent" />
-      <div className="pointer-events-none absolute left-1/2 top-0 h-[420px] w-[720px] -translate-x-1/2 rounded-full bg-primary/[0.06] blur-3xl" />
+    <div className="relative min-h-screen overflow-hidden bg-[#FBF6EE] font-sans text-slate-900">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-[320px] bg-gradient-to-b from-primary/[0.10] via-primary/[0.04] to-transparent" />
+      <div className="pointer-events-none absolute left-1/2 top-0 h-[240px] w-[560px] -translate-x-1/2 rounded-full bg-primary/[0.10] blur-3xl" />
       {inner}
     </div>
   );

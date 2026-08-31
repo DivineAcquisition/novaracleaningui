@@ -60,7 +60,7 @@ export function applyHostOnboardingPreviewAction(action: string, body: Record<st
     previewMem.signed = true;
     return { ok: true, status: 200, outcome: "signed", message: "Signed. Next: confirm each property and its Company-set rate." };
   }
-  if (!previewMem.signed && ["decide_property", "request_property", "setup_payment", "payment_status", "create_portal"].includes(action)) {
+  if (!previewMem.signed && ["decide_property", "request_property", "setup_payment", "confirm_payment", "payment_status", "create_portal"].includes(action)) {
     return { ok: false, status: 409, message: "Sign the Host Partnership Agreement first — Pages 2 and 3 open after that." };
   }
   if (action === "decide_property") {
@@ -85,6 +85,10 @@ export function applyHostOnboardingPreviewAction(action: string, body: Record<st
     previewMem.paymentOption = option;
     previewMem.card = true;
     return { ok: true, status: 200, outcome: "payment_ready", message: "Payment method on file (preview)." };
+  }
+  if (action === "confirm_payment") {
+    previewMem.card = true;
+    return { ok: true, status: 200, outcome: "payment_ready", message: "Pre-Auth hold is on file (preview)." };
   }
   if (action === "payment_status") {
     return { ok: true, status: 200, outcome: previewMem.card ? "payment_ready" : "payment_pending" };

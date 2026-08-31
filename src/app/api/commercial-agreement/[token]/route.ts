@@ -10,18 +10,19 @@
 //                           countersign, deliver our certificate of insurance,
 //                           and open the billing step.
 //   POST { action:"setup_billing" }
-//                           Auto-Pay  → a Stripe setup session (no charge)
+//                           Auto-Pay  → in-page Payment Element + Pre-Auth hold
 //                           Invoiced  → confirm contact, cycle and Net terms
+//   POST { action:"confirm_billing" }
+//                           record the hold after the card form confirms
 //   POST { action:"billing_status" }
-//                           resolve the saved payment method after the Stripe
-//                           redirect returns.
+//                           resolve the saved method after a 3DS return
 //
 // Two things here are deliberate rather than incidental:
 //
-//   * BILLING IS NOT A CHARGE. Auto-Pay opens a Stripe *setup* session, which
-//     saves a card or bank account and moves no money. Invoiced collects no
-//     payment identifier at all. Both are complete: an invoiced account is
-//     never left waiting on a card it was never going to have.
+//   * BILLING IS NOT A CHARGE. Auto-Pay places a Stripe Pre-Auth hold
+//     (manual capture, card saved for later) in an embed on this page — never
+//     a Checkout redirect. The agreement is not complete until that hold
+//     lands. Invoiced collects no payment identifier at all.
 //   * The token is burned on signature. A forwarded email cannot produce a
 //     second executed agreement, but the billing step stays reachable through
 //     a short-lived continuation token so the signer isn't dropped mid-flow.
@@ -62,9 +63,9 @@ function refuse(status: number, reason: string, message: string): Resolved {
 /**
  * Resolve a signing link.
  *
- * A signed agreement still resolves — the signer may be returning from the
- * Stripe redirect to finish billing, and dropping them at "invalid link"
- * halfway through setup is how an account ends up signed but unbillable.
+ * A signed agreement still resolves — the signer may be returning from 3DS
+ * to finish billing, and dropping them at "invalid link" halfway through
+ * setup is how an account ends up signed but unbillable.
  */
 async function resolveToken(token: string): Promise<Resolved> {
   if (!token || token.length < 32) {
@@ -241,8 +242,8 @@ export async function POST(
       signatureDataUrl,
       pdfBase64,
       ctx: requestContext(req),
-      // This route IS the signer's link, so it needs a continuation token to
-      // survive the Stripe redirect and finish billing.
+      // Signing burns the link. A continuation token keeps billing reachable
+      // on this same page (the Pre-Auth embed stays here, not on Checkout).
       mintContinuation: true,
     });
 
@@ -315,12 +316,59 @@ export async function POST(
     if (!setup.ok) {
       return NextResponse.json({ ok: false, message: setup.message }, { status: setup.status });
     }
-    return NextResponse.json({ ok: true, outcome: "redirect", url: setup.url });
+    if (setup.alreadyHeld) {
+      const billing = await billingSnapshot(supabase, accountId);
+      await retireContinuationToken(supabase, a, billing.state);
+      return NextResponse.json({
+        ok: true,
+        outcome: "billing_configured",
+        billing: billing.state,
+        message: "Pre-Auth hold is already on file.",
+      });
+    }
+    return NextResponse.json({
+      ok: true,
+      outcome: "embed",
+      clientSecret: setup.clientSecret,
+      amountCents: setup.amountCents,
+    });
   }
 
-  // ── Resolve the saved method after the Stripe redirect ─────────────────
+  if (action === "confirm_billing") {
+    if (a.status !== "signed") {
+      return NextResponse.json(
+        { ok: false, message: "Billing is set up after the agreement is signed." },
+        { status: 409 },
+      );
+    }
+    const held = await refreshAutoPayFromStripe(supabase, {
+      agreement: a,
+      account: acct,
+      paymentIntentId: clip(body.paymentIntentId, 80) || null,
+    });
+    if (!held) {
+      return NextResponse.json(
+        { ok: false, message: "The pre-auth hold has not landed yet. Submit the card form again." },
+        { status: 409 },
+      );
+    }
+    const billing = await billingSnapshot(supabase, accountId);
+    await retireContinuationToken(supabase, a, billing.state);
+    return NextResponse.json({
+      ok: true,
+      outcome: "billing_configured",
+      billing: billing.state,
+      message: "Pre-Auth hold is on file.",
+    });
+  }
+
+  // ── Resolve the saved method after a 3DS return ────────────────────────
   if (action === "billing_status") {
-    await refreshAutoPayFromStripe(supabase, { agreement: a, account: acct });
+    await refreshAutoPayFromStripe(supabase, {
+      agreement: a,
+      account: acct,
+      paymentIntentId: clip(body.paymentIntentId, 80) || null,
+    });
     const billing = await billingSnapshot(supabase, accountId);
     await retireContinuationToken(supabase, a, billing.state);
     return NextResponse.json({ ok: true, billing: billing.state, billingProfile: billing.profile });

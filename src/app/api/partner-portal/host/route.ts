@@ -102,12 +102,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     );
   }
   if (action === "update_payment_method") {
-    return NextResponse.json(
-      await openHostPaymentSetup(
-        session.identity,
-        portalCallbackUrl(req, "payment=updated&kind=host&session_id={CHECKOUT_SESSION_ID}"),
-      ),
-    );
+    return NextResponse.json(await openHostPaymentSetup(session.identity));
   }
   if (action === "refresh_payment") {
     return NextResponse.json(

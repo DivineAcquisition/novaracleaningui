@@ -50,7 +50,10 @@ export function deriveCommercialOnboardingProgress(input: {
   const signed = input.agreementStatus === "signed";
   const billed = !!input.billingConfigured;
   const portal = !!input.portalReady;
-  const complete = pricing && signed && billed && portal;
+  // Auto-Pay: the agreement is not complete until the pre-auth hold lands.
+  // Invoiced accounts finish the agreement on signature, then confirm billing contact.
+  const agreementDone = signed && (method === "invoiced" || billed);
+  const complete = pricing && signed && billed && portal && agreementDone;
 
   const current: CommercialOnboardingStep = paused
     ? "paused"
@@ -72,7 +75,7 @@ export function deriveCommercialOnboardingProgress(input: {
     billing_method: method,
     steps: [
       { key: "pricing", label: "Pricing & Terms", done: pricing },
-      { key: "agreement", label: "Agreement", done: signed },
+      { key: "agreement", label: "Agreement", done: agreementDone },
       { key: "billing", label: billingStepLabel(method), done: billed && portal },
     ],
   };

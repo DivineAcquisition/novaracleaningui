@@ -18,6 +18,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { CompanyCoiDownloadLink } from "@/components/commercial/CompanyCoiDownloadLink";
+import { EmbeddedCardForm } from "@/components/token/EmbeddedCardForm";
 import { cn } from "@/lib/utils";
 
 const PURPLE = "linear-gradient(135deg,#5C0FFE 0%,#8F7BFD 100%)";
@@ -114,6 +115,7 @@ export default function CommercialPortal() {
   const [loading, setLoading] = useState(true);
   const [siteId, setSiteId] = useState<string | null>(null);
   const [tab, setTab] = useState<"account" | "visits" | "billing" | "documents" | "requests">("account");
+  const [cardEmbed, setCardEmbed] = useState<{ clientSecret: string; amountCents: number } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -126,16 +128,20 @@ export default function CommercialPortal() {
       if (siteId) params.set("siteId", siteId);
       if (!preview) {
         const q = new URLSearchParams(window.location.search);
-        if (q.get("payment") === "updated") {
+        if (q.get("payment") === "updated" || q.get("payment_intent")) {
           await fetch("/api/partner-portal/commercial", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "refresh_payment", sessionId: q.get("session_id") }),
+            body: JSON.stringify({
+              action: "refresh_payment",
+              sessionId: q.get("payment_intent") || q.get("session_id"),
+            }),
           });
           toast.success("Payment method updated.");
           const next = new URL(window.location.href);
           next.searchParams.delete("payment");
           next.searchParams.delete("session_id");
+          next.searchParams.delete("payment_intent");
           window.history.replaceState({}, "", next.pathname + (next.search ? next.search : ""));
         }
       }
@@ -153,6 +159,25 @@ export default function CommercialPortal() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  async function startCardUpdate() {
+    try {
+      const res = await fetch(`/api/partner-portal/commercial${qs()}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "update_payment_method" }),
+      });
+      const json = await res.json();
+      if (json.preview) {
+        toast.success(json.message || "Preview only — not saved.");
+        return;
+      }
+      if (!json.ok || !json.clientSecret) throw new Error(json.error || "Couldn't open card setup.");
+      setCardEmbed({ clientSecret: String(json.clientSecret), amountCents: Number(json.amountCents || 100) });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't open card setup.");
+    }
+  }
 
   if (loading && !data) {
     return (
@@ -353,10 +378,30 @@ export default function CommercialPortal() {
                       size="sm"
                       className="mt-3 text-white"
                       style={{ background: PURPLE }}
-                      onClick={() => void updateCommercialPayment()}
+                      onClick={() => void startCardUpdate()}
                     >
                       {data.billing.cardOnFile ? "Update payment method" : "Add payment method"}
                     </Button>
+                  )}
+                  {cardEmbed && (
+                    <div className="mt-4">
+                      <EmbeddedCardForm
+                        clientSecret={cardEmbed.clientSecret}
+                        amountCents={cardEmbed.amountCents}
+                        returnUrl={typeof window !== "undefined" ? window.location.href.split("#")[0] : ""}
+                        submitLabel="Submit card and place Pre-Auth hold"
+                        onConfirmed={async (paymentIntentId) => {
+                          await fetch("/api/partner-portal/commercial", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ action: "refresh_payment", sessionId: paymentIntentId }),
+                          });
+                          setCardEmbed(null);
+                          toast.success("Payment method updated.");
+                          await load();
+                        }}
+                      />
+                    </div>
                   )}
                 </>
               ) : (
@@ -512,25 +557,6 @@ function VisitRow({ v }: { v: Visit }) {
       </CardContent>
     </Card>
   );
-}
-
-async function updateCommercialPayment() {
-  try {
-    const res = await fetch(`/api/partner-portal/commercial${qs()}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "update_payment_method" }),
-    });
-    const json = await res.json();
-    if (json.preview) {
-      toast.success(json.message || "Preview only — not saved.");
-      return;
-    }
-    if (!json.ok || !json.url) throw new Error(json.error || "Couldn't open card setup.");
-    window.location.href = json.url;
-  } catch (e) {
-    toast.error(e instanceof Error ? e.message : "Couldn't open card setup.");
-  }
 }
 
 function CommercialRequests({ sites, onDone }: { sites: Site[]; onDone: () => void }) {

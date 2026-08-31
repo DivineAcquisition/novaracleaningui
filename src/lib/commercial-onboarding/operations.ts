@@ -17,7 +17,7 @@ import { sendCompanyCoi } from "@/lib/company-coi";
 import { sendPartnershipMessage } from "@/lib/partnership-comms/server";
 import { sendAgreement, buildCommercialValues, downloadCompletedAgreementPdf } from "@/lib/docuseal";
 import { buildCommercialAgreementBase64 } from "@/lib/commercial-agreement-pdf";
-import { resolveAppSecret, stripeCall, ensureCommercialCustomer } from "@/lib/stripe-rest";
+import { resolveAppSecret, stripeCall, ensureCommercialCustomer, createCardPreAuth, readPaymentIntent } from "@/lib/stripe-rest";
 import { money, type ProposalSite } from "@/lib/commercial-proposal";
 import { generateAgreement } from "@/lib/commercial-agreement-server";
 
@@ -591,14 +591,20 @@ export interface AutoPaySetupInput {
 }
 
 /**
- * Auto-Pay: a Stripe SETUP session. No money moves. It saves a card or bank
- * account for future billing, which is what a commercial account expects when
- * it agrees to Auto-Pay — not a charge on the day they sign.
+ * Auto-Pay: in-page Stripe Payment Element + a manual-capture pre-auth hold.
+ * No Checkout session. Nothing is captured now; the card is saved for later.
  */
 export async function openAutoPaySetup(
   supabase: Admin,
   input: AutoPaySetupInput,
-): Promise<{ ok: boolean; status: number; message?: string; url?: string }> {
+): Promise<{
+  ok: boolean;
+  status: number;
+  message?: string;
+  clientSecret?: string;
+  amountCents?: number;
+  alreadyHeld?: boolean;
+}> {
   const { agreement: a, account: acct } = input;
   const accountId = String(a.business_account_id);
 
@@ -625,16 +631,45 @@ export async function openAutoPaySetup(
     });
     await supabase.from("business_accounts").update({ stripe_customer_id: customerId }).eq("id", accountId);
 
-    const session = await stripeCall(stripeKey, "POST", "checkout/sessions", {
-      mode: "setup",
-      customer: customerId,
-      "payment_method_types[0]": "card",
-      "payment_method_types[1]": "us_bank_account",
-      success_url: `${input.returnUrl}?billing=done`,
-      cancel_url: `${input.returnUrl}?billing=cancelled`,
-      "metadata[business_account_id]": accountId,
-      "metadata[agreement_id]": String(a.id),
-      "metadata[kind]": "commercial_setup",
+    const { data: existingProfile } = await supabase
+      .from("commercial_billing_profiles")
+      .select("setup_session_id, stripe_payment_method_id")
+      .eq("business_account_id", accountId)
+      .maybeSingle();
+    const existingId = String(existingProfile?.setup_session_id || "");
+    if (existingId.startsWith("pi_")) {
+      const existing = await readPaymentIntent(stripeKey, existingId);
+      if (existing.held && existing.paymentMethodId) {
+        await recordCommercialHold(supabase, {
+          accountId,
+          agreementId: String(a.id),
+          customerId: existing.customerId || customerId,
+          paymentMethodId: existing.paymentMethodId,
+          intentId: existing.id,
+          signerName: (a.signed_by_name as string) || "Client",
+        });
+        return { ok: true, status: 200, alreadyHeld: true, amountCents: existing.amountCents };
+      }
+      if (existing.needsCard && existing.clientSecret) {
+        return {
+          ok: true,
+          status: 200,
+          clientSecret: existing.clientSecret,
+          amountCents: existing.amountCents,
+        };
+      }
+    }
+
+    const amountCents = Number(a.total_per_visit_cents || 0);
+    const hold = await createCardPreAuth(stripeKey, {
+      customerId,
+      amountCents,
+      description: `Novara pre-auth hold — ${String(acct.business_name || "commercial account")}`,
+      metadata: {
+        business_account_id: accountId,
+        agreement_id: String(a.id),
+        kind: "commercial_onboarding_preauth",
+      },
     });
 
     await supabase.from("commercial_billing_profiles").upsert(
@@ -643,7 +678,7 @@ export async function openAutoPaySetup(
         agreement_id: a.id,
         method: "auto_pay",
         stripe_customer_id: customerId,
-        setup_session_id: String(session.id || ""),
+        setup_session_id: hold.id,
         billing_contact_name: input.billingContactName || (a.signed_by_name as string) || null,
         billing_contact_email: input.billingContactEmail || email,
         updated_at: new Date().toISOString(),
@@ -651,23 +686,70 @@ export async function openAutoPaySetup(
       { onConflict: "business_account_id" },
     );
 
-    return { ok: true, status: 200, url: String(session.url || "") };
+    return { ok: true, status: 200, clientSecret: hold.clientSecret, amountCents: hold.amountCents };
   } catch (err) {
     return { ok: false, status: 502, message: `Could not open card setup: ${(err as Error).message}` };
   }
 }
 
+async function recordCommercialHold(
+  supabase: Admin,
+  input: {
+    accountId: string;
+    agreementId: string;
+    customerId: string;
+    paymentMethodId: string;
+    intentId: string;
+    signerName: string;
+  },
+): Promise<void> {
+  const stripeKey = await resolveAppSecret("STRIPE_SECRET_KEY");
+  let type: "card" | "us_bank_account" = "card";
+  let brand: string | null = null;
+  let last4: string | null = null;
+  if (stripeKey) {
+    try {
+      const pm = await stripeCall(stripeKey, "GET", `payment_methods/${input.paymentMethodId}`);
+      type = pm?.type === "us_bank_account" ? "us_bank_account" : "card";
+      brand = type === "card" ? pm?.card?.brand || null : pm?.us_bank_account?.bank_name || null;
+      last4 = type === "card" ? pm?.card?.last4 || null : pm?.us_bank_account?.last4 || null;
+    } catch {
+      /* description is optional */
+    }
+  }
+  await supabase
+    .from("commercial_billing_profiles")
+    .update({
+      stripe_customer_id: input.customerId,
+      stripe_payment_method_id: input.paymentMethodId,
+      payment_method_type: type,
+      payment_method_brand: brand,
+      payment_method_last4: last4,
+      payment_method_added_at: new Date().toISOString(),
+      setup_session_id: input.intentId,
+      confirmed_at: new Date().toISOString(),
+      confirmed_by_name: input.signerName,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("business_account_id", input.accountId);
+  if (stripeKey && input.customerId && input.paymentMethodId) {
+    try {
+      await stripeCall(stripeKey, "POST", `customers/${input.customerId}`, {
+        "invoice_settings[default_payment_method]": input.paymentMethodId,
+      });
+    } catch {
+      /* default PM is best-effort */
+    }
+  }
+}
+
 /**
- * Resolve the saved payment method after the Stripe redirect returns.
- *
- * Stripe's setup session only tells us the method once we go and ask, so this
- * runs when the client lands back on the page rather than waiting on a webhook
- * — a signer sitting on a "still setting up" screen is a support ticket.
+ * Resolve the saved payment method after the embed confirms (or a 3DS return).
  */
 export async function refreshAutoPayFromStripe(
   supabase: Admin,
-  { agreement, account }: { agreement: Row; account: Row },
-): Promise<void> {
+  { agreement, account, paymentIntentId }: { agreement: Row; account: Row; paymentIntentId?: string | null },
+): Promise<boolean> {
   const accountId = String(agreement.business_account_id);
   const { data: profile } = await supabase
     .from("commercial_billing_profiles")
@@ -676,44 +758,51 @@ export async function refreshAutoPayFromStripe(
     .maybeSingle();
   const p = (profile || null) as Row | null;
 
-  if (!p || p.method !== "auto_pay" || p.stripe_payment_method_id || !p.setup_session_id) return;
+  if (!p || p.method !== "auto_pay") return false;
+  if (p.stripe_payment_method_id) return true;
 
   const stripeKey = await resolveAppSecret("STRIPE_SECRET_KEY");
-  if (!stripeKey) return;
+  if (!stripeKey) return false;
+
+  const storedId = String(paymentIntentId || p.setup_session_id || "");
+  if (!storedId) return false;
 
   try {
-    const session = await stripeCall(stripeKey, "GET", `checkout/sessions/${String(p.setup_session_id)}`);
-    const setupIntentId = session?.setup_intent as string | undefined;
-    if (!setupIntentId) return;
-    const intent = await stripeCall(stripeKey, "GET", `setup_intents/${setupIntentId}`);
-    const pmId = intent?.payment_method as string | undefined;
-    if (!pmId) return;
+    let pmId: string | undefined;
+    let customerId = String(p.stripe_customer_id || account.stripe_customer_id || "");
+    if (storedId.startsWith("pi_")) {
+      const intent = await readPaymentIntent(stripeKey, storedId);
+      if (!intent.held || !intent.paymentMethodId) return false;
+      pmId = intent.paymentMethodId;
+      if (intent.customerId) customerId = intent.customerId;
+    } else {
+      const session = await stripeCall(stripeKey, "GET", `checkout/sessions/${storedId}`);
+      const setupIntentId = session?.setup_intent as string | undefined;
+      if (!setupIntentId) return false;
+      const intent = await stripeCall(stripeKey, "GET", `setup_intents/${setupIntentId}`);
+      pmId = intent?.payment_method as string | undefined;
+      if (session?.customer) customerId = String(session.customer);
+    }
+    if (!pmId) return false;
 
-    const pm = await stripeCall(stripeKey, "GET", `payment_methods/${pmId}`);
-    const type = pm?.type === "us_bank_account" ? "us_bank_account" : "card";
-    await supabase
-      .from("commercial_billing_profiles")
-      .update({
-        stripe_payment_method_id: pmId,
-        payment_method_type: type,
-        payment_method_brand:
-          type === "card" ? pm?.card?.brand || null : pm?.us_bank_account?.bank_name || null,
-        payment_method_last4:
-          type === "card" ? pm?.card?.last4 || null : pm?.us_bank_account?.last4 || null,
-        payment_method_added_at: new Date().toISOString(),
-        confirmed_at: new Date().toISOString(),
-        confirmed_by_name: (agreement.signed_by_name as string) || "Client",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("business_account_id", accountId);
+    await recordCommercialHold(supabase, {
+      accountId,
+      agreementId: String(agreement.id),
+      customerId,
+      paymentMethodId: pmId,
+      intentId: storedId,
+      signerName: (agreement.signed_by_name as string) || "Client",
+    });
 
     await supabase.from("events").insert({
       event_type: "commercial.billing.configured",
       source: "commercial-onboarding",
-      summary: `${String(account.business_name || "An account")} added an Auto-Pay method (${type === "card" ? "card" : "bank account"}).`,
-      data: { account_id: accountId, agreement_id: agreement.id, method: "auto_pay", payment_method_type: type },
+      summary: `${String(account.business_name || "An account")} added an Auto-Pay method (card pre-auth hold).`,
+      data: { account_id: accountId, agreement_id: agreement.id, method: "auto_pay", payment_method_type: "card" },
     });
+    return true;
   } catch (err) {
     console.error("[commercial-onboarding] auto-pay refresh", (err as Error).message);
+    return false;
   }
 }

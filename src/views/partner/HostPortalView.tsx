@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { EmbeddedCardForm } from "@/components/token/EmbeddedCardForm";
 import { cn } from "@/lib/utils";
 
 const PURPLE = "linear-gradient(135deg,#5C0FFE 0%,#8F7BFD 100%)";
@@ -85,6 +86,7 @@ export default function HostPortalView() {
   const [cancelFor, setCancelFor] = useState<Turnover | null>(null);
   const [photosFor, setPhotosFor] = useState<Turnover | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [cardEmbed, setCardEmbed] = useState<{ clientSecret: string; amountCents: number } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -100,19 +102,23 @@ export default function HostPortalView() {
             body: JSON.stringify({ action: "finalize_turnover", sessionId }),
           });
         }
-        if (params.get("payment") === "updated") {
+        if (params.get("payment") === "updated" || params.get("payment_intent")) {
           await fetch("/api/partner-portal/host", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "refresh_payment", sessionId }),
+            body: JSON.stringify({
+              action: "refresh_payment",
+              sessionId: params.get("payment_intent") || params.get("session_id"),
+            }),
           });
           toast.success("Payment method updated.");
         }
-        if (params.get("turnover") === "paid" || params.get("payment")) {
+        if (params.get("turnover") === "paid" || params.get("payment") || params.get("payment_intent")) {
           const next = new URL(window.location.href);
           next.searchParams.delete("turnover");
           next.searchParams.delete("payment");
           next.searchParams.delete("session_id");
+          next.searchParams.delete("payment_intent");
           window.history.replaceState({}, "", next.pathname + (next.search ? next.search : ""));
         }
       }
@@ -130,6 +136,25 @@ export default function HostPortalView() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  async function startCardUpdate() {
+    try {
+      const res = await fetch(`/api/partner-portal/host${qs()}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "update_payment_method" }),
+      });
+      const json = await res.json();
+      if (json.preview) {
+        toast.success(json.message || "Preview only — not saved.");
+        return;
+      }
+      if (!json.ok || !json.clientSecret) throw new Error(json.error || "Couldn't open card setup.");
+      setCardEmbed({ clientSecret: String(json.clientSecret), amountCents: Number(json.amountCents || 100) });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't open card setup.");
+    }
+  }
 
   const nameOf = (id: string) =>
     data?.properties.find((p) => p.id === id)?.nickname || data?.properties.find((p) => p.id === id)?.address || "Property";
@@ -296,10 +321,30 @@ export default function HostPortalView() {
                 size="sm"
                 className="mt-3 text-white"
                 style={{ background: PURPLE }}
-                onClick={() => void updatePayment()}
+                onClick={() => void startCardUpdate()}
               >
                 {data.host.cardOnFile ? "Update payment method" : "Add payment method"}
               </Button>
+              {cardEmbed && (
+                <div className="mt-4">
+                  <EmbeddedCardForm
+                    clientSecret={cardEmbed.clientSecret}
+                    amountCents={cardEmbed.amountCents}
+                    returnUrl={typeof window !== "undefined" ? window.location.href.split("#")[0] : ""}
+                    submitLabel="Submit card and place Pre-Auth hold"
+                    onConfirmed={async (paymentIntentId) => {
+                      await fetch("/api/partner-portal/host", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ action: "refresh_payment", sessionId: paymentIntentId }),
+                      });
+                      setCardEmbed(null);
+                      toast.success("Payment method updated.");
+                      await load();
+                    }}
+                  />
+                </div>
+              )}
             </CardContent>
           </Card>
           <h3 className="font-semibold">Per-turnover invoices</h3>
@@ -379,25 +424,6 @@ function cardLabel(host: HostData["host"]) {
     return `${brand} •••• ${host.paymentLast4}`;
   }
   return host.cardOnFile ? "On file" : "Not yet";
-}
-
-async function updatePayment() {
-  try {
-    const res = await fetch(`/api/partner-portal/host${qs()}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "update_payment_method" }),
-    });
-    const json = await res.json();
-    if (json.preview) {
-      toast.success(json.message || "Preview only — not saved.");
-      return;
-    }
-    if (!json.ok || !json.url) throw new Error(json.error || "Couldn't open card setup.");
-    window.location.href = json.url;
-  } catch (e) {
-    toast.error(e instanceof Error ? e.message : "Couldn't open card setup.");
-  }
 }
 
 function TurnoverRow({

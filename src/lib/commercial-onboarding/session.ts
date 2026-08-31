@@ -138,7 +138,7 @@ export async function loadProgress(supabase: Admin, sessionId: string): Promise<
       : ((["pricing", "agreement", "billing", "done", "paused"].includes(reportedStep)
           ? reportedStep
           : "pricing") as SessionStep);
-  return {
+  const progress: Progress = {
     ok: true,
     current_step: current,
     paused_for_changes: Boolean(raw.paused_for_changes),
@@ -151,6 +151,13 @@ export async function loadProgress(supabase: Admin, sessionId: string): Promise<
     compliance: raw.compliance ?? null,
     billing: raw.billing ?? null,
   };
+  if (progress.billing_method === "auto_pay" && !progress.billing_configured) {
+    progress.complete = false;
+    progress.steps = progress.steps.map((s) =>
+      s.key === "agreement" ? { ...s, done: false } : s,
+    );
+  }
+  return progress;
 }
 
 /**

@@ -58,3 +58,78 @@ export async function ensureCommercialCustomer(
   });
   return String(created.id);
 }
+
+/** Stripe's card minimum. A $0.50 hold is enough to prove the card works. */
+export const MIN_PREAUTH_CENTS = 50;
+
+export function holdAmountCents(raw: number): number {
+  const n = Math.round(Number(raw) || 0);
+  return Math.max(MIN_PREAUTH_CENTS, n);
+}
+
+export function paymentIntentIsHeld(status: string): boolean {
+  return status === "requires_capture" || status === "succeeded" || status === "processing";
+}
+
+export function paymentIntentNeedsCard(status: string): boolean {
+  return status === "requires_payment_method" || status === "requires_confirmation" || status === "requires_action";
+}
+
+/**
+ * Manual-capture PaymentIntent so we place a pre-auth hold and save the card
+ * (setup_future_usage) without sending the customer to Checkout.
+ */
+export async function createCardPreAuth(
+  stripeKey: string,
+  args: {
+    customerId: string;
+    amountCents: number;
+    description: string;
+    metadata: Record<string, string>;
+  },
+): Promise<{ id: string; clientSecret: string; amountCents: number }> {
+  const amount = holdAmountCents(args.amountCents);
+  const params: Record<string, string> = {
+    amount: String(amount),
+    currency: "usd",
+    customer: args.customerId,
+    capture_method: "manual",
+    setup_future_usage: "off_session",
+    "payment_method_types[0]": "card",
+    description: args.description.slice(0, 220),
+  };
+  for (const [k, v] of Object.entries(args.metadata)) {
+    if (v) params[`metadata[${k}]`] = String(v).slice(0, 500);
+  }
+  const pi = await stripeCall(stripeKey, "POST", "payment_intents", params);
+  const clientSecret = String(pi.client_secret || "");
+  if (!clientSecret) throw new Error("Stripe did not return a client secret for the pre-auth hold.");
+  return { id: String(pi.id), clientSecret, amountCents: amount };
+}
+
+export async function readPaymentIntent(
+  stripeKey: string,
+  intentId: string,
+): Promise<{
+  id: string;
+  paymentMethodId: string | null;
+  customerId: string | null;
+  status: string;
+  clientSecret: string | null;
+  amountCents: number;
+  held: boolean;
+  needsCard: boolean;
+}> {
+  const pi = await stripeCall(stripeKey, "GET", `payment_intents/${intentId}`);
+  const status = String(pi.status || "");
+  return {
+    id: String(pi.id || intentId),
+    paymentMethodId: pi.payment_method ? String(pi.payment_method) : null,
+    customerId: pi.customer ? String(pi.customer) : null,
+    status,
+    clientSecret: pi.client_secret ? String(pi.client_secret) : null,
+    amountCents: Number(pi.amount || 0),
+    held: paymentIntentIsHeld(status),
+    needsCard: paymentIntentNeedsCard(status),
+  };
+}

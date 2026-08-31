@@ -226,13 +226,47 @@ export async function POST(
       return NextResponse.json({ ok: false, message: setup.message }, { status: setup.status });
     }
     await touchActivity(supabase, sessionId);
-    return NextResponse.json({ ok: true, outcome: "redirect", url: setup.url });
+    if (setup.alreadyHeld) {
+      return finish({ outcome: "payment_ready", message: "Pre-Auth hold is already on file." });
+    }
+    return NextResponse.json({
+      ok: true,
+      outcome: "embed",
+      clientSecret: setup.clientSecret,
+      amountCents: setup.amountCents,
+    });
+  }
+
+  if (action === "confirm_payment") {
+    const gate = requireSigned(session);
+    if (gate) return NextResponse.json({ ok: false, message: gate }, { status: 409 });
+    const refreshed = await refreshPaymentFromStripe(supabase, {
+      session,
+      host,
+      paymentIntentId: clip(body.paymentIntentId, 80) || null,
+    });
+    if (!refreshed.ok) {
+      return NextResponse.json(
+        { ok: false, message: "The pre-auth hold has not landed yet. Submit the card form again." },
+        { status: 409 },
+      );
+    }
+    await touchActivity(supabase, sessionId, "payment");
+    return finish({
+      outcome: "payment_ready",
+      paymentMethodId: refreshed.paymentMethodId,
+      message: "Pre-Auth hold is on file.",
+    });
   }
 
   if (action === "payment_status") {
     const gate = requireSigned(session);
     if (gate) return NextResponse.json({ ok: false, message: gate }, { status: 409 });
-    const refreshed = await refreshPaymentFromStripe(supabase, { session, host });
+    const refreshed = await refreshPaymentFromStripe(supabase, {
+      session,
+      host,
+      paymentIntentId: clip(body.paymentIntentId, 80) || null,
+    });
     if (refreshed.ok && host.user_id) {
       await markPortalAlreadyLinked(supabase, session, host);
       await touchActivity(supabase, sessionId, "payment");

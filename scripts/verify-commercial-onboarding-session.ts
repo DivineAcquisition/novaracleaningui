@@ -66,8 +66,28 @@ const signed = deriveCommercialOnboardingProgress({
   billingMethod: "auto_pay",
 });
 check("signing advances to billing", signed.current_step, "billing");
-check("agreement page is done", signed.steps[1].done, true);
+check("auto_pay agreement stays open until the hold lands", signed.steps[1].done, false);
 check("billing page is not done until billed AND portal", signed.steps[2].done, false);
+
+const invoicedSigned = deriveCommercialOnboardingProgress({
+  proposalStatus: "accepted",
+  hasAgreement: true,
+  agreementStatus: "signed",
+  billingConfigured: false,
+  portalReady: false,
+  billingMethod: "invoiced",
+});
+check("invoiced agreement completes on signature", invoicedSigned.steps[1].done, true);
+
+const autoPayHeld = deriveCommercialOnboardingProgress({
+  proposalStatus: "accepted",
+  hasAgreement: true,
+  agreementStatus: "signed",
+  billingConfigured: true,
+  portalReady: false,
+  billingMethod: "auto_pay",
+});
+check("auto_pay agreement completes once the hold is on file", autoPayHeld.steps[1].done, true);
 
 const billedOnly = deriveCommercialOnboardingProgress({
   proposalStatus: "accepted",
@@ -152,6 +172,8 @@ const sign = applyCommercialOnboardingPreviewAction("preview-commercial", "sign"
 check("sign succeeds after accept", sign.ok, true);
 const afterSign = commercialOnboardingPreviewPayload("preview-commercial");
 check("sign advances to billing", afterSign.progress.current_step, "billing");
+check("auto_pay agreement is not done until the hold lands", afterSign.progress.steps[1].done, false);
+check("auto_pay is not complete after signature alone", afterSign.progress.complete, false);
 check("auto_pay billing copy mentions Stripe Pre-Auth", afterSign.progress.steps[2].label.includes("Stripe Pre-Auth"), true);
 check("auto_pay page has no invoice contact yet", afterSign.session.billingMethod, "auto_pay");
 
@@ -169,6 +191,7 @@ const billed = applyCommercialOnboardingPreviewAction("preview-commercial", "set
 check("preview auto_pay setup does not redirect to Stripe", Boolean(billed.url), false);
 check("billing setup completes the preview session", billed.ok, true);
 const afterBill = commercialOnboardingPreviewPayload("preview-commercial");
+check("auto_pay agreement completes once the hold is on file", afterBill.progress.steps[1].done, true);
 check("portal is the conclusion of billing", afterBill.progress.current_step, "done");
 check("handoff goes to commercial portal preview", afterBill.handoffUrl, "/partner/enter/preview-commercial");
 

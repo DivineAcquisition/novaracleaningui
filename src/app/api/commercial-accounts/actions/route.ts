@@ -6,9 +6,9 @@
 //       Upsert a business_sites row + best-effort Airtable Sites sync
 //       (linked to the account's Commercial Accounts record).
 //   { action:"send_payment_link", accountId }
-//       Ensure a Stripe customer for the account's email, save the id on the
-//       account (payment gate), open a Stripe Setup Checkout session, and
-//       email the secure link to the contact.
+//       Ensure a Stripe customer, then email the onboarding or portal URL
+//       where the client adds a card via the in-page Pre-Auth embed — never
+//       a Stripe Checkout session.
 //   { action:"send_agreement", accountId }
 //       Send the service agreement via the existing DocuSeal engine
 //       (completed-copy pattern used across the app) and stamp
@@ -23,6 +23,7 @@ import { primeAirtablePat } from "@/lib/airtable/sources/prime-pat";
 import { parseSiteZones, serializeSiteZones } from "@/lib/site-zones";
 import { syncCommercialAccount, syncSite } from "@/lib/airtable/mappers";
 import { generateAgreement } from "@/lib/commercial-agreement-server";
+import { onboardingUrl, portalUrl } from "@/lib/commercial-onboarding/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -177,7 +178,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       return NextResponse.json({ ok: true, siteId });
     }
 
-    // ── Payment setup link (Stripe customer + Setup Checkout) ───────────
+    // ── Payment setup link (in-page Pre-Auth embed, never Checkout) ──────
     if (action === "send_payment_link") {
       if (!account.email) return NextResponse.json({ ok: false, error: "Account has no email." }, { status: 400 });
       const stripeKey = await secret("STRIPE_SECRET_KEY");
@@ -199,21 +200,19 @@ export async function POST(req: Request): Promise<NextResponse> {
       }
       await supabase.from("business_accounts").update({ stripe_customer_id: customerId }).eq("id", accountId);
 
-      const session = await stripeCall(stripeKey, "POST", "checkout/sessions", {
-        mode: "setup",
-        customer: customerId!,
-        "payment_method_types[0]": "card",
-        "payment_method_types[1]": "us_bank_account",
-        success_url: "https://partner.novaracleaning.com/partner?setup=done",
-        cancel_url: "https://partner.novaracleaning.com/partner",
-        "metadata[business_account_id]": accountId,
-        "metadata[kind]": "commercial_setup",
-      });
+      const { data: onboarding } = await supabase
+        .from("commercial_onboarding_sessions")
+        .select("token, status")
+        .eq("business_account_id", accountId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const token = onboarding?.token ? String(onboarding.token) : "";
+      const setupUrl = token ? onboardingUrl(token) : `${portalUrl()}/partner`;
 
-      // Email the link (best-effort; the URL is also returned to the admin).
       const resendKey = await secret("RESEND_API_KEY");
       let emailed = false;
-      if (resendKey && session.url) {
+      if (resendKey) {
         const res = await fetch("https://api.resend.com/emails", {
           method: "POST",
           headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
@@ -222,12 +221,12 @@ export async function POST(req: Request): Promise<NextResponse> {
             to: [account.email],
             reply_to: "contact@novaracleaning.com",
             subject: `Set up payment for ${account.business_name} — Novara Cleaning`,
-            html: `<p>Hi ${account.contact_name || "there"},</p><p>To activate cleaning service for <strong>${account.business_name}</strong>, please add a payment method on file using this secure Stripe link:</p><p><a href="${session.url}">${session.url}</a></p><p>Nothing is charged now — this simply keeps a card or bank account on file for invoicing per your agreement.</p><p>— Novara Cleaning</p>`,
+            html: `<p>Hi ${account.contact_name || "there"},</p><p>To activate cleaning service for <strong>${account.business_name}</strong>, add a payment method on this page. It stays on our site — a Stripe Pre-Auth hold verifies the card and nothing is captured now:</p><p><a href="${setupUrl}">${setupUrl}</a></p><p>— Novara Cleaning</p>`,
           }),
         });
         emailed = res.ok;
       }
-      return NextResponse.json({ ok: true, customerId, setupUrl: session.url, emailed });
+      return NextResponse.json({ ok: true, customerId, setupUrl, emailed });
     }
 
     // ── Service agreement → tokenized signing link ───────────────────────

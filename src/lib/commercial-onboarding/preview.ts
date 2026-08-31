@@ -218,6 +218,23 @@ export function applyCommercialOnboardingPreviewAction(
     return { ok: true, status: 200, outcome: previewMem.billed ? "billing_ready" : "billing_pending" };
   }
 
+  if (action === "confirm_billing") {
+    if (!previewMem.signed) {
+      return { ok: false, status: 409, message: "Billing is set up after the agreement is signed." };
+    }
+    previewMem.billed = true;
+    previewMem.portal = true;
+    const url = handoffUrl(method);
+    return {
+      ok: true,
+      status: 200,
+      outcome: "billing_configured",
+      message: "Pre-Auth hold is on file. Your partner portal is ready.",
+      handoffUrl: url,
+      portalUrl: url,
+    };
+  }
+
   if (action === "create_portal") {
     if (!previewMem.billed) {
       return { ok: false, status: 409, message: "Finish billing setup first — your portal opens as soon as that's done." };

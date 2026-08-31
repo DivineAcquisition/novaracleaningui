@@ -9,8 +9,9 @@
 //   POST accept_pricing              accept the terms; the agreement is built
 //   POST request_changes             pause and route back to admin
 //   POST sign                        execute the agreement
-//   POST setup_billing               invoiced confirm, or a Stripe setup session
-//   POST billing_status              resolve the method after the Stripe return
+//   POST setup_billing               invoiced confirm, or an in-page Pre-Auth embed
+//   POST confirm_billing             record the hold after the card form
+//   POST billing_status              resolve the method after a 3DS return
 //   POST create_portal               create their portal login
 //   POST submit_info                 request a site, or send a document
 //
@@ -536,7 +537,6 @@ export async function POST(
     const setup = await openAutoPaySetup(supabase, {
       agreement,
       account,
-      // Stripe returns them to THIS session, not to the agreement page.
       returnUrl: onboardingUrl(token),
       billingContactName: clip(body.billingContactName, 120) || undefined,
       billingContactEmail: clip(body.billingContactEmail, 200) || undefined,
@@ -545,12 +545,62 @@ export async function POST(
       return NextResponse.json({ ok: false, message: setup.message }, { status: setup.status });
     }
     await touchActivity(supabase, sessionId);
-    return NextResponse.json({ ok: true, outcome: "redirect", url: setup.url });
+    if (setup.alreadyHeld) {
+      const billing = await billingSnapshot(supabase, accountId);
+      const portal = await provisionPortalNow();
+      return finish({
+        outcome: "billing_configured",
+        billing: billing.state,
+        portalUrl: portal.ok ? portal.handoffUrl || portalUrl() : undefined,
+        handoffUrl: portal.ok ? portal.handoffUrl : undefined,
+        message: "Pre-Auth hold is already on file.",
+      });
+    }
+    return NextResponse.json({
+      ok: true,
+      outcome: "embed",
+      clientSecret: setup.clientSecret,
+      amountCents: setup.amountCents,
+    });
+  }
+
+  if (action === "confirm_billing") {
+    if (!agreement) {
+      return NextResponse.json({ ok: false, message: "Billing is set up after the agreement is signed." }, { status: 409 });
+    }
+    const held = await refreshAutoPayFromStripe(supabase, {
+      agreement,
+      account,
+      paymentIntentId: clip(body.paymentIntentId, 80) || null,
+    });
+    if (!held) {
+      return NextResponse.json(
+        { ok: false, message: "The pre-auth hold has not landed yet. Submit the card form again." },
+        { status: 409 },
+      );
+    }
+    await touchActivity(supabase, sessionId, "billing");
+    const portal = await provisionPortalNow();
+    const billing = await billingSnapshot(supabase, accountId);
+    return finish({
+      outcome: "billing_configured",
+      billing: billing.state,
+      portalUrl: portal.ok ? portal.handoffUrl || portalUrl() : undefined,
+      handoffUrl: portal.ok ? portal.handoffUrl : undefined,
+      message: portal.ok
+        ? "Pre-Auth hold is on file. Your partner portal is ready."
+        : "Pre-Auth hold is on file.",
+      portalError: portal.ok ? null : portal.error || "Could not open the portal yet.",
+    });
   }
 
   if (action === "billing_status") {
     if (agreement) {
-      await refreshAutoPayFromStripe(supabase, { agreement, account });
+      await refreshAutoPayFromStripe(supabase, {
+        agreement,
+        account,
+        paymentIntentId: clip(body.paymentIntentId, 80) || null,
+      });
     }
     const billing = await billingSnapshot(supabase, accountId);
     const billed = await loadProgress(supabase, sessionId);

@@ -22,6 +22,7 @@ import {
 import { SignaturePad } from "@/components/booking/SignaturePad";
 import { PdfViewer } from "@/components/PdfViewer";
 import { TokenPageShell, TokenPanel } from "@/components/token/TokenPageShell";
+import { EmbeddedCardForm } from "@/components/token/EmbeddedCardForm";
 import {
   BINDING_ACKNOWLEDGMENTS,
   IMPORTANT_NOTICE,
@@ -139,16 +140,22 @@ export default function HostOnboardingSession({ token }: { token: string }) {
 
   const returningFromStripe = useMemo(() => {
     if (typeof window === "undefined") return false;
-    return new URLSearchParams(window.location.search).get("payment") === "done";
+    const q = new URLSearchParams(window.location.search);
+    return q.get("payment") === "done" || Boolean(q.get("payment_intent"));
   }, []);
 
   useEffect(() => {
     if (!returningFromStripe) return;
     void (async () => {
+      const q = new URLSearchParams(window.location.search);
+      const paymentIntentId = q.get("payment_intent");
       await fetch(`/api/partner/host-onboarding/${token}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "payment_status" }),
+        body: JSON.stringify({
+          action: paymentIntentId ? "confirm_payment" : "payment_status",
+          paymentIntentId,
+        }),
       });
       await load();
       window.history.replaceState({}, "", window.location.pathname);
@@ -173,6 +180,9 @@ export default function HostOnboardingSession({ token }: { token: string }) {
       if (json.outcome === "redirect" && json.url) {
         window.location.href = json.url as string;
         return null;
+      }
+      if (json.outcome === "embed") {
+        return json;
       }
       if (json.message) setNotice(json.message as string);
       if (typeof window !== "undefined") {
@@ -238,7 +248,7 @@ export default function HostOnboardingSession({ token }: { token: string }) {
 
       {step === "legal" && <LegalStep data={d} busy={busy} onPost={post} onError={setError} />}
       {step === "rates" && <RatesStep data={d} busy={busy} onPost={post} />}
-      {step === "payment" && <PaymentStep data={d} busy={busy} onPost={post} />}
+      {step === "payment" && <PaymentStep token={token} data={d} busy={busy} onPost={post} />}
       {step === "done" && <DoneCard data={d} />}
     </Shell>
   );
@@ -639,10 +649,12 @@ function RatesStep({
 }
 
 function PaymentStep({
+  token,
   data,
   busy,
   onPost,
 }: {
+  token: string;
   data: Payload;
   busy: boolean;
   onPost: (body: Record<string, unknown>) => Promise<unknown>;
@@ -652,6 +664,25 @@ function PaymentStep({
   );
   const needsPortal = !data.host.hasPortal;
   const cardReady = data.host.cardOnFile || data.progress.payment_ready;
+  const preview = token.startsWith("preview-");
+  const [embed, setEmbed] = useState<{ clientSecret: string; amountCents: number } | null>(null);
+  const [embedError, setEmbedError] = useState<string | null>(null);
+
+  const openEmbed = async () => {
+    setEmbedError(null);
+    const json = (await onPost({ action: "setup_payment", paymentOption: option })) as {
+      clientSecret?: string;
+      amountCents?: number;
+      outcome?: string;
+    } | null;
+    if (json?.clientSecret) {
+      setEmbed({ clientSecret: json.clientSecret, amountCents: Number(json.amountCents || 50) });
+      return;
+    }
+    if (json?.outcome !== "payment_ready") {
+      setEmbedError("Could not open the card form.");
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -661,8 +692,8 @@ function PaymentStep({
           <h2 className="text-lg font-semibold text-slate-900">Payment Setup</h2>
         </div>
         <p className="mt-1 text-sm text-slate-500">
-          The three options in Section 6.2. Saving a card does not charge you now — it authorizes
-          the option you pick for each booked turnover.
+          The three options in Section 6.2. Adding a card places a Stripe Pre-Auth hold — nothing
+          is captured now. The partnership is not complete until that hold is submitted.
         </p>
         {!data.session.payAfterEnabled && (
           <p className="mt-3 text-xs text-slate-500">{PAY_AFTER_DISCRETION} It is not offered on this account.</p>
@@ -685,7 +716,7 @@ function PaymentStep({
           ))}
         </div>
 
-        {!cardReady && (
+        {!cardReady && preview && (
           <button
             type="button"
             disabled={busy}
@@ -693,9 +724,32 @@ function PaymentStep({
             className="mt-5 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-violet-600 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
           >
             {busy ? <RiLoader4Line className="h-4 w-4 animate-spin" /> : <RiBankCardLine className="h-4 w-4" />}
-            Save a card for {data.paymentOptions.find((o) => o.key === option)?.title || "this option"}
+            Place the Pre-Auth hold for {data.paymentOptions.find((o) => o.key === option)?.title || "this option"}
           </button>
         )}
+        {!cardReady && !preview && !embed && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void openEmbed()}
+            className="mt-5 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-violet-600 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
+          >
+            {busy ? <RiLoader4Line className="h-4 w-4 animate-spin" /> : <RiBankCardLine className="h-4 w-4" />}
+            Add a card for {data.paymentOptions.find((o) => o.key === option)?.title || "this option"}
+          </button>
+        )}
+        {!cardReady && !preview && embed && (
+          <div className="mt-5">
+            <EmbeddedCardForm
+              clientSecret={embed.clientSecret}
+              amountCents={embed.amountCents}
+              returnUrl={typeof window !== "undefined" ? window.location.href.split("#")[0] : ""}
+              submitLabel="Submit card and place Pre-Auth hold"
+              onConfirmed={(paymentIntentId) => void onPost({ action: "confirm_payment", paymentIntentId })}
+            />
+          </div>
+        )}
+        {embedError && <p className="mt-3 text-sm text-rose-700">{embedError}</p>}
         {cardReady && (
           <p className="mt-4 text-sm font-medium text-emerald-700">
             <RiCheckLine className="mr-1 inline h-4 w-4" />

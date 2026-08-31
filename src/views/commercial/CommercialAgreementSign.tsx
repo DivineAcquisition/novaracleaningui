@@ -7,14 +7,15 @@
 //   1. Read and sign the Commercial Cleaning Services Agreement, pre-filled
 //      from the accepted proposal — including Exhibit A, which is the schedule
 //      of locations and rates the client already agreed to.
-//   2. Set up billing. Auto-Pay opens Stripe to save a card or bank account
-//      (no charge). Invoiced confirms the billing contact and Net terms and
-//      collects no payment details at all.
+//   2. Set up billing. Auto-Pay places a Stripe Pre-Auth hold in an embed on
+//      this page — the agreement is not complete until that hold is submitted.
+//      Invoiced confirms the billing contact and Net terms and collects no
+//      payment details at all.
 //
 // The second step is where this differs from the residential page, which ends
 // in a charge. An invoiced commercial account has no card to take and never
 // was going to, so "confirm terms" is a complete ending rather than a
-// half-finished one.
+// half-finished one. Auto-Pay never leaves this page for Checkout.
 
 import {
   RiAlertLine,
@@ -26,7 +27,7 @@ import {
   RiLoader4Line,
   RiMailLine,
 } from "@remixicon/react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 
 import { SEO } from "@/components/SEO";
@@ -34,6 +35,7 @@ import { SignaturePad } from "@/components/booking/SignaturePad";
 import { PdfViewer } from "@/components/PdfViewer";
 import { Button } from "@/components/ui/button";
 import { TokenPageShell, TokenPanel } from "@/components/token/TokenPageShell";
+import { EmbeddedCardForm } from "@/components/token/EmbeddedCardForm";
 import { ShimmerButton } from "@/components/magicui/shimmer-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -123,11 +125,15 @@ export default function CommercialAgreementSign() {
   const params = useParams<{ token: string }>();
   const search = useSearchParams();
   const token = String(params?.token || "");
-  const returningFromStripe = search?.get("billing") === "done";
+  const returningFromStripe =
+    search?.get("billing") === "done" || Boolean(search?.get("payment_intent"));
 
   const [state, setState] = useState<State>({ kind: "loading" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [embed, setEmbed] = useState<{ clientSecret: string; amountCents: number } | null>(null);
+  const [stripeReturnDone, setStripeReturnDone] = useState(!returningFromStripe);
+  const embedStarted = useRef(false);
 
   // Signing
   const [signature, setSignature] = useState<string | null>(null);
@@ -174,7 +180,7 @@ export default function CommercialAgreementSign() {
     void load();
   }, [load]);
 
-  // Coming back from Stripe: resolve the saved method before rendering the
+  // Coming back from 3DS: resolve the saved method before rendering the
   // billing step again, so a signer who paid attention doesn't see the form
   // they just completed.
   //
@@ -186,10 +192,17 @@ export default function CommercialAgreementSign() {
     void (async () => {
       setBusy(true);
       try {
+        const paymentIntentId =
+          typeof window !== "undefined"
+            ? new URLSearchParams(window.location.search).get("payment_intent")
+            : search?.get("payment_intent");
         const res = await fetch(`/api/commercial-agreement/${token}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "billing_status" }),
+          body: JSON.stringify({
+            action: paymentIntentId ? "confirm_billing" : "billing_status",
+            paymentIntentId,
+          }),
         });
         const json = await res.json();
         if (json?.ok && json.billing?.configured) {
@@ -198,14 +211,18 @@ export default function CommercialAgreementSign() {
               ? { kind: "complete", data: { ...prev.data, billing: json.billing } }
               : prev,
           );
+          if (typeof window !== "undefined") {
+            window.history.replaceState({}, "", window.location.pathname);
+          }
           return;
         }
         await load();
       } finally {
         setBusy(false);
+        setStripeReturnDone(true);
       }
     })();
-  }, [returningFromStripe, token, load]);
+  }, [returningFromStripe, token, load, search]);
 
   const sign = async () => {
     if (state.kind !== "ready") return;
@@ -266,11 +283,11 @@ export default function CommercialAgreementSign() {
         setError(json?.message || "That didn't go through. Please try again.");
         return;
       }
-      if (json.outcome === "redirect" && json.url) {
-        window.location.href = json.url;
+      if (json.outcome === "embed" && json.clientSecret) {
+        setEmbed({ clientSecret: String(json.clientSecret), amountCents: Number(json.amountCents || 50) });
         return;
       }
-      // Same reason as the Stripe return above: this succeeded, and the link
+      // Same reason as the 3DS return above: this succeeded, and the link
       // is retired now, so complete from the response rather than re-fetching.
       if (json.outcome === "billing_configured" && json.billing?.configured) {
         setState((prev) =>
@@ -287,6 +304,53 @@ export default function CommercialAgreementSign() {
       setBusy(false);
     }
   };
+
+  const confirmHold = async (paymentIntentId: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/commercial-agreement/${token}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "confirm_billing", paymentIntentId }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) {
+        setError(json?.message || "The hold did not finish. Please try the card again.");
+        return;
+      }
+      if (json.billing?.configured) {
+        setState((prev) =>
+          prev.kind === "ready" || prev.kind === "complete"
+            ? { kind: "complete", data: { ...prev.data, billing: json.billing } }
+            : prev,
+        );
+        return;
+      }
+      await load();
+    } catch {
+      setError("The hold did not finish. Please try the card again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const openAutoPayRef = useRef<() => void>(() => undefined);
+  openAutoPayRef.current = () => {
+    void setupBilling("auto_pay");
+  };
+
+  useEffect(() => {
+    if (!stripeReturnDone) return;
+    if (state.kind !== "ready") return;
+    if (state.data.agreement.status !== "signed") return;
+    if (state.data.agreement.billingMethod !== "auto_pay") return;
+    if (state.data.billing?.configured) return;
+    if (embed || embedStarted.current) return;
+    if (billingEmail.trim().length < 5) return;
+    embedStarted.current = true;
+    openAutoPayRef.current();
+  }, [stripeReturnDone, state, embed, billingEmail]);
 
   if (state.kind === "loading") {
     return (
@@ -510,7 +574,7 @@ export default function CommercialAgreementSign() {
             </h2>
             <p className="mt-1 text-xs text-muted-foreground">
               {agreement.billingMethod === "auto_pay"
-                ? "Save a card or bank account for automatic payment. Nothing is charged now."
+                ? "Add a card here. This places a Stripe Pre-Auth hold to verify the card — nothing is captured now. The agreement is not complete until that hold is submitted."
                 : "Confirm where invoices go and on what terms. No payment details are collected."}
             </p>
           </div>
@@ -571,16 +635,40 @@ export default function CommercialAgreementSign() {
           )}
           {error && <p className="text-sm text-red-600">{error}</p>}
 
-          <Button
-            className="w-full"
-            disabled={busy || billingEmail.trim().length < 5}
-            onClick={() => void setupBilling(agreement.billingMethod)}
-          >
-            {busy ? <RiLoader4Line className="mr-1.5 h-4 w-4 animate-spin" /> : null}
-            {agreement.billingMethod === "auto_pay"
-              ? "Continue to add a payment method"
-              : "Confirm invoicing terms"}
-          </Button>
+          {agreement.billingMethod === "auto_pay" && embed && (
+            <EmbeddedCardForm
+              clientSecret={embed.clientSecret}
+              amountCents={embed.amountCents}
+              returnUrl={typeof window !== "undefined" ? window.location.href.split("#")[0] : ""}
+              submitLabel="Submit card and place Pre-Auth hold"
+              onConfirmed={(paymentIntentId) => void confirmHold(paymentIntentId)}
+            />
+          )}
+
+          {agreement.billingMethod === "auto_pay" && !embed && (
+            <Button
+              className="w-full"
+              disabled={busy || billingEmail.trim().length < 5}
+              onClick={() => {
+                embedStarted.current = true;
+                void setupBilling("auto_pay");
+              }}
+            >
+              {busy ? <RiLoader4Line className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+              {busy ? "Opening the card form…" : "Open the card form"}
+            </Button>
+          )}
+
+          {agreement.billingMethod === "invoiced" && (
+            <Button
+              className="w-full"
+              disabled={busy || billingEmail.trim().length < 5}
+              onClick={() => void setupBilling("invoiced")}
+            >
+              {busy ? <RiLoader4Line className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+              Confirm invoicing terms
+            </Button>
+          )}
         </Card>
       )}
 

@@ -8,7 +8,7 @@ import {
   requestScheduleChange,
   uploadCommercialDocument,
 } from "@/lib/partner-portal/commercial";
-import { portalCallbackUrl, requestIsLocal } from "@/lib/partner-portal/origins";
+import { requestIsLocal } from "@/lib/partner-portal/origins";
 import { openCommercialPaymentSetup, refreshCommercialPaymentMethod } from "@/lib/partner-portal/payment-method";
 import { isPreviewQuery, previewCommercialOverview } from "@/lib/partner-portal/preview";
 import { resolvePortalSession } from "@/lib/partner-portal/session";
@@ -104,12 +104,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     );
   }
   if (action === "update_payment_method") {
-    return NextResponse.json(
-      await openCommercialPaymentSetup(
-        session.identity,
-        portalCallbackUrl(req, "payment=updated&kind=commercial&session_id={CHECKOUT_SESSION_ID}"),
-      ),
-    );
+    return NextResponse.json(await openCommercialPaymentSetup(session.identity));
   }
   if (action === "refresh_payment") {
     return NextResponse.json(
