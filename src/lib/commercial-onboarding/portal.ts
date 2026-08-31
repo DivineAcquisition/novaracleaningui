@@ -21,7 +21,7 @@ type Admin = any;
 export interface ProvisionPortalInput {
   accountId: string;
   email: string;
-  password: string;
+  password?: string;
   fullName?: string;
   businessName?: string;
 }
@@ -33,6 +33,7 @@ export interface ProvisionPortalResult {
   linkedExisting: boolean;
   userId: string | null;
   error?: string;
+  handoffUrl?: string;
 }
 
 const MIN_PASSWORD_LENGTH = 8;
@@ -170,9 +171,20 @@ export async function provisionCommercialPortalUser(
   }
 
   try {
+    const { provisionCommercialPortalAccess } = await import("@/lib/partner-portal/handoff");
+    const access = await provisionCommercialPortalAccess({
+      email,
+      accountId: input.accountId,
+      displayName: input.fullName || null,
+    });
+    if (!access.ok) {
+      result.error = access.error || "Could not open portal access.";
+      return result;
+    }
+    result.handoffUrl = access.handoffUrl;
+
     const created = await admin.auth.admin.createUser({
       email,
-      password: input.password,
       email_confirm: true,
       user_metadata: {
         is_commercial_client: true,
@@ -183,40 +195,22 @@ export async function provisionCommercialPortalUser(
     });
 
     if (created.error) {
-      if (!isDuplicate(created.error.message)) {
-        result.error = created.error.message;
-        return result;
-      }
-      // Already has a login — link it rather than refusing. Someone who has
-      // booked with us before should not be blocked from their own portal.
-      result.linkedExisting = true;
-      result.userId = await findUserIdByEmail(admin, email);
-      if (!result.userId) {
-        result.error =
-          "That email already has an account, but we couldn't link it. Your account manager will finish this.";
-        return result;
+      if (isDuplicate(created.error.message)) {
+        result.linkedExisting = true;
+        result.userId = await findUserIdByEmail(admin, email);
       }
     } else {
       result.created = true;
       result.userId = created.data?.user?.id || null;
     }
 
-    if (!result.userId) {
-      result.error = "The login was created but could not be linked. Your account manager will finish this.";
-      return result;
-    }
-
-    const { error: linkError } = await admin
+    await admin
       .from("business_accounts")
       .update({
-        portal_user_id: result.userId,
+        ...(result.userId ? { portal_user_id: result.userId } : {}),
         portal_created_at: new Date().toISOString(),
       })
       .eq("id", input.accountId);
-    if (linkError) {
-      result.error = linkError.message;
-      return result;
-    }
 
     result.ok = true;
     return result;

@@ -43,10 +43,7 @@ import {
   signCommercialAgreement,
   validateSignature,
 } from "@/lib/commercial-onboarding/operations";
-import {
-  provisionCommercialPortalUser,
-  validatePortalPassword,
-} from "@/lib/commercial-onboarding/portal";
+import { provisionCommercialPortalUser } from "@/lib/commercial-onboarding/portal";
 import {
   closeIfComplete,
   loadProgress,
@@ -501,14 +498,7 @@ export async function POST(
   // ── Step 4: portal login ───────────────────────────────────────────────
 
   if (action === "create_portal") {
-    if (account.portal_user_id) {
-      return finish({
-        outcome: "portal_exists",
-        portalUrl: portalUrl(),
-        message: "You already have portal access — sign in with your email.",
-      });
-    }
-    if (progress.current_step !== "portal") {
+    if (progress.current_step !== "portal" && progress.current_step !== "done" && !account.portal_created_at && !account.portal_user_id) {
       return NextResponse.json(
         { ok: false, message: "Finish the earlier steps first — your portal is the last one." },
         { status: 409 },
@@ -516,19 +506,14 @@ export async function POST(
     }
 
     const email = clip(body.email, 200) || (session.recipient_email as string) || "";
-    const password = String(body.password || "");
-    const invalid = validatePortalPassword(password);
-    if (invalid) return NextResponse.json({ ok: false, message: invalid }, { status: 400 });
-
     const result = await provisionCommercialPortalUser(supabase, {
       accountId,
       email,
-      password,
       fullName: clip(body.fullName, 120) || (agreement?.signed_by_name as string) || undefined,
       businessName: (account.business_name as string) || undefined,
     });
     if (!result.ok) {
-      return NextResponse.json({ ok: false, message: result.error || "Could not create your login." }, { status: 400 });
+      return NextResponse.json({ ok: false, message: result.error || "Could not open your portal." }, { status: 400 });
     }
 
     await supabase.from("events").insert({
@@ -541,11 +526,10 @@ export async function POST(
     await touchActivity(supabase, sessionId, "portal");
     return finish({
       outcome: "portal_created",
-      portalUrl: portalUrl(),
+      portalUrl: result.handoffUrl || portalUrl(),
+      handoffUrl: result.handoffUrl || portalUrl(),
       email,
-      message: result.linkedExisting
-        ? "That email already had an account, so we've linked it to your company. Sign in with your existing password."
-        : "Your portal login is ready.",
+      message: "Your portal is ready — no password needed.",
     });
   }
 

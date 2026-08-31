@@ -24,7 +24,6 @@ import {
   requestContext,
   requireSigned,
   signHostAgreement,
-  validatePortalPassword,
   validateSignature,
 } from "@/lib/host-onboarding/operations";
 import {
@@ -254,38 +253,27 @@ export async function POST(
         { status: 409 },
       );
     }
-    if (host.user_id || session.portal_user_id) {
+    if (host.user_id || session.portal_user_id || session.portal_provisioned_at) {
       await markPortalAlreadyLinked(supabase, session, host);
       await touchActivity(supabase, sessionId, "payment");
-      return finish({
-        outcome: "portal_exists",
-        portalUrl: portalUrl(),
-        message: "You already have portal access — sign in with your email.",
-      });
     }
     const email = clip(body.email, 200) || (session.recipient_email as string) || (host.email as string) || "";
-    const password = String(body.password || "");
-    const invalid = validatePortalPassword(password);
-    if (invalid) return NextResponse.json({ ok: false, message: invalid }, { status: 400 });
-
     const result = await provisionHostPortal(supabase, {
       session,
       host,
       email,
-      password,
       fullName: clip(body.fullName, 120) || (session.signer_name as string) || undefined,
     });
     if (!result.ok) {
-      return NextResponse.json({ ok: false, message: result.error || "Could not create your login." }, { status: 400 });
+      return NextResponse.json({ ok: false, message: result.error || "Could not open your portal." }, { status: 400 });
     }
     await touchActivity(supabase, sessionId, "payment");
     return finish({
       outcome: "portal_created",
-      portalUrl: result.portalUrl,
+      portalUrl: result.handoffUrl || result.portalUrl,
+      handoffUrl: result.handoffUrl || result.portalUrl,
       email,
-      message: result.linkedExisting
-        ? "That email already had an account, so we've linked it. Sign in with your existing password."
-        : "Your portal login is ready.",
+      message: "Your portal is ready — no password needed.",
     });
   }
 

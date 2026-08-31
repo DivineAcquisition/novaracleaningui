@@ -176,7 +176,7 @@ export async function loadProgress(supabase: Admin, session: Row, host?: Row | n
     decisions: decisionsFromItems(items),
     paymentOption: (session.payment_option as PaymentOptionKey) || null,
     paymentMethodOnFile: paymentOnFile,
-    portalReady: !!(session.portal_user_id || hostRow?.user_id),
+    portalReady: !!(session.portal_user_id || session.portal_provisioned_at || hostRow?.user_id),
     payAfterEnabled: !!(hostRow?.pay_after_enabled ?? session.pay_after_enabled),
   });
 }
@@ -307,7 +307,7 @@ export async function sessionPayload(supabase: Admin, session: Row): Promise<Ses
       email: (hostRow.email as string) || (session.recipient_email as string) || null,
       entityType: ((submission as Row | null)?.entity_type as string) || "individual",
       entityName: ((submission as Row | null)?.entity_name as string) || null,
-      hasPortal: !!(session.portal_user_id || hostRow.user_id),
+      hasPortal: !!(session.portal_user_id || session.portal_provisioned_at || hostRow.user_id),
       cardOnFile: !!(session.payment_method_id || hostRow.default_payment_method_id),
     },
     properties: snapshot.map((p) => {

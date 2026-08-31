@@ -53,6 +53,8 @@ export function applyHostOnboardingPreviewAction(action: string, body: Record<st
   message?: string;
   outcome?: string;
   url?: string;
+  handoffUrl?: string;
+  portalUrl?: string;
 } {
   if (action === "sign") {
     previewMem.signed = true;
@@ -89,7 +91,15 @@ export function applyHostOnboardingPreviewAction(action: string, body: Record<st
   }
   if (action === "create_portal") {
     previewMem.portal = true;
-    return { ok: true, status: 200, outcome: "portal_created", message: "Your portal login is ready." };
+    const handoffUrl = "/partner/enter/preview-host";
+    return {
+      ok: true,
+      status: 200,
+      outcome: "portal_created",
+      message: "Your portal is ready — no password needed.",
+      handoffUrl,
+      portalUrl: handoffUrl,
+    };
   }
   return { ok: false, status: 400, message: `Unknown action "${action}".` };
 }

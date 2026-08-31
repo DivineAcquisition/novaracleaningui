@@ -633,12 +633,20 @@ serve(async (req) => {
       const { data: tr } = await admin.from("turnover_requests").select("*").eq("id", body.turnoverId).maybeSingle();
       if (!tr || tr.host_id !== host.id) return json({ error: "Turnover not found" }, 404);
       if (["completed", "cancelled"].includes(tr.status)) return json({ error: "Already closed" }, 409);
-      // Cancellation cutoff: no self-cancel within 24h of the service date.
-      const svc = new Date(`${tr.requested_date}T12:00:00`);
-      if (svc.getTime() - Date.now() < 24 * 60 * 60 * 1000) {
-        return json({ error: "Within 24 hours of service - contact support to cancel." }, 409);
-      }
-      await admin.from("turnover_requests").update({ status: "cancelled" }).eq("id", tr.id);
+      // Section 9 tiers: 48+ credit-eligible, 24–48 = 50%, under 24 = 100%.
+      const start = new Date(`${tr.requested_date}T${String(tr.window_start || "12:00:00").slice(0, 8)}`);
+      const hoursOut = (start.getTime() - Date.now()) / 3600000;
+      const priceCents = Math.round(Number(tr.price || 0) * 100);
+      const tier = hoursOut >= 48 ? "credit_eligible" : hoursOut >= 24 ? "fifty_percent" : "full";
+      const feePercent = tier === "credit_eligible" ? 0 : tier === "fifty_percent" ? 50 : 100;
+      const feeCents = Math.round((priceCents * feePercent) / 100);
+      await admin.from("turnover_requests").update({
+        status: "cancelled",
+        cancelled_at: new Date().toISOString(),
+        cancel_fee_cents: feeCents,
+        cancel_fee_tier: tier,
+        cancel_hours_out: Math.round(hoursOut * 10) / 10,
+      }).eq("id", tr.id);
       const { property: cProp } = await loadContext(admin, tr);
       await sendHostEmail(admin, "turnover_cancelled", host.email, {
         name: (host.name || "").split(" ")[0] || "",

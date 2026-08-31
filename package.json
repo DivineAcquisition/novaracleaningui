@@ -27,6 +27,7 @@
     "proposals:verify": "tsx scripts/verify-proposal-request.ts",
     "host-onboarding:verify": "tsx scripts/verify-host-onboarding-session.ts",
     "partnership-comms:verify": "tsx scripts/verify-partnership-comms.ts",
+    "partner-portal:verify": "tsx scripts/verify-partner-portal.ts",
     "docs:pricing": "tsx scripts/docs/pricing-examples.ts",
     "docs:capture": "tsx scripts/docs/capture-screenshots.ts",
     "docs:verify": "tsx scripts/docs/verify-docs.ts",
