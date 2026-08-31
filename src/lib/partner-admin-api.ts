@@ -129,3 +129,57 @@ export async function sendCalendarLink(input: {
   });
   return handle<SendCalendarLinkResponse>(res);
 }
+
+export interface HostOnboardingAttentionRow {
+  id: string;
+  host_id: string;
+  host_name: string | null;
+  host_email: string | null;
+  current_step: string | null;
+  idle_hours: number | null;
+  stalled: boolean;
+  pending_items: number | null;
+  sent_at: string | null;
+}
+
+export async function fetchHostOnboardingAttention(): Promise<HostOnboardingAttentionRow[]> {
+  const res = await fetch("/api/partner-admin/host-onboarding", {
+    headers: await authHeaders(),
+    cache: "no-store",
+  });
+  const data = await handle<{ ok: true; attention: HostOnboardingAttentionRow[] }>(res);
+  return data.attention || [];
+}
+
+export async function sendHostOnboarding(hostId: string): Promise<{
+  ok: boolean;
+  link?: string;
+  emailed?: boolean;
+  texted?: boolean;
+  message?: string;
+}> {
+  const res = await fetch("/api/partner-admin/host-onboarding", {
+    method: "POST",
+    headers: await authHeaders(),
+    body: JSON.stringify({ action: "send", hostId }),
+  });
+  return handle(res);
+}
+
+export async function nudgeHostOnboarding(sessionId: string): Promise<{ ok: boolean; emailed?: boolean; texted?: boolean }> {
+  const res = await fetch("/api/partner-admin/host-onboarding", {
+    method: "POST",
+    headers: await authHeaders(),
+    body: JSON.stringify({ action: "nudge", sessionId }),
+  });
+  return handle(res);
+}
+
+export async function setHostPayAfter(hostId: string, enabled: boolean): Promise<{ ok: boolean }> {
+  const res = await fetch("/api/partner-admin/host-onboarding", {
+    method: "POST",
+    headers: await authHeaders(),
+    body: JSON.stringify({ action: "set_pay_after", hostId, enabled }),
+  });
+  return handle(res);
+}

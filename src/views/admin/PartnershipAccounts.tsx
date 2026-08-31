@@ -125,7 +125,7 @@ export default function PartnershipAccounts() {
       const monthStartYmd = monthStart.toISOString().slice(0, 10);
       const todayYmd = new Date().toISOString().slice(0, 10);
 
-      const [bizRes, hostRes, propRes, turnRes] = await Promise.all([
+      const [bizRes, hostRes, propRes, turnRes, sessRes] = await Promise.all([
         (supabase.from as any)("business_accounts").select("*").order("last_activity_at", { ascending: false }).limit(500),
         (supabase.from as any)("hosts").select("id, name, email, phone, status, stripe_customer_id, default_payment_method_id, created_at").order("created_at", { ascending: false }).limit(500),
         (supabase.from as any)("properties").select("id, nickname, address, turnover_price, host_id").limit(2000),
@@ -134,6 +134,10 @@ export default function PartnershipAccounts() {
           .gte("requested_date", new Date(Date.now() - 60 * 86400_000).toISOString().slice(0, 10))
           .order("requested_date", { ascending: true })
           .limit(3000),
+        (supabase.from as any)("host_onboarding_sessions_v1")
+          .select("host_id, stalled, pending_items, current_step, idle_hours")
+          .eq("status", "active")
+          .limit(500),
       ]);
 
       const biz = (bizRes.data || []) as AccountRow[];
@@ -183,6 +187,21 @@ export default function PartnershipAccounts() {
           if (pendingPricing.length > 0) flags.push(`${pendingPricing.length} propert${pendingPricing.length === 1 ? "y" : "ies"} pending pricing`);
           if (!h.default_payment_method_id && !h.stripe_customer_id) flags.push("No payment on file");
         }
+        const sessions = ((sessRes.data || []) as Array<{
+          host_id: string;
+          stalled: boolean;
+          pending_items: number;
+          current_step: string | null;
+          idle_hours: number | null;
+        }>).filter((s) => s.host_id === h.id);
+        const stalled = sessions.find((s) => s.stalled);
+        if (stalled) {
+          flags.push(
+            `Onboarding stalled ${Math.round(Number(stalled.idle_hours || 0))}h on ${stalled.current_step || "setup"}`,
+          );
+        }
+        const pendingItems = sessions.reduce((n, s) => n + Number(s.pending_items || 0), 0);
+        if (pendingItems > 0) flags.push(`${pendingItems} onboarding flag/request`);
         const host: HostAccount = {
           ...h,
           properties: hProps,

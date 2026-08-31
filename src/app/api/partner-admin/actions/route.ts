@@ -25,7 +25,8 @@ import {
   type PropertyPatch,
 } from "@/lib/airtable/partner-admin";
 import { invokeHostOnboardingGhl } from "@/lib/host-onboarding/ghl";
-import { sendAgreement, buildHostValues } from "@/lib/docuseal";
+import { startHostOnboardingSession } from "@/lib/host-onboarding/admin";
+import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -173,37 +174,16 @@ export async function POST(req: Request): Promise<NextResponse> {
         extra = { jobRecordId: recordId };
         break;
       }
-      case "resend_agreement": {
+      case "resend_agreement":
+      case "send_host_onboarding": {
         if (!body.hostId) throw new Error("hostId is required.");
-        const host = await getHostDetail(body.hostId, true);
-        if (!host?.email) throw new Error("Host has no email on file.");
-        // Pre-fill from the host + first priced property so they just sign.
-        const prop = host.properties.find((p) => (p.standardTurnoverRate ?? 0) > 0) || host.properties[0];
-        const linen = prop
-          ? [prop.linenIncluded ? "Linen included" : null, prop.restockIncluded ? "Restock included" : null]
-              .filter(Boolean)
-              .join(", ") || "Not included"
-          : undefined;
-        const values = buildHostValues({
-          name: host.name || undefined,
-          company: host.company || undefined,
-          email: host.email,
-          entityType: host.entityType,
-          propertyNickname: prop?.nickname || undefined,
-          rate: prop?.standardTurnoverRate ?? undefined,
-          rateEndDate: prop?.introRateEndDate || undefined,
-          linen,
-          notes: prop?.stagingNotes || "STR turnover cleaning",
+        const started = await startHostOnboardingSession(getAdminSupabase(), {
+          hostId: body.hostId,
+          actorName: principal.email,
+          send: true,
         });
-        await sendAgreement({
-          audience: "str_host",
-          email: host.email,
-          name: host.name || undefined,
-          values,
-          hostEmail: host.email,
-          createdBy: principal.email,
-          metadata: { hostRecordId: body.hostId, source: "partner-admin" },
-        });
+        if (!started.ok) throw new Error(started.message || "Could not send the onboarding link.");
+        extra = { link: started.link, emailed: started.emailed, texted: started.texted };
         break;
       }
       case "resend_payment": {

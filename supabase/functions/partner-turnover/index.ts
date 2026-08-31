@@ -715,6 +715,19 @@ serve(async (req) => {
         .map((p) => `${(p.nickname as string) || (p.address as string) || "Property"}: ${money(Number(p.turnover_price))}/turnover`)
         .join("; ");
 
+      const snapshot = propList.map((p) => ({
+        property_id: p.id,
+        nickname: p.nickname || null,
+        address: p.address || null,
+        bedrooms: p.bedrooms ?? null,
+        bathrooms: p.bathrooms ?? null,
+        sqft: p.sqft ?? null,
+        turnover_price: Number(p.turnover_price),
+        linen: !!p.laundry_included,
+        restock: !!p.restock_included,
+        special_notes: p.special_notes || null,
+      }));
+
       // Pull the onboarding submission for entity type + GHL ids (best-effort).
       const { data: sub } = await admin
         .from("host_onboarding_submissions")
@@ -724,6 +737,32 @@ serve(async (req) => {
         .limit(1)
         .maybeSingle();
       const entityType = (sub?.entity_type as "individual" | "entity") || "individual";
+
+      // One tokenized session — Legal → Rates → Payment. Supersede any live one.
+      await admin.from("host_onboarding_sessions")
+        .update({ status: "superseded", token: null, updated_at: new Date().toISOString() })
+        .eq("host_id", hostId)
+        .eq("status", "active");
+      const { data: minted } = await admin.rpc("mint_host_token");
+      const token = String(minted || "");
+      const partnerOrigin = Deno.env.get("PARTNER_ORIGIN") || "https://partner.novaracleaning.com";
+      const onboardingLink = token ? `${partnerOrigin.replace(/\/+$/, "")}/partner/host-onboarding/${token}` : null;
+      if (token) {
+        await admin.from("host_onboarding_sessions").insert({
+          host_id: hostId,
+          submission_id: sub?.id || null,
+          property_snapshot: snapshot,
+          token,
+          expires_at: new Date(Date.now() + 30 * 86400_000).toISOString(),
+          recipient_name: targetHost.name || null,
+          recipient_email: targetHost.email || null,
+          recipient_phone: targetHost.phone || null,
+          pay_after_enabled: !!targetHost.pay_after_enabled,
+          created_by_name: userId,
+          sent_at: new Date().toISOString(),
+          send_count: 1,
+        });
+      }
 
       // Ensure a GHL contact exists, then trigger the entity-aware document.
       const contactId = targetHost.ghl_contact_id
@@ -741,17 +780,20 @@ serve(async (req) => {
         });
       }
 
-      // Email (Resend) + SMS (GHL) the host that their agreement is ready.
+      // Email (Resend) + SMS (GHL) the host the same tokenized link.
       const firstName = (targetHost.name || "").split(" ")[0] || "there";
       await sendHostEmail(admin, "agreement_sent", targetHost.email, {
         name: firstName,
         rateSummary,
+        agreementUrl: onboardingLink,
       });
       if (targetHost.phone) {
         await sendSms(admin, {
           toPhone: targetHost.phone,
           type: "confirmation",
-          message: `${firstName}, your Novara Host Partnership Agreement (with your rates) is ready to e-sign. Please sign within 24 hours so we can activate your properties. Check your email. - NovaraCleaning`,
+          message: onboardingLink
+            ? `${firstName}, your Novara Host Partnership Agreement (with your rates) is ready. Review, sign, and finish payment setup: ${onboardingLink}`
+            : `${firstName}, your Novara Host Partnership Agreement (with your rates) is ready to e-sign. Check your email. - NovaraCleaning`,
         });
       }
 
@@ -762,7 +804,7 @@ serve(async (req) => {
           .eq("id", sub.id);
       }
 
-      return json({ ok: true, ghl: ghlOk, contactId, rateSummary });
+      return json({ ok: true, ghl: ghlOk, contactId, rateSummary, link: onboardingLink });
     }
 
     // --- admin.sendPaymentLink (role-gated: after a rate is set, send the ---
