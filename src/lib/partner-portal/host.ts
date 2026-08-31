@@ -4,7 +4,6 @@ import { computeCancelFee } from "./cancel-fee";
 import type { PartnerIdentity } from "./identity";
 import { publicStatusLabel, publicTurnoverStatus, stripCrewContact } from "./sanitize";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Admin = any;
 
 function hostIds(identity: PartnerIdentity): string[] {

@@ -155,6 +155,11 @@ export function previewCommercialOverview() {
         serviceWindowStart: "18:00",
         serviceWindowEnd: "22:00",
         upcomingCount: 2,
+        lastVisit: "2026-08-20",
+        zones: [
+          { id: "z1", name: "Reception", description: "Lobby and front desk", status: "complete" as const, note: "", before: [], after: [] },
+          { id: "z2", name: "Open office", description: "Workstations", status: "complete" as const, note: "", before: [], after: [] },
+        ],
       },
       {
         id: "s2",

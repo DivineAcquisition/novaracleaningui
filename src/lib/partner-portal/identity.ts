@@ -1,6 +1,5 @@
 import { normalizeEmail, looksLikeEmail } from "./tokens";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Admin = any;
 
 export interface PartnerHostLink {

@@ -1,4 +1,5 @@
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
+import { sendPortalMagicLink } from "@/lib/partnership-comms/server";
 import { emailHasPartnership, ensureIdentity, findIdentityByEmail } from "./identity";
 import { enterUrl } from "./origins";
 import { loadPortalSettings } from "./settings";
@@ -40,35 +41,17 @@ async function sendMagicLink(email: string): Promise<{ ok: true }> {
   const link = enterUrl(raw);
   const name = (identity.displayName || identity.hosts[0]?.name || identity.accounts[0]?.contactName || "there")
     .split(" ")[0];
-
-  await supabase.functions
-    .invoke("admin-send-email", {
-      body: {
-        to: email,
-        subject: "Your Novara partner portal sign-in link",
-        html: [
-          `<p>Hi ${name},</p>`,
-          `<p>Tap the button below to sign in to your Novara partner portal. No password is needed.</p>`,
-          `<p style="margin:24px 0"><a href="${link}" style="background:#5C0FFE;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:600">Sign in</a></p>`,
-          `<p style="font-size:13px;color:#6B7280">This link expires in ${settings.magicLinkMinutes} minutes and can only be used once.</p>`,
-          `<p style="font-size:12px;word-break:break-all">${link}</p>`,
-        ].join(""),
-      },
-    })
-    .catch(() => null);
-
   const phone = identity.phone || identity.hosts[0]?.phone || identity.accounts[0]?.phone;
-  if (phone) {
-    await supabase.functions
-      .invoke("send-ghl-sms", {
-        body: {
-          phone,
-          type: "confirmation",
-          message: `Novara Cleaning: your partner portal sign-in link (expires in ${settings.magicLinkMinutes} min): ${link}`,
-        },
-      })
-      .catch(() => null);
-  }
+
+  await sendPortalMagicLink(supabase, {
+    email,
+    phone,
+    firstName: name,
+    link,
+    expiresMinutes: settings.magicLinkMinutes,
+    hostId: identity.hosts[0]?.id || null,
+    accountId: identity.accounts[0]?.id || null,
+  }).catch(() => null);
 
   return { ok: true };
 }

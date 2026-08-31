@@ -10,7 +10,6 @@ export const DEFAULT_PORTAL_SETTINGS: PartnerPortalSettings = {
   handoffMinutes: 30,
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function loadPortalSettings(supabase: any): Promise<PartnerPortalSettings> {
   try {
     const { data } = await supabase

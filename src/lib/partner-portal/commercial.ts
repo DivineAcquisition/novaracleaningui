@@ -13,8 +13,8 @@ import {
 } from "@/lib/company-coi-public";
 import type { PartnerIdentity } from "./identity";
 import { stripCrewContact } from "./sanitize";
+import { parseSiteZones, parseZoneCompletions } from "@/lib/site-zones";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Admin = any;
 
 function accountIds(identity: PartnerIdentity): string[] {
@@ -54,7 +54,7 @@ export async function commercialOverview(identity: PartnerIdentity, siteId?: str
       supabase
         .from("business_sites")
         .select(
-          "id, nickname, address, city, state, facility_type, scope_level, sqft, service_window_start, service_window_end, active",
+          "id, nickname, address, city, state, facility_type, scope_level, sqft, service_window_start, service_window_end, active, photo_zones",
         )
         .eq("business_account_id", accountId)
         .eq("active", true)
@@ -62,7 +62,7 @@ export async function commercialOverview(identity: PartnerIdentity, siteId?: str
       supabase
         .from("bookings")
         .select(
-          "id, booking_number, status, service_date, time_slot, arrival_window, address, city, custom_quote_cents, final_charge_cents, total_estimate_cents, hosted_invoice_url, stripe_invoice_id, is_recurring, recurring_frequency, completed_at, before_photos, after_photos, business_site_id",
+          "id, booking_number, status, service_date, time_slot, arrival_window, address, city, custom_quote_cents, final_charge_cents, total_estimate_cents, hosted_invoice_url, stripe_invoice_id, is_recurring, recurring_frequency, completed_at, before_photos, after_photos, business_site_id, job_id, photo_zones",
         )
         .eq("business_account_id", accountId)
         .order("service_date", { ascending: false })
@@ -96,6 +96,41 @@ export async function commercialOverview(identity: PartnerIdentity, siteId?: str
 
   const today = new Date().toISOString().slice(0, 10);
   const allBookings = bookings || [];
+  const completed = allBookings.filter((b: { status?: string | null }) =>
+    b.status === "completed" || b.status === "pending_review",
+  );
+  const lastBySite = new Map<string, Record<string, unknown>>();
+  for (const b of completed) {
+    const sid = String(b.business_site_id || "");
+    if (!sid || lastBySite.has(sid)) continue;
+    lastBySite.set(sid, b);
+  }
+  const jobIds = [...lastBySite.values()].map((b) => String(b.job_id || "")).filter(Boolean);
+  const checklistsByJob = new Map<string, { section_meta?: unknown; zone_completion?: unknown }>();
+  if (jobIds.length) {
+    const { data: cls } = await supabase
+      .from("job_checklists")
+      .select("job_id, section_meta, zone_completion")
+      .in("job_id", jobIds);
+    for (const cl of cls || []) {
+      checklistsByJob.set(String(cl.job_id), cl);
+    }
+  }
+
+  const photoSlots = (meta: unknown): Array<{ before: string[]; after: string[] }> => {
+    if (!meta || typeof meta !== "object") return [];
+    const rec = meta as Record<string, { before?: string[]; after?: string[] }>;
+    return Object.keys(rec)
+      .sort((a, b) => Number(a) - Number(b))
+      .map((k) => {
+        const m = rec[k] || {};
+        return {
+          before: Array.isArray(m.before) ? m.before.map(String).filter(Boolean) : [],
+          after: Array.isArray(m.after) ? m.after.map(String).filter(Boolean) : [],
+        };
+      })
+      .filter((s) => s.before.length > 0 || s.after.length > 0);
+  };
   const upcoming = allBookings.filter(
     (b: { service_date?: string | null; status?: string | null }) =>
       (b.service_date || "") >= today && b.status !== "cancelled",
@@ -129,19 +164,40 @@ export async function commercialOverview(identity: PartnerIdentity, siteId?: str
       };
     });
 
-  const siteList = (sites || []).map((s: Record<string, unknown>) => ({
-    id: s.id,
-    nickname: s.nickname,
-    address: s.address,
-    city: s.city,
-    state: s.state,
-    facilityType: s.facility_type,
-    scopeLevel: s.scope_level,
-    sqft: s.sqft,
-    serviceWindowStart: s.service_window_start,
-    serviceWindowEnd: s.service_window_end,
-    upcomingCount: upcoming.filter((b: { business_site_id?: string }) => b.business_site_id === s.id).length,
-  }));
+  const siteList = (sites || []).map((s: Record<string, unknown>) => {
+    const map = parseSiteZones(s.photo_zones);
+    const last = lastBySite.get(String(s.id));
+    const cl = last?.job_id ? checklistsByJob.get(String(last.job_id)) : null;
+    const completions = parseZoneCompletions(cl?.zone_completion);
+    const slots = photoSlots(cl?.section_meta);
+    return {
+      id: s.id,
+      nickname: s.nickname,
+      address: s.address,
+      city: s.city,
+      state: s.state,
+      facilityType: s.facility_type,
+      scopeLevel: s.scope_level,
+      sqft: s.sqft,
+      serviceWindowStart: s.service_window_start,
+      serviceWindowEnd: s.service_window_end,
+      upcomingCount: upcoming.filter((b: { business_site_id?: string }) => b.business_site_id === s.id).length,
+      lastVisit: last?.service_date || null,
+      zones: map.map((z, i) => {
+        const done = completions.find((c) => c.name.toLowerCase() === z.name.toLowerCase());
+        const slot = slots[i] || { before: [] as string[], after: [] as string[] };
+        return {
+          id: z.id,
+          name: z.name,
+          description: z.description,
+          status: done?.status || null,
+          note: done?.note || "",
+          before: slot.before,
+          after: slot.after,
+        };
+      }),
+    };
+  });
 
   const selected = siteId ? siteList.find((s: { id: string }) => s.id === siteId) || null : null;
   const visitsFor = (sid?: string | null) =>
