@@ -282,7 +282,7 @@ export default function DynamicPricing() {
     return (
       <div className="p-8 text-sm text-slate-500">
         Dynamic pricing is not configured — run the{" "}
-        <code>20260731090000_dynamic_zone_demand_pricing</code> migration to seed config v1.
+        <code>20260731222235_dynamic_zone_demand_pricing</code> migration to seed config v1.
       </div>
     );
   }
