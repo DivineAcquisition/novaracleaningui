@@ -26,10 +26,24 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PartnerOnboardingLinkDialog } from "@/components/admin/PartnerOnboardingLinkDialog";
+import {
+  fetchHostOnboardingAttention,
+  nudgeHostOnboarding,
+  sendHostOnboarding,
+  setHostPayAfter,
+  type HostOnboardingAttentionRow,
+} from "@/lib/partner-admin-api";
 import { cn } from "@/lib/utils";
 
 interface Property { id: string; nickname: string | null; address: string | null; turnover_price: number | null; host_id: string; }
-interface Host { id: string; name: string | null; email: string | null; phone: string | null; status: string | null; }
+interface Host {
+  id: string;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  status: string | null;
+  pay_after_enabled?: boolean | null;
+}
 interface Turnover {
   id: string; property_id: string; host_id: string; requested_date: string; window_start: string | null; window_end: string | null;
   price: number; status: string; assignment_type: string | null; assigned_cleaner_id: string | null;
@@ -83,12 +97,14 @@ export default function PartnerAdmin() {
   const [bulkPrice, setBulkPrice] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
+  const [attention, setAttention] = useState<HostOnboardingAttentionRow[]>([]);
+  const [nudging, setNudging] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     const [{ data: props }, { data: hs }, { data: trs }, { data: cl }, { data: cr }, { data: rec }, { data: bt }] = await Promise.all([
       (supabase.from as any)("properties").select("*").order("created_at", { ascending: false }),
-      (supabase.from as any)("hosts").select("id, name, email, phone, status").order("created_at", { ascending: false }),
+      (supabase.from as any)("hosts").select("id, name, email, phone, status, pay_after_enabled").order("created_at", { ascending: false }),
       (supabase.from as any)("turnover_requests").select("*").order("created_at", { ascending: false }).limit(500),
       (supabase.from as any)("cleaners").select("id, first_name, last_name, phone").order("first_name"),
       (supabase.from as any)("turnover_crew").select("*"),
@@ -102,6 +118,11 @@ export default function PartnerAdmin() {
     setCrew((cr as Crew[]) || []);
     setRecurring((rec as RecurringSchedule[]) || []);
     setBatches((bt as Batch[]) || []);
+    try {
+      setAttention(await fetchHostOnboardingAttention());
+    } catch {
+      setAttention([]);
+    }
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -213,14 +234,42 @@ export default function PartnerAdmin() {
   const sendAgreement = async (hostId: string) => {
     setSendingAgreement(hostId);
     try {
-      const { data, error } = await supabase.functions.invoke("partner-turnover", {
-        body: { action: "admin.sendHostAgreement", hostId },
-      });
-      const err = error || (data as any)?.error;
-      if (err) { toast.error((data as any)?.error || "Could not send agreement"); return; }
-      toast.success("Host agreement sent — e-sign link emailed & texted.");
+      const data = await sendHostOnboarding(hostId);
+      if (!data.ok) {
+        toast.error(data.message || "Could not send the onboarding link.");
+        return;
+      }
+      toast.success(
+        `Host onboarding link sent${data.emailed ? " by email" : ""}${data.texted ? " and text" : ""}.`,
+      );
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not send the onboarding link.");
     } finally {
       setSendingAgreement(null);
+    }
+  };
+
+  const nudgeSession = async (sessionId: string) => {
+    setNudging(sessionId);
+    try {
+      await nudgeHostOnboarding(sessionId);
+      toast.success("Nudge sent — same link, picks up where they left off.");
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not send the nudge.");
+    } finally {
+      setNudging(null);
+    }
+  };
+
+  const togglePayAfter = async (hostId: string, enabled: boolean) => {
+    try {
+      await setHostPayAfter(hostId, enabled);
+      setHosts((prev) => prev.map((h) => (h.id === hostId ? { ...h, pay_after_enabled: enabled } : h)));
+      toast.success(enabled ? "Pay After enabled for this host." : "Pay After removed for this host.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not update Pay After.");
     }
   };
 
@@ -313,6 +362,34 @@ export default function PartnerAdmin() {
           value={stats.avgRating ? stats.avgRating.toFixed(1) : "—"}
         />
       </div>
+
+      {attention.length > 0 && (
+        <Card className="border-amber-300">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2 text-amber-700">
+              <RiAlarmWarningLine className="w-5 h-5" /> Host onboarding needs attention ({attention.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {attention.map((s) => (
+              <div key={s.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50/50 p-3">
+                <div className="text-sm">
+                  <p className="font-medium">{s.host_name || s.host_email || "Host"}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {s.stalled
+                      ? `Stalled ${Math.round(Number(s.idle_hours || 0))}h on ${s.current_step || "setup"}`
+                      : `On ${s.current_step || "setup"}`}
+                    {Number(s.pending_items || 0) > 0 ? ` · ${s.pending_items} flag/request` : ""}
+                  </p>
+                </div>
+                <Button size="sm" variant="outline" disabled={nudging === s.id} onClick={() => nudgeSession(s.id)}>
+                  {nudging === s.id ? "Sending…" : "Nudge"}
+                </Button>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Unassigned alert queue */}
       {unassigned.length > 0 && (
@@ -411,14 +488,25 @@ export default function PartnerAdmin() {
                     {!allPriced && <span className="text-amber-600"> · price all to send</span>}
                   </p>
                 </div>
-                <Button
-                  size="sm"
-                  variant={allPriced ? "default" : "outline"}
-                  disabled={!allPriced || sendingAgreement === host.id}
-                  onClick={() => sendAgreement(host.id)}
-                >
-                  {sendingAgreement === host.id ? "Sending…" : "Send agreement"}
-                </Button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="flex items-center gap-1.5 text-[11px] text-slate-600">
+                    <input
+                      type="checkbox"
+                      className="h-3.5 w-3.5 accent-[#5500FF]"
+                      checked={!!host.pay_after_enabled}
+                      onChange={(e) => togglePayAfter(host.id, e.target.checked)}
+                    />
+                    Pay After
+                  </label>
+                  <Button
+                    size="sm"
+                    variant={allPriced ? "default" : "outline"}
+                    disabled={!allPriced || sendingAgreement === host.id}
+                    onClick={() => sendAgreement(host.id)}
+                  >
+                    {sendingAgreement === host.id ? "Sending…" : "Send onboarding link"}
+                  </Button>
+                </div>
               </div>
             );
           })}

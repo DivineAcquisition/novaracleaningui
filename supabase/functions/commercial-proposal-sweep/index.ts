@@ -65,7 +65,7 @@ serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
   );
 
-  const result = { expired: 0, reminded: 0, stalled: 0, coiWarnings: 0, onboardingStalled: 0 };
+  const result = { expired: 0, reminded: 0, stalled: 0, coiWarnings: 0, onboardingStalled: 0, hostOnboardingStalled: 0 };
 
   try {
     // ── 1. Expire ────────────────────────────────────────────────────────
@@ -256,6 +256,43 @@ serve(async (req) => {
         },
       });
       result.onboardingStalled += 1;
+    }
+
+    // ── 3c. Host onboarding sessions that went quiet ─────────────────────
+    const { data: idleHostSessions } = await admin
+      .from("host_onboarding_sessions_v1")
+      .select("id, host_id, host_name, host_email, current_step, idle_hours, stalled")
+      .eq("stalled", true)
+      .limit(200);
+
+    for (const raw of idleHostSessions || []) {
+      const d = raw as unknown as Record<string, unknown>;
+      const { count } = await admin
+        .from("events")
+        .select("id", { count: "exact", head: true })
+        .eq("event_type", "host.onboarding.stalled")
+        .contains("data", { session_id: d.id })
+        .gte("created_at", new Date(Date.now() - 3 * 86_400_000).toISOString());
+      if ((count || 0) > 0) continue;
+
+      const step = String(d.current_step || "legal");
+      const stepLabel =
+        step === "legal" ? "signing the agreement" : step === "rates" ? "confirming the rate schedule" : step === "payment" ? "setting up payment" : step;
+
+      await admin.from("events").insert({
+        event_type: "host.onboarding.stalled",
+        source: "commercial-proposal-sweep",
+        summary:
+          `${String(d.host_name || d.host_email || "A host")} has been stuck on ${stepLabel} for ` +
+          `${Math.round(Number(d.idle_hours || 0))} hours. Nudge ${String(d.host_email || "the host")}.`,
+        data: {
+          session_id: d.id,
+          host_id: d.host_id,
+          current_step: step,
+          idle_hours: d.idle_hours,
+        },
+      });
+      result.hostOnboardingStalled += 1;
     }
 
     // ── 4. Our own certificate ───────────────────────────────────────────

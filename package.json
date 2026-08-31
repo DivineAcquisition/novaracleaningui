@@ -25,6 +25,7 @@
     "reclean:verify": "deno run --allow-read scripts/verify-reclean.deno.ts",
     "reclean:verify:node": "tsx scripts/verify-reclean.deno.ts",
     "proposals:verify": "tsx scripts/verify-proposal-request.ts",
+    "host-onboarding:verify": "tsx scripts/verify-host-onboarding-session.ts",
     "docs:pricing": "tsx scripts/docs/pricing-examples.ts",
     "docs:capture": "tsx scripts/docs/capture-screenshots.ts",
     "docs:verify": "tsx scripts/docs/verify-docs.ts",

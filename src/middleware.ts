@@ -102,6 +102,9 @@ const ROUTE_OWNER: Array<[string, SubdomainKey]> = [
   // (/partner/auth/callback). partners.* is an alias of partner.*.
   // Listed before the try.* marketing prefixes so it can never fall through.
   ["/partner", "partner"],
+  // Public Host Partnership Agreement (the apply-form link). Lives on the
+  // partner host so partners.novaracleaning.com/host-partnership-agreement works.
+  ["/host-partnership-agreement", "partner"],
 
   // Public commercial / office / STR partnership intake funnel — no login.
   // Lead capture only (never prices); feeds the internal Partnerships Hub.

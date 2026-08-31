@@ -12,6 +12,7 @@ import { NextResponse } from "next/server";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import { markHostAgreementSent, readPropertyRates } from "@/lib/airtable";
 import { invokeHostOnboardingGhl } from "@/lib/host-onboarding/ghl";
+import { startHostOnboardingSession } from "@/lib/host-onboarding/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -92,5 +93,30 @@ export async function POST(req: Request): Promise<NextResponse> {
     .update({ status: "agreement_sent", sync_error: ghl.ok ? null : `GHL send failed: ${ghl.error}` })
     .eq("id", submission.id);
 
-  return NextResponse.json({ ok: true, sent: true, ghl: ghl.ok, rateSummary });
+  let session: { ok: boolean; link?: string; emailed?: boolean; texted?: boolean; message?: string } | null = null;
+  let hostId = (submission.host_id as string) || null;
+  if (!hostId && submission.email) {
+    const { data: hostRow } = await supabase
+      .from("hosts")
+      .select("id")
+      .eq("email", String(submission.email).toLowerCase())
+      .maybeSingle();
+    hostId = (hostRow?.id as string) || null;
+  }
+  if (hostId) {
+    session = await startHostOnboardingSession(supabase, {
+      hostId,
+      actorName: "send-contract",
+      recipientEmail: submission.email,
+      send: true,
+    });
+  }
+
+  return NextResponse.json({
+    ok: true,
+    sent: true,
+    ghl: ghl.ok,
+    rateSummary,
+    onboarding: session,
+  });
 }
