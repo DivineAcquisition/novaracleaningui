@@ -29,6 +29,7 @@ import {
   PAY_AFTER_DISCRETION,
   bedsBathsLabel,
   formatTurnoverRate,
+  hostPaymentSetupMode,
   type PaymentOptionKey,
 } from "@/lib/host-onboarding/agreement";
 import type { HostOnboardingProgress } from "@/lib/host-onboarding/progress";
@@ -379,7 +380,7 @@ function LegalStep({
 
       <div className="mt-5 space-y-3">
         {BINDING_ACKNOWLEDGMENTS.map((ack) => (
-          <label key={ack.key} className="flex items-start gap-3 rounded-xl border border-slate-200 p-3">
+          <label key={ack.key} className="flex items-start gap-3 rounded-xl border-2 border-slate-300 bg-white p-3">
             <input
               type="checkbox"
               className="mt-1 h-4 w-4 accent-[#5500FF]"
@@ -391,7 +392,7 @@ function LegalStep({
             </span>
           </label>
         ))}
-        <label className="flex items-start gap-3 rounded-xl border border-slate-200 p-3">
+        <label className="flex items-start gap-3 rounded-xl border-2 border-slate-300 bg-white p-3">
           <input
             type="checkbox"
             className="mt-1 h-4 w-4 accent-[#5500FF]"
@@ -665,7 +666,14 @@ function PaymentStep({
   const needsPortal = !data.host.hasPortal;
   const cardReady = data.host.cardOnFile || data.progress.payment_ready;
   const preview = token.startsWith("preview-");
-  const [embed, setEmbed] = useState<{ clientSecret: string; amountCents: number } | null>(null);
+  const setupMode = hostPaymentSetupMode(option);
+  const isSplit = option === "split";
+  const optionTitle = data.paymentOptions.find((o) => o.key === option)?.title || "this option";
+  const [embed, setEmbed] = useState<{
+    clientSecret: string;
+    amountCents: number;
+    mode: "hold" | "setup";
+  } | null>(null);
   const [embedError, setEmbedError] = useState<string | null>(null);
 
   const openEmbed = async () => {
@@ -674,15 +682,27 @@ function PaymentStep({
       clientSecret?: string;
       amountCents?: number;
       outcome?: string;
+      mode?: "hold" | "setup";
     } | null;
     if (json?.clientSecret) {
-      setEmbed({ clientSecret: json.clientSecret, amountCents: Number(json.amountCents || 50) });
+      setEmbed({
+        clientSecret: json.clientSecret,
+        amountCents: Number(json.amountCents || 0),
+        mode: json.mode || setupMode,
+      });
       return;
     }
     if (json?.outcome !== "payment_ready") {
       setEmbedError("Could not open the card form.");
     }
   };
+
+  const intro =
+    option === "split"
+      ? "Split Payment places a Stripe Pre-Auth hold for half of the first property's turnover rate. Pay half now. The remaining amount is paid on service completion."
+      : option === "pay_after"
+        ? "Save a card on file. Nothing is charged at booking. The full rate is charged when the turnover is completed. No Pre-Auth hold for Pay After."
+        : "Save a card on file. The full per-turnover rate is charged when you book. No Pre-Auth hold for Pay in Full.";
 
   return (
     <div className="space-y-4">
@@ -691,10 +711,7 @@ function PaymentStep({
           <RiBankCardLine className="h-5 w-5" />
           <h2 className="text-lg font-semibold text-slate-900">Payment Setup</h2>
         </div>
-        <p className="mt-1 text-sm text-slate-500">
-          The three options in Section 6.2. Adding a card places a Stripe Pre-Auth hold — nothing
-          is captured now. The partnership is not complete until that hold is submitted.
-        </p>
+        <p className="mt-1 text-sm text-slate-500">{intro}</p>
         {!data.session.payAfterEnabled && (
           <p className="mt-3 text-xs text-slate-500">{PAY_AFTER_DISCRETION} It is not offered on this account.</p>
         )}
@@ -704,9 +721,13 @@ function PaymentStep({
             <button
               key={o.key}
               type="button"
-              onClick={() => setOption(o.key)}
-              className={`rounded-xl border p-3 text-left transition-colors ${
-                option === o.key ? "border-violet-500 bg-violet-50" : "border-slate-200 hover:bg-slate-50"
+              onClick={() => {
+                setOption(o.key);
+                setEmbed(null);
+                setEmbedError(null);
+              }}
+              className={`rounded-xl border-2 p-3 text-left transition-colors ${
+                option === o.key ? "border-violet-500 bg-violet-50" : "border-slate-300 bg-white hover:bg-slate-50"
               }`}
             >
               <span className="block text-sm font-semibold">{o.title}</span>
@@ -724,7 +745,7 @@ function PaymentStep({
             className="mt-5 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-violet-600 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
           >
             {busy ? <RiLoader4Line className="h-4 w-4 animate-spin" /> : <RiBankCardLine className="h-4 w-4" />}
-            Place the Pre-Auth hold for {data.paymentOptions.find((o) => o.key === option)?.title || "this option"}
+            {isSplit ? `Place the Pre-Auth hold for ${optionTitle}` : `Save a card for ${optionTitle}`}
           </button>
         )}
         {!cardReady && !preview && !embed && (
@@ -735,7 +756,7 @@ function PaymentStep({
             className="mt-5 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-violet-600 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
           >
             {busy ? <RiLoader4Line className="h-4 w-4 animate-spin" /> : <RiBankCardLine className="h-4 w-4" />}
-            Add a card for {data.paymentOptions.find((o) => o.key === option)?.title || "this option"}
+            {isSplit ? "Add a card and pay half now" : `Save a card for ${optionTitle}`}
           </button>
         )}
         {!cardReady && !preview && embed && (
@@ -743,8 +764,20 @@ function PaymentStep({
             <EmbeddedCardForm
               clientSecret={embed.clientSecret}
               amountCents={embed.amountCents}
+              mode={embed.mode}
               returnUrl={typeof window !== "undefined" ? window.location.href.split("#")[0] : ""}
-              submitLabel="Submit card and place Pre-Auth hold"
+              submitLabel={
+                embed.mode === "hold" ? "Submit card and place Pre-Auth hold" : "Save this card"
+              }
+              description={
+                embed.mode === "hold" ? (
+                  <p className="text-sm leading-relaxed text-slate-600">
+                    This places a Stripe Pre-Auth hold for half of the first property&apos;s
+                    turnover rate. <strong>Pay half now.</strong> The remaining amount is paid on
+                    service completion. Nothing is captured from this hold until that visit.
+                  </p>
+                ) : undefined
+              }
               onConfirmed={(paymentIntentId) => void onPost({ action: "confirm_payment", paymentIntentId })}
             />
           </div>

@@ -84,11 +84,23 @@ export function applyHostOnboardingPreviewAction(action: string, body: Record<st
     }
     previewMem.paymentOption = option;
     previewMem.card = true;
-    return { ok: true, status: 200, outcome: "payment_ready", message: "Payment method on file (preview)." };
+    const isSplit = option === "split";
+    return {
+      ok: true,
+      status: 200,
+      outcome: "payment_ready",
+      message: isSplit ? "Pre-Auth hold is on file (preview)." : "Card is on file (preview).",
+    };
   }
   if (action === "confirm_payment") {
     previewMem.card = true;
-    return { ok: true, status: 200, outcome: "payment_ready", message: "Pre-Auth hold is on file (preview)." };
+    const isSplit = previewMem.paymentOption === "split";
+    return {
+      ok: true,
+      status: 200,
+      outcome: "payment_ready",
+      message: isSplit ? "Pre-Auth hold is on file (preview)." : "Card is on file (preview).",
+    };
   }
   if (action === "payment_status") {
     return { ok: true, status: 200, outcome: previewMem.card ? "payment_ready" : "payment_pending" };

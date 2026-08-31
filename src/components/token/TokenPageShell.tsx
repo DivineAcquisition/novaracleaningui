@@ -4,9 +4,6 @@ import type { ReactNode } from "react";
 
 import { AnimatedShinyText } from "@/components/magicui/animated-shiny-text";
 import { BlurFade } from "@/components/magicui/blur-fade";
-import { BorderBeam } from "@/components/magicui/border-beam";
-import { ShineBorder } from "@/components/magicui/shine-border";
-import { Panel } from "@/components/ui/panel";
 import { cn } from "@/lib/utils";
 
 /**
@@ -41,7 +38,7 @@ export function TokenPageShell({
             <img src="/novara-logo.png" alt="Novara Cleaning" className="mx-auto mb-4 h-8" />
           )}
           {eyebrow && (
-            <div className="mb-3 inline-flex items-center rounded-full border border-primary/20 bg-primary/[0.04] px-4 py-1.5 backdrop-blur-sm">
+            <div className="mb-3 inline-flex items-center rounded-full border-2 border-slate-400 bg-white px-4 py-1.5">
               <AnimatedShinyText className="mx-0 max-w-none text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">
                 {eyebrow}
               </AnimatedShinyText>
@@ -78,19 +75,23 @@ export function TokenPageShell({
 export function TokenPanel({
   children,
   className,
-  shine = false,
-  beam = false,
+  shine: _shine = false,
+  beam: _beam = false,
 }: {
   children: ReactNode;
   className?: string;
+  /** Kept for callers. Token cards are solid white — no glass or shine. */
   shine?: boolean;
   beam?: boolean;
 }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl">
-      {shine && <ShineBorder borderWidth={1.5} duration={14} />}
-      {beam && <BorderBeam size={80} duration={8} />}
-      <Panel className={cn("relative z-10 p-5 sm:p-6", className)}>{children}</Panel>
+    <div
+      className={cn(
+        "relative rounded-2xl border-2 border-slate-400 bg-white p-5 sm:p-6 shadow-sm",
+        className,
+      )}
+    >
+      {children}
     </div>
   );
 }

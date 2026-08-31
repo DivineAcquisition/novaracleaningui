@@ -410,7 +410,7 @@ function PricingStep({
         Please check this over. Nothing is binding until you sign on the next step.
       </p>
 
-      <div className="mt-4 divide-y divide-slate-100 rounded-xl border border-slate-200">
+      <div className="mt-4 divide-y divide-slate-200 rounded-xl border-2 border-slate-300 bg-white">
         {data.sites.map((s) => (
           <div key={s.id || s.nickname} className="flex flex-wrap items-baseline justify-between gap-2 p-3">
             <div>
@@ -431,12 +431,12 @@ function PricingStep({
       </div>
 
       <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-        <div className="rounded-lg bg-slate-50 p-3">
+        <div className="rounded-lg border-2 border-slate-300 bg-white p-3">
           <dt className="text-xs text-slate-500">Total per visit</dt>
           <dd className="text-lg font-bold tabular-nums">{money(Number(p.totalPerVisitCents || 0))}</dd>
         </div>
         {monthly > 0 && (
-          <div className="rounded-lg bg-slate-50 p-3">
+          <div className="rounded-lg border-2 border-slate-300 bg-white p-3">
             <dt className="text-xs text-slate-500">Estimated monthly</dt>
             <dd className="text-lg font-bold tabular-nums">{money(monthly)}</dd>
           </div>
