@@ -168,6 +168,10 @@ const TEMPLATES: Record<string, ChecklistTemplate> = {
           "Clean and polish stove top and vent hood",
           "Detail-clean under electric range burners",
           "Vacuum and mop kitchen floor",
+          "Hand-wipe small appliances and items on countertops (if present)",
+          "Remove trash, replace bag, wipe exterior",
+          "Clean inside refrigerator and freezer",
+          "Clean inside oven",
         ],
       },
       {
@@ -181,6 +185,8 @@ const TEMPLATES: Record<string, ChecklistTemplate> = {
           "Clean counters, sinks, and polish fixtures",
           "Disinfect toilet and surrounding area",
           "Clean and disinfect bathroom floor",
+          "Vacuum bathroom rugs (if present)",
+          "Remove trash, replace bags, wipe exterior",
         ],
       },
       {
@@ -198,12 +204,17 @@ const TEMPLATES: Record<string, ChecklistTemplate> = {
           "Vacuum floors and mop hard surface floors",
           "Vacuum carpet edges with attachment",
           "Clean front and back door glass",
+          "Dust wall art (if present)",
+          "Dust TVs, electronics, book tops, knick-knacks, lamps (if present)",
+          "Hand-polish all wood furniture (if present)",
+          "Vacuum under all furniture (if present)",
+          "Vacuum upholstered furniture and crevices (if present)",
+          "Change linens and/or make beds (if present)",
         ],
       },
     ],
     notIncludedHeading: "Not included — available as add-ons:",
     notIncluded: [
-      "Inside oven, refrigerator, or freezer (available as add-on)",
       "Exterior windows",
       "Wall washing (spot cleaning only)",
       "Carpet shampooing or steam cleaning",
@@ -376,8 +387,8 @@ TEMPLATES.office = {
 };
 
 function normalizeServiceType(serviceType: string | null | undefined): string {
-  const s = String(serviceType || "standard").toLowerCase().replace(/-/g, "_");
-  if (s === "moveinout" || s === "move_in_out" || s === "move-in-out") return "move_in_out";
+  const s = String(serviceType || "standard").toLowerCase().replace(/[\s\-\/]+/g, "_");
+  if (s === "moveinout" || s === "move_in_out" || s === "movein" || s === "moveout") return "move_in_out";
   if (s === "recurring" || s === "membership") return "recurring";
   if (s === "deep") return "deep";
   if (s === "combo") return "deep";

@@ -6,6 +6,10 @@
 // works through on-site. Item keys ("<sectionIdx>:<itemIdx>") are stable
 // ids used for the progress map stored on job_checklists.items.
 //
+// Residential depth (mirrors price): Standard (occupied maintenance) <
+// Deep (hand-wipe reset) < Move-In/Out (Deep + interiors + included
+// fridge/oven). Move must never be the shorter list.
+//
 // If a checklist line changes, update BOTH this file and
 // src/lib/checklists.ts / src/lib/commercial-checklists.ts so the
 // customer promise and the crew execution list stay in lock-step.
@@ -44,6 +48,11 @@ export interface ContractorChecklistSection {
 export interface ContractorChecklist {
   key: string;
   name: string;
+  /**
+   * One-line depth cue shown on the contractor job page so Standard vs
+   * Deep vs Move-In/Out is obvious before the crew starts tapping boxes.
+   */
+  blurb?: string;
   sections: ContractorChecklistSection[];
 }
 
@@ -151,6 +160,14 @@ const DEEP_SECTIONS: ContractorChecklistSection[] = [
   },
 ];
 
+// Move-In/Out is Deep PLUS empty-home interiors PLUS the fridge/oven work
+// that is included in the price. Occupied-only Deep lines stay on the list
+// with "(if present)" so an empty house can skip them with a reason — they
+// are not dropped, because dropping them made this list *shorter than
+// Standard* (31 vs 32) even though the customer paid for the heavier job.
+//
+// New lines are appended at the end of each section so in-flight jobs that
+// already stored progress under "<section>:<item>" keep their existing keys.
 const MOVE_IN_OUT_SECTIONS: ContractorChecklistSection[] = [
   {
     title: "Kitchen",
@@ -166,6 +183,10 @@ const MOVE_IN_OUT_SECTIONS: ContractorChecklistSection[] = [
       "Clean and polish stove top and vent hood",
       "Detail-clean under electric range burners",
       "Vacuum and mop kitchen floor",
+      "Hand-wipe small appliances and items on countertops (if present)",
+      "Remove trash, replace bag, wipe exterior",
+      "Clean inside refrigerator and freezer",
+      "Clean inside oven",
     ],
   },
   {
@@ -179,6 +200,8 @@ const MOVE_IN_OUT_SECTIONS: ContractorChecklistSection[] = [
       "Clean counters, sinks, and polish fixtures",
       "Disinfect toilet and surrounding area",
       "Clean and disinfect bathroom floor",
+      "Vacuum bathroom rugs (if present)",
+      "Remove trash, replace bags, wipe exterior",
     ],
   },
   {
@@ -196,6 +219,12 @@ const MOVE_IN_OUT_SECTIONS: ContractorChecklistSection[] = [
       "Vacuum floors and mop hard surface floors",
       "Vacuum carpet edges with attachment",
       "Clean front and back door glass",
+      "Dust wall art (if present)",
+      "Dust TVs, electronics, book tops, knick-knacks, lamps (if present)",
+      "Hand-polish all wood furniture (if present)",
+      "Vacuum under all furniture (if present)",
+      "Vacuum upholstered furniture and crevices (if present)",
+      "Change linens and/or make beds (if present)",
     ],
   },
 ];
@@ -490,11 +519,41 @@ const OFFICE_SECTIONS: ContractorChecklistSection[] = [
 ];
 
 const CHECKLISTS: Record<string, ContractorChecklist> = {
-  standard: { key: "standard", name: "Standard Clean", sections: STANDARD_SECTIONS },
-  deep: { key: "deep", name: "Deep Clean", sections: DEEP_SECTIONS },
-  combo: { key: "combo", name: "Deep + Standard Combo", sections: DEEP_SECTIONS },
-  move_in_out: { key: "move_in_out", name: "Move In / Move Out Clean", sections: MOVE_IN_OUT_SECTIONS },
-  recurring: { key: "recurring", name: "Maintenance Clean", sections: STANDARD_SECTIONS },
+  standard: {
+    key: "standard",
+    name: "Standard Clean",
+    blurb:
+      "Occupied-home maintenance: dust, vacuum, mop, kitchen exteriors, bathrooms, linens. Hand-wiping, inside cabinets, and appliance interiors are Deep or Move-In/Out.",
+    sections: STANDARD_SECTIONS,
+  },
+  deep: {
+    key: "deep",
+    name: "Deep Clean",
+    blurb:
+      "The reset: Standard surfaces, hand-wiped, plus under-burner and carpet-edge detail. Inside cabinets, fridge, and oven are Move-In/Out (or add-ons).",
+    sections: DEEP_SECTIONS,
+  },
+  combo: {
+    key: "combo",
+    name: "Deep + Standard Combo",
+    blurb:
+      "The reset: Standard surfaces, hand-wiped, plus under-burner and carpet-edge detail. Inside cabinets, fridge, and oven are Move-In/Out (or add-ons).",
+    sections: DEEP_SECTIONS,
+  },
+  move_in_out: {
+    key: "move_in_out",
+    name: "Move In / Move Out Clean",
+    blurb:
+      "Everything in a Deep Clean, plus inside cabinets, pantry, built-ins, fridge, and oven. Skip occupied-only lines (if present) when the home is empty.",
+    sections: MOVE_IN_OUT_SECTIONS,
+  },
+  recurring: {
+    key: "recurring",
+    name: "Maintenance Clean",
+    blurb:
+      "Same list as a Standard Clean — the recurring visit that keeps the home at baseline after a Deep reset.",
+    sections: STANDARD_SECTIONS,
+  },
   turnover: { key: "turnover", name: "STR Turnover — Guest-Ready", sections: TURNOVER_SECTIONS },
   commercial: { key: "commercial", name: "Commercial Site Service", sections: COMMERCIAL_SECTIONS },
   office: { key: "office", name: "Office Clean (After-Hours)", sections: OFFICE_SECTIONS },
@@ -516,7 +575,7 @@ const CHECKLISTS: Record<string, ContractorChecklist> = {
 
 /** Normalize a booking/job service_type to a checklist key. */
 export function normalizeServiceType(serviceType: string | null | undefined): string {
-  const raw = String(serviceType || "standard").toLowerCase().replace(/[\s-]/g, "_");
+  const raw = String(serviceType || "standard").toLowerCase().replace(/[\s\-\/]+/g, "_");
   if (raw === "moveinout" || raw === "move_in_out" || raw === "movein" || raw === "moveout") return "move_in_out";
   if (raw === "membership" || raw === "recurring" || raw === "maintenance") return "recurring";
   if (raw === "deep") return "deep";
@@ -589,6 +648,8 @@ export interface CommercialChecklistOptions {
   scopeLevel?: string | null;
   /** Documentation zones for a large site; empty means one site-wide pair. */
   photoZones?: string[] | null;
+  /** Booked add-on ids. Appended as a final contractor-only section. */
+  bookedAddOns?: string[] | null;
 }
 
 export function getContractorChecklist(
@@ -598,12 +659,12 @@ export function getContractorChecklist(
   commercial?: CommercialChecklistOptions | null,
 ): ContractorChecklist {
   const key = normalizeServiceType(serviceType);
+  let resolved: ContractorChecklist;
   if (key === "focused") {
     const sections = focusedChecklistSections(focusedAreas || [], focusedSettings)
       .map((s) => ({ ...s, photoRequired: true }));
-    return { key: "focused", name: "Focused / Single-Area Clean", sections };
-  }
-  if (key === "commercial" || key === "office") {
+    resolved = { key: "focused", name: "Focused / Single-Area Clean", sections };
+  } else if (key === "commercial" || key === "office") {
     const sections = commercialChecklistSections(
       commercial?.scopeLevel ?? "standard",
       commercial?.photoZones,
@@ -611,9 +672,51 @@ export function getContractorChecklist(
     );
     const label = COMMERCIAL_SCOPE_LABEL[String(commercial?.scopeLevel || "standard").toLowerCase()];
     const base = key === "office" ? "Office Clean (After-Hours)" : "Commercial Site Service";
-    return { key, name: label ? `${base} — ${label}` : base, sections };
+    resolved = { key, name: label ? `${base} — ${label}` : base, sections };
+  } else {
+    resolved = CHECKLISTS[key] || CHECKLISTS.standard;
   }
-  return CHECKLISTS[key] || CHECKLISTS.standard;
+  return withBookedAddonSection(resolved, commercial?.bookedAddOns);
+}
+
+/**
+ * Rehydrate the crew list exactly as issued. Live templates change; a job
+ * that already started (or finished) must keep the snapshot or progress keys
+ * and QC review both lie.
+ */
+export function checklistFromSnapshot(raw: unknown): ContractorChecklist | null {
+  if (!raw || typeof raw !== "object") return null;
+  const snap = raw as {
+    key?: unknown;
+    name?: unknown;
+    blurb?: unknown;
+    sections?: unknown;
+  };
+  if (!Array.isArray(snap.sections) || snap.sections.length === 0) return null;
+  const sections: ContractorChecklistSection[] = [];
+  for (const entry of snap.sections) {
+    if (!entry || typeof entry !== "object") return null;
+    const s = entry as Record<string, unknown>;
+    const title = String(s.title || "").trim();
+    if (!title || !Array.isArray(s.items) || s.items.length === 0) return null;
+    const section: ContractorChecklistSection = {
+      title,
+      items: s.items.map((item) => String(item)),
+    };
+    if (Array.isArray(s.itemIds)) section.itemIds = s.itemIds.map((id) => String(id || ""));
+    if (s.photoRequired) section.photoRequired = true;
+    if (s.zoneName != null && String(s.zoneName).trim()) section.zoneName = String(s.zoneName);
+    if (s.areaId != null && String(s.areaId).trim()) section.areaId = String(s.areaId);
+    if (typeof s.instance === "number") section.instance = s.instance;
+    sections.push(section);
+  }
+  const blurb = typeof snap.blurb === "string" && snap.blurb.trim() ? snap.blurb : undefined;
+  return {
+    key: String(snap.key || ""),
+    name: String(snap.name || "Job checklist"),
+    ...(blurb ? { blurb } : {}),
+    sections,
+  };
 }
 
 /** Indices of sections whose completion requires before AND after photos. */
@@ -656,3 +759,34 @@ export const CONTRACTOR_ADDON_CATALOG: Record<string, { label: string; price: nu
   pestLight: { label: "Pest — Light", price: 65, note: "Dead bugs, webs, minor trails. Confined surface work." },
   moldMinor: { label: "Mold — Minor (surface)", price: 65, note: "Small non-porous surface area. Confined work at the Focused Clean area rate." },
 };
+
+/** Fridge + oven ship free with Move-In/Out and are already on that list. */
+const MOVE_INCLUDED_ADDON_IDS = new Set(["fridge", "oven"]);
+
+export function includedAddonIdsForChecklistKey(key: string): Set<string> {
+  return normalizeServiceType(key) === "move_in_out" ? MOVE_INCLUDED_ADDON_IDS : new Set();
+}
+
+function withBookedAddonSection(
+  checklist: ContractorChecklist,
+  bookedAddOns?: string[] | null,
+): ContractorChecklist {
+  const included = includedAddonIdsForChecklistKey(checklist.key);
+  const ids = [...new Set((bookedAddOns || []).map((id) => String(id)))].filter(
+    (id) => CONTRACTOR_ADDON_CATALOG[id] && !included.has(id),
+  );
+  if (ids.length === 0) return checklist;
+  return {
+    ...checklist,
+    sections: [
+      ...checklist.sections,
+      {
+        title: "Booked add-ons",
+        items: ids.map((id) => {
+          const a = CONTRACTOR_ADDON_CATALOG[id];
+          return a.note ? `${a.label} (${a.note})` : a.label;
+        }),
+      },
+    ],
+  };
+}

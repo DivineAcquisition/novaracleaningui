@@ -31,7 +31,9 @@ import {
   CONTRACTOR_ADDON_CATALOG,
   contractorChecklistKeyForBooking,
   countChecklistItems,
+  checklistFromSnapshot,
   getContractorChecklist,
+  includedAddonIdsForChecklistKey,
   photoRequiredSectionIndexes,
 } from "../_shared/contractor-checklists.ts";
 import { ensureJobChecklist } from "../_shared/job-checklist.ts";
@@ -277,16 +279,25 @@ serve(async (req) => {
       || String(checklistRow.service_type).toLowerCase() === "focused";
 
     const focusedSettings = await loadFocusedSettings(supabase);
-    // Completed checklists keep the list the crew actually worked. Live
-    // checklists follow the booking (membership visits → maintenance, not Deep).
+    // Completed / in-progress checklists keep the list the crew actually
+    // worked (the pinned snapshot). Unstarted jobs follow the live booking
+    // template (membership visits → maintenance, not Deep).
     const checklistKey = checklistRow.completed_at
       ? String(checklistRow.service_type || serviceTypeRaw)
       : contractorChecklistKeyForBooking(booking, serviceTypeRaw);
     const photoZones: string[] = siteZoneNames(booking?.photo_zones);
-    const spec = getContractorChecklist(checklistKey, focusedAreas, focusedSettings, {
+    const liveSpec = getContractorChecklist(checklistKey, focusedAreas, focusedSettings, {
       scopeLevel: booking?.scope_level || null,
       photoZones,
+      bookedAddOns: Array.isArray(booking?.add_ons) ? booking.add_ons.map(String) : [],
     });
+    const pinned = checklistFromSnapshot(checklistRow.sections_snapshot);
+    const inFlight = Boolean(
+      checklistRow.completed_at
+      || checklistRow.started_at
+      || Number(checklistRow.completed_items) > 0,
+    );
+    const spec = inFlight && pinned ? pinned : liveSpec;
     // Sections that are photo evidence: every focused area, every commercial
     // documentation zone. These are what the completion gate checks.
     const photoSections = photoRequiredSectionIndexes(spec);
@@ -829,8 +840,8 @@ serve(async (req) => {
 
     const addonsEnabled = await contractorAddonsEnabled(supabase);
     const includedAddOns: string[] = Array.isArray(booking?.add_ons) ? booking.add_ons.map(String) : [];
-    const freeForService = (id: string) =>
-      serviceTypeRaw === "moveInOut" && (id === "fridge" || id === "oven");
+    const freeAddonIds = includedAddonIdsForChecklistKey(checklistKey);
+    const freeForService = (id: string) => freeAddonIds.has(id);
 
     const { count: confirmedCount } = await supabase
       .from("job_assignments")
@@ -1000,7 +1011,9 @@ serve(async (req) => {
         : null,
       cleaner: cleaner ? { id: cleaner.id, first_name: cleaner.first_name } : null,
       checklist: {
+        key: spec.key,
         name: spec.name,
+        blurb: spec.blurb || null,
         sections: spec.sections,
         items: itemsMap,
         total_items: totalItems,

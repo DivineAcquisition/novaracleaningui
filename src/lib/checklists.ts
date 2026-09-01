@@ -258,7 +258,7 @@ export const CHECKLISTS: Record<ChecklistSlug, Checklist> = {
     name: "Move In / Move Out Clean",
     tagline: "Empty home service — ready for the next chapter",
     description:
-      "Our Move In/Out Clean is designed for empty homes — whether you're preparing a new place to move into or finalizing your move out. Because the home is empty, we can reach every cabinet, drawer, and pantry that a regular clean can't. This service includes everything in a Deep Clean plus the interior of all cabinets, drawers, and built-ins.",
+      "Our Move In/Out Clean is designed for empty homes — whether you're preparing a new place to move into or finalizing your move out. Because the home is empty, we can reach every cabinet, drawer, and pantry that a regular clean can't. This service includes everything in a Deep Clean plus the interior of all cabinets, drawers, and built-ins, and inside the refrigerator and oven.",
     accent: "purple",
     meta: {
       estimatedTime: "5–7 hours for a typical home",
@@ -282,6 +282,10 @@ export const CHECKLISTS: Record<ChecklistSlug, Checklist> = {
           "Clean and polish stove top and vent hood",
           "Detail-clean under electric range burners",
           "Vacuum and mop kitchen floor",
+          "Hand-wipe small appliances and items on countertops (if present)",
+          "Remove trash, replace bag, wipe exterior",
+          "Clean inside refrigerator and freezer",
+          "Clean inside oven",
         ],
       },
       {
@@ -295,6 +299,8 @@ export const CHECKLISTS: Record<ChecklistSlug, Checklist> = {
           "Clean counters, sinks, and polish fixtures",
           "Disinfect toilet and surrounding area",
           "Clean and disinfect bathroom floor",
+          "Vacuum bathroom rugs (if present)",
+          "Remove trash, replace bags, wipe exterior",
         ],
       },
       {
@@ -312,12 +318,17 @@ export const CHECKLISTS: Record<ChecklistSlug, Checklist> = {
           "Vacuum floors and mop hard surface floors",
           "Vacuum carpet edges with attachment",
           "Clean front and back door glass",
+          "Dust wall art (if present)",
+          "Dust TVs, electronics, book tops, knick-knacks, lamps (if present)",
+          "Hand-polish all wood furniture (if present)",
+          "Vacuum under all furniture (if present)",
+          "Vacuum upholstered furniture and crevices (if present)",
+          "Change linens and/or make beds (if present)",
         ],
       },
     ],
     notIncludedHeading: "Not included — available as add-ons:",
     notIncluded: [
-      "Inside oven, refrigerator, or freezer (available as add-on)",
       "Exterior windows",
       "Wall washing (spot cleaning only)",
       "Carpet shampooing or steam cleaning",
@@ -325,8 +336,6 @@ export const CHECKLISTS: Record<ChecklistSlug, Checklist> = {
     ],
     addOns: [
       "Hand wash baseboards",
-      "Clean oven interior",
-      "Clean refrigerator and freezer interior",
       "Wash interior windows (reachable with 2-step stool)",
       "Hand wash wood blinds or shutters",
     ],
@@ -550,7 +559,7 @@ export function checklistPathForServiceType(
   serviceType?: string | null,
   scopeLevel?: string | null,
 ): string {
-  const t = String(serviceType || "").toLowerCase().replace(/[\s-]/g, "_");
+  const t = String(serviceType || "").toLowerCase().replace(/[\s\-\/]+/g, "_");
   if (t === "office") return "/checklist/office";
   if (
     t === "commercial" ||

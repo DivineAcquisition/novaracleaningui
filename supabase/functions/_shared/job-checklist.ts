@@ -59,6 +59,7 @@ function pinnedVersion(checklist: { key: string; name: string; sections: any[] }
     snapshot: {
       key: checklist.key,
       name: checklist.name,
+      blurb: checklist.blurb ?? null,
       pinned_at: new Date().toISOString(),
       sections,
     },
@@ -84,14 +85,14 @@ async function loadBookingForChecklist(
   if (args.bookingId) {
     const { data } = await supabase
       .from("bookings")
-      .select("id, service_type, is_recurring, membership_plan, booking_channel, focused_areas, scope_level, photo_zones")
+      .select("id, service_type, is_recurring, membership_plan, booking_channel, focused_areas, scope_level, photo_zones, add_ons")
       .eq("id", args.bookingId)
       .maybeSingle();
     if (data) return data;
   }
   const { data } = await supabase
     .from("bookings")
-    .select("id, service_type, is_recurring, membership_plan, booking_channel, focused_areas, scope_level, photo_zones")
+    .select("id, service_type, is_recurring, membership_plan, booking_channel, focused_areas, scope_level, photo_zones, add_ons")
     .eq("job_id", args.jobId)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -105,7 +106,9 @@ async function loadBookingForChecklist(
  *
  * Existing rows are synced from the booking: a membership/recurring visit
  * that was cloned off a Deep first-clean must not keep serving the Deep
- * list. Completed checklists are left as historical (what the crew actually
+ * list. Unstarted rows also pick up the current template (so a Move job
+ * issued before interiors were restored gets the longer list). Completed
+ * and in-progress checklists are left as historical (what the crew actually
  * worked).
  */
 export async function ensureJobChecklist(
@@ -125,6 +128,7 @@ export async function ensureJobChecklist(
   const commercialOpts = {
     scopeLevel: booking?.scope_level || null,
     photoZones: siteZoneNames(booking?.photo_zones),
+    bookedAddOns: Array.isArray(booking?.add_ons) ? booking.add_ons.map(String) : [],
   };
 
   const checklistKey = contractorChecklistKeyForBooking(
@@ -148,7 +152,10 @@ export async function ensureJobChecklist(
 
   if (existing?.id) {
     const stale = String(existing.service_type || "") !== checklistKey;
-    if (stale && !existing.completed_at) {
+    const untouched = !existing.completed_at
+      && !existing.started_at
+      && !(Number(existing.completed_items) > 0);
+    if ((stale || untouched) && !existing.completed_at) {
       let focusedSettings = FOCUSED_SAME_DAY_DEFAULTS;
       if (checklistKey === "focused") {
         try {

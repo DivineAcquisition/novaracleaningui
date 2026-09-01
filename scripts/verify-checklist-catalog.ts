@@ -24,6 +24,12 @@ import {
   commercialChecklistSections,
   commercialChecklistSectionsForJob,
 } from "../src/lib/commercial-checklists";
+import {
+  countChecklistItems,
+  getContractorChecklist,
+  normalizeServiceType,
+} from "../supabase/functions/_shared/contractor-checklists";
+import { CHECKLISTS } from "../src/lib/checklists";
 
 let failures = 0;
 
@@ -165,6 +171,97 @@ console.log("\nCrew mirror (supabase/functions/_shared/contractor-checklists.ts)
     unknown.join(", "),
   );
   check("the crew list references catalog ids at all", referenced.length > 0);
+}
+
+console.log("\nResidential contractor lists (Standard ⊂ Deep ⊂ Move-In/Out by depth)");
+{
+  const standard = getContractorChecklist("standard");
+  const deep = getContractorChecklist("deep");
+  const move = getContractorChecklist("move_in_out");
+  const standardCount = countChecklistItems(standard);
+  const deepCount = countChecklistItems(deep);
+  const moveCount = countChecklistItems(move);
+
+  check("Standard has kitchen / bathrooms / all rooms", standard.sections.length === 3);
+  check("Deep has kitchen / bathrooms / all rooms", deep.sections.length === 3);
+  check("Move-In/Out has kitchen / bathrooms / all rooms", move.sections.length === 3);
+  check(
+    "Deep has more crew items than Standard",
+    deepCount > standardCount,
+    `standard=${standardCount} deep=${deepCount}`,
+  );
+  check(
+    "Move-In/Out has more crew items than Deep",
+    moveCount > deepCount,
+    `deep=${deepCount} move=${moveCount}`,
+  );
+  check(
+    "Move-In/Out includes inside refrigerator",
+    move.sections.some((s) => s.items.some((item) => /inside refrigerator/i.test(item))),
+  );
+  check(
+    "Move-In/Out includes inside oven",
+    move.sections.some((s) => s.items.some((item) => /inside oven/i.test(item))),
+  );
+  check(
+    "Move-In/Out includes inside cabinets",
+    move.sections.some((s) => s.items.some((item) => /inside all cabinets/i.test(item))),
+  );
+  check(
+    "Move-In/Out still has Deep trash removal",
+    move.sections.some((s) => s.items.some((item) => /remove trash/i.test(item))),
+  );
+  check(
+    '"Move In/Out" normalizes to move_in_out (slash spellings)',
+    normalizeServiceType("Move In/Out") === "move_in_out",
+  );
+
+  const customerMove = CHECKLISTS["move-in-out"].sections.flatMap((s) => s.items);
+  const crewMove = move.sections.flatMap((s) => s.items);
+  check(
+    "customer Move-In/Out list matches the contractor list",
+    customerMove.length === crewMove.length && customerMove.every((item, i) => item === crewMove[i]),
+    `customer=${customerMove.length} crew=${crewMove.length}`,
+  );
+
+  const customerStandard = CHECKLISTS["standard-clean"].sections.flatMap((s) => s.items);
+  const crewStandard = standard.sections.flatMap((s) => s.items);
+  check(
+    "customer Standard list matches the contractor list",
+    customerStandard.length === crewStandard.length && customerStandard.every((item, i) => item === crewStandard[i]),
+  );
+
+  const customerDeep = CHECKLISTS["deep-clean"].sections.flatMap((s) => s.items);
+  const crewDeep = deep.sections.flatMap((s) => s.items);
+  check(
+    "customer Deep list matches the contractor list",
+    customerDeep.length === crewDeep.length && customerDeep.every((item, i) => item === crewDeep[i]),
+  );
+
+  const standardWithAddon = getContractorChecklist("standard", null, undefined, {
+    bookedAddOns: ["windows", "fridge"],
+  });
+  check(
+    "booked add-ons append a fourth contractor section without shifting Standard items",
+    standardWithAddon.sections.length === 4
+      && standardWithAddon.sections[3].title === "Booked add-ons"
+      && countChecklistItems(standardWithAddon) === standardCount + 2
+      && standardWithAddon.sections[0].items[0] === standard.sections[0].items[0],
+  );
+
+  const moveWithIncluded = getContractorChecklist("move_in_out", null, undefined, {
+    bookedAddOns: ["fridge", "oven", "windows"],
+  });
+  check(
+    "Move-In/Out does not duplicate included fridge/oven as add-on lines",
+    moveWithIncluded.sections.some((s) => s.title === "Booked add-ons")
+      && moveWithIncluded.sections.find((s) => s.title === "Booked add-ons")?.items.length === 1,
+  );
+
+  check(
+    "customer Move-In/Out no longer lists fridge/oven as not-included",
+    !CHECKLISTS["move-in-out"].notIncluded.some((line) => /oven|refrigerator|fridge/i.test(line)),
+  );
 }
 
 console.log(
