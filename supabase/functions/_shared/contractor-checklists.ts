@@ -151,6 +151,11 @@ const DEEP_SECTIONS: ContractorChecklistSection[] = [
   },
 ];
 
+/**
+ * Move In/Out is Deep plus empty-home interiors (cabinets, pantry, built-ins).
+ * Occupied-home Deep lines stay on the list — skip them on-site if the home
+ * is empty. This list must stay longer than Standard and Deep.
+ */
 const MOVE_IN_OUT_SECTIONS: ContractorChecklistSection[] = [
   {
     title: "Kitchen",
@@ -161,11 +166,13 @@ const MOVE_IN_OUT_SECTIONS: ContractorChecklistSection[] = [
       "Clean countertops",
       "Wipe backsplash",
       "Clean sink and polish faucets",
+      "Hand-wipe small appliances and items on countertops",
       "Clean microwave (inside and out)",
       "Clean and polish oven and refrigerator exterior",
       "Clean and polish stove top and vent hood",
       "Detail-clean under electric range burners",
       "Vacuum and mop kitchen floor",
+      "Remove trash, replace bag, wipe exterior",
     ],
   },
   {
@@ -178,6 +185,8 @@ const MOVE_IN_OUT_SECTIONS: ContractorChecklistSection[] = [
       "Scrub shower and tub",
       "Clean counters, sinks, and polish fixtures",
       "Disinfect toilet and surrounding area",
+      "Vacuum bathroom rugs",
+      "Remove trash, replace bags, wipe exterior",
       "Clean and disinfect bathroom floor",
     ],
   },
@@ -186,15 +195,20 @@ const MOVE_IN_OUT_SECTIONS: ContractorChecklistSection[] = [
     items: [
       "Remove cobwebs",
       "Wipe all reachable light fixtures and ceiling fan blades",
-      "Dust A/C vents",
+      "Dust wall art and A/C vents",
       "Wipe inside and out of any built-in cabinets or bookcases",
       "Disinfect light switches and door knobs",
       "Hand-wipe door frames and doors",
-      "Hand-wipe window sills and ledges",
+      "Hand-wipe window sills and window ledges",
       "Dust baseboards and blinds",
+      "Dust TVs, electronics, book tops, knick-knacks, lamps",
+      "Hand-polish all wood furniture",
       "Dust banisters and handrails",
       "Vacuum floors and mop hard surface floors",
+      "Vacuum under all furniture (where possible)",
       "Vacuum carpet edges with attachment",
+      "Vacuum upholstered furniture and crevices",
+      "Change linens and/or make beds",
       "Clean front and back door glass",
     ],
   },
@@ -516,26 +530,41 @@ const CHECKLISTS: Record<string, ContractorChecklist> = {
 
 /** Normalize a booking/job service_type to a checklist key. */
 export function normalizeServiceType(serviceType: string | null | undefined): string {
-  const raw = String(serviceType || "standard").toLowerCase().replace(/[\s-]/g, "_");
-  if (raw === "moveinout" || raw === "move_in_out" || raw === "movein" || raw === "moveout") return "move_in_out";
-  if (raw === "membership" || raw === "recurring" || raw === "maintenance") return "recurring";
-  if (raw === "deep") return "deep";
-  if (raw === "combo" || raw === "deep_standard" || raw === "deep_+_standard") return "combo";
-  if (raw === "turnover" || raw === "str_turnover" || raw === "str" || raw.includes("airbnb")) return "turnover";
-  if (raw === "office") return "office";
+  const raw = String(serviceType || "standard")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_|_$/g, "");
+  const trimmed = raw.replace(/_clean(ing)?$/, "").replace(/_service$/, "");
   if (
-    raw === "commercial" ||
-    raw === "retail" ||
-    raw === "warehouse" ||
-    raw === "restaurant" ||
-    raw === "gym" ||
-    raw === "medical" ||
-    raw === "business"
+    trimmed === "moveinout" ||
+    trimmed === "move_in_out" ||
+    trimmed === "move_in" ||
+    trimmed === "move_out" ||
+    trimmed.includes("move_in") ||
+    trimmed.includes("move_out")
+  ) {
+    return "move_in_out";
+  }
+  if (raw === "membership" || raw === "recurring" || raw === "maintenance" || trimmed === "membership" || trimmed === "recurring" || trimmed === "maintenance") {
+    return "recurring";
+  }
+  if (trimmed === "deep") return "deep";
+  if (trimmed === "combo" || trimmed === "deep_standard") return "combo";
+  if (trimmed === "turnover" || trimmed === "str_turnover" || trimmed === "str" || raw.includes("airbnb")) return "turnover";
+  if (trimmed === "office") return "office";
+  if (
+    trimmed === "commercial" ||
+    trimmed === "retail" ||
+    trimmed === "warehouse" ||
+    trimmed === "restaurant" ||
+    trimmed === "gym" ||
+    trimmed === "medical" ||
+    trimmed === "business"
   ) {
     return "commercial";
   }
-  if (raw === "focused" || raw === "single_area" || raw === "singlearea") return "focused";
-  return CHECKLISTS[raw] ? raw : "standard";
+  if (trimmed === "focused" || trimmed === "single_area" || trimmed === "singlearea") return "focused";
+  return CHECKLISTS[trimmed] ? trimmed : "standard";
 }
 
 const SPECIALTY_CHECKLIST_KEYS = new Set([

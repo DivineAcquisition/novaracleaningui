@@ -163,11 +163,13 @@ const TEMPLATES: Record<string, ChecklistTemplate> = {
           "Clean countertops",
           "Wipe backsplash",
           "Clean sink and polish faucets",
+          "Hand-wipe small appliances and items on countertops",
           "Clean microwave (inside and out)",
           "Clean and polish oven and refrigerator exterior",
           "Clean and polish stove top and vent hood",
           "Detail-clean under electric range burners",
           "Vacuum and mop kitchen floor",
+          "Remove trash, replace bag, wipe exterior",
         ],
       },
       {
@@ -180,6 +182,8 @@ const TEMPLATES: Record<string, ChecklistTemplate> = {
           "Scrub shower and tub",
           "Clean counters, sinks, and polish fixtures",
           "Disinfect toilet and surrounding area",
+          "Vacuum bathroom rugs",
+          "Remove trash, replace bags, wipe exterior",
           "Clean and disinfect bathroom floor",
         ],
       },
@@ -188,15 +192,20 @@ const TEMPLATES: Record<string, ChecklistTemplate> = {
         items: [
           "Remove cobwebs",
           "Wipe all reachable light fixtures and ceiling fan blades",
-          "Dust A/C vents",
+          "Dust wall art and A/C vents",
           "Wipe inside and out of any built-in cabinets or bookcases",
           "Disinfect light switches and door knobs",
           "Hand-wipe door frames and doors",
-          "Hand-wipe window sills and ledges",
+          "Hand-wipe window sills and window ledges",
           "Dust baseboards and blinds",
+          "Dust TVs, electronics, book tops, knick-knacks, lamps",
+          "Hand-polish all wood furniture",
           "Dust banisters and handrails",
           "Vacuum floors and mop hard surface floors",
+          "Vacuum under all furniture (where possible)",
           "Vacuum carpet edges with attachment",
+          "Vacuum upholstered furniture and crevices",
+          "Change linens and/or make beds",
           "Clean front and back door glass",
         ],
       },
@@ -376,8 +385,13 @@ TEMPLATES.office = {
 };
 
 function normalizeServiceType(serviceType: string | null | undefined): string {
-  const s = String(serviceType || "standard").toLowerCase().replace(/-/g, "_");
-  if (s === "moveinout" || s === "move_in_out" || s === "move-in-out") return "move_in_out";
+  const s = String(serviceType || "standard")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_|_$/g, "")
+    .replace(/_clean(ing)?$/, "")
+    .replace(/_service$/, "");
+  if (s === "moveinout" || s === "move_in_out" || s.includes("move_in") || s.includes("move_out")) return "move_in_out";
   if (s === "recurring" || s === "membership") return "recurring";
   if (s === "deep") return "deep";
   if (s === "combo") return "deep";

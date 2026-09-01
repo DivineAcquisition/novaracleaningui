@@ -17,6 +17,7 @@ import {
   catalogItemsFor,
   catalogSectionsFor,
 } from "../src/lib/checklist-catalog";
+import { CHECKLISTS } from "../src/lib/checklists";
 import {
   COMMERCIAL_COMPARISON,
   COMMERCIAL_DETAILED_EXTRAS,
@@ -165,6 +166,56 @@ console.log("\nCrew mirror (supabase/functions/_shared/contractor-checklists.ts)
     unknown.join(", "),
   );
   check("the crew list references catalog ids at all", referenced.length > 0);
+}
+
+console.log("\nResidential ladder (Standard ⊂ lighter than Deep ⊂ Move In/Out)");
+{
+  const count = (slug: keyof typeof CHECKLISTS) =>
+    CHECKLISTS[slug].sections.reduce((n, s) => n + s.items.length, 0);
+  const standardN = count("standard-clean");
+  const deepN = count("deep-clean");
+  const moveN = count("move-in-out");
+  const moveItems = CHECKLISTS["move-in-out"].sections.flatMap((s) => s.items);
+  const standardItems = CHECKLISTS["standard-clean"].sections.flatMap((s) => s.items);
+  const deepItems = CHECKLISTS["deep-clean"].sections.flatMap((s) => s.items);
+
+  check("Standard has fewer items than Deep", standardN < deepN, `${standardN} vs ${deepN}`);
+  check("Deep has fewer items than Move In/Out", deepN < moveN, `${deepN} vs ${moveN}`);
+  check(
+    "Move In/Out includes pantry interiors",
+    moveItems.some((i) => /pantry/i.test(i)),
+  );
+  check(
+    "Move In/Out includes inside cabinets and drawers",
+    moveItems.some((i) => /inside all cabinets and drawers/i.test(i)),
+  );
+  check(
+    "Move In/Out includes built-in cabinets or bookcases",
+    moveItems.some((i) => /built-in cabinets or bookcases/i.test(i)),
+  );
+  check(
+    "Standard does not include inside cabinets",
+    !standardItems.some((i) => /inside all cabinets/i.test(i)),
+  );
+  check(
+    "Deep does not include inside cabinets (that's the Move upgrade)",
+    !deepItems.some((i) => /inside all cabinets/i.test(i)),
+  );
+
+  const crew = readFileSync(
+    resolve(process.cwd(), "supabase/functions/_shared/contractor-checklists.ts"),
+    "utf8",
+  );
+  const missingOnCrew = moveItems.filter((item) => !crew.includes(`"${item}"`));
+  check(
+    "contractor Move list includes every customer Move line",
+    missingOnCrew.length === 0,
+    missingOnCrew.join(" | "),
+  );
+  check(
+    "contractor normalizer accepts Move In/Out labels",
+    crew.includes('trimmed.includes("move_in")'),
+  );
 }
 
 console.log(
