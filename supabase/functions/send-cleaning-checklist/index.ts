@@ -193,7 +193,7 @@ const CHECKLIST_BY_TYPE: Record<string, ChecklistContent> = {
     subject: "Your Move In/Out Cleaning Checklist — complete scope ✨",
     heading: "Move In/Out Clean Checklist",
     intro:
-      "Your Move In/Out Clean covers every inch of the empty home — including the interior of all cabinets, drawers, and built-ins that a standard or deep clean can't reach. Here's exactly what our team will complete.",
+      "Your Move In/Out Clean covers every inch of the empty home — including everything in a Deep Clean plus the interior of all cabinets, drawers, and built-ins, and inside the refrigerator and oven. Occupied-only lines (furniture, linens, rugs) are marked <em>if present</em> so an empty house can skip them.",
     emailKind: "moveinout_checklist",
     sections: [
       {
@@ -210,6 +210,10 @@ const CHECKLIST_BY_TYPE: Record<string, ChecklistContent> = {
           "Clean and polish stove top and vent hood",
           "Detail-clean under electric range burners",
           "Vacuum and mop kitchen floor",
+          "Hand-wipe small appliances and items on countertops (if present)",
+          "Remove trash, replace bag, wipe exterior",
+          "Clean inside refrigerator and freezer",
+          "Clean inside oven",
         ],
       },
       {
@@ -223,6 +227,8 @@ const CHECKLIST_BY_TYPE: Record<string, ChecklistContent> = {
           "Clean counters, sinks, and polish fixtures",
           "Disinfect toilet and surrounding area",
           "Clean and disinfect bathroom floor",
+          "Vacuum bathroom rugs (if present)",
+          "Remove trash, replace bags, wipe exterior",
         ],
       },
       {
@@ -240,12 +246,16 @@ const CHECKLIST_BY_TYPE: Record<string, ChecklistContent> = {
           "Vacuum floors and mop hard surface floors",
           "Vacuum carpet edges with attachment",
           "Clean front and back door glass",
+          "Dust wall art (if present)",
+          "Dust TVs, electronics, book tops, knick-knacks, lamps (if present)",
+          "Hand-polish all wood furniture (if present)",
+          "Vacuum under all furniture (if present)",
+          "Vacuum upholstered furniture and crevices (if present)",
+          "Change linens and/or make beds (if present)",
         ],
       },
     ],
     extras: [
-      "Clean oven interior",
-      "Clean refrigerator and freezer interior",
       "Wash interior windows (reachable with a 2-step stool)",
       "Hand wash wood blinds or shutters",
       "Carpet shampooing / steam cleaning (separate service)",

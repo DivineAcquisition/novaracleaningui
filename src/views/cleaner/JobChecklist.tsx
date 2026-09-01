@@ -131,7 +131,9 @@ interface ChecklistState {
   } | null;
   cleaner: { id: string; first_name: string | null } | null;
   checklist: {
+    key?: string;
     name: string;
+    blurb?: string | null;
     sections: ChecklistSection[];
     items: Record<string, ItemState>;
     total_items: number;
@@ -604,6 +606,11 @@ export default function CleanerJobChecklistPage() {
           <h1 className="text-xl font-bold text-white flex items-center gap-2">
             <RiSparklingLine className="w-5 h-5" /> {checklist.name}
           </h1>
+          {checklist.blurb && (
+            <p className="text-sm text-white/85 mt-1.5 leading-snug">
+              {checklist.blurb}
+            </p>
+          )}
           {state.cleaner?.first_name && (
             <p className="text-sm text-white/80 mt-0.5">
               Hi {state.cleaner.first_name} — work through every line as you clean.

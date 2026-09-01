@@ -172,10 +172,9 @@ export const SERVICE_TIERS: ServiceTierConfig[] = [
     additionalCost: 0,
     features: [
       "Everything in Standard Clean",
-      "Inside cabinet cleaning",
-      "Baseboard cleaning",
+      "Hand-wiped surfaces & detailed scrubbing",
+      "Under-burner and carpet-edge detail",
       "Light fixture cleaning",
-      "Detailed scrubbing",
     ],
   },
   {
@@ -189,7 +188,6 @@ export const SERVICE_TIERS: ServiceTierConfig[] = [
       "Inside all cabinets & drawers",
       "Inside refrigerator",
       "Inside oven",
-      "Garage sweep",
     ],
   },
 ];

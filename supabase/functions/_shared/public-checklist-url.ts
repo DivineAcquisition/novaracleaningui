@@ -4,7 +4,7 @@
 const BASE = "https://try.novaracleaning.com/checklist";
 
 function norm(value: string | null | undefined): string {
-  return String(value || "").toLowerCase().replace(/[\s-]/g, "_");
+  return String(value || "").toLowerCase().replace(/[\s\-\/]+/g, "_");
 }
 
 function commercialSlug(scopeLevel?: string | null): string {
