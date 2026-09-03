@@ -58,6 +58,42 @@ export async function emailsThatBelongInClients(): Promise<Set<string>> {
   return keep;
 }
 
+/**
+ * Delete Airtable Jobs rows that are not completed bookings. Idempotent.
+ * STR turnover jobs (`STR-<id>`) stay only when that turnover is completed.
+ */
+export async function purgeStaleJobs(): Promise<{ kept: number; deleted: number }> {
+  const supabase = getAdminSupabase();
+  const keepIds = new Set<string>();
+
+  const [{ data: completed }, { data: turnovers }] = await Promise.all([
+    supabase.from("bookings").select("id").eq("status", "completed").limit(5000),
+    supabase.from("turnover_requests").select("id").eq("status", "completed").limit(1000),
+  ]);
+  for (const row of completed || []) {
+    const id = String(row.id || "").trim();
+    if (id) keepIds.add(id);
+  }
+  for (const row of turnovers || []) {
+    const id = String(row.id || "").trim();
+    if (id) keepIds.add(`STR-${id}`);
+  }
+
+  const existing = await listRecords(TABLES.jobs);
+  const stale: string[] = [];
+  let kept = 0;
+  for (const rec of existing) {
+    const jobId = String(rec.fields[JOB_FIELDS.jobId] || "").trim();
+    if (jobId && keepIds.has(jobId)) {
+      kept += 1;
+      continue;
+    }
+    stale.push(rec.id);
+  }
+  if (stale.length) await deleteRecords(TABLES.jobs, stale);
+  return { kept, deleted: stale.length };
+}
+
 /** True when this customer email may occupy a Clients row. */
 export async function customerBelongsInClients(email: string | null | undefined): Promise<boolean> {
   const e = normEmail(email);
@@ -239,12 +275,15 @@ export async function syncJobByBookingId(
   if (error) throw error;
   if (!booking) return null;
 
-  // Clients table = finished bookings only. Sync the linked client when this
-  // booking is completed (or the email already qualifies via another completed
-  // job / partner identity). Prefer the full customer record; fall back to the
-  // booking's own contact fields when there's no matching customer row.
+  // Jobs table = finished bookings only. Upcoming / cancelled / unpaid rows
+  // do not belong here.
   const bookingCompleted = String(booking.status || "").toLowerCase() === "completed";
-  if (bookingCompleted || (await customerBelongsInClients(booking.email))) {
+  if (!bookingCompleted) return null;
+
+  // Clients table = finished bookings only. Prefer the full customer record;
+  // fall back to the booking's own contact fields when there's no matching
+  // customer row.
+  {
     let clientSynced = false;
     if (booking.customer_id) {
       clientSynced = (await syncClientById(booking.customer_id).catch(() => null)) != null;

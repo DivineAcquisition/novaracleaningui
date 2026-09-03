@@ -409,7 +409,7 @@ export async function runFlow(flow: string, payload: FlowPayload = {}): Promise<
       const bookingId = payload.bookingId || payload.id;
       if (!bookingId) throw new FlowPermanentError("job flow requires a bookingId");
       const recordId = await syncJobByBookingId(bookingId, { entrySource: DEFAULT_LIVE_ENTRY_SOURCE });
-      if (!recordId) return { status: "skipped", records: 0, detail: { reason: "booking not found" } };
+      if (!recordId) return { status: "skipped", records: 0, detail: { reason: "booking not found or not completed" } };
       return { status: "success", records: 1, detail: { recordId } };
     }
 

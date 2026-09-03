@@ -18,6 +18,7 @@ import { ENTRY_SOURCE } from "../src/lib/airtable/schema";
 import { bookingToClientInput } from "../src/lib/airtable/sources/supabase";
 import {
   purgeStaleClients,
+  purgeStaleJobs,
   syncAllPayrollRuns,
   syncClientById,
   syncJobByBookingId,
@@ -86,6 +87,8 @@ async function backfillJobs(): Promise<void> {
     }
   }
   console.log(`Jobs: ${ok}/${rows.length} upserted`);
+  const purged = await purgeStaleJobs();
+  console.log(`Jobs: kept ${purged.kept}, purged ${purged.deleted} non-completed rows`);
 }
 
 async function backfillPayroll(): Promise<void> {

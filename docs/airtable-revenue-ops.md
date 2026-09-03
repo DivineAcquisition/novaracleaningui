@@ -10,6 +10,9 @@ fields the no-code build couldn't create.
 - **Clients table:** only people who **finished a booking** (`bookings.status =
   completed`), plus STR hosts needed for Properties links. Leads / quotes /
   abandoned carts are not Clients.
+- **Jobs table:** only **completed bookings** (`bookings.status = completed`).
+  Cancelled, assigned, confirmed, and pending jobs are not Jobs rows. Completed
+  STR turnovers (`STR-<id>`) are the only non-booking exception.
 - **Payroll Runs table:** only **Custom Payroll** (`manual_payouts`). Extra-pay
   rows do not create or inflate payroll runs.
 - **Transport:** Airtable Web API (REST) + Meta API. The PAT is read server-side
