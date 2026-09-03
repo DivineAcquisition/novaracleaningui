@@ -12,9 +12,81 @@ import {
   type CleanerRow,
 } from "./sources/supabase";
 import { syncClient, syncJob, syncPayrollRun } from "./mappers";
-import { ENTRY_SOURCE, JOB_FIELDS, PAYROLL_RUN_FIELDS, TABLES } from "./schema";
+import { CLIENT_FIELDS, CLIENT_TYPE, ENTRY_SOURCE, JOB_FIELDS, PAYROLL_RUN_FIELDS, TABLES } from "./schema";
 import { createField, deleteRecords, listRecords, listTableFields } from "./client";
 import { payPeriodMonday, payPeriodSunday } from "./pay";
+
+/** Normalize emails for Clients keep/purge matching. */
+function normEmail(value: unknown): string {
+  return String(value || "").trim().toLowerCase();
+}
+
+let keepEmailCache: { emails: Set<string>; at: number } | null = null;
+const KEEP_EMAIL_TTL_MS = 60_000;
+
+/**
+ * Clients table keep-set: anyone who finished an actual booking, plus STR
+ * hosts (Properties link into Clients). Leads / quotes / abandoned carts and
+ * internal QA accounts do not belong here.
+ */
+export async function emailsThatBelongInClients(): Promise<Set<string>> {
+  if (keepEmailCache && Date.now() - keepEmailCache.at < KEEP_EMAIL_TTL_MS) {
+    return keepEmailCache.emails;
+  }
+  const supabase = getAdminSupabase();
+  const keep = new Set<string>();
+
+  const [{ data: completed }, { data: hosts }] = await Promise.all([
+    supabase
+      .from("bookings")
+      .select("email")
+      .eq("status", "completed")
+      .not("email", "is", null)
+      .limit(5000),
+    supabase.from("hosts").select("email").not("email", "is", null).limit(1000),
+  ]);
+
+  for (const row of completed || []) {
+    const e = normEmail(row.email);
+    if (e) keep.add(e);
+  }
+  for (const row of hosts || []) {
+    const e = normEmail(row.email);
+    if (e) keep.add(e);
+  }
+  keepEmailCache = { emails: keep, at: Date.now() };
+  return keep;
+}
+
+/** True when this customer email may occupy a Clients row. */
+export async function customerBelongsInClients(email: string | null | undefined): Promise<boolean> {
+  const e = normEmail(email);
+  if (!e) return false;
+  return (await emailsThatBelongInClients()).has(e);
+}
+
+/**
+ * Delete Airtable Clients rows that are not completed-booking clients and not
+ * partner (STR Host / Commercial) records. Idempotent.
+ */
+export async function purgeStaleClients(): Promise<{ kept: number; deleted: number }> {
+  const keepEmails = await emailsThatBelongInClients();
+  const existing = await listRecords(TABLES.clients);
+  const stale: string[] = [];
+  let kept = 0;
+  for (const rec of existing) {
+    const email = normEmail(rec.fields[CLIENT_FIELDS.email]);
+    const type = String(rec.fields[CLIENT_FIELDS.clientType] || "");
+    const isPartner = type === CLIENT_TYPE.strHost || type === CLIENT_TYPE.commercial;
+    if (isPartner || (email && keepEmails.has(email))) {
+      kept += 1;
+      continue;
+    }
+    stale.push(rec.id);
+  }
+  if (stale.length) await deleteRecords(TABLES.clients, stale);
+  return { kept, deleted: stale.length };
+}
 
 // ─── QC documentation fields (Drive Folder / Documented) ─────────────────────
 // Written by NAME; created lazily via the Meta API on first use so the sync
@@ -107,21 +179,23 @@ async function clientEnrichment(email: string, customer?: {
   return extra;
 }
 
-/** Upsert a client by Supabase customer id. */
+/** Upsert a client by Supabase customer id (only if they belong in Clients). */
 export async function syncClientById(customerId: string): Promise<string | null> {
   const supabase = getAdminSupabase();
   const { data, error } = await supabase.from("customers").select("*").eq("id", customerId).maybeSingle();
   if (error) throw error;
   if (!data) return null;
+  if (!(await customerBelongsInClients(data.email))) return null;
   const extra = await clientEnrichment(data.email, data);
   return syncClient(customerToClientInput(data, extra));
 }
 
-/** Upsert a client by email (used when only the email is known). */
+/** Upsert a client by email (only if they belong in Clients). */
 export async function syncClientByEmail(email: string): Promise<string | null> {
   const supabase = getAdminSupabase();
   const { data } = await supabase.from("customers").select("*").eq("email", email).maybeSingle();
   if (!data) return null;
+  if (!(await customerBelongsInClients(data.email))) return null;
   const extra = await clientEnrichment(email, data);
   return syncClient(customerToClientInput(data, extra));
 }
@@ -165,16 +239,20 @@ export async function syncJobByBookingId(
   if (error) throw error;
   if (!booking) return null;
 
-  // Make sure the linked client exists so the Job→Client link resolves on the
-  // first pass. Prefer the full customer record; fall back to the booking's own
-  // contact fields when there's no matching customer row (guest/imported).
-  let clientSynced = false;
-  if (booking.customer_id) {
-    clientSynced = (await syncClientById(booking.customer_id).catch(() => null)) != null;
-  }
-  if (!clientSynced) {
-    const clientInput = bookingToClientInput(booking);
-    if (clientInput) await syncClient(clientInput).catch(() => null);
+  // Clients table = finished bookings only. Sync the linked client when this
+  // booking is completed (or the email already qualifies via another completed
+  // job / partner identity). Prefer the full customer record; fall back to the
+  // booking's own contact fields when there's no matching customer row.
+  const bookingCompleted = String(booking.status || "").toLowerCase() === "completed";
+  if (bookingCompleted || (await customerBelongsInClients(booking.email))) {
+    let clientSynced = false;
+    if (booking.customer_id) {
+      clientSynced = (await syncClientById(booking.customer_id).catch(() => null)) != null;
+    }
+    if (!clientSynced) {
+      const clientInput = bookingToClientInput(booking);
+      if (clientInput) await syncClient(clientInput).catch(() => null);
+    }
   }
 
   const cleaners = await cleanersForBooking(booking.job_id);
@@ -247,14 +325,10 @@ export async function syncJobByBookingId(
 }
 
 /**
- * Build + upsert all weekly payroll runs (Mon–Sun per cleaner) from the two
- * REAL pay ledgers only:
- *   • manual_payouts  → Custom Payout amounts   (Gross Pay)
- *   • job_extra_pay   → Extra Pay (supplies / mileage / surge / OT / job value) (Bonus)
- * Every field is filled (cleaner, period, jobs, gross, bonus, deduction, net,
- * method, status, transfer id) and the run is linked to its Jobs rows. Stale
- * runs (from older sources) are purged so the table mirrors these two ledgers
- * exactly.
+ * Build + upsert all weekly payroll runs (Mon–Sun per cleaner) from Custom
+ * Payroll only (`manual_payouts`). Extra-pay / supplies / mileage rows do not
+ * belong in this table. Stale runs (extras-only or retired sources) are purged
+ * so Payroll Runs mirrors the custom-payout ledger exactly.
  */
 export async function syncAllPayrollRuns(limit = 1000): Promise<number> {
   const supabase = getAdminSupabase();
@@ -263,55 +337,30 @@ export async function syncAllPayrollRuns(limit = 1000): Promise<number> {
     cleanerId: string;
     monday: string;
     grossCents: number;
-    bonusCents: number;
     bookingIds: Set<string>;
     components: number;
     paidComponents: number;
-    customCount: number;
-    extraCount: number;
     lastPaidAt?: string;
-    transferId?: string;
   }
   const runs = new Map<string, RunAcc>();
   const cleanerIds = new Set<string>();
-  const needServiceDate = new Set<string>();
 
   const acc = (cleanerId: string, monday: string): RunAcc => {
     const key = `${cleanerId}_${monday}`;
     let r = runs.get(key);
     if (!r) {
-      r = { cleanerId, monday, grossCents: 0, bonusCents: 0, bookingIds: new Set(), components: 0, paidComponents: 0, customCount: 0, extraCount: 0 };
+      r = { cleanerId, monday, grossCents: 0, bookingIds: new Set(), components: 0, paidComponents: 0 };
       runs.set(key, r);
     }
     return r;
   };
 
-  // ── Source 1: custom payouts (per booking, with per-cleaner breakdown) ──
   const { data: payouts } = await supabase
     .from("manual_payouts")
     .select("id, booking_id, cleaner_id, cleaner_name, cleaner_breakdown, service_date, amount_cents, status, created_at, paid_at")
     .neq("status", "cancelled")
     .order("created_at", { ascending: false })
     .limit(limit);
-
-  // ── Source 2: extra pay (per booking + cleaner) ──
-  const { data: extras } = await supabase
-    .from("job_extra_pay")
-    .select("id, booking_id, cleaner_id, total_cents, status, stripe_transfer_id, created_at, paid_at")
-    .neq("status", "failed")
-    .order("created_at", { ascending: false })
-    .limit(limit);
-
-  // Resolve booking service dates for extra-pay bucketing.
-  for (const e of extras || []) if (e.booking_id) needServiceDate.add(String(e.booking_id));
-  const serviceDateByBooking: Record<string, string> = {};
-  if (needServiceDate.size) {
-    const { data: bookings } = await supabase
-      .from("bookings")
-      .select("id, service_date")
-      .in("id", Array.from(needServiceDate));
-    for (const b of bookings || []) serviceDateByBooking[b.id] = b.service_date || "";
-  }
 
   for (const p of payouts || []) {
     const date = (p.service_date || p.created_at || "").slice(0, 10);
@@ -330,7 +379,6 @@ export async function syncAllPayrollRuns(limit = 1000): Promise<number> {
       r.grossCents += Number(b.amountCents) || 0;
       if (p.booking_id) r.bookingIds.add(String(p.booking_id));
       r.components += 1;
-      r.customCount += 1;
       if (String(p.status) === "paid") {
         r.paidComponents += 1;
         const paidDate = String(p.paid_at || "").slice(0, 10);
@@ -339,26 +387,6 @@ export async function syncAllPayrollRuns(limit = 1000): Promise<number> {
     }
   }
 
-  for (const e of extras || []) {
-    const cid = String(e.cleaner_id || "");
-    if (!cid) continue;
-    const date = ((e.booking_id && serviceDateByBooking[String(e.booking_id)]) || e.paid_at || e.created_at || "").slice(0, 10);
-    if (!date) continue;
-    cleanerIds.add(cid);
-    const r = acc(cid, payPeriodMonday(date));
-    r.bonusCents += Number(e.total_cents) || 0;
-    if (e.booking_id) r.bookingIds.add(String(e.booking_id));
-    r.components += 1;
-    r.extraCount += 1;
-    if (String(e.status) === "paid") {
-      r.paidComponents += 1;
-      const paidDate = String(e.paid_at || "").slice(0, 10);
-      if (paidDate && (!r.lastPaidAt || paidDate > r.lastPaidAt)) r.lastPaidAt = paidDate;
-    }
-    if (e.stripe_transfer_id && !r.transferId) r.transferId = String(e.stripe_transfer_id);
-  }
-
-  // Cleaner display names.
   const cleanerNameById: Record<string, string> = {};
   if (cleanerIds.size) {
     const { data: cleaners } = await supabase
@@ -370,7 +398,6 @@ export async function syncAllPayrollRuns(limit = 1000): Promise<number> {
     }
   }
 
-  // Map booking ids → Airtable Job record ids so runs link to their Jobs.
   const jobRecordIdByBookingId: Record<string, string> = {};
   try {
     const jobRecords = await listRecords(TABLES.jobs);
@@ -382,21 +409,16 @@ export async function syncAllPayrollRuns(limit = 1000): Promise<number> {
     /* links are best-effort */
   }
 
-  // Upsert every run with all fields filled.
   const keepRunIds = new Set<string>();
   let ok = 0;
   for (const r of runs.values()) {
     const runId = `${r.cleanerId}_${r.monday}`;
     keepRunIds.add(runId);
     const gross = Math.round(r.grossCents) / 100;
-    const bonus = Math.round(r.bonusCents) / 100;
     const jobRecordIds = Array.from(r.bookingIds)
       .map((bid) => jobRecordIdByBookingId[bid])
       .filter(Boolean) as string[];
     const allPaid = r.components > 0 && r.paidComponents === r.components;
-    const noteParts: string[] = [];
-    if (r.customCount > 0) noteParts.push(`Custom payouts ×${r.customCount}: $${gross.toFixed(2)}`);
-    if (r.extraCount > 0) noteParts.push(`Extra pay ×${r.extraCount} (supplies/mileage/surge/OT/job value): $${bonus.toFixed(2)}`);
     try {
       await syncPayrollRun({
         runId,
@@ -405,14 +427,13 @@ export async function syncAllPayrollRuns(limit = 1000): Promise<number> {
         periodEnd: payPeriodSunday(r.monday),
         totalJobs: r.bookingIds.size || r.components,
         grossPay: gross,
-        bonus,
+        bonus: 0,
         deduction: 0,
-        netPay: gross + bonus,
+        netPay: gross,
         paymentMethod: "Manual",
         status: allPaid ? "Paid" : "Pending",
         sentAt: allPaid ? r.lastPaidAt : undefined,
-        stripeTransferId: r.transferId,
-        notes: noteParts.join(" · ") || undefined,
+        notes: r.components > 0 ? `Custom payouts ×${r.components}: $${gross.toFixed(2)}` : undefined,
         jobRecordIds,
       });
       ok++;
@@ -422,8 +443,6 @@ export async function syncAllPayrollRuns(limit = 1000): Promise<number> {
     }
   }
 
-  // Purge stale runs (built from retired sources) so the table mirrors the
-  // custom-pay + extra-pay ledgers exactly.
   try {
     const existing = await listRecords(TABLES.payrollRuns);
     const stale = existing
