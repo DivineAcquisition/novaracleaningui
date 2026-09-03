@@ -71,9 +71,10 @@ export function validatePortalPassword(password: string, minLength = MIN_PASSWOR
 const PARTNER_ORIGIN = partnersOrigin();
 
 /**
- * Staff-side: create (or link) the portal login before a proposal can go out.
- * Sends Supabase's invite email when the address is new; links an existing
- * login when it is not. Does not set a password — they choose one from the invite.
+ * Staff-side: create (or link) the portal login for a commercial account.
+ * Optional — proposals can go out without it. Sends Supabase's invite email
+ * when the address is new; links an existing login when it is not. Does not
+ * set a password — they choose one from the invite.
  */
 export async function inviteCommercialPortalUser(
   admin: Admin,
