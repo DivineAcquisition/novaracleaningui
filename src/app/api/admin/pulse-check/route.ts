@@ -182,7 +182,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       settings,
       dryRun: Boolean(body.dryRun || body.dry_run),
     });
-    if (!result.ok) {
+    if (result.ok === false) {
       return NextResponse.json({ error: result.error }, { status: result.status });
     }
     return NextResponse.json(result);
