@@ -34,6 +34,7 @@ export async function syncManualPayoutJob(
     .eq("id", bookingId)
     .maybeSingle();
   if (!booking) return null;
+  if (String(booking.status || "").toLowerCase() !== "completed") return null;
 
   // Make sure the linked client exists first so the Job→Client link resolves.
   let clientSynced = false;

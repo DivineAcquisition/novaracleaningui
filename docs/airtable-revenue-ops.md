@@ -6,7 +6,15 @@ fields the no-code build couldn't create.
 
 - **Stack:** Next.js 14 + Supabase (partner-portal DB is the source of record) + Stripe.
 - **Source of booking/job/payment data:** the Supabase database (`customers`,
-  `bookings`, `jobs`, `job_assignments`, `cleaners`, `payouts`).
+  `bookings`, `jobs`, `job_assignments`, `cleaners`, `manual_payouts`).
+- **Clients table:** only people who **finished a booking** (`bookings.status =
+  completed`), plus STR hosts needed for Properties links. Leads / quotes /
+  abandoned carts are not Clients.
+- **Jobs table:** only **completed bookings** (`bookings.status = completed`).
+  Cancelled, assigned, confirmed, and pending jobs are not Jobs rows. Completed
+  STR turnovers (`STR-<id>`) are the only non-booking exception.
+- **Payroll Runs table:** only **Custom Payroll** (`manual_payouts`). Extra-pay
+  rows do not create or inflate payroll runs.
 - **Transport:** Airtable Web API (REST) + Meta API. The PAT is read server-side
   from `AIRTABLE_PAT` and is never hard-coded or logged.
 
@@ -77,10 +85,10 @@ Mapping by event:
 
 | Source event | Sync |
 |---|---|
-| client created/updated | `syncClient` (upsert on Email) |
+| client created/updated | `syncClient` (only if they finished a booking or are an STR host) |
 | property/account/site created/updated | `syncProperty` / `syncCommercialAccount` / `syncSite` |
-| **job completed** (high-frequency) | `syncJob` (upsert on Job ID, computes locked pay) |
-| payroll run created/paid | `syncPayrollRun` (upsert on Run ID, links its Jobs) |
+| **job completed** (high-frequency) | `syncJob` (upsert on Job ID; pay from `manual_payouts`) |
+| payroll run created/paid | `syncPayrollRun` from Custom Payroll only (upsert on Run ID) |
 
 ## Locked pay math
 

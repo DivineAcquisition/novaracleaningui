@@ -384,9 +384,9 @@ export async function runFlow(flow: string, payload: FlowPayload = {}): Promise<
       try {
         const recordId = id ? await syncClientById(id) : await syncClientByEmail(String(email));
         if (!recordId) {
-          // Source row gone (deleted customer) — existing convention keeps the
-          // Airtable row as-is; nothing to do.
-          return { status: "skipped", records: 0, detail: { reason: "customer not found" } };
+          // Missing customer, or they have not finished a booking (Clients is
+          // completed-booking + STR host only).
+          return { status: "skipped", records: 0, detail: { reason: "customer not found or not a completed-booking client" } };
         }
         return { status: "success", records: 1, detail: { recordId } };
       } catch (err) {
@@ -409,7 +409,7 @@ export async function runFlow(flow: string, payload: FlowPayload = {}): Promise<
       const bookingId = payload.bookingId || payload.id;
       if (!bookingId) throw new FlowPermanentError("job flow requires a bookingId");
       const recordId = await syncJobByBookingId(bookingId, { entrySource: DEFAULT_LIVE_ENTRY_SOURCE });
-      if (!recordId) return { status: "skipped", records: 0, detail: { reason: "booking not found" } };
+      if (!recordId) return { status: "skipped", records: 0, detail: { reason: "booking not found or not completed" } };
       return { status: "success", records: 1, detail: { recordId } };
     }
 
