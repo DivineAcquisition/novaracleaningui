@@ -41,6 +41,7 @@ import {
   RiShieldCheckLine,
   RiFileChartLine,
   RiFileList3Line,
+  RiLineChartLine,
   RiPriceTag3Line,
   RiRefreshLine,
   RiMailSendLine,
@@ -152,7 +153,14 @@ const NAV_ITEMS: NavItem[] = [
     title: "Payroll",
     url: "/admin/payroll",
     icon: RiMoneyDollarCircleLine,
-    description: "Payouts · extra pay · expenses & reimbursements",
+    description: "Payouts · extra pay · pay rates",
+    adminOnly: true,
+  },
+  {
+    title: "P&L",
+    url: "/admin/pnl",
+    icon: RiLineChartLine,
+    description: "Collected · pipeline · ads · contribution",
     adminOnly: true,
   },
   {

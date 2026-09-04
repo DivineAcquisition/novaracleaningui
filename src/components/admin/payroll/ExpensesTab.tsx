@@ -1,19 +1,14 @@
 "use client";
 
-// ─── Payroll → Expenses & reimbursements ──────────────────────────────────────
+// ─── P&L → Expenses & reimbursements ─────────────────────────────────────────
 //
 // Logging money owed to a cleaner, VA or vendor, and marking it paid.
 //
-// This used to live under a separate "P&L Data" screen alongside ad spend and
-// EOD reports, which is a reporting surface — but reimbursing a cleaner for mop
-// heads is a PAYROLL task, done by the same person in the same sitting as the
-// rest of their pay. It sits here now so nobody has to remember which of two
-// money screens holds the thing they owe somebody.
-//
-// The Promised/Paid distinction is the point of the workflow, not decoration:
-// "Promised" records a commitment so it shows as owed without touching profit,
-// and flipping to "Paid" is what lets it hit True Net. Logging something as Paid
-// before the money moves is how the books drift.
+// This lives on Profit & Loss next to contribution, not on Payroll. Reimbursing
+// a cleaner for mop heads is a books task: Promised records the commitment
+// without touching profit, and flipping to Paid is what lets it hit
+// contribution. Logging something as Paid before the money moves is how the
+// books drift.
 
 import { RiCheckboxCircleFill, RiLoader4Line } from "@remixicon/react";
 import { useCallback, useEffect, useState } from "react";
@@ -33,6 +28,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
+import { ymdInZone } from "@/lib/pnl";
 import { cn } from "@/lib/utils";
 
 const EXPENSE_TYPES = ["Promised", "Reimbursement", "One-off Expense", "Other"];
@@ -45,11 +41,10 @@ const STATUS_STYLE: Record<string, string> = {
   Denied: "bg-rose-100 text-rose-700",
 };
 
-// Local calendar day. toISOString() would roll over to tomorrow after 8pm
+// Eastern calendar day. toISOString() would roll over to tomorrow after 8pm
 // Eastern and date-stamp an expense on a day nobody worked.
 function todayYmd(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return ymdInZone(new Date());
 }
 
 const money = (c: number) => `$${(c / 100).toFixed(2)}`;
@@ -65,7 +60,7 @@ interface ExpenseRow {
   paid_date: string | null;
 }
 
-export default function ExpensesTab() {
+export default function ExpensesTab({ onChanged }: { onChanged?: () => void }) {
   const [rows, setRows] = useState<ExpenseRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -117,6 +112,7 @@ export default function ExpensesTab() {
       toast.success("Logged.");
       setF({ date: todayYmd(), type: "Promised", who: "", description: "", amount: "", status: "Promised" });
       await load();
+      onChanged?.();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Save failed");
     } finally {
@@ -136,6 +132,7 @@ export default function ExpensesTab() {
       if (error) throw error;
       toast.success(status === "Paid" ? "Marked Paid — now hits True Net." : `Status → ${status}`);
       await load();
+      onChanged?.();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Update failed");
     } finally {

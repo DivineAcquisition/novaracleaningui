@@ -1,12 +1,19 @@
-import { redirect } from "next/navigation";
+import { Suspense } from "react";
 
-// P&L Data is retired. The only part of it anyone was using day to day —
-// logging an expense or reimbursement — now lives in Payroll, next to the rest
-// of the money. Ad spend and EOD entry are gone from the app; the underlying
-// tables and the Google Sheet mirror are untouched, so nothing that was already
-// captured is lost and the sheet remains the reporting surface.
+import AdminLayout from "@/components/admin/AdminLayout";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
+import AdminPnl from "@/views/admin/Pnl";
+
 export default function Page() {
-  redirect("/admin/payroll");
+  return (
+    <ProtectedRoute requiredRole="admin_strict">
+      <AdminLayout>
+        <Suspense>
+          <AdminPnl />
+        </Suspense>
+      </AdminLayout>
+    </ProtectedRoute>
+  );
 }
 
 export const dynamic = "force-dynamic";

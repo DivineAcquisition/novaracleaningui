@@ -9,22 +9,24 @@
 //   Jobs (derived from completed bookings + legacy STR turnovers)
 //     → "Daily Log"       A:date B:client_type C:service_type D:client/property
 //                          E:revenue F:cleaner_pay G:supplies H:other I:notes
-//                          (J "Job Profit" is a sheet formula — never written)
+//                          J:job_profit K:month_tag (YYYY-MM, written as values)
 //   pl_expenses → "Expenses & Reimb"  A:date B:type C:who D:description
-//                          E:amount F:status G:paid_date   (H formula)
+//                          E:amount F:status G:paid_date H:month_tag
 //   pl_ad_spend → "Ad Spend"          A:date B:platform C:spend D:leads
-//                          E:booked F:notes                (G formula)
+//                          E:booked F:notes G:month_tag
 //   va_eod_submissions + va_verified_metrics → "EOD"
-//                          A:date B:va C..H:counts I:revenue J:notes
-//                          (K formula)
+//                          A:date B:va C..H:counts I:revenue J:notes K:month_tag
 //     (legacy pl_eod_reports is retired — the live VA EOD system is the source)
 //
-// Idempotency: full clean rewrite of each tab's DATA RANGE (A2:<lastCol>),
+// Month Tag and Job Profit used to be sheet formulas. Empty rows evaluated
+// DATEVALUE/TEXT on a blank cell (Excel serial 0) and displayed "1899-12".
+// Those columns are now written as values, and a wider clear wipes leftover
+// formulas so a re-sync heals a busted workbook.
+//
+// Idempotency: full clean rewrite of each tab's DATA RANGE (A2:P),
 // sorted by date then id — re-running never duplicates; edits update in
-// place. Only those ranges are touched: report tabs and formula columns are
-// never written. Dates are emitted as literal YYYY-MM-DD text (RAW input) so
-// the sheet's month roll-ups keep working. All payloads are built BEFORE any
-// write, so an upstream failure leaves the sheet in its last good state.
+// place. Report tabs are never written. Dates are emitted as literal
+// YYYY-MM-DD text (RAW input). All payloads are built BEFORE any write.
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
@@ -56,15 +58,33 @@ const TABS = {
 // Per-tab data geometry. The branded template keeps its title in row 1 and
 // the column headers around row 4 — the sync AUTO-DETECTS the header row
 // (the row whose column A reads "Date") and writes data directly beneath it,
-// so template redesigns can't get clobbered. Formula columns sit outside
-// lastCol and are never touched.
+// so template redesigns can't get clobbered.
 const MAX_ROWS = 10000;
+// Wider than lastCol so leftover ARRAYFORMULA / Month Tag cells (the 1899-12
+// ghost rows) are wiped even when they sit past the data we write.
+const FORMULA_CLEAR_COL = "P";
 const TAB_GEOMETRY = {
-  jobs: { lastCol: "I", headers: ["Date", "Client Type", "Service Type", "Client / Property", "Revenue (Collected)", "Cleaner Pay", "Supplies / Materials", "Other Job Cost", "Notes"] },
-  expenses: { lastCol: "G", headers: ["Date", "Type", "Who (Cleaner / VA / Vendor)", "Description", "Amount", "Status", "Paid Date"] },
-  adSpend: { lastCol: "F", headers: ["Date", "Platform", "Spend", "Leads / Calls", "Booked Jobs", "Campaign / Notes"] },
-  eod: { lastCol: "J", headers: ["Date", "VA Name", "Inbound Leads Handled", "Bookings Closed", "Outbound Calls", "Applications Reviewed", "Phone Screens", "Complaints / Issues", "Revenue Booked", "Blockers / Notes"] },
+  jobs: { lastCol: "K", headers: ["Date", "Client Type", "Service Type", "Client / Property", "Revenue (Collected)", "Cleaner Pay", "Supplies / Materials", "Other Job Cost", "Notes", "Job Profit", "Month Tag"] },
+  expenses: { lastCol: "H", headers: ["Date", "Type", "Who (Cleaner / VA / Vendor)", "Description", "Amount", "Status", "Paid Date", "Month Tag"] },
+  adSpend: { lastCol: "G", headers: ["Date", "Platform", "Spend", "Leads / Calls", "Booked Jobs", "Campaign / Notes", "Month Tag"] },
+  eod: { lastCol: "K", headers: ["Date", "VA Name", "Inbound Leads Handled", "Bookings Closed", "Outbound Calls", "Applications Reviewed", "Phone Screens", "Complaints / Issues", "Revenue Booked", "Blockers / Notes", "Month Tag"] },
 } as const;
+
+function monthTag(dateYmd: string | number): string {
+  const s = ymd(String(dateYmd || ""));
+  return /^\d{4}-\d{2}/.test(s) ? s.slice(0, 7) : "";
+}
+
+function withDerived(kind: keyof typeof TAB_GEOMETRY, row: (string | number)[]): (string | number)[] {
+  const tag = monthTag(row[0]);
+  if (kind === "jobs") {
+    const profit = Math.round(
+      ((Number(row[4]) || 0) - (Number(row[5]) || 0) - (Number(row[6]) || 0) - (Number(row[7]) || 0)) * 100,
+    ) / 100;
+    return [...row, profit, tag];
+  }
+  return [...row, tag];
+}
 const DEFAULT_HEADER_ROW = 4;
 
 /** Find the header row (column A == "Date") within the first 10 rows. */
@@ -367,9 +387,10 @@ serve(async (req) => {
     ]);
 
     // Clean rewrite per tab: locate the header row, ensure the header text
-    // is intact (self-heals templates), clear the data range beneath it,
-    // then write. RAW keeps YYYY-MM-DD as literal text. Formula columns are
-    // outside every range and are never touched.
+    // is intact (self-heals templates), clear the data range beneath it
+    // (including leftover formula columns), then write values — Job Profit
+    // and Month Tag included, so empty-row DATE formulas cannot resurrect
+    // 1899-12. RAW keeps YYYY-MM-DD as literal text.
     const writes: Array<[keyof typeof TABS, (string | number)[][]]> = [
       ["jobs", jobRows],
       ["expenses", expenseRows],
@@ -387,16 +408,16 @@ serve(async (req) => {
         const above = await readRange(token, sheetId, `'${tab}'!A2:A${Math.max(2, headerRow - 1)}`);
         for (let i = 0; i < above.length; i++) {
           if (/^\d{4}-\d{2}-\d{2}$/.test(String(above[i]?.[0] ?? ""))) {
-            await clearRange(token, sheetId, `'${tab}'!A${i + 2}:${geo.lastCol}${i + 2}`);
+            await clearRange(token, sheetId, `'${tab}'!A${i + 2}:${FORMULA_CLEAR_COL}${i + 2}`);
           }
         }
       } catch { /* best-effort */ }
       // Keep the header row itself canonical (repairs any past damage).
       await writeRange(token, sheetId, `'${tab}'!A${headerRow}`, [[...geo.headers]]);
       const dataStart = headerRow + 1;
-      await clearRange(token, sheetId, `'${tab}'!A${dataStart}:${geo.lastCol}${MAX_ROWS}`);
+      await clearRange(token, sheetId, `'${tab}'!A${dataStart}:${FORMULA_CLEAR_COL}${MAX_ROWS}`);
       if (values.length > 0) {
-        await writeRange(token, sheetId, `'${tab}'!A${dataStart}`, values);
+        await writeRange(token, sheetId, `'${tab}'!A${dataStart}`, values.map((row) => withDerived(key, row)));
       }
     }
 

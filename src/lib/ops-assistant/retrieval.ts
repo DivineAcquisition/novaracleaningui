@@ -61,6 +61,7 @@ export function screenSlugFromPath(path: string): string | null {
     customers: "customers",
     recurring: "recurring",
     payroll: "payroll",
+    pnl: "pnl",
     qc: "quality-control",
     proposals: "proposals",
     "va-performance": "va-performance",

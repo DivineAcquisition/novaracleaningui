@@ -442,4 +442,22 @@ export const SHOTS: Shot[] = [
     ],
     fullPage: true,
   },
+
+  // ── P&L ──────────────────────────────────────────────────────────────────
+  {
+    id: "pnl-overview",
+    doc: "pnl",
+    caption: "Profit & Loss — collected vs pipeline, ads, contribution, and the sheet mirror.",
+    url: "/admin/pnl",
+    waitForText: "Profit & Loss",
+    callouts: [
+      { text: "Collected", nth: 0, label: "Completed job revenue" },
+      { text: "Pipeline", nth: 0, label: "Booked, not yet done" },
+      { text: "Contribution", nth: 0, label: "After ads and paid expenses" },
+      { text: "Booked ROAS", label: "Collected + pipeline over ads" },
+      { text: "Open Google Sheet", label: "The sheet is a mirror" },
+      { text: "Sync sheet", label: "Refresh the Google Sheet now" },
+    ],
+    fullPage: true,
+  },
 ];

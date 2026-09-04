@@ -16,6 +16,7 @@
     "airtable:backfill": "tsx scripts/backfill-airtable.ts",
     "airtable:verify": "tsx scripts/verify-airtable-mapping.ts",
     "va:verify": "tsx scripts/verify-va-performance.ts",
+    "pnl:verify": "tsx scripts/verify-pnl.ts",
     "screening:verify": "tsx scripts/verify-phone-screening.ts",
     "edge:bundle": "node scripts/build-edge-bundle.mjs",
     "pricing:verify": "tsx scripts/verify-dynamic-pricing.ts",

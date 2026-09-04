@@ -5,7 +5,7 @@ category: How the Tool Works
 summary: What the workspace is, how it's laid out, why you may not see every section, and what the dashboard is telling you.
 whoCanSee: Admins and VAs
 where: /admin/dashboard
-lastVerified: 2026-08-29
+lastVerified: 2026-09-04
 order: 1
 ---
 
@@ -38,7 +38,7 @@ it's for.
 - **VA** — the operational set: Dashboard, Bookings, Operations, Cleaners, Internal Booking,
   Proposals, Customers, Recurring, and Quality Control.
 - **Full admin** — all of the above plus the money, roles and commercial surfaces: Quotes,
-  Pricing, Commercial, Payroll, VA Performance, Weekly Report, and Team.
+  Pricing, Commercial, Payroll, P&L, VA Performance, Weekly Report, and Team.
 
 If a section isn't in your sidebar, you don't have access to it, and typing the address in
 directly won't help. You'll get a message reading **"Admins only — this section is restricted
@@ -69,6 +69,7 @@ going looking for something.
 | **Customers** | Account-level things: credits, refunds, billing links, password resets. |
 | **Recurring** | Memberships and repeating cleans. |
 | **Payroll** | Paying contractors. |
+| **P&L** | Collected vs pipeline revenue, ad spend, contribution, ROAS. |
 | **Quality Control** | A customer complained, or a job needs documenting or defending. |
 | **VA Performance** | Reviewing how the VA team is doing. |
 | **Weekly Report** | The weekly sales and growth PDF. |
@@ -76,18 +77,17 @@ going looking for something.
 
 ## The dashboard
 
-The dashboard is a read-only summary of today. There is nothing to click that changes
-anything — it's the "how are we doing" screen, not a working screen.
+The dashboard is a read-only summary of **today in Eastern Time**. There is nothing to click
+that changes anything — it's the "how are we doing" screen, not a working screen.
 
 @screenshot dashboard-overview
 
-**Bookings today** counts every booking scheduled for today, with how many are confirmed and
-how many are already done underneath.
+**Bookings today** counts every booking scheduled for today that is not cancelled, with how
+many are still on and how many are already done underneath.
 
-**Revenue today** adds up today's bookings that are confirmed, assigned or completed. The
-smaller number underneath is the month so far. It uses the final charge where a job has one
-and the estimate where it doesn't — so it moves slightly as jobs finish and final amounts
-land.
+**Revenue today** adds up today's remaining jobs (final charge where a job has one, estimate
+otherwise). The smaller number underneath is **collected this month** and **still booked this
+month** — two different piles. Re-cleans are $0.
 
 **Active cleaners** is contractors who are both approved and currently active. It is not how
 many are working today.
@@ -96,16 +96,23 @@ many are working today.
 amber number under it, there are unresolved dispatch alerts and Operations is where you deal
 with them.
 
-**Last 30 days** plots bookings created and revenue collected.
+**Coming up this week** lists today's jobs and the next seven days on the calendar, so a quiet
+today does not look like an empty business.
+
+**Last 30 days** plots jobs on the calendar and revenue collected. If the daily-metrics view
+is empty, the chart is built from bookings instead so it is not a strip of blank bars.
 
 **Live activity** is a running feed of things happening right now — bookings created, offers
 sent, offers accepted, jobs completed, texts going out. It updates by itself; you don't need
 to refresh.
 
+Full admins also see a **Profit & Loss** strip with this month's collected and booked totals
+and a link to the P&L screen.
+
 :::note Revenue today and Payroll will not agree, and that's correct
 Revenue today counts what jobs are worth. Payroll counts what contractors are owed. They
-measure different things and neither is wrong. If you need the money picture, use the
-Payroll and Weekly Report screens rather than reasoning from this tile.
+measure different things and neither is wrong. If you need the money picture — ads, job
+profit, contribution, ROAS — use **P&L**, not this tile.
 :::
 
 ## Things worth knowing before you start
