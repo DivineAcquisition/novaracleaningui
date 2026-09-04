@@ -22,8 +22,6 @@ SELECT
   e.cycle_id,
   cy.started_at AS cycle_started_at,
   cy.interval_days,
-  cy.counts_toward_interval,
-  cy.source AS cycle_source,
   e.cleaner_id,
   TRIM(COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '')) AS cleaner_name,
   c.email,
@@ -47,7 +45,9 @@ SELECT
   e.admin_note,
   e.token_expires_at,
   e.token IS NOT NULL
-    AND (e.token_expires_at IS NULL OR e.token_expires_at > now()) AS link_outstanding
+    AND (e.token_expires_at IS NULL OR e.token_expires_at > now()) AS link_outstanding,
+  cy.counts_toward_interval,
+  cy.source AS cycle_source
 FROM public.pulse_check_entries e
 JOIN public.pulse_check_cycles cy ON cy.id = e.cycle_id
 JOIN public.cleaners c ON c.id = e.cleaner_id;
