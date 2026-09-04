@@ -224,6 +224,34 @@ serve(async (req) => {
         break;
       }
 
+      case "pulse_check": {
+        const first = data.firstName || "there";
+        const pulseUrl = data.pulseUrl || "https://contractor.novaracleaning.com/cleaner/auth";
+        const followup = data.followup === true;
+        subject = followup
+          ? "Reminder: Novara Cleaning pulse check"
+          : "Novara Cleaning pulse check — are you still available?";
+        html = `
+          <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#0f172a">
+            <h2 style="margin:0 0 8px;font-size:20px">${followup ? "Quick reminder" : "Are you still available for jobs?"}</h2>
+            <p style="margin:0 0 16px;color:#475569">Hi ${first},</p>
+            <p style="margin:0 0 16px;color:#475569">
+              ${followup
+                ? "We still need a quick status update. The same link also shows jobs you can claim right now, with your pay."
+                : "It's been a couple of weeks without a job on your schedule. This is a short check-in — confirm you're still available, and claim any open jobs that match your zone and hours."}
+            </p>
+            <p style="margin:24px 0;text-align:center">
+              <a href="${pulseUrl}"
+                 style="display:inline-block;background:#7c3aed;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600">
+                Open your pulse check
+              </a>
+            </p>
+            <p style="margin:0 0 8px;color:#64748b;font-size:14px">No login required — the link opens straight onto your form.</p>
+            <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">Novara Cleaning</p>
+          </div>`;
+        break;
+      }
+
       case "tip_received": {
         const first = data.cleanerFirstName || data.firstName || "there";
         const amountStr = `$${((Number(data.amount) || 0) / 100).toFixed(2)}`;

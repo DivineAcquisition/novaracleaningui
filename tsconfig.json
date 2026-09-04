@@ -33,6 +33,6 @@
     "supabase/functions",
     "mobile",
     "contractor-app",
-    "scripts/*.deno.ts"
+    "scripts"
   ]
 }

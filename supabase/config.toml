@@ -734,3 +734,10 @@ verify_jwt = false
 
 [functions.weekly-report-generate]
 verify_jwt = false
+
+# Recurring 14-day contractor pulse check (idle active contractors).
+# Invoked by pg_cron (anon bearer + x-cron-secret) and by admins from the
+# contractors tab. JWT verified in-function is not required; the function
+# uses the service role internally and never changes roster status.
+[functions.pulse-check-runner]
+verify_jwt = false
