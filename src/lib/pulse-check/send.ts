@@ -7,19 +7,29 @@ import {
   type PulseCheckSettings,
 } from "@/lib/pulse-check/settings";
 
-export type PulseSendKind = "initial" | "followup";
+export type PulseSendKind = "initial" | "followup" | "closed";
 
-export function pulseSmsMessage(firstName: string, link: string, kind: PulseSendKind): string {
+export function pulseSmsMessage(
+  firstName: string,
+  link: string,
+  kind: PulseSendKind,
+  opts?: { terminateDays?: number; reapplyDate?: string | null },
+): string {
   const name = firstName.trim() || "there";
+  const days = opts?.terminateDays && opts.terminateDays > 0 ? opts.terminateDays : 3;
+  if (kind === "closed") {
+    const until = opts?.reapplyDate ? ` You can apply again after ${opts.reapplyDate}.` : " You can apply again in 3 months.";
+    return `Hi ${name} — we didn't hear back on your Novara pulse check, so your contractor account is closed.${until} Reply STOP to opt out.`;
+  }
   if (kind === "followup") {
     return (
-      `Hi ${name} — Novara Cleaning checking in. We still need a quick status update, ` +
-      `and there may be jobs you can claim: ${link} Reply STOP to opt out.`
+      `Hi ${name} — last reminder from Novara Cleaning. Respond to your pulse check or we'll close ` +
+      `your contractor account: ${link} Reply STOP to opt out.`
     );
   }
   return (
-    `Hi ${name} — Novara Cleaning pulse check. Are you still available for jobs? ` +
-    `Open this link to confirm and see work you can claim: ${link} Reply STOP to opt out.`
+    `Hi ${name} — Novara Cleaning pulse check. Confirm you're still a contractor within ${days} days ` +
+    `or we'll close your account (no reapply for 3 months): ${link} Reply STOP to opt out.`
   );
 }
 
@@ -38,6 +48,7 @@ export async function sendPulseChannels(
   cleaner: CleanerContact,
   link: string,
   kind: PulseSendKind = "initial",
+  opts?: { terminateDays?: number; reapplyDate?: string | null },
 ): Promise<{ emailed: boolean; smsSent: boolean; emailError: string | null; smsError: string | null }> {
   const firstName = String(cleaner.first_name || "").trim() || "there";
   const email = String(cleaner.email || "").trim();
@@ -54,7 +65,14 @@ export async function sendPulseChannels(
       body: {
         type: "pulse_check",
         email,
-        data: { firstName, pulseUrl: link, followup: kind === "followup" },
+        data: {
+          firstName,
+          pulseUrl: link,
+          followup: kind === "followup",
+          closed: kind === "closed",
+          terminateDays: opts?.terminateDays ?? 3,
+          reapplyDate: opts?.reapplyDate || null,
+        },
       },
     });
     const res = await edgeResult(error, data);
@@ -77,7 +95,7 @@ export async function sendPulseChannels(
         email: email || undefined,
         firstName,
         lastName: cleaner.last_name || undefined,
-        message: pulseSmsMessage(firstName, link, kind),
+        message: pulseSmsMessage(firstName, link, kind, opts),
         type: kind === "followup" ? "pulse_check_followup" : "pulse_check",
       },
     });
@@ -209,7 +227,9 @@ export async function sendAdminPulseCheck(args: {
   }
 
   const link = pulseCheckLink(String(token));
-  const sent = await sendPulseChannels(supabase, cleaner as CleanerContact, link, "initial");
+  const sent = await sendPulseChannels(supabase, cleaner as CleanerContact, link, "initial", {
+    terminateDays: settings.no_response_terminate_days,
+  });
   const reached = sent.emailed || sent.smsSent;
 
   await (supabase.from as any)("pulse_check_entries")

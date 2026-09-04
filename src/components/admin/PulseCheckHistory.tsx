@@ -21,7 +21,9 @@ interface HistoryRow {
 
 function label(outcome: string, answers?: Record<string, unknown> | null) {
   const roster = String(answers?.rosterAction || answers?.roster_action || "");
-  if (roster === "terminate") return "Terminated";
+  if (roster === "terminate") {
+    return String(answers?.reason || "") === "no_response" ? "Terminated (no reply)" : "Terminated";
+  }
   if (roster === "inactive") return "Set inactive";
   if (outcome === "completed") return "Completed";
   if (outcome === "needs_review") return "Needs review";
@@ -115,8 +117,8 @@ export default function PulseCheckHistory({
         </Button>
       </div>
       <p className="text-[11px] text-slate-500">
-        Sends the same stay / pause / leave form plus claimable jobs. Does not wait for idle time and
-        does not move the recurring cycle. Leaving or a month away will update their roster.
+        Sends the same stay / pause / leave form plus claimable jobs. No reply in 3 days closes
+        the account. Does not wait for idle time and does not move the recurring cycle.
       </p>
       {rows && rows.length > 0 ? (
         rows.map((r) => (

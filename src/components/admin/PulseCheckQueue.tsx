@@ -281,7 +281,7 @@ export default function PulseCheckQueue({
           <p className="text-xs text-rose-800">{loadError} — treat this as unknown rather than clear.</p>
         ) : null}
 
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
           <label className="text-[11px] text-slate-600">
             Cycle (days)
             <Input
@@ -294,13 +294,26 @@ export default function PulseCheckQueue({
             />
           </label>
           <label className="text-[11px] text-slate-600">
-            Follow-up (days)
+            Reminder (days)
             <Input
               type="number"
               min={1}
               max={30}
               value={settings.followup_days}
               onChange={(e) => setSettings((s) => ({ ...s, followup_days: Number(e.target.value) }))}
+              className="mt-1 h-8 bg-white"
+            />
+          </label>
+          <label className="text-[11px] text-slate-600">
+            Close if silent (days)
+            <Input
+              type="number"
+              min={1}
+              max={30}
+              value={settings.no_response_terminate_days}
+              onChange={(e) =>
+                setSettings((s) => ({ ...s, no_response_terminate_days: Number(e.target.value) }))
+              }
               className="mt-1 h-8 bg-white"
             />
           </label>
@@ -324,8 +337,8 @@ export default function PulseCheckQueue({
 
         {latest.length === 0 ? (
           <p className="text-xs text-sky-900/80">
-            Every {settings.interval_days} days, active contractors with zero assignments in that window get a
-            tokenized status form plus jobs they can claim. Stay on / short pause / leave can update roster status.
+            Every {settings.interval_days} days, idle contractors get a stay / pause / leave form.
+            No reply in {settings.no_response_terminate_days} days closes the account.
           </p>
         ) : (
           <div className="space-y-1.5">
@@ -450,9 +463,10 @@ export default function PulseCheckQueue({
         ) : null}
 
         <p className="text-[11px] text-sky-900/80">
-          One follow-up in the same cycle, then silence surfaces here. A yes keeps them on the roster.
-          A 1- or 2-week pause sets them inactive. Leaving, or asking for a month away, terminates with
-          a 3-month reapply lockout.
+          One reminder, then silence for {settings.no_response_terminate_days} day
+          {settings.no_response_terminate_days === 1 ? "" : "s"} closes the contractor account
+          (3-month reapply lockout). A yes keeps them on the roster. A 1- or 2-week pause sets them
+          inactive. Leaving, or asking for a month away, also terminates.
         </p>
       </CardContent>
     </Card>

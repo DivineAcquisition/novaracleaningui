@@ -40,6 +40,7 @@ type Payload = {
   claimedJobIds: string[];
   jobs: PulseJobCard[];
   avgWeeklyPayCents?: number | null;
+  respondWithinDays?: number | null;
   rosterAction?: string | null;
   inactiveUntil?: string | null;
   reapplyEligibleAt?: string | null;
@@ -255,6 +256,9 @@ export default function PulseCheckForm() {
   const terminatePath = leaving || monthAway;
   const showJobs = staying && !done && jobs.length > 0;
   const earningsLine = formatAvgWeeklyPay(state.data.avgWeeklyPayCents ?? null);
+  const respondDays = state.data.respondWithinDays && state.data.respondWithinDays > 0
+    ? state.data.respondWithinDays
+    : 3;
   const finished = doneCopy({
     outcome: submittedOutcome,
     rosterAction: submittedRoster,
@@ -270,7 +274,7 @@ export default function PulseCheckForm() {
     <TokenPageShell
       eyebrow="Pulse check"
       title={`Hi ${first}`}
-      subtitle="Are you still willing to be a Novara contractor? Your answer updates the roster."
+      subtitle={`Are you still willing to be a Novara contractor? Submit within ${respondDays} days or we close the account.`}
     >
       {done ? (
         <TokenPanel>
@@ -287,6 +291,11 @@ export default function PulseCheckForm() {
               <legend className="text-sm font-semibold text-slate-900">
                 Are you still willing to be a contractor for Novara Cleaning?
               </legend>
+              <p className="text-xs text-slate-500">
+                If you don&apos;t submit this form within {respondDays} days, we close your contractor
+                account. You cannot reapply for 3 months. We keep the roster for active, reliable
+                contractors.
+              </p>
               {PULSE_STATUS_OPTIONS.map((opt) => (
                 <label
                   key={opt.value}

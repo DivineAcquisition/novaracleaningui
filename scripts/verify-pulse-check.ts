@@ -4,9 +4,9 @@
 //   • eligibility reuses zone/capacity scoring, then hard-applies days + cutoffs
 //   • stay / 1–2 week pause / leave + 1-month map onto roster actions
 //   • availability patches still never include roster or score fields
-//   • no-response after expiry, unless they claimed a job
+//   • unanswered forms terminate after 3 days (claimed jobs complete instead)
 //   • taken-job copy is a message, not an error
-//   • schedule: cycle interval vs follow-up vs token TTL
+//   • schedule: cycle interval vs reminder vs 3-day silence close vs token TTL
 //
 //   Run:  npm run pulse:verify
 
@@ -34,6 +34,7 @@ import { formatAvgWeeklyPay } from "../src/lib/pulse-check/earnings";
 import {
   inactiveUntilFromDraft,
   isReapplyBlocked,
+  pulseNoResponseTerminationPatch,
   PULSE_REAPPLY_DAYS,
   reapplyEligibleAt,
 } from "../src/lib/pulse-check/roster";
@@ -44,6 +45,7 @@ import {
   pulseCheckLink,
   pulseSendBlockedReason,
 } from "../src/lib/pulse-check/settings";
+import { pulseSilenceAction } from "../src/lib/pulse-check/silence";
 import { pulseSmsMessage } from "../src/lib/pulse-check/send";
 import { jobValueForPay, serviceTypeLabel, zoneLabel } from "../src/lib/pulse-check/jobs";
 import { scoreCleanerForJob } from "../src/lib/dispatch-scoring";
@@ -339,14 +341,104 @@ check("move-in label", serviceTypeLabel("move_in_out"), "Move-in / move-out");
 
 console.log("\nCycle schedule:");
 check(
-  "defaults are a 14-day cycle, 3-day follow-up, 14-day link",
+  "defaults are a 14-day cycle, 2-day reminder, 3-day silence close, 14-day link",
   parsePulseCheckSettings({}),
-  { enabled: true, interval_days: 14, followup_days: 3, token_ttl_days: 14 },
+  {
+    enabled: true,
+    interval_days: 14,
+    followup_days: 2,
+    no_response_terminate_days: 3,
+    token_ttl_days: 14,
+  },
+);
+check(
+  "a stored 3-day follow-up is pulled before the 3-day close",
+  parsePulseCheckSettings({ followup_days: 3, no_response_terminate_days: 3 }).followup_days,
+  2,
 );
 check(
   "follow-up is clamped inside the token window",
-  parsePulseCheckSettings({ followup_days: 20, token_ttl_days: 7 }).followup_days,
+  parsePulseCheckSettings({
+    followup_days: 20,
+    token_ttl_days: 7,
+    no_response_terminate_days: 7,
+  }).followup_days,
   6,
+);
+check(
+  "SMS copy includes STOP",
+  pulseSmsMessage("Maya", "https://contractor.novaracleaning.com/cleaner/pulse/abc", "initial").includes("STOP"),
+  true,
+);
+check(
+  "initial SMS warns of a 3-day close",
+  pulseSmsMessage("Maya", "https://x/p/abc", "initial").includes("within 3 days"),
+  true,
+);
+check(
+  "follow-up SMS warns the account will close",
+  pulseSmsMessage("Maya", "https://x/p/abc", "followup").includes("close"),
+  true,
+);
+
+console.log("\nSilence close:");
+const sent = "2026-09-04T22:02:00.000Z";
+const base = {
+  submitted: false,
+  claimedCount: 0,
+  sentAt: sent,
+  followupSent: false,
+  followupDays: 2,
+  terminateDays: 3,
+  tokenExpiresAt: "2026-09-18T22:02:00.000Z",
+};
+check(
+  "nothing happens the next morning",
+  pulseSilenceAction({ ...base, now: new Date("2026-09-05T14:00:00.000Z") }),
+  "none",
+);
+check(
+  "reminder is due after 2 days",
+  pulseSilenceAction({ ...base, now: new Date("2026-09-06T22:02:00.000Z") }),
+  "followup",
+);
+check(
+  "already-reminded entries wait until the close",
+  pulseSilenceAction({ ...base, followupSent: true, now: new Date("2026-09-06T22:02:00.000Z") }),
+  "none",
+);
+check(
+  "unanswered form at 3 days terminates",
+  pulseSilenceAction({ ...base, followupSent: true, now: new Date("2026-09-07T22:02:00.000Z") }),
+  "terminate",
+);
+check(
+  "a claimed job at the deadline completes instead of terminating",
+  pulseSilenceAction({
+    ...base,
+    claimedCount: 1,
+    followupSent: true,
+    now: new Date("2026-09-07T22:02:00.000Z"),
+  }),
+  "complete_claimed",
+);
+check(
+  "submitted forms are left alone",
+  pulseSilenceAction({
+    ...base,
+    submitted: true,
+    now: new Date("2026-09-08T14:00:00.000Z"),
+  }),
+  "none",
+);
+check(
+  "silence terminate patch writes terminated + 90-day lockout",
+  (() => {
+    const freeze = new Date("2026-09-07T22:02:00.000Z");
+    const { patch, eligible } = pulseNoResponseTerminationPatch(freeze, 3);
+    return [patch.status, patch.approved, patch.rehire_status, eligible];
+  })(),
+  ["terminated", false, "no_rehire", "2026-12-06T22:02:00.000Z"],
 );
 check(
   "a cycle is due after the interval",

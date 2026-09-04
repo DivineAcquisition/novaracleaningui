@@ -22,6 +22,10 @@ import {
   offerThenAccept,
 } from "@/lib/pulse-check/jobs";
 import { applyPulseRosterChange } from "@/lib/pulse-check/roster";
+import {
+  parsePulseCheckSettings,
+  PULSE_CHECK_SETTINGS_KEY,
+} from "@/lib/pulse-check/settings";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -132,7 +136,11 @@ export async function GET(_req: Request, ctx: Ctx): Promise<NextResponse> {
 
   const onFile = constraintsOf(cleaner);
   const draft = draftFrom(entry, cleaner);
-  const earnings = await loadAverageWeeklyContractorPay(supabase);
+  const [earnings, settingRow] = await Promise.all([
+    loadAverageWeeklyContractorPay(supabase),
+    (supabase.from as any)("app_settings").select("value").eq("key", PULSE_CHECK_SETTINGS_KEY).maybeSingle(),
+  ]);
+  const settings = parsePulseCheckSettings(settingRow.data?.value);
   const upcoming = alreadySubmitted || String(cleaner.status) !== "active"
     ? 0
     : await upcomingCount(supabase, String(cleaner.id));
@@ -182,6 +190,7 @@ export async function GET(_req: Request, ctx: Ctx): Promise<NextResponse> {
     claimedJobIds: entry.claimed_job_ids || [],
     jobs,
     avgWeeklyPayCents: earnings.avgWeeklyPayCents,
+    respondWithinDays: settings.no_response_terminate_days,
     rosterAction: alreadySubmitted
       ? (entry.answers as { rosterAction?: string } | null)?.rosterAction || null
       : null,

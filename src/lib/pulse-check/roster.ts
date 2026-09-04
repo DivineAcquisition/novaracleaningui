@@ -58,6 +58,34 @@ export function rosterChangeSummary(action: PulseRosterAction, draft: PulseDraft
   return "";
 }
 
+/** Cleaner row patch for silence / no-response termination. Runner mirrors this. */
+export function pulseNoResponseTerminationPatch(now: Date, silentDays = 3) {
+  const iso = now.toISOString();
+  const eligible = reapplyEligibleAt(now);
+  const reasonLabel =
+    `Terminated — no pulse-check response in ${silentDays} day${silentDays === 1 ? "" : "s"} ` +
+    "(3-month reapply lockout)";
+  return {
+    eligible,
+    reasonLabel,
+    patch: {
+      status: "terminated",
+      available_for_bookings: false,
+      approved: false,
+      terminated_at: iso,
+      termination_reason: "abandoned_role",
+      deactivated_at: iso,
+      deactivation_reason: "personal_request",
+      rehire_status: "no_rehire",
+      rehire_notes: `Pulse check — no response. May reapply after ${formatRosterDate(eligible)}.`,
+      reapply_eligible_at: eligible,
+      inactive_until: null,
+      termination_effective_date: iso.slice(0, 10),
+      updated_at: iso,
+    } as Record<string, unknown>,
+  };
+}
+
 type Admin = {
   from: (table: string) => any;
   functions: { invoke: (name: string, args: { body: unknown }) => Promise<unknown> };

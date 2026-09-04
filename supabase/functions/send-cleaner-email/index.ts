@@ -228,17 +228,34 @@ serve(async (req) => {
         const first = data.firstName || "there";
         const pulseUrl = data.pulseUrl || "https://contractor.novaracleaning.com/cleaner/auth";
         const followup = data.followup === true;
+        const closed = data.closed === true;
+        const terminateDays = Number(data.terminateDays) > 0 ? Number(data.terminateDays) : 3;
+        const reapplyDate = data.reapplyDate ? String(data.reapplyDate) : "";
+        if (closed) {
+          subject = "Your Novara contractor account is closed";
+          html = `
+          <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#0f172a">
+            <h2 style="margin:0 0 8px;font-size:20px">We didn't hear back</h2>
+            <p style="margin:0 0 16px;color:#475569">Hi ${first},</p>
+            <p style="margin:0 0 16px;color:#475569">
+              We didn't get a response to your Novara Cleaning pulse check, so your contractor account
+              is closed as of today. You cannot reapply for 3 months${reapplyDate ? ` (after ${reapplyDate})` : ""}.
+            </p>
+            <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">Novara Cleaning</p>
+          </div>`;
+          break;
+        }
         subject = followup
-          ? "Reminder: Novara Cleaning pulse check"
-          : "Novara Cleaning pulse check — are you still available?";
+          ? "Last reminder: Novara pulse check — respond or we close your account"
+          : `Novara Cleaning pulse check — respond within ${terminateDays} days`;
         html = `
           <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#0f172a">
-            <h2 style="margin:0 0 8px;font-size:20px">${followup ? "Quick reminder" : "Are you still available for jobs?"}</h2>
+            <h2 style="margin:0 0 8px;font-size:20px">${followup ? "Last reminder" : "Are you still a Novara contractor?"}</h2>
             <p style="margin:0 0 16px;color:#475569">Hi ${first},</p>
             <p style="margin:0 0 16px;color:#475569">
               ${followup
-                ? "We still need a quick status update. The same link also shows jobs you can claim right now, with your pay."
-                : "It's been a couple of weeks without a job on your schedule. This is a short check-in — confirm you're still available, and claim any open jobs that match your zone and hours."}
+                ? "We still need your pulse check. If we don't hear back, we'll close your contractor account — we keep the roster for people who stay active and reliable."
+                : `Please confirm you're still willing to take jobs. If we don't get a response within ${terminateDays} days, we'll close your contractor account. You would not be able to reapply for 3 months.`}
             </p>
             <p style="margin:24px 0;text-align:center">
               <a href="${pulseUrl}"
