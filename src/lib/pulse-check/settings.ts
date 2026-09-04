@@ -56,3 +56,35 @@ export function cycleIsDue(
   const elapsedMs = now.getTime() - started.getTime();
   return elapsedMs >= intervalDays * 86_400_000;
 }
+
+/** Full idle cycles (cron / admin force) move the clock. One-off admin sends do not. */
+export function cycleCountsTowardInterval(cycle: {
+  counts_toward_interval?: boolean | null;
+  source?: string | null;
+}): boolean {
+  if (cycle.counts_toward_interval === false) return false;
+  const source = String(cycle.source || "").toLowerCase();
+  if (source === "admin-one" || source === "manual") return false;
+  return true;
+}
+
+export function latestIntervalStartedAt(
+  cycles: Array<{
+    started_at: string;
+    counts_toward_interval?: boolean | null;
+    source?: string | null;
+  }>,
+): string | null {
+  const counting = cycles.filter(cycleCountsTowardInterval);
+  if (counting.length === 0) return null;
+  return [...counting].sort(
+    (a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime(),
+  )[0].started_at;
+}
+
+export function pulseSendBlockedReason(status: string | null | undefined): string | null {
+  if (String(status || "").toLowerCase() === "terminated") {
+    return "Cannot send a pulse check to a terminated contractor.";
+  }
+  return null;
+}

@@ -9,7 +9,9 @@
 //      assignments in that lookback gets a unique tokenized link by
 //      SMS + email in the same run.
 //
-// Admin can force a new cycle via { force: true }.
+// Admin can force a new idle cycle via { force: true } (counts toward the
+// 14-day clock). One-off sends go through POST /api/admin/pulse-check
+// { action: "send_one" } and never reset that clock.
 // Auth: service-role bearer, x-cron-secret (pg_cron), or admin/VA JWT.
 // verify_jwt is false so cron can call with the anon key; this gate is the
 // real lock. Never leave this function open — a POST would SMS every idle
@@ -182,6 +184,7 @@ serve(async (req) => {
       const { data: latest } = await admin
         .from("pulse_check_cycles")
         .select("id, started_at, qualifying_count, sent_count")
+        .eq("counts_toward_interval", true)
         .order("started_at", { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -270,6 +273,7 @@ serve(async (req) => {
     const { data: latest } = await admin
       .from("pulse_check_cycles")
       .select("id, started_at")
+      .eq("counts_toward_interval", true)
       .order("started_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -279,6 +283,11 @@ serve(async (req) => {
       return json({ ok: true, skippedCycle: true, followups, stale, source });
     }
 
+    const startedBy = typeof body?.startedBy === "string" && /^[0-9a-f-]{36}$/i.test(body.startedBy)
+      ? body.startedBy
+      : null;
+    const cycleSource = source === "admin" || source === "pg_cron" || source === "cron" ? source : "cron";
+
     const { data: cycle, error: cycleErr } = await admin
       .from("pulse_check_cycles")
       .insert({
@@ -286,7 +295,10 @@ serve(async (req) => {
         interval_days: settings.interval_days,
         followup_days: settings.followup_days,
         token_ttl_days: settings.token_ttl_days,
-        settings_snapshot: settings,
+        settings_snapshot: { ...settings, source: cycleSource },
+        counts_toward_interval: true,
+        source: cycleSource,
+        started_by: startedBy,
       })
       .select("id")
       .single();

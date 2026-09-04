@@ -29,9 +29,12 @@ import {
 } from "../src/lib/pulse-check/answers";
 import {
   cycleIsDue,
+  latestIntervalStartedAt,
   parsePulseCheckSettings,
   pulseCheckLink,
+  pulseSendBlockedReason,
 } from "../src/lib/pulse-check/settings";
+import { pulseSmsMessage } from "../src/lib/pulse-check/send";
 import { jobValueForPay, serviceTypeLabel, zoneLabel } from "../src/lib/pulse-check/jobs";
 import { scoreCleanerForJob } from "../src/lib/dispatch-scoring";
 
@@ -251,6 +254,48 @@ check(
 check(
   "tokenized link is on the contractor host",
   pulseCheckLink("abc").startsWith("https://contractor.novaracleaning.com/cleaner/pulse/"),
+  true,
+);
+check(
+  "a one-off admin send does not move the 14-day clock",
+  cycleIsDue(
+    latestIntervalStartedAt([
+      { started_at: "2026-09-04T14:00:00Z", counts_toward_interval: true, source: "cron" },
+      { started_at: "2026-09-05T18:00:00Z", counts_toward_interval: false, source: "admin-one" },
+    ]),
+    14,
+    new Date("2026-09-05T20:00:00Z"),
+  ),
+  false,
+);
+check(
+  "without any interval cycle, a manual send still leaves the schedule due",
+  cycleIsDue(
+    latestIntervalStartedAt([
+      { started_at: "2026-09-04T14:00:00Z", counts_toward_interval: false, source: "admin-one" },
+    ]),
+    14,
+    new Date("2026-09-04T15:00:00Z"),
+  ),
+  true,
+);
+check(
+  "source=admin-one is ignored even if the boolean is missing",
+  latestIntervalStartedAt([
+    { started_at: "2026-09-01T14:00:00Z", source: "cron" },
+    { started_at: "2026-09-04T14:00:00Z", source: "admin-one" },
+  ]),
+  "2026-09-01T14:00:00Z",
+);
+check(
+  "terminated contractors are blocked from a manual send",
+  pulseSendBlockedReason("terminated"),
+  "Cannot send a pulse check to a terminated contractor.",
+);
+check("active contractors are not blocked", pulseSendBlockedReason("active"), null);
+check(
+  "SMS copy includes STOP",
+  pulseSmsMessage("Maya", "https://contractor.novaracleaning.com/cleaner/pulse/abc", "initial").includes("STOP"),
   true,
 );
 
