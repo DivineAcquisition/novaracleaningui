@@ -226,6 +226,7 @@ export type Database = {
           booker_source: string | null
           booking_channel: string | null
           booking_number: number | null
+          business_name: string | null
           cancel_reason: string | null
           check_in_time: string | null
           check_out_time: string | null
@@ -305,6 +306,7 @@ export type Database = {
           booker_source?: string | null
           booking_channel?: string | null
           booking_number?: number | null
+          business_name?: string | null
           cancel_reason?: string | null
           check_in_time?: string | null
           check_out_time?: string | null
@@ -384,6 +386,7 @@ export type Database = {
           booker_source?: string | null
           booking_channel?: string | null
           booking_number?: number | null
+          business_name?: string | null
           cancel_reason?: string | null
           check_in_time?: string | null
           check_out_time?: string | null
