@@ -146,7 +146,8 @@ REVOKE ALL ON FUNCTION public.mint_cleaner_pulse_token(uuid, integer) FROM anon;
 REVOKE ALL ON FUNCTION public.mint_cleaner_pulse_token(uuid, integer) FROM authenticated;
 GRANT EXECUTE ON FUNCTION public.mint_cleaner_pulse_token(uuid, integer) TO service_role;
 
-CREATE OR REPLACE VIEW public.cleaner_pulse_status_v1 AS
+CREATE OR REPLACE VIEW public.cleaner_pulse_status_v1
+WITH (security_invoker = true) AS
 SELECT
   e.id AS entry_id,
   e.cycle_id,

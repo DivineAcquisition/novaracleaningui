@@ -459,7 +459,7 @@ export async function offerThenAccept(args: {
   reason?: string;
 }> {
   const staffed = await jobStillClaimable(args.supabase, args.jobId, args.cleanerId);
-  if (!staffed.ok) {
+  if (staffed.ok === false) {
     return {
       ok: false,
       taken: staffed.taken,

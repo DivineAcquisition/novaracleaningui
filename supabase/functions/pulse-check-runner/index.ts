@@ -10,6 +10,10 @@
 //      SMS + email in the same run.
 //
 // Admin can force a new cycle via { force: true }.
+// Auth: service-role bearer, x-cron-secret (pg_cron), or admin/VA JWT.
+// verify_jwt is false so cron can call with the anon key; this gate is the
+// real lock. Never leave this function open — a POST would SMS every idle
+// contractor.
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
@@ -119,17 +123,47 @@ async function sendPulse(admin: SB, cleaner: Record<string, unknown>, link: stri
   return { emailed, smsSent };
 }
 
+async function authorize(req: Request, admin: SB): Promise<boolean> {
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
+  if (token && serviceKey && token === serviceKey) return true;
+
+  const cronHeader = (req.headers.get("x-cron-secret") || "").trim();
+  if (cronHeader) {
+    let expected = (Deno.env.get("CRON_SECRET") || "").trim();
+    try {
+      const { data } = await admin.from("app_secrets").select("value").eq("key", "CRON_SECRET").maybeSingle();
+      if (data?.value && typeof data.value === "string" && data.value.trim()) {
+        expected = data.value.trim();
+      }
+    } catch {
+      /* env fallback */
+    }
+    if (expected && cronHeader === expected) return true;
+  }
+
+  if (!token) return false;
+  const { data: u } = await admin.auth.getUser(token);
+  if (!u?.user?.id) return false;
+  const { data: roles } = await admin.from("user_roles").select("role").eq("user_id", u.user.id);
+  return (roles || []).some((r: { role: string }) => r.role === "admin" || r.role === "va");
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method !== "POST") return json({ error: "POST required" }, 405);
 
   const admin: SB = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
   );
 
+  if (!(await authorize(req, admin))) return json({ error: "Unauthorized" }, 401);
+
   try {
     const body = await req.json().catch(() => ({}));
     const force = Boolean(body?.force);
+    const dryRun = Boolean(body?.dryRun || body?.dry_run);
     const source = String(body?.source || "unknown");
 
     const { data: settingRow } = await admin
@@ -139,6 +173,30 @@ serve(async (req) => {
       .maybeSingle();
     const settings = parseSettings(settingRow?.value);
     const now = new Date();
+
+    if (dryRun) {
+      const { data: idleIds, error: idleErr } = await admin.rpc("pulse_check_idle_cleaner_ids", {
+        p_lookback_days: settings.interval_days,
+      });
+      if (idleErr) throw idleErr;
+      const { data: latest } = await admin
+        .from("pulse_check_cycles")
+        .select("id, started_at, qualifying_count, sent_count")
+        .order("started_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const idleCount = (idleIds || []).length;
+      return json({
+        ok: true,
+        dryRun: true,
+        enabled: settings.enabled,
+        settings,
+        idleCount,
+        cycleDue: cycleDue(latest?.started_at || null, settings.interval_days, now),
+        lastCycle: latest || null,
+        source,
+      });
+    }
 
     let followups = 0;
     let stale = 0;
