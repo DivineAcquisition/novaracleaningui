@@ -69,6 +69,8 @@ import ApplicantsPipeline from "@/components/admin/ApplicantsPipeline";
 import CleanerAccountability from "@/components/admin/CleanerAccountability";
 import AccountabilityWatchlist from "@/components/admin/AccountabilityWatchlist";
 import UnsignedAgreements from "@/components/admin/UnsignedAgreements";
+import PulseCheckQueue from "@/components/admin/PulseCheckQueue";
+import PulseCheckHistory from "@/components/admin/PulseCheckHistory";
 import { useAdminRole } from "@/hooks/use-admin-role";
 
 const REHIRE_BADGE: Record<string, { label: string; cls: string }> = {
@@ -472,6 +474,9 @@ export default function AdminCleaners() {
       {/* Accountability review queue: suspended / active strikes / repeat offenders. */}
       <AccountabilityWatchlist onSelectCleaner={(id) => setSelectedId(id)} />
 
+      {/* Recurring idle-contractor pulse check — status form + claimable jobs. */}
+      <PulseCheckQueue onSelectCleaner={(id) => setSelectedId(id)} />
+
       <Card className="border-slate-200">
         <CardContent className="p-3 sm:p-4">
           <div className="flex flex-col sm:flex-row gap-3">
@@ -735,8 +740,9 @@ function CleanerSheet({
                     actioning={actioning}
                   />
                 </TabsContent>
-                <TabsContent value="performance" className="pt-3">
+                <TabsContent value="performance" className="pt-3 space-y-4">
                   <PerformanceBlock cleaner={cleaner} onRefresh={onRefresh} />
+                  <PulseCheckHistory cleanerId={cleaner.id} />
                 </TabsContent>
                 <TabsContent value="accountability" className="pt-3">
                   <CleanerAccountability

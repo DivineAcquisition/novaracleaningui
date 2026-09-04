@@ -37,7 +37,8 @@
     "commercial:verify:sql": "bash scripts/migrations/verify-commercial-onboarding.sh",
     "commercial:verify:ui": "tsx scripts/commercial/verify-onboarding-ui.ts",
     "commercial-onboarding:verify": "tsx scripts/verify-commercial-onboarding-session.ts",
-    "zones:verify": "tsx scripts/verify-site-zones.ts"
+    "zones:verify": "tsx scripts/verify-site-zones.ts",
+    "pulse:verify": "tsx scripts/verify-pulse-check.ts"
   },
   "dependencies": {
     "@capacitor/android": "^7.4.4",
