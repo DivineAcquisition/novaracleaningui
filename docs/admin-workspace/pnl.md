@@ -15,6 +15,8 @@ admins"** and are sent back to the dashboard.
 It is the live money picture. The branded Google Sheet is a **mirror** of these numbers, not
 the source of truth. Supabase is.
 
+@screenshot pnl-overview
+
 ## What the tiles mean
 
 **Collected** is completed jobs in the selected month. The job's final charge is used when it
