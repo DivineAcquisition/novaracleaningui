@@ -742,7 +742,11 @@ function CleanerSheet({
                 </TabsContent>
                 <TabsContent value="performance" className="pt-3 space-y-4">
                   <PerformanceBlock cleaner={cleaner} onRefresh={onRefresh} />
-                  <PulseCheckHistory cleanerId={cleaner.id} />
+                  <PulseCheckHistory
+                    cleanerId={cleaner.id}
+                    cleanerName={fullName(cleaner)}
+                    cleanerStatus={cleaner.status}
+                  />
                 </TabsContent>
                 <TabsContent value="accountability" className="pt-3">
                   <CleanerAccountability

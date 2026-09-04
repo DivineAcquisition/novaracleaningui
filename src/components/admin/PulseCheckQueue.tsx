@@ -1,6 +1,6 @@
 "use client";
 
-import { RiAlarmWarningLine, RiLoader4Line, RiPlayLine, RiRefreshLine } from "@remixicon/react";
+import { RiAlarmWarningLine, RiLoader4Line, RiPlayLine, RiRefreshLine, RiSendPlaneLine } from "@remixicon/react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
-import { describeEdgeError } from "@/lib/edge-invoke";
 import {
   DEFAULT_PULSE_CHECK_SETTINGS,
   type PulseCheckSettings,
@@ -33,6 +32,8 @@ interface PulseRow {
   availability_updated: boolean;
   admin_reviewed_at: string | null;
   admin_note: string | null;
+  counts_toward_interval?: boolean | null;
+  cycle_source?: string | null;
 }
 
 function authHeaders(): Promise<HeadersInit> {
@@ -71,6 +72,7 @@ export default function PulseCheckQueue({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [settings, setSettings] = useState<PulseCheckSettings>(DEFAULT_PULSE_CHECK_SETTINGS);
+  const [idleCount, setIdleCount] = useState<number | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -86,6 +88,7 @@ export default function PulseCheckQueue({
       const res = await fetch("/api/admin/pulse-check", { headers, cache: "no-store" });
       const json = await res.json().catch(() => ({}));
       if (json?.settings) setSettings(json.settings);
+      if (typeof json?.idleCount === "number") setIdleCount(json.idleCount);
     } catch {
       /* settings are optional on first paint */
     }
@@ -117,14 +120,33 @@ export default function PulseCheckQueue({
   };
 
   const runNow = async () => {
+    const n = idleCount;
+    const people = n == null
+      ? "every currently idle contractor"
+      : n === 1
+        ? "1 currently idle contractor"
+        : `${n} currently idle contractors`;
+    const ok = window.confirm(
+      n === 0
+        ? `Nobody currently qualifies as idle. Running now still processes follow-ups and stale replies, and opens a new cycle (which resets the ${settings.interval_days}-day clock). Continue?`
+        : `This will SMS and email ${people} a pulse-check link. It starts a real cycle and resets the ${settings.interval_days}-day clock. Roster status will not change. Continue?`,
+    );
+    if (!ok) return;
     setBusy("run");
     try {
-      const { data, error } = await supabase.functions.invoke("pulse-check-runner", {
-        body: { force: true, source: "admin" },
+      const headers = await authHeaders();
+      const res = await fetch("/api/admin/pulse-check", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ action: "run_cycle" }),
       });
-      if (error) throw new Error(await describeEdgeError(error, data));
-      const d = (data || {}) as { error?: string; sent?: number; qualified?: number; skippedCycle?: boolean };
-      if (d.error) throw new Error(d.error);
+      const d = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        sent?: number;
+        qualified?: number;
+        skippedCycle?: boolean;
+      };
+      if (!res.ok) throw new Error(d.error || "Could not run pulse check");
       toast.success(
         d.skippedCycle
           ? "Follow-ups ran. A new cycle wasn't due yet."
@@ -133,6 +155,40 @@ export default function PulseCheckQueue({
       await load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not run pulse check");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const sendOne = async (cleanerId: string, name: string) => {
+    const ok = window.confirm(
+      `Send a pulse-check SMS and email to ${name || "this contractor"} now? This does not change their roster status or the ${settings.interval_days}-day schedule.`,
+    );
+    if (!ok) return;
+    setBusy(`send:${cleanerId}`);
+    try {
+      const headers = await authHeaders();
+      const res = await fetch("/api/admin/pulse-check", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ action: "send_one", cleanerId }),
+      });
+      const d = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        emailed?: boolean;
+        smsSent?: boolean;
+        reused?: boolean;
+      };
+      if (!res.ok) throw new Error(d.error || "Could not send pulse check");
+      const bits = [
+        d.emailed ? "email sent" : "email not sent",
+        d.smsSent ? "SMS sent" : "SMS not sent",
+        d.reused ? "existing link resent" : null,
+      ].filter(Boolean);
+      toast.success(`Pulse check: ${bits.join(" · ")}`);
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not send pulse check");
     } finally {
       setBusy(null);
     }
@@ -159,9 +215,25 @@ export default function PulseCheckQueue({
 
   if (loading) return null;
 
-  const latestCycleId = rows[0]?.cycle_id || null;
+  const intervalRows = rows.filter((r) => r.counts_toward_interval !== false);
+
+  const latestCycleId = intervalRows[0]?.cycle_id || null;
   const latest = latestCycleId ? rows.filter((r) => r.cycle_id === latestCycleId) : [];
   const review = latest.filter((r) => r.outcome === "needs_review" || r.outcome === "no_response");
+  const openManual = rows.filter(
+    (r) =>
+      r.counts_toward_interval === false &&
+      (r.outcome === "pending" ||
+        r.outcome === "needs_review" ||
+        (r.outcome === "no_response" && !r.admin_reviewed_at)),
+  );
+
+  const idleLabel =
+    idleCount == null
+      ? null
+      : idleCount === 1
+        ? "1 idle contractor right now"
+        : `${idleCount} idle contractors right now`;
 
   return (
     <Card className="border-sky-200 bg-sky-50/40">
@@ -174,9 +246,12 @@ export default function PulseCheckQueue({
               <span className="font-normal text-sky-800">
                 · {latest.length} in this cycle
                 {review.length ? ` · ${review.length} need a human look` : ""}
+                {idleLabel ? ` · ${idleLabel}` : ""}
               </span>
             ) : (
-              <span className="font-normal text-sky-800">· no cycle has run yet</span>
+              <span className="font-normal text-sky-800">
+                · no cycle has run yet{idleLabel ? ` · ${idleLabel}` : ""}
+              </span>
             )}
           </p>
           <div className="flex gap-1.5">
@@ -276,25 +351,101 @@ export default function PulseCheckQueue({
                     {answerLine(r.answers) || (r.opened_at ? "opened, not submitted" : r.followup_sent_at ? "follow-up sent" : "sent")}
                   </span>
                 </div>
-                {(r.outcome === "needs_review" || r.outcome === "no_response") && !r.admin_reviewed_at ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => void markReviewed(r.entry_id)}
-                    disabled={busy !== null}
-                  >
-                    Mark reviewed
-                  </Button>
-                ) : r.admin_reviewed_at ? (
-                  <span className="text-[11px] text-slate-400">reviewed</span>
-                ) : null}
+                <div className="flex items-center gap-1.5">
+                  {r.outcome === "pending" ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void sendOne(r.cleaner_id, r.cleaner_name || "this contractor")}
+                      disabled={busy !== null}
+                    >
+                      {busy === `send:${r.cleaner_id}` ? (
+                        <RiLoader4Line className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <>
+                          <RiSendPlaneLine className="mr-1 h-3.5 w-3.5" /> Resend
+                        </>
+                      )}
+                    </Button>
+                  ) : null}
+                  {(r.outcome === "needs_review" || r.outcome === "no_response") && !r.admin_reviewed_at ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void markReviewed(r.entry_id)}
+                      disabled={busy !== null}
+                    >
+                      Mark reviewed
+                    </Button>
+                  ) : r.admin_reviewed_at ? (
+                    <span className="text-[11px] text-slate-400">reviewed</span>
+                  ) : null}
+                </div>
               </div>
             ))}
           </div>
         )}
 
+        {openManual.length > 0 ? (
+          <div className="space-y-1.5">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-900/70">
+              One-off sends
+            </p>
+            {openManual.map((r) => (
+              <div
+                key={r.entry_id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-sky-200 bg-white px-3 py-2"
+              >
+                <div className="min-w-0 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => onSelectCleaner?.(r.cleaner_id)}
+                    className="font-medium text-slate-900 underline decoration-dotted"
+                  >
+                    {r.cleaner_name || "Unnamed contractor"}
+                  </button>
+                  <span className="ml-1.5">{outcomeBadge(r.outcome)}</span>
+                  <span className="ml-1.5 text-slate-500">
+                    {answerLine(r.answers) || (r.opened_at ? "opened, not submitted" : "manual send")}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {r.outcome === "pending" ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void sendOne(r.cleaner_id, r.cleaner_name || "this contractor")}
+                      disabled={busy !== null}
+                    >
+                      {busy === `send:${r.cleaner_id}` ? (
+                        <RiLoader4Line className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <>
+                          <RiSendPlaneLine className="mr-1 h-3.5 w-3.5" /> Resend
+                        </>
+                      )}
+                    </Button>
+                  ) : null}
+                  {(r.outcome === "needs_review" || r.outcome === "no_response") && !r.admin_reviewed_at ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void markReviewed(r.entry_id)}
+                      disabled={busy !== null}
+                    >
+                      Mark reviewed
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
         <p className="text-[11px] text-sky-900/80">
-          One follow-up in the same cycle, then silence surfaces here. Nothing auto-deactivates a contractor.
+          One follow-up in the same cycle, then silence surfaces here. Send a pulse check to one
+          contractor from their Performance tab without waiting for idle or moving the schedule.
+          Nothing auto-deactivates a contractor.
         </p>
       </CardContent>
     </Card>
