@@ -13,6 +13,7 @@ import {
   applicantRoleLabel,
   roleById,
 } from "@/lib/hiring/roles";
+import { formatRosterDate, isReapplyBlocked } from "@/lib/pulse-check/roster";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -83,6 +84,34 @@ export async function POST(req: Request): Promise<NextResponse> {
   const role = roleById(roleId);
   const fullName = `${firstName} ${lastName}`.trim();
   const supabase = getAdminSupabase();
+
+  const { data: priorByEmail } = await supabase
+    .from("cleaners")
+    .select("status, reapply_eligible_at, terminated_at")
+    .ilike("email", email)
+    .limit(5);
+  const { data: priorByPhone } = phone
+    ? await supabase
+        .from("cleaners")
+        .select("status, reapply_eligible_at, terminated_at")
+        .eq("phone", phone)
+        .limit(5)
+    : { data: [] as Array<{ status: string | null; reapply_eligible_at: string | null; terminated_at: string | null }> };
+  const prior = [...(priorByEmail || []), ...(priorByPhone || [])];
+  for (const row of prior) {
+    const lock = isReapplyBlocked(row);
+    if (lock.blocked) {
+      const until = formatRosterDate(lock.until);
+      return NextResponse.json(
+        {
+          error: until
+            ? `This contractor account was closed. You can apply again after ${until}.`
+            : "This contractor account was closed. You can apply again in 3 months.",
+        },
+        { status: 409 },
+      );
+    }
+  }
 
   // Dedupe by email (then phone) — re-apply updates the same person.
   const { data: byEmail } = await supabase

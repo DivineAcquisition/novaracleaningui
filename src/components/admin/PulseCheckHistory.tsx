@@ -19,7 +19,10 @@ interface HistoryRow {
   counts_toward_interval?: boolean | null;
 }
 
-function label(outcome: string) {
+function label(outcome: string, answers?: Record<string, unknown> | null) {
+  const roster = String(answers?.rosterAction || answers?.roster_action || "");
+  if (roster === "terminate") return "Terminated";
+  if (roster === "inactive") return "Set inactive";
   if (outcome === "completed") return "Completed";
   if (outcome === "needs_review") return "Needs review";
   if (outcome === "no_response") return "No response";
@@ -57,7 +60,7 @@ export default function PulseCheckHistory({
   const send = async () => {
     if (terminated) return;
     const ok = window.confirm(
-      `Send a pulse-check SMS and email to ${name} now? This does not change their roster status or the 14-day schedule.`,
+      `Send a pulse-check SMS and email to ${name} now? If they choose to leave or take a month away, that will update their roster status.`,
     );
     if (!ok) return;
     setBusy(true);
@@ -112,8 +115,8 @@ export default function PulseCheckHistory({
         </Button>
       </div>
       <p className="text-[11px] text-slate-500">
-        Sends the same status form plus claimable jobs. Does not wait for idle time and does not move the
-        recurring cycle.
+        Sends the same stay / pause / leave form plus claimable jobs. Does not wait for idle time and
+        does not move the recurring cycle. Leaving or a month away will update their roster.
       </p>
       {rows && rows.length > 0 ? (
         rows.map((r) => (
@@ -122,7 +125,7 @@ export default function PulseCheckHistory({
               {new Date(r.cycle_started_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
             </span>{" "}
             <Badge variant="outline" className="ml-1 text-[9px] py-0">
-              {label(r.outcome)}
+            {label(r.outcome, r.answers)}
             </Badge>
             {r.counts_toward_interval === false ? (
               <Badge variant="outline" className="ml-1 text-[9px] py-0">

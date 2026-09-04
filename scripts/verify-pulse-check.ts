@@ -2,7 +2,8 @@
 //
 //   • idle predicate (active + approved + available, ignoring declined/lost rows)
 //   • eligibility reuses zone/capacity scoring, then hard-applies days + cutoffs
-//   • form outcomes never write roster status or scores
+//   • stay / 1–2 week pause / leave + 1-month map onto roster actions
+//   • availability patches still never include roster or score fields
 //   • no-response after expiry, unless they claimed a job
 //   • taken-job copy is a message, not an error
 //   • schedule: cycle interval vs follow-up vs token TTL
@@ -21,12 +22,21 @@ import {
 import {
   availabilityPatch,
   claimTakenMessage,
+  EMPTY_PULSE_DRAFT,
   normalizePulseDraft,
   outcomeFromAnswers,
   PULSE_FORBIDDEN_CLEANER_FIELDS,
   pulseDraftComplete,
+  rosterActionFromDraft,
   staleOutcome,
 } from "../src/lib/pulse-check/answers";
+import { formatAvgWeeklyPay } from "../src/lib/pulse-check/earnings";
+import {
+  inactiveUntilFromDraft,
+  isReapplyBlocked,
+  PULSE_REAPPLY_DAYS,
+  reapplyEligibleAt,
+} from "../src/lib/pulse-check/roster";
 import {
   cycleIsDue,
   latestIntervalStartedAt,
@@ -158,47 +168,144 @@ check(
 );
 
 console.log("\nForm outcomes:");
+const stayAble = normalizePulseDraft({
+  status: "still_active",
+  ability: "able",
+  preferredWorkDays: ["Mon"],
+});
+check("still active + able is complete", pulseDraftComplete(stayAble), true);
+check("still active + able closes as completed", outcomeFromAnswers(stayAble), "completed");
+check("still active + able does not change roster", rosterActionFromDraft(stayAble), "none");
 check(
-  "still active + able closes as completed",
-  outcomeFromAnswers(
-    normalizePulseDraft({
-      status: "still_active",
-      ability: "able",
-      preferredWorkDays: ["Mon"],
-    }),
-  ),
-  "completed",
+  "step away without a duration is incomplete",
+  pulseDraftComplete(normalizePulseDraft({ status: "step_away" })),
+  false,
 );
 check(
-  "step away flags review without treating it as a roster change",
-  outcomeFromAnswers(normalizePulseDraft({ status: "step_away", ability: "able" })),
-  "needs_review",
+  "step away without a duration is not a roster write",
+  rosterActionFromDraft(normalizePulseDraft({ status: "step_away" })),
+  "none",
+);
+const weekAway = normalizePulseDraft({ status: "step_away", timeAway: "1_week" });
+check("1 week away is complete", pulseDraftComplete(weekAway), true);
+check("1 week away sets inactive", rosterActionFromDraft(weekAway), "inactive");
+check("1 week away closes as completed", outcomeFromAnswers(weekAway), "completed");
+check(
+  "2 weeks away sets inactive",
+  rosterActionFromDraft(normalizePulseDraft({ status: "step_away", timeAway: "2_weeks" })),
+  "inactive",
 );
 check(
-  "not sure flags review",
-  outcomeFromAnswers(normalizePulseDraft({ status: "not_sure", ability: "able" })),
-  "needs_review",
+  "1 month away without ack is incomplete",
+  pulseDraftComplete(normalizePulseDraft({ status: "step_away", timeAway: "1_month" })),
+  false,
+);
+const monthAway = normalizePulseDraft({
+  status: "step_away",
+  timeAway: "1_month",
+  acknowledged: true,
+});
+check("1 month away with ack is complete", pulseDraftComplete(monthAway), true);
+check("1 month away terminates", rosterActionFromDraft(monthAway), "terminate");
+check(
+  "leave without ack is incomplete",
+  pulseDraftComplete(normalizePulseDraft({ status: "leave" })),
+  false,
+);
+const leave = normalizePulseDraft({ status: "leave", acknowledged: true });
+check("leave with ack is complete", pulseDraftComplete(leave), true);
+check("leave terminates", rosterActionFromDraft(leave), "terminate");
+check("leave closes as completed", outcomeFromAnswers(leave), "completed");
+check(
+  "legacy not_sure is incomplete and flags review",
+  [
+    pulseDraftComplete(normalizePulseDraft({ status: "not_sure", ability: "able" })),
+    outcomeFromAnswers(normalizePulseDraft({ status: "not_sure", ability: "able" })),
+    rosterActionFromDraft(normalizePulseDraft({ status: "not_sure", ability: "able" })),
+  ],
+  [false, "needs_review", "none"],
 );
 check(
-  "blocked ability flags review",
-  outcomeFromAnswers(
-    normalizePulseDraft({ status: "still_active", ability: "blocked", abilityNote: "surgery" }),
-  ),
-  "needs_review",
+  "blocked ability flags review without a roster write",
+  [
+    outcomeFromAnswers(
+      normalizePulseDraft({ status: "still_active", ability: "blocked", abilityNote: "surgery" }),
+    ),
+    rosterActionFromDraft(
+      normalizePulseDraft({ status: "still_active", ability: "blocked", abilityNote: "surgery" }),
+    ),
+  ],
+  ["needs_review", "none"],
 );
 check(
   "blocked without a note is incomplete",
   pulseDraftComplete(normalizePulseDraft({ status: "still_active", ability: "blocked" })),
   false,
 );
+const availPatch = availabilityPatch(
+  normalizePulseDraft({ preferredWorkDays: ["Mon"], noWorkAfter: "3pm" }),
+  {},
+);
 check(
-  "availability patch never includes status / scores",
-  PULSE_FORBIDDEN_CLEANER_FIELDS.some((k) => k in availabilityPatch(
-    normalizePulseDraft({ preferredWorkDays: ["Mon"], noWorkAfter: "3pm" }),
-    {},
-  )),
+  "availability patch never includes status / scores / roster stamps",
+  PULSE_FORBIDDEN_CLEANER_FIELDS.some((k) => k in availPatch),
   false,
 );
+check("availability patch only writes days + constraints", Object.keys(availPatch).sort(), [
+  "constraints",
+  "preferred_work_days",
+]);
+
+console.log("\nRoster stamps:");
+const freeze = new Date("2026-09-04T14:00:00.000Z");
+check(
+  "1 week pause stamps inactive_until +7 days",
+  inactiveUntilFromDraft(weekAway, freeze),
+  "2026-09-11T14:00:00.000Z",
+);
+check(
+  "2 weeks pause stamps inactive_until +14 days",
+  inactiveUntilFromDraft(normalizePulseDraft({ status: "step_away", timeAway: "2_weeks" }), freeze),
+  "2026-09-18T14:00:00.000Z",
+);
+check("1 month away does not stamp inactive_until", inactiveUntilFromDraft(monthAway, freeze), null);
+check("stay does not stamp inactive_until", inactiveUntilFromDraft(stayAble, freeze), null);
+check("reapply lockout is 90 days", PULSE_REAPPLY_DAYS, 90);
+check("reapplyEligibleAt is +90 days", reapplyEligibleAt(freeze), "2026-12-03T14:00:00.000Z");
+check(
+  "future reapply_eligible_at blocks hiring",
+  isReapplyBlocked({ status: "terminated", reapply_eligible_at: "2026-12-03T14:00:00.000Z" }, freeze),
+  { blocked: true, until: "2026-12-03T14:00:00.000Z" },
+);
+check(
+  "terminated_at fallback blocks for 90 days when stamp is missing",
+  isReapplyBlocked(
+    { status: "terminated", terminated_at: "2026-09-01T14:00:00.000Z", reapply_eligible_at: null },
+    freeze,
+  ).blocked,
+  true,
+);
+check(
+  "active contractors are not reapply-blocked",
+  isReapplyBlocked({ status: "active", reapply_eligible_at: null }, freeze),
+  { blocked: false, until: null },
+);
+check(
+  "lockout lifts after the eligible date",
+  isReapplyBlocked({ status: "terminated", reapply_eligible_at: "2026-08-01T00:00:00.000Z" }, freeze),
+  { blocked: false, until: null },
+);
+check(
+  "earnings copy includes a weekly dollar amount",
+  formatAvgWeeklyPay(12500).includes("$125"),
+  true,
+);
+check(
+  "earnings copy has a fallback when we have no paid weeks",
+  formatAvgWeeklyPay(null).includes("paid per job"),
+  true,
+);
+check("empty draft is not a roster write", rosterActionFromDraft(EMPTY_PULSE_DRAFT), "none");
 check(
   "silence after expiry is no_response",
   staleOutcome({ submitted: false, claimedCount: 0 }),

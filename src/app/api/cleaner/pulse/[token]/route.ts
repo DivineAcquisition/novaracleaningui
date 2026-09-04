@@ -10,14 +10,18 @@ import {
   EMPTY_PULSE_DRAFT,
   normalizePulseDraft,
   outcomeFromAnswers,
+  pulseAnswersPayload,
   pulseDraftComplete,
+  rosterActionFromDraft,
   type PulseDraft,
 } from "@/lib/pulse-check/answers";
+import { loadAverageWeeklyContractorPay } from "@/lib/pulse-check/earnings";
 import {
   ensureJobForBooking,
   listEligiblePulseJobs,
   offerThenAccept,
 } from "@/lib/pulse-check/jobs";
+import { applyPulseRosterChange } from "@/lib/pulse-check/roster";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,7 +29,7 @@ export const dynamic = "force-dynamic";
 type Ctx = { params: Promise<{ token: string }> };
 
 const CLEANER_SELECT =
-  "id, first_name, last_name, email, status, preferred_work_days, constraints, home_lat, home_lng, home_zip, service_zip_codes, max_travel_miles, max_weekly_bookings, average_rating, total_ratings, workload_score, acceptance_rate, on_time_rate, approved, available_for_bookings";
+  "id, first_name, last_name, email, status, preferred_work_days, constraints, home_lat, home_lng, home_zip, service_zip_codes, max_travel_miles, max_weekly_bookings, average_rating, total_ratings, workload_score, acceptance_rate, on_time_rate, approved, available_for_bookings, inactive_until, reapply_eligible_at";
 
 async function resolveToken(token: string) {
   const supabase = getAdminSupabase();
@@ -119,7 +123,8 @@ export async function GET(_req: Request, ctx: Ctx): Promise<NextResponse> {
   if (!cleaner) {
     return NextResponse.json({ error: "This link isn't valid.", reason: "invalid" }, { status: 404 });
   }
-  if (String(cleaner.status) === "terminated") {
+  const alreadySubmitted = Boolean(entry.submitted_at);
+  if (String(cleaner.status) === "terminated" && !alreadySubmitted) {
     return NextResponse.json({ error: "This account is no longer active.", reason: "terminated" }, { status: 409 });
   }
 
@@ -127,48 +132,62 @@ export async function GET(_req: Request, ctx: Ctx): Promise<NextResponse> {
 
   const onFile = constraintsOf(cleaner);
   const draft = draftFrom(entry, cleaner);
-  const upcoming = await upcomingCount(supabase, String(cleaner.id));
+  const earnings = await loadAverageWeeklyContractorPay(supabase);
+  const upcoming = alreadySubmitted || String(cleaner.status) !== "active"
+    ? 0
+    : await upcomingCount(supabase, String(cleaner.id));
   let jobs: Awaited<ReturnType<typeof listEligiblePulseJobs>> = [];
-  try {
-    jobs = await listEligiblePulseJobs(supabase, {
-      id: String(cleaner.id),
-      home_lat: cleaner.home_lat as number | null,
-      home_lng: cleaner.home_lng as number | null,
-      home_zip: cleaner.home_zip as string | null,
-      service_zip_codes: cleaner.service_zip_codes as string[] | null,
-      preferred_work_days: (draft.preferredWorkDays.length
-        ? draft.preferredWorkDays
-        : onFile.preferredWorkDays) as string[],
-      max_travel_miles: cleaner.max_travel_miles as number | null,
-      max_weekly_bookings: cleaner.max_weekly_bookings as number | null,
-      average_rating: cleaner.average_rating as number | null,
-      total_ratings: cleaner.total_ratings as number | null,
-      workload_score: cleaner.workload_score as number | null,
-      acceptance_rate: cleaner.acceptance_rate as number | null,
-      on_time_rate: cleaner.on_time_rate as number | null,
-      upcoming_jobs_count: upcoming,
-      constraints: {
-        no_work_after: draft.noWorkAfter || onFile.noWorkAfter,
-        no_work_before: draft.noWorkBefore || onFile.noWorkBefore,
-      },
-    });
-  } catch (e) {
-    console.error("[pulse-check] jobs list failed", e instanceof Error ? e.message : e);
+  const showJobs = !alreadySubmitted && String(cleaner.status) === "active";
+  if (showJobs) {
+    try {
+      jobs = await listEligiblePulseJobs(supabase, {
+        id: String(cleaner.id),
+        home_lat: cleaner.home_lat as number | null,
+        home_lng: cleaner.home_lng as number | null,
+        home_zip: cleaner.home_zip as string | null,
+        service_zip_codes: cleaner.service_zip_codes as string[] | null,
+        preferred_work_days: (draft.preferredWorkDays.length
+          ? draft.preferredWorkDays
+          : onFile.preferredWorkDays) as string[],
+        max_travel_miles: cleaner.max_travel_miles as number | null,
+        max_weekly_bookings: cleaner.max_weekly_bookings as number | null,
+        average_rating: cleaner.average_rating as number | null,
+        total_ratings: cleaner.total_ratings as number | null,
+        workload_score: cleaner.workload_score as number | null,
+        acceptance_rate: cleaner.acceptance_rate as number | null,
+        on_time_rate: cleaner.on_time_rate as number | null,
+        upcoming_jobs_count: upcoming,
+        constraints: {
+          no_work_after: draft.noWorkAfter || onFile.noWorkAfter,
+          no_work_before: draft.noWorkBefore || onFile.noWorkBefore,
+        },
+      });
+    } catch (e) {
+      console.error("[pulse-check] jobs list failed", e instanceof Error ? e.message : e);
+    }
   }
 
   return NextResponse.json({
     ok: true,
-    submitted: Boolean(entry.submitted_at),
+    submitted: alreadySubmitted,
     outcome: entry.outcome,
     expiresAt: entry.token_expires_at,
     cleaner: {
       firstName: cleaner.first_name || "",
       name: `${cleaner.first_name || ""} ${cleaner.last_name || ""}`.trim(),
+      status: cleaner.status || null,
     },
     draft,
     onFile,
     claimedJobIds: entry.claimed_job_ids || [],
     jobs,
+    avgWeeklyPayCents: earnings.avgWeeklyPayCents,
+    rosterAction: alreadySubmitted
+      ? (entry.answers as { rosterAction?: string } | null)?.rosterAction || null
+      : null,
+    inactiveUntil: cleaner.inactive_until || (entry.answers as { inactiveUntil?: string } | null)?.inactiveUntil || null,
+    reapplyEligibleAt:
+      cleaner.reapply_eligible_at || (entry.answers as { reapplyEligibleAt?: string } | null)?.reapplyEligibleAt || null,
   });
 }
 
@@ -225,6 +244,13 @@ export async function POST(req: Request, ctx: Ctx): Promise<NextResponse> {
   }
 
   if (action === "claim") {
+    const status = String(cleaner.status || "").toLowerCase();
+    if (status === "terminated" || status === "inactive") {
+      return NextResponse.json(
+        { ok: false, message: "This account isn't taking new jobs right now." },
+        { status: 409 },
+      );
+    }
     const bookingId = String(body.bookingId || "").trim();
     if (!bookingId) {
       return NextResponse.json({ error: "Missing job." }, { status: 400 });
@@ -245,7 +271,7 @@ export async function POST(req: Request, ctx: Ctx): Promise<NextResponse> {
       booking: ensured.booking,
     });
 
-    if (!result.ok) {
+    if (result.ok === false) {
       const taken = Boolean(result.taken);
       return NextResponse.json(
         {
@@ -321,7 +347,8 @@ export async function POST(req: Request, ctx: Ctx): Promise<NextResponse> {
   }
 
   const onFile = constraintsOf(cleaner);
-  const changed = availabilityChanged(draft, onFile);
+  const staying = draft.status === "still_active";
+  const changed = staying && availabilityChanged(draft, onFile);
   if (changed) {
     const patch = availabilityPatch(
       draft,
@@ -333,16 +360,33 @@ export async function POST(req: Request, ctx: Ctx): Promise<NextResponse> {
     if (cErr) return NextResponse.json({ error: cErr.message }, { status: 400 });
   }
 
+  let roster: Awaited<ReturnType<typeof applyPulseRosterChange>> = {
+    action: "none",
+    inactiveUntil: null,
+    reapplyEligibleAt: null,
+    reassignedJobs: 0,
+  };
+  try {
+    roster = await applyPulseRosterChange({
+      supabase: supabase as any,
+      cleanerId: String(cleaner.id),
+      cleanerName: `${cleaner.first_name || ""} ${cleaner.last_name || ""}`.trim(),
+      draft,
+    });
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Could not update your roster status." },
+      { status: 400 },
+    );
+  }
+
   const outcome = outcomeFromAnswers(draft);
   const now = new Date().toISOString();
-  const answers = {
-    status: draft.status,
-    ability: draft.ability,
-    abilityNote: draft.abilityNote,
-    preferredWorkDays: draft.preferredWorkDays,
-    noWorkAfter: draft.noWorkAfter,
-    noWorkBefore: draft.noWorkBefore,
-  };
+  const answers = pulseAnswersPayload(draft, {
+    inactiveUntil: roster.inactiveUntil,
+    reapplyEligibleAt: roster.reapplyEligibleAt,
+    reassignedJobs: roster.reassignedJobs,
+  });
   const { error: upErr } = await (supabase.from as any)("pulse_check_entries")
     .update({
       draft,
@@ -362,7 +406,9 @@ export async function POST(req: Request, ctx: Ctx): Promise<NextResponse> {
     source: "pulse-check",
     summary:
       `${cleaner.first_name || "Contractor"} pulse check: ${draft.status}` +
+      (draft.timeAway ? ` · ${draft.timeAway}` : "") +
       (draft.ability === "blocked" ? " (not able to work)" : "") +
+      (roster.action !== "none" ? ` · roster ${roster.action}` : "") +
       (claimedCount ? ` · claimed ${claimedCount} job(s)` : "") +
       (outcome === "needs_review" ? " — needs review" : ""),
     data: {
@@ -372,6 +418,7 @@ export async function POST(req: Request, ctx: Ctx): Promise<NextResponse> {
       answers,
       claimed_job_count: claimedCount,
       availability_updated: changed,
+      roster_action: roster.action,
     },
   }).then(() => undefined, () => undefined);
 
@@ -379,6 +426,9 @@ export async function POST(req: Request, ctx: Ctx): Promise<NextResponse> {
     ok: true,
     submitted: true,
     outcome,
+    rosterAction: roster.action,
+    inactiveUntil: roster.inactiveUntil,
+    reapplyEligibleAt: roster.reapplyEligibleAt,
     availabilityUpdated: changed,
     claimedJobCount: claimedCount,
   });

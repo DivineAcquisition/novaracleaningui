@@ -43,7 +43,10 @@ function authHeaders(): Promise<HeadersInit> {
   }));
 }
 
-function outcomeBadge(outcome: string) {
+function outcomeBadge(outcome: string, answers?: Record<string, unknown> | null) {
+  const roster = String(answers?.rosterAction || answers?.roster_action || "");
+  if (roster === "terminate") return <Badge variant="destructive" className="text-[10px]">terminated</Badge>;
+  if (roster === "inactive") return <Badge className="bg-amber-100 text-amber-900 text-[10px]">inactive</Badge>;
   if (outcome === "completed") return <Badge className="bg-emerald-100 text-emerald-800 text-[10px]">completed</Badge>;
   if (outcome === "needs_review") return <Badge variant="destructive" className="text-[10px]">needs review</Badge>;
   if (outcome === "no_response") return <Badge variant="outline" className="text-[10px]">no response</Badge>;
@@ -54,9 +57,13 @@ function answerLine(answers: Record<string, unknown> | null): string {
   if (!answers) return "";
   const status = String(answers.status || "");
   const ability = String(answers.ability || "");
+  const timeAway = String(answers.timeAway || answers.time_away || "");
+  const roster = String(answers.rosterAction || answers.roster_action || "");
   const note = String(answers.abilityNote || answers.ability_note || "").trim();
   const bits = [
-    status === "still_active" ? "still active" : status === "step_away" ? "stepping away" : status === "not_sure" ? "wants to talk" : "",
+    status === "still_active" ? "staying on" : status === "step_away" ? "needs time away" : status === "leave" ? "does not want to continue" : status === "not_sure" ? "wanted to talk" : "",
+    timeAway === "1_week" ? "1 week" : timeAway === "2_weeks" ? "2 weeks" : timeAway === "1_month" ? "1 month" : "",
+    roster === "inactive" ? "set inactive" : roster === "terminate" ? "terminated" : "",
     ability === "blocked" ? "not able to work" : ability === "able" ? "able to work" : "",
     note ? `“${note.slice(0, 80)}”` : "",
   ].filter(Boolean);
@@ -129,7 +136,7 @@ export default function PulseCheckQueue({
     const ok = window.confirm(
       n === 0
         ? `Nobody currently qualifies as idle. Running now still processes follow-ups and stale replies, and opens a new cycle (which resets the ${settings.interval_days}-day clock). Continue?`
-        : `This will SMS and email ${people} a pulse-check link. It starts a real cycle and resets the ${settings.interval_days}-day clock. Roster status will not change. Continue?`,
+        : `This will SMS and email ${people} a pulse-check link. It starts a real cycle and resets the ${settings.interval_days}-day clock. Continue?`,
     );
     if (!ok) return;
     setBusy("run");
@@ -162,7 +169,7 @@ export default function PulseCheckQueue({
 
   const sendOne = async (cleanerId: string, name: string) => {
     const ok = window.confirm(
-      `Send a pulse-check SMS and email to ${name || "this contractor"} now? This does not change their roster status or the ${settings.interval_days}-day schedule.`,
+      `Send a pulse-check SMS and email to ${name || "this contractor"} now? This does not move the ${settings.interval_days}-day schedule. Their answers can update roster status.`,
     );
     if (!ok) return;
     setBusy(`send:${cleanerId}`);
@@ -318,7 +325,7 @@ export default function PulseCheckQueue({
         {latest.length === 0 ? (
           <p className="text-xs text-sky-900/80">
             Every {settings.interval_days} days, active contractors with zero assignments in that window get a
-            tokenized status form plus jobs they can claim. Roster status never changes automatically.
+            tokenized status form plus jobs they can claim. Stay on / short pause / leave can update roster status.
           </p>
         ) : (
           <div className="space-y-1.5">
@@ -341,7 +348,7 @@ export default function PulseCheckQueue({
                   >
                     {r.cleaner_name || "Unnamed contractor"}
                   </button>
-                  <span className="ml-1.5">{outcomeBadge(r.outcome)}</span>
+                  <span className="ml-1.5">{outcomeBadge(r.outcome, r.answers)}</span>
                   {r.claimed_job_count > 0 ? (
                     <Badge className="ml-1.5 bg-emerald-100 text-emerald-800 text-[10px]">
                       claimed {r.claimed_job_count}
@@ -404,7 +411,7 @@ export default function PulseCheckQueue({
                   >
                     {r.cleaner_name || "Unnamed contractor"}
                   </button>
-                  <span className="ml-1.5">{outcomeBadge(r.outcome)}</span>
+                  <span className="ml-1.5">{outcomeBadge(r.outcome, r.answers)}</span>
                   <span className="ml-1.5 text-slate-500">
                     {answerLine(r.answers) || (r.opened_at ? "opened, not submitted" : "manual send")}
                   </span>
@@ -443,9 +450,9 @@ export default function PulseCheckQueue({
         ) : null}
 
         <p className="text-[11px] text-sky-900/80">
-          One follow-up in the same cycle, then silence surfaces here. Send a pulse check to one
-          contractor from their Performance tab without waiting for idle or moving the schedule.
-          Nothing auto-deactivates a contractor.
+          One follow-up in the same cycle, then silence surfaces here. A yes keeps them on the roster.
+          A 1- or 2-week pause sets them inactive. Leaving, or asking for a month away, terminates with
+          a 3-month reapply lockout.
         </p>
       </CardContent>
     </Card>

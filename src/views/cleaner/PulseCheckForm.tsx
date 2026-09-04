@@ -20,21 +20,29 @@ import {
   PULSE_ABILITY_OPTIONS,
   PULSE_DAYS,
   PULSE_STATUS_OPTIONS,
+  PULSE_TIME_AWAY_OPTIONS,
   pulseDraftComplete,
+  rosterActionFromDraft,
   type PulseDraft,
 } from "@/lib/pulse-check/answers";
+import { formatAvgWeeklyPay } from "@/lib/pulse-check/earnings";
 import type { PulseJobCard } from "@/lib/pulse-check/jobs";
+import { formatRosterDate } from "@/lib/pulse-check/roster";
 
 type Payload = {
   ok: true;
   submitted: boolean;
   outcome: string;
   expiresAt: string | null;
-  cleaner: { firstName: string; name: string };
+  cleaner: { firstName: string; name: string; status?: string | null };
   draft: PulseDraft;
   onFile: { preferredWorkDays: string[]; noWorkAfter: string; noWorkBefore: string };
   claimedJobIds: string[];
   jobs: PulseJobCard[];
+  avgWeeklyPayCents?: number | null;
+  rosterAction?: string | null;
+  inactiveUntil?: string | null;
+  reapplyEligibleAt?: string | null;
 };
 
 type LoadState =
@@ -44,6 +52,42 @@ type LoadState =
 
 function dollars(cents: number): string {
   return (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
+}
+
+function doneCopy(args: {
+  outcome: string | null;
+  rosterAction: string | null;
+  inactiveUntil: string | null;
+  reapplyEligibleAt: string | null;
+}): { title: string; body: string } {
+  if (args.rosterAction === "terminate") {
+    const until = formatRosterDate(args.reapplyEligibleAt);
+    return {
+      title: "Your contractor account is closed",
+      body: until
+        ? `You chose to leave the active roster. Your Novara contractor account is terminated as of today. You can apply again after ${until}.`
+        : "You chose to leave the active roster. Your Novara contractor account is terminated as of today. You can apply again in 3 months.",
+    };
+  }
+  if (args.rosterAction === "inactive") {
+    const until = formatRosterDate(args.inactiveUntil);
+    return {
+      title: "You're on pause",
+      body: until
+        ? `We've set you inactive until ${until}. You won't be offered new jobs during that window. The office can turn you back on when you're ready.`
+        : "We've set you inactive. You won't be offered new jobs until the office reactivates you.",
+    };
+  }
+  if (args.outcome === "needs_review") {
+    return {
+      title: "Thanks — we'll be in touch",
+      body: "Someone from the office will follow up. Your roster status was not changed from this answer.",
+    };
+  }
+  return {
+    title: "Great — you're all set",
+    body: "You're still on the Novara roster. If you claimed a job below, it's on your schedule.",
+  };
 }
 
 export default function PulseCheckForm() {
@@ -57,6 +101,9 @@ export default function PulseCheckForm() {
   const [claimingId, setClaimingId] = useState<string | null>(null);
   const [claimNotice, setClaimNotice] = useState<string | null>(null);
   const [submittedOutcome, setSubmittedOutcome] = useState<string | null>(null);
+  const [submittedRoster, setSubmittedRoster] = useState<string | null>(null);
+  const [submittedInactiveUntil, setSubmittedInactiveUntil] = useState<string | null>(null);
+  const [submittedReapply, setSubmittedReapply] = useState<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
@@ -74,7 +121,12 @@ export default function PulseCheckForm() {
       setState({ kind: "ready", data });
       setDraft(data.draft);
       setJobs(data.jobs || []);
-      if (data.submitted) setSubmittedOutcome(data.outcome);
+      if (data.submitted) {
+        setSubmittedOutcome(data.outcome);
+        setSubmittedRoster(data.rosterAction || null);
+        setSubmittedInactiveUntil(data.inactiveUntil || null);
+        setSubmittedReapply(data.reapplyEligibleAt || null);
+      }
     } catch (e) {
       setState({ kind: "blocked", message: e instanceof Error ? e.message : "This link isn't valid." });
     }
@@ -107,6 +159,14 @@ export default function PulseCheckForm() {
   const updateDraft = (patch: Partial<PulseDraft>) => {
     setDraft((prev) => {
       const next = { ...prev, ...patch };
+      if (patch.status && patch.status !== prev.status) {
+        next.acknowledged = false;
+        if (patch.status !== "step_away") next.timeAway = "";
+        if (patch.status !== "still_active") {
+          next.ability = "";
+          next.abilityNote = "";
+        }
+      }
       if (saveTimer.current) clearTimeout(saveTimer.current);
       saveTimer.current = setTimeout(() => void persist(next), 400);
       return next;
@@ -125,6 +185,12 @@ export default function PulseCheckForm() {
       const json = await res.json().catch(() => ({}));
       if (!res.ok || json?.ok === false) throw new Error(json?.error || "Could not submit.");
       setSubmittedOutcome(String(json.outcome || "completed"));
+      setSubmittedRoster(json.rosterAction || rosterActionFromDraft(draft));
+      setSubmittedInactiveUntil(json.inactiveUntil || null);
+      setSubmittedReapply(json.reapplyEligibleAt || null);
+      if (json.rosterAction === "terminate" || json.rosterAction === "inactive") {
+        setJobs([]);
+      }
     } catch (e) {
       setClaimNotice(e instanceof Error ? e.message : "Could not submit.");
     } finally {
@@ -182,33 +248,44 @@ export default function PulseCheckForm() {
 
   const first = state.data.cleaner.firstName || "there";
   const done = Boolean(submittedOutcome);
+  const staying = draft.status === "still_active";
+  const pausing = draft.status === "step_away";
+  const leaving = draft.status === "leave";
+  const monthAway = pausing && draft.timeAway === "1_month";
+  const terminatePath = leaving || monthAway;
+  const showJobs = staying && !done && jobs.length > 0;
+  const earningsLine = formatAvgWeeklyPay(state.data.avgWeeklyPayCents ?? null);
+  const finished = doneCopy({
+    outcome: submittedOutcome,
+    rosterAction: submittedRoster,
+    inactiveUntil: submittedInactiveUntil,
+    reapplyEligibleAt: submittedReapply,
+  });
+
+  let submitLabel = "Submit";
+  if (leaving || monthAway) submitLabel = "I understand — close my account";
+  else if (pausing) submitLabel = "Set me inactive";
 
   return (
     <TokenPageShell
       eyebrow="Pulse check"
       title={`Hi ${first}`}
-      subtitle="A quick status check — and any jobs you can take right now."
+      subtitle="Are you still willing to be a Novara contractor? Your answer updates the roster."
     >
       {done ? (
         <TokenPanel>
           <p className="flex items-center gap-2 text-base font-semibold text-slate-900">
             <RiCheckLine className="h-5 w-5 text-emerald-600" />
-            {submittedOutcome === "needs_review"
-              ? "Thanks — we'll be in touch"
-              : "You're all set"}
+            {finished.title}
           </p>
-          <p className="mt-2 text-sm text-slate-600">
-            {submittedOutcome === "needs_review"
-              ? "Someone from the office will follow up. Nothing on your roster changes automatically."
-              : "We've got your status. If you claimed a job below, it's on your schedule."}
-          </p>
+          <p className="mt-2 text-sm text-slate-600">{finished.body}</p>
         </TokenPanel>
       ) : (
         <TokenPanel>
           <div className="space-y-6">
             <fieldset className="space-y-2">
               <legend className="text-sm font-semibold text-slate-900">
-                Are you still active and interested in taking jobs with NovaraCleaning?
+                Are you still willing to be a contractor for Novara Cleaning?
               </legend>
               {PULSE_STATUS_OPTIONS.map((opt) => (
                 <label
@@ -235,93 +312,194 @@ export default function PulseCheckForm() {
               ))}
             </fieldset>
 
-            <fieldset className="space-y-2">
-              <legend className="text-sm font-semibold text-slate-900">
-                Is there anything currently preventing you from taking jobs?
-              </legend>
-              {PULSE_ABILITY_OPTIONS.map((opt) => (
-                <label
-                  key={opt.value}
-                  className={cn(
-                    "flex cursor-pointer items-start gap-3 rounded-xl border px-3 py-3 text-sm",
-                    draft.ability === opt.value
-                      ? "border-primary bg-primary/[0.04]"
-                      : "border-slate-200 bg-white",
-                  )}
-                >
-                  <input
-                    type="radio"
-                    name="ability"
-                    className="mt-1"
-                    checked={draft.ability === opt.value}
-                    onChange={() => updateDraft({ ability: opt.value })}
-                  />
-                  <span className="font-medium text-slate-900">{opt.label}</span>
-                </label>
-              ))}
-              {draft.ability === "blocked" ? (
-                <Textarea
-                  value={draft.abilityNote}
-                  onChange={(e) => updateDraft({ abilityNote: e.target.value })}
-                  placeholder="Brief note — what's in the way?"
-                  className="mt-1"
-                  rows={3}
-                />
-              ) : null}
-            </fieldset>
+            {staying ? (
+              <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
+                Great — you stay on the roster and can keep taking jobs.
+              </p>
+            ) : null}
 
-            <fieldset className="space-y-2">
-              <legend className="text-sm font-semibold text-slate-900">
-                What's your current availability?
-              </legend>
-              <p className="text-xs text-slate-500">Pre-filled from what's on file. Confirm or correct it.</p>
-              <div className="flex flex-wrap gap-1.5">
-                {PULSE_DAYS.map((d) => {
-                  const on = draft.preferredWorkDays.includes(d.value);
-                  return (
-                    <button
-                      key={d.value}
-                      type="button"
-                      onClick={() =>
-                        updateDraft({
-                          preferredWorkDays: on
-                            ? draft.preferredWorkDays.filter((x) => x !== d.value)
-                            : [...draft.preferredWorkDays, d.value],
-                        })
-                      }
+            {pausing ? (
+              <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3">
+                <p className="text-sm text-amber-950">
+                  We keep the Novara roster for contractors who are <strong>active and reliable</strong> —
+                  customers need a crew that can actually take jobs. A short pause is OK: we&apos;ll set
+                  you inactive so you don&apos;t get new offers. If you need a full month away, we close
+                  the contractor account.
+                </p>
+                <fieldset className="space-y-2">
+                  <legend className="text-sm font-semibold text-slate-900">How long do you need away?</legend>
+                  {PULSE_TIME_AWAY_OPTIONS.map((opt) => (
+                    <label
+                      key={opt.value}
                       className={cn(
-                        "rounded-full border px-3 py-1.5 text-xs font-semibold",
-                        on
-                          ? "border-primary bg-primary text-white"
-                          : "border-slate-200 bg-white text-slate-700",
+                        "flex cursor-pointer items-start gap-3 rounded-xl border px-3 py-3 text-sm",
+                        draft.timeAway === opt.value
+                          ? "border-amber-400 bg-white"
+                          : "border-amber-200 bg-white",
                       )}
                     >
-                      {d.label}
-                    </button>
-                  );
-                })}
+                      <input
+                        type="radio"
+                        name="timeAway"
+                        className="mt-1"
+                        checked={draft.timeAway === opt.value}
+                        onChange={() => updateDraft({ timeAway: opt.value, acknowledged: false })}
+                      />
+                      <span>
+                        <span className="font-medium text-slate-900">{opt.label}</span>
+                        <span className="mt-0.5 block text-xs text-slate-500">
+                          {opt.value === "1_month"
+                            ? "This will terminate your contractor account"
+                            : `We'll set you inactive for ${opt.label}`}
+                        </span>
+                      </span>
+                    </label>
+                  ))}
+                </fieldset>
+                {draft.timeAway === "1_week" || draft.timeAway === "2_weeks" ? (
+                  <p className="text-xs text-amber-900">
+                    Submitting sets you <strong>inactive</strong> for {draft.timeAway === "1_week" ? "1 week" : "2 weeks"}.
+                    You won&apos;t be offered new jobs until the office turns you back on.
+                  </p>
+                ) : null}
+                {monthAway ? (
+                  <>
+                    <p className="text-sm text-amber-950">{earningsLine}</p>
+                    <p className="text-sm text-amber-950">
+                      A full month away <strong>terminates</strong> your contractor account today. You
+                      cannot reapply for 3 months.
+                    </p>
+                    <label className="flex cursor-pointer items-start gap-2 text-sm text-amber-950">
+                      <input
+                        type="checkbox"
+                        className="mt-1"
+                        checked={draft.acknowledged}
+                        onChange={(e) => updateDraft({ acknowledged: e.target.checked })}
+                      />
+                      <span>
+                        I understand a month away <strong>terminates</strong> my Novara contractor account
+                        because we need people who can stay active, and I cannot reapply for 3 months.
+                      </span>
+                    </label>
+                  </>
+                ) : null}
               </div>
-              <div className="grid grid-cols-2 gap-2 pt-1">
-                <label className="text-xs text-slate-600">
-                  No work before
+            ) : null}
+
+            {leaving ? (
+              <div className="space-y-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-3">
+                <p className="text-sm font-semibold text-rose-950">Before you go</p>
+                <p className="text-sm text-rose-950">{earningsLine}</p>
+                <p className="text-sm text-rose-950">
+                  If you continue, your contractor account is <strong>terminated today</strong>. That
+                  means no new jobs, and you <strong>cannot reapply for 3 months</strong>.
+                </p>
+                <label className="flex cursor-pointer items-start gap-2 text-sm text-rose-950">
                   <input
-                    value={draft.noWorkBefore}
-                    onChange={(e) => updateDraft({ noWorkBefore: e.target.value })}
-                    placeholder="e.g. 9am"
-                    className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                    type="checkbox"
+                    className="mt-1"
+                    checked={draft.acknowledged}
+                    onChange={(e) => updateDraft({ acknowledged: e.target.checked })}
                   />
-                </label>
-                <label className="text-xs text-slate-600">
-                  No work after
-                  <input
-                    value={draft.noWorkAfter}
-                    onChange={(e) => updateDraft({ noWorkAfter: e.target.value })}
-                    placeholder="e.g. 3pm"
-                    className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                  />
+                  <span>
+                    I understand this will terminate my Novara contractor account, and I cannot reapply
+                    for 3 months.
+                  </span>
                 </label>
               </div>
-            </fieldset>
+            ) : null}
+
+            {staying ? (
+              <>
+                <fieldset className="space-y-2">
+                  <legend className="text-sm font-semibold text-slate-900">
+                    Is there anything currently preventing you from taking jobs?
+                  </legend>
+                  {PULSE_ABILITY_OPTIONS.map((opt) => (
+                    <label
+                      key={opt.value}
+                      className={cn(
+                        "flex cursor-pointer items-start gap-3 rounded-xl border px-3 py-3 text-sm",
+                        draft.ability === opt.value
+                          ? "border-primary bg-primary/[0.04]"
+                          : "border-slate-200 bg-white",
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name="ability"
+                        className="mt-1"
+                        checked={draft.ability === opt.value}
+                        onChange={() => updateDraft({ ability: opt.value })}
+                      />
+                      <span className="font-medium text-slate-900">{opt.label}</span>
+                    </label>
+                  ))}
+                  {draft.ability === "blocked" ? (
+                    <Textarea
+                      value={draft.abilityNote}
+                      onChange={(e) => updateDraft({ abilityNote: e.target.value })}
+                      placeholder="Brief note — what's in the way?"
+                      className="mt-1"
+                      rows={3}
+                    />
+                  ) : null}
+                </fieldset>
+
+                <fieldset className="space-y-2">
+                  <legend className="text-sm font-semibold text-slate-900">
+                    What&apos;s your current availability?
+                  </legend>
+                  <p className="text-xs text-slate-500">Pre-filled from what&apos;s on file. Confirm or correct it.</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {PULSE_DAYS.map((d) => {
+                      const on = draft.preferredWorkDays.includes(d.value);
+                      return (
+                        <button
+                          key={d.value}
+                          type="button"
+                          onClick={() =>
+                            updateDraft({
+                              preferredWorkDays: on
+                                ? draft.preferredWorkDays.filter((x) => x !== d.value)
+                                : [...draft.preferredWorkDays, d.value],
+                            })
+                          }
+                          className={cn(
+                            "rounded-full border px-3 py-1.5 text-xs font-semibold",
+                            on
+                              ? "border-primary bg-primary text-white"
+                              : "border-slate-200 bg-white text-slate-700",
+                          )}
+                        >
+                          {d.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <label className="text-xs text-slate-600">
+                      No work before
+                      <input
+                        value={draft.noWorkBefore}
+                        onChange={(e) => updateDraft({ noWorkBefore: e.target.value })}
+                        placeholder="e.g. 9am"
+                        className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                      />
+                    </label>
+                    <label className="text-xs text-slate-600">
+                      No work after
+                      <input
+                        value={draft.noWorkAfter}
+                        onChange={(e) => updateDraft({ noWorkAfter: e.target.value })}
+                        placeholder="e.g. 3pm"
+                        className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                      />
+                    </label>
+                  </div>
+                </fieldset>
+              </>
+            ) : null}
 
             <div className="flex items-center justify-between gap-3">
               <p className="text-[11px] text-slate-400">
@@ -337,9 +515,9 @@ export default function PulseCheckForm() {
                 type="button"
                 onClick={() => void submit()}
                 disabled={!pulseDraftComplete(draft) || submitting}
-                className="min-w-[140px]"
+                className={cn("min-w-[140px]", terminatePath && "bg-rose-700 hover:bg-rose-800")}
               >
-                {submitting ? <RiLoader4Line className="h-4 w-4 animate-spin" /> : "Submit"}
+                {submitting ? <RiLoader4Line className="h-4 w-4 animate-spin" /> : submitLabel}
               </Button>
             </div>
           </div>
@@ -352,7 +530,7 @@ export default function PulseCheckForm() {
         </div>
       ) : null}
 
-      {jobs.length > 0 ? (
+      {showJobs ? (
         <div className="space-y-3">
           <h2 className="text-center text-sm font-semibold text-slate-900">Jobs you can take</h2>
           {jobs.map((job) => (
