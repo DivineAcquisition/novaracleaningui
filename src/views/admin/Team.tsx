@@ -18,6 +18,7 @@ import {
 } from "@remixicon/react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { edgeResult } from "@/lib/edge-invoke";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -531,8 +532,8 @@ function VaOnboardingQueue() {
           offerNote: prefill ? undefined : offerNote.trim() || undefined,
         },
       });
-      if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).error);
+      const outcome = await edgeResult(error, data);
+      if (!outcome.ok) throw new Error(outcome.error || "Could not send the offer");
       const d = data as { offerEmailSent?: boolean; expiresAt?: string; onboardingId?: string };
       // Stamp the chosen agreement/pay type on the onboarding row so the
       // wizard routes the signature to the matching DocuSeal template
@@ -577,8 +578,8 @@ function VaOnboardingQueue() {
       const { data, error } = await supabase.functions.invoke("admin-va-provision", {
         body: { action, onboardingId: row.id, reason },
       });
-      if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).error);
+      const outcome = await edgeResult(error, data);
+      if (!outcome.ok) throw new Error(outcome.error || "Action failed");
       if (action === "approve") {
         const d = data as { ghlUserCreated?: boolean; ghlError?: string | null; workspaceInviteSent?: boolean; vaEmailSent?: boolean };
         toast.success(
@@ -646,6 +647,18 @@ function VaOnboardingQueue() {
                 disabled={working !== null}
                 onClick={() => sendOffer({ email: r.email, first: r.first_name || "", last: r.last_name || "", role: r.va_role, payType: r.pay_type || "base" })}>
                 {working === `offer-${r.email}` ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin" /> : "Resend offer link"}
+              </Button>
+            )}
+            {(r.status === "offboarded" || r.status === "rejected") && (
+              <Button size="sm" variant="outline" className="h-8 text-xs"
+                disabled={working !== null}
+                onClick={() => {
+                  if (!confirm(
+                    `Send a new offer to ${name}?\n\nThis reopens onboarding. They will need to sign the agreement again before you can approve access.`,
+                  )) return;
+                  void sendOffer({ email: r.email, first: r.first_name || "", last: r.last_name || "", role: r.va_role, payType: r.pay_type || "base" });
+                }}>
+                {working === `offer-${r.email}` ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin" /> : "Send new offer"}
               </Button>
             )}
             {r.status === "submitted" && (

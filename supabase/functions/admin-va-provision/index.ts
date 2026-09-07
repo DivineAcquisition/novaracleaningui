@@ -202,10 +202,16 @@ serve(async (req) => {
       const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
 
       const { data: existing } = await admin.from("va_onboarding").select("id, status").ilike("email", email).maybeSingle();
-      if (existing && ["approved", "offboarded"].includes(String(existing.status))) {
-        return json({ error: `This email already has a ${existing.status} record.` }, 409);
+      const existingStatus = existing ? String(existing.status) : "";
+      // Active VAs already have access — don't mint a second offer. Offboarded
+      // / rejected rows are a rehire: reopen onboarding so they sign again.
+      if (existingStatus === "approved") {
+        return json({
+          error: "This person is already an active VA. Offboard them first if you need to send a new offer.",
+        }, 409);
       }
-      const stamp = {
+      const rehire = existingStatus === "offboarded" || existingStatus === "rejected";
+      const stamp: Row = {
         first_name: firstName,
         last_name: lastName,
         va_role: vaRole,
@@ -216,10 +222,40 @@ serve(async (req) => {
         invited_by: callerId,
         updated_at: new Date().toISOString(),
       };
+      if (rehire) {
+        Object.assign(stamp, {
+          status: "invited",
+          agreement_signed_at: null,
+          agreement_submission_id: null,
+          submitted_at: null,
+          approved_at: null,
+          approved_by: null,
+          offboarded_at: null,
+          offboarded_by: null,
+          rejected_reason: null,
+          provisioned_at: null,
+          ghl_user_id: null,
+          portal_user_id: null,
+        });
+      }
       let rowId: string;
       if (existing) {
-        await admin.from("va_onboarding").update(stamp).eq("id", existing.id);
+        const { error: updErr } = await admin.from("va_onboarding").update(stamp).eq("id", existing.id);
+        if (updErr) throw updErr;
         rowId = existing.id;
+        if (existingStatus === "offboarded") {
+          const authUser = await findAuthUserByEmail(admin, email);
+          if (authUser?.id) {
+            try {
+              await admin.auth.admin.updateUserById(authUser.id, { ban_duration: "none" });
+            } catch (e) {
+              console.warn(
+                "[admin-va-provision] could not lift auth ban on rehire",
+                e instanceof Error ? e.message : String(e),
+              );
+            }
+          }
+        }
       } else {
         const { data: created, error } = await admin.from("va_onboarding")
           .insert({ email, status: "invited", ...stamp })
@@ -234,7 +270,7 @@ serve(async (req) => {
       };
       let offerEmailSent = false;
       try {
-        const inviteResendKey = Deno.env.get("RESEND_API_KEY");
+        const inviteResendKey = Deno.env.get("RESEND_API_KEY") || await secret(admin, "RESEND_API_KEY");
         if (inviteResendKey) {
           const resend = new Resend(inviteResendKey);
           await resend.emails.send({
