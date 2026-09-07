@@ -13,8 +13,12 @@ const extra = (Constants.expoConfig?.extra ?? {}) as {
 };
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? extra.supabaseUrl;
+// `eas integrations:supabase:connect` writes EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY.
+// Keep the anon-key name too so existing .env / EAS profiles keep working.
 const supabaseAnonKey =
-  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? extra.supabaseAnonKey;
+  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ??
+  process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
+  extra.supabaseAnonKey;
 
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error(
