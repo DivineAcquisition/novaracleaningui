@@ -30,7 +30,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "eas-build-pre-install": "node ../scripts/eas-prepare-contractor-app.mjs"
+    "eas-build-pre-install": "node ../scripts/eas-prepare-contractor-app.mjs",
+    "eas:supabase:connect": "npx eas-cli@latest integrations:supabase:connect --link sxdraeptzuamsgjcvfeg"
   },
   "private": true
 }
