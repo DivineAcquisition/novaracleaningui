@@ -52,9 +52,10 @@ signed — **Agreement signed ✓** or **NOT signed**.
 The **Approve & provision** button stays greyed out while the row shows **NOT signed**. There
 is no override.
 
-Approving provisions a CRM seat and workspace access. Doing that for someone who hasn't
-signed a contractor agreement means giving customer data to somebody with no confidentiality
-terms in place.
+Approving provisions a CRM seat and workspace access. CRM seats use the VA's
+@novaracleaning.com work email (not their personal onboarding Gmail). Doing that for someone
+who hasn't signed a contractor agreement means giving customer data to somebody with no
+confidentiality terms in place.
 :::
 
 Approving asks you to confirm, then creates their CRM user and their workspace access.

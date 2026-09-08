@@ -170,6 +170,12 @@ function inferredNovaraEmail(firstName: string): string | null {
   return `${first}@novaracleaning.com`;
 }
 
+/** GHL staff seats use the Novara work email when we can infer one. */
+function ghlLoginEmail(row: Row): string {
+  return inferredNovaraEmail(String(row.first_name || ""))
+    || String(row.email || "").trim().toLowerCase();
+}
+
 async function unbanRehireLogins(admin: DB, row: Row) {
   const personal = await findAuthUserByEmail(admin, String(row.email || ""));
   if (personal?.id) await unbanAuthUser(admin, personal.id, String(row.email || ""));
@@ -389,7 +395,7 @@ serve(async (req) => {
       let ghl: { ghlUserId: string | null; created: boolean; error?: string; skipped?: string } = { ghlUserId: null, created: false };
       try {
         ghl = await provisionGhlUserFromTemplate(admin, {
-          email: row.email,
+          email: ghlLoginEmail(row),
           firstName: row.first_name || "VA",
           lastName: row.last_name || "",
           phone: row.phone || null,
@@ -424,8 +430,9 @@ serve(async (req) => {
         (await secret(admin, "GHL_USER_TEMPLATE_EMAIL")) ||
         undefined;
       const ghlPassword = tempPassword();
+      const ghlEmail = ghlLoginEmail(row);
       const ghl = await provisionGhlUserFromTemplate(admin, {
-        email: row.email,
+        email: ghlEmail,
         firstName: row.first_name || "VA",
         lastName: row.last_name || "",
         phone: row.phone || null,
@@ -532,7 +539,7 @@ serve(async (req) => {
                 <div style="border:1px solid #e9e6f7;border-radius:10px;padding:14px 16px;margin:14px 0">
                   <p style="margin:0 0 6px"><strong>1. CRM (GoHighLevel)</strong></p>
                   <p style="margin:0;font-size:14px">Log in at <a href="https://app.gohighlevel.com">app.gohighlevel.com</a><br/>
-                  Email: <strong>${row.email}</strong><br/>
+                  Email: <strong>${ghlEmail}</strong><br/>
                   Temporary password: <strong>${ghl.created ? ghlPassword : "use your existing password / reset via the login page"}</strong></p>
                   <p style="margin:6px 0 0;font-size:12px;color:#64748b">Change your password after first login.</p>
                 </div>
