@@ -29,6 +29,7 @@ import {
   serviceTypeLabel,
   supplyChecklistValid,
   unfilledStillNeedsCoverage,
+  urgentHireErrorMessage,
   urgentHireOfferUrl,
   urgentHirePayCents,
   usablePhone,
@@ -49,7 +50,20 @@ const log = (s: string, d?: unknown) =>
   console.log(`[urgent-hire] ${s}${d ? ` ${JSON.stringify(d)}` : ""}`);
 
 function json(payload: unknown, status = 200): Response {
-  return new Response(JSON.stringify(payload), {
+  const body =
+    payload && typeof payload === "object"
+      ? { ...(payload as Record<string, unknown>) }
+      : payload;
+  if (
+    body &&
+    typeof body === "object" &&
+    "error" in body &&
+    (body as { error?: unknown }).error != null &&
+    typeof (body as { error?: unknown }).error !== "string"
+  ) {
+    (body as { error: string }).error = urgentHireErrorMessage((body as { error: unknown }).error);
+  }
+  return new Response(JSON.stringify(body), {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
@@ -1283,7 +1297,7 @@ serve(async (req) => {
 
     return json({ ok: false, error: `Unknown action: ${action || "(none)"}` }, 400);
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
+    const msg = urgentHireErrorMessage(e);
     log("error", msg);
     const status = /not signed in/i.test(msg) ? 401 : /admins or vas/i.test(msg) ? 403 : 500;
     return json({ ok: false, error: msg }, status);

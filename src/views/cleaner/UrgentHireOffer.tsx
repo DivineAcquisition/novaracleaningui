@@ -18,6 +18,7 @@ import {
 } from "@remixicon/react";
 
 import { Button } from "@/components/ui/button";
+import { asErrorMessage } from "@/lib/edge-invoke";
 import { supabase } from "@/integrations/supabase/client";
 
 interface OfferPayload {
@@ -90,7 +91,11 @@ async function invoke(body: Record<string, unknown>): Promise<OfferPayload> {
       const ctx = (error as { context?: Response }).context;
       if (ctx && typeof ctx.json === "function") {
         const parsed = (await ctx.json()) as OfferPayload;
-        if (parsed?.error) return parsed;
+        if (parsed?.error) {
+          parsed.error = asErrorMessage(parsed.error, "That link isn't valid.");
+          return parsed;
+        }
+        if (parsed) return parsed;
       }
     } catch {
       /* keep */
@@ -148,7 +153,7 @@ export default function UrgentHireOffer() {
       return;
     }
     if (!data.ok) {
-      setState({ kind: "blocked", message: data.error || "That link isn't valid." });
+      setState({ kind: "blocked", message: asErrorMessage(data.error, "That link isn't valid.") });
       return;
     }
     setState({ kind: "ready", data });

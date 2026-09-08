@@ -15,6 +15,7 @@
 // - Zero hardcoded data. Realtime row updates via Supabase channel.
 
 import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   RiSearchLine,
   RiUserStarLine,
@@ -64,6 +65,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { cn } from "@/lib/utils";
 import { describeEdgeError } from "@/lib/edge-invoke";
 import TerminateCleanerDialog from "@/components/admin/TerminateCleanerDialog";
+import UrgentHireLog from "@/components/admin/UrgentHireLog";
 import AdminCrews from "@/views/admin/Crews";
 import ApplicantsPipeline from "@/components/admin/ApplicantsPipeline";
 import CleanerAccountability from "@/components/admin/CleanerAccountability";
@@ -86,6 +88,35 @@ const CLEANER_STATUSES = [
   { value: "inactive", label: "Inactive" },
   { value: "terminated", label: "Terminated" },
 ] as const;
+
+type CleanerSection = "contractors" | "applicants" | "crews" | "urgent-hire";
+
+function parseCleanerSection(raw: string | null | undefined): CleanerSection {
+  const s = String(raw || "").toLowerCase().replace(/_/g, "-");
+  if (s === "applicants" || s === "crews" || s === "urgent-hire") return s;
+  if (s === "urgent") return "urgent-hire";
+  return "contractors";
+}
+
+const SECTION_COPY: Record<CleanerSection, { title: string; subtitle: string }> = {
+  contractors: {
+    title: "Cleaner directory",
+    subtitle: "Contractors, onboarding status, performance, and quick actions.",
+  },
+  applicants: {
+    title: "Applicants",
+    subtitle: "Talent-acquisition submissions — review, launch onboarding, activate.",
+  },
+  crews: {
+    title: "Crews",
+    subtitle: "How contractors are grouped for multi-cleaner jobs — leads, members, hand-offs.",
+  },
+  "urgent-hire": {
+    title: "Urgent Hire",
+    subtitle:
+      "Last-resort broadcasts to nearby pipeline applicants. Launch from Dispatch or Coverage; the log and tunables live here.",
+  },
+};
 
 interface CleanerRow {
   id: string;
@@ -167,6 +198,9 @@ const onboardingProgress = (c: CleanerRow): number => {
 };
 
 export default function AdminCleaners() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
   const [loading, setLoading] = useState(true);
   const [cleaners, setCleaners] = useState<CleanerRow[]>([]);
   const [search, setSearch] = useState("");
@@ -175,10 +209,24 @@ export default function AdminCleaners() {
   const [actioning, setActioning] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   // One hub, whole lifecycle. Applicants (the talent queue), contractors (the
-  // directory) and crews (how those contractors are grouped) are three views of
-  // the same people, so they are sections here rather than three sidebar
-  // entries that each answer a third of the question "who works for us".
-  const [section, setSection] = useState<"contractors" | "applicants" | "crews">("contractors");
+  // directory), crews, and Urgent Hire (last-resort pipeline coverage) are
+  // sections here rather than separate sidebar entries.
+  const [section, setSectionState] = useState<CleanerSection>(() =>
+    parseCleanerSection(searchParams?.get("section")),
+  );
+
+  useEffect(() => {
+    setSectionState(parseCleanerSection(searchParams?.get("section")));
+  }, [searchParams]);
+
+  const setSection = (id: CleanerSection) => {
+    setSectionState(id);
+    const params = new URLSearchParams(searchParams?.toString() || "");
+    if (id === "contractors") params.delete("section");
+    else params.set("section", id);
+    const q = params.toString();
+    router.replace(q ? `${pathname}?${q}` : pathname || "/admin/cleaners", { scroll: false });
+  };
 
   const selected = useMemo(
     () => cleaners.find((c) => c.id === selectedId) || null,
@@ -389,20 +437,15 @@ export default function AdminCleaners() {
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
           <h1 className="font-jakarta text-2xl font-bold text-slate-900 tracking-tight">
-            {section === "applicants" ? "Applicants" : section === "crews" ? "Crews" : "Cleaner directory"}
+            {SECTION_COPY[section].title}
           </h1>
-          <p className="text-sm text-slate-500">
-            {section === "applicants"
-              ? "Talent-acquisition submissions — review, launch onboarding, activate."
-              : section === "crews"
-              ? "How contractors are grouped for multi-cleaner jobs — leads, members, hand-offs."
-              : "Contractors, onboarding status, performance, and quick actions."}
-          </p>
+          <p className="text-sm text-slate-500">{SECTION_COPY[section].subtitle}</p>
           <div className="mt-2 inline-flex gap-1 bg-slate-100 rounded-lg p-1">
             {(
               [
                 { id: "contractors", label: "Contractors" },
                 { id: "applicants", label: "Applicants" },
+                { id: "urgent-hire", label: "Urgent Hire" },
                 { id: "crews", label: "Crews" },
               ] as const
             ).map((s) => (
@@ -451,6 +494,8 @@ export default function AdminCleaners() {
       </div>
 
       {section === "applicants" && <ApplicantsPipeline />}
+
+      {section === "urgent-hire" && <UrgentHireLog />}
 
       {section === "crews" && <AdminCrews embedded />}
 

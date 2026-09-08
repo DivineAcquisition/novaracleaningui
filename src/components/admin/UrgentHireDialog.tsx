@@ -13,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { asErrorMessage } from "@/lib/edge-invoke";
 import { callUrgentHire } from "@/lib/urgent-hire-client";
 
 export interface UrgentHirePreview {
@@ -72,7 +73,7 @@ export function UrgentHireDialog({
       fillDeadlineAt?: string;
     }>({ action: "send", jobId: preview.jobId });
     setSending(false);
-    if (!ok) return void toast.error(data.error || "Could not send Urgent Hire.");
+    if (!ok) return void toast.error(asErrorMessage(data.error, "Could not send Urgent Hire."));
     toast.success(
       `Urgent Hire sent to ${data.reached ?? 0} of ${data.eligibleCount ?? 0} eligible applicant(s). First to finish and accept wins.`,
     );
@@ -204,7 +205,7 @@ export function useUrgentHireLaunch() {
     const { ok, data } = await callUrgentHire<UrgentHirePreview>({ action: "preview", jobId });
     setLoading(false);
     if (!ok) {
-      toast.error(data.error || "Could not preview Urgent Hire.");
+      toast.error(asErrorMessage(data.error, "Could not preview Urgent Hire."));
       setOpen(false);
       return;
     }

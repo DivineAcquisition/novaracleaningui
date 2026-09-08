@@ -47,10 +47,10 @@ import {
   RiUserSharedLine,
 } from "@remixicon/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 
 import CoverageBoard from "@/components/admin/CoverageBoard";
-import UrgentHireLog from "@/components/admin/UrgentHireLog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -86,7 +86,7 @@ import {
   type ScheduleGuardSettings,
 } from "@/lib/schedule-risk";
 
-type Tab = "risk" | "coverage" | "urgent" | "backups" | "projections" | "settings";
+type Tab = "risk" | "coverage" | "backups" | "projections" | "settings";
 
 interface BackupRow {
   id: string;
@@ -948,8 +948,8 @@ export default function NeedsAttention() {
               </span>{" "}
               The job still needs coverage — this is not a silent expiry.
             </p>
-            <Button size="sm" variant="outline" onClick={() => setTab("urgent")}>
-              Open Urgent Hire log
+            <Button size="sm" variant="outline" asChild>
+              <Link href="/admin/cleaners?section=urgent-hire">Open Urgent Hire log</Link>
             </Button>
           </CardContent>
         </Card>
@@ -977,7 +977,6 @@ export default function NeedsAttention() {
           [
             ["risk", "At risk", RiAlertLine],
             ["coverage", "Coverage", RiUserSharedLine],
-            ["urgent", "Urgent Hire", RiFlashlightLine],
             ["backups", "On call", RiLifebuoyLine],
             ["projections", "Projections", RiRulerLine],
             ["settings", "Thresholds", RiSettings3Line],
@@ -1115,8 +1114,6 @@ export default function NeedsAttention() {
             setTab("backups");
           }}
         />
-      ) : tab === "urgent" ? (
-        <UrgentHireLog onChanged={() => void load(true)} />
       ) : tab === "backups" ? (
         <BackupsTab
           payload={payload}

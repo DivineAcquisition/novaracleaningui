@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { asErrorMessage } from "@/lib/edge-invoke";
 import { callUrgentHire } from "@/lib/urgent-hire-client";
 import { parseUrgentHireSettings, URGENT_HIRE_DEFAULTS, type UrgentHireSettings } from "@/lib/urgent-hire";
 import { cn } from "@/lib/utils";
@@ -80,7 +81,7 @@ export default function UrgentHireLog({ onChanged }: { onChanged?: () => void })
       callUrgentHire<{ settings: UrgentHireSettings }>({ action: "get_settings" }),
     ]);
     setLoading(false);
-    if (!logRes.ok) return void toast.error(logRes.data.error || "Could not load Urgent Hire log.");
+    if (!logRes.ok) return void toast.error(asErrorMessage(logRes.data.error, "Could not load Urgent Hire log."));
     setBroadcasts(logRes.data.broadcasts || []);
     setOffers(logRes.data.offers || []);
     if (setRes.ok && setRes.data.settings) setSettings(parseUrgentHireSettings(setRes.data.settings));
@@ -109,14 +110,14 @@ export default function UrgentHireLog({ onChanged }: { onChanged?: () => void })
     setSaving(true);
     const { ok, data } = await callUrgentHire({ action: "save_settings", settings });
     setSaving(false);
-    if (!ok) return void toast.error(data.error || "Could not save settings.");
+    if (!ok) return void toast.error(asErrorMessage(data.error, "Could not save settings."));
     toast.success("Urgent Hire settings saved.");
     onChanged?.();
   };
 
   const cancel = async (id: string) => {
     const { ok, data } = await callUrgentHire({ action: "cancel", broadcastId: id });
-    if (!ok) return void toast.error(data.error || "Could not cancel.");
+    if (!ok) return void toast.error(asErrorMessage(data.error, "Could not cancel."));
     toast.success("Broadcast cancelled. Applicants keep any onboarding progress.");
     void load();
   };
@@ -163,7 +164,7 @@ export default function UrgentHireLog({ onChanged }: { onChanged?: () => void })
         <Card>
           <CardContent className="py-8 text-center text-sm text-slate-500">
             No Urgent Hire broadcasts yet. Launch one from Dispatch or a coverage card when the
-            backup pool can&apos;t fill a job.
+            backup pool can&apos;t fill a job. This tab is the log and the tunables.
           </CardContent>
         </Card>
       ) : (

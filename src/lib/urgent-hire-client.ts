@@ -1,6 +1,7 @@
 // Browser helper for the Urgent Hire edge function.
 
 import { supabase } from "@/integrations/supabase/client";
+import { asErrorMessage, describeEdgeError } from "@/lib/edge-invoke";
 
 export interface UrgentHireResponse<T> {
   ok: boolean;
@@ -17,19 +18,21 @@ export async function callUrgentHire<T = Record<string, unknown>>(
       ? { Authorization: `Bearer ${session.session.access_token}` }
       : undefined,
   });
-  if (error) {
-    let message = error.message || "Urgent Hire request failed.";
-    try {
-      const ctx = (error as { context?: Response }).context;
-      if (ctx && typeof ctx.json === "function") {
-        const parsed = (await ctx.json()) as { error?: string };
-        if (parsed?.error) message = parsed.error;
-      }
-    } catch {
-      /* keep message */
-    }
-    return { ok: false, data: { error: message } as T & { error?: string } };
+  const json = (data && typeof data === "object" ? data : {}) as T & {
+    ok?: boolean;
+    error?: unknown;
+    code?: string;
+  };
+  if (error || json.ok === false || json.error) {
+    const fromBody = asErrorMessage(json.error, "");
+    const message =
+      fromBody ||
+      (await describeEdgeError(error, data)) ||
+      "Urgent Hire request failed.";
+    return {
+      ok: false,
+      data: { ...json, error: asErrorMessage(message, "Urgent Hire request failed.") },
+    };
   }
-  const json = (data || {}) as T & { ok?: boolean; error?: string };
-  return { ok: json.ok !== false && !json.error, data: json };
+  return { ok: true, data: json as T & { error?: string; code?: string } };
 }

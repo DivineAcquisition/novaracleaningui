@@ -102,6 +102,29 @@ export function unfilledStillNeedsCoverage(opts: {
   return true;
 }
 
+/** Postgres/Postgrest errors are plain objects — String(err) is "[object Object]". */
+export function urgentHireErrorMessage(e: unknown, fallback = "Urgent Hire failed."): string {
+  if (typeof e === "string" && e.trim() && e !== "[object Object]") return e.slice(0, 400);
+  if (e instanceof Error && e.message && e.message !== "[object Object]") return e.message.slice(0, 400);
+  if (e && typeof e === "object") {
+    const o = e as { message?: unknown; details?: unknown; hint?: unknown; code?: unknown; error?: unknown };
+    const parts = [o.message, o.details, o.hint].filter((x) => typeof x === "string" && x.trim()) as string[];
+    if (parts.length) {
+      const code = typeof o.code === "string" && o.code ? ` (${o.code})` : "";
+      return `${parts.join(" — ")}${code}`.slice(0, 400);
+    }
+    if (typeof o.error === "string" && o.error.trim()) return o.error.slice(0, 400);
+    try {
+      const s = JSON.stringify(e);
+      if (s && s !== "{}" && s !== "[object Object]") return s.slice(0, 400);
+    } catch {
+      /* fall through */
+    }
+  }
+  const s = String(e ?? "");
+  return s && s !== "[object Object]" ? s.slice(0, 400) : fallback;
+}
+
 /** Screening bar for this pathway: valid photo ID and own vehicle both passed. */
 export function screeningQualifiersPass(answers: unknown): boolean {
   const bag = answers && typeof answers === "object" ? (answers as Record<string, unknown>) : {};

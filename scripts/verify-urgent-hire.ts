@@ -22,6 +22,7 @@ import {
   screeningQualifiersPass,
   supplyChecklistValid,
   unfilledStillNeedsCoverage,
+  urgentHireErrorMessage,
   urgentHirePayCents,
   URGENT_HIRE_DEFAULTS,
   URGENT_HIRE_ELIGIBLE_STAGES,
@@ -75,6 +76,24 @@ check(
 check("eligible stages never include excluded ones",
   URGENT_HIRE_ELIGIBLE_STAGES.some((s) => (URGENT_HIRE_EXCLUDED_STAGES as readonly string[]).includes(s)),
   false,
+);
+
+console.log("\nError objects never stringify to [object Object]:");
+check(
+  "postgres-shaped object uses message",
+  urgentHireErrorMessage({ message: "relation \"urgent_hire_broadcasts\" does not exist", code: "42P01" }),
+  'relation "urgent_hire_broadcasts" does not exist (42P01)',
+);
+check("string passes through", urgentHireErrorMessage("Nobody in radius."), "Nobody in radius.");
+check(
+  "empty object falls back instead of [object Object]",
+  urgentHireErrorMessage({}, "Urgent Hire failed."),
+  "Urgent Hire failed.",
+);
+check(
+  "literal [object Object] string falls back",
+  urgentHireErrorMessage("[object Object]", "Urgent Hire failed."),
+  "Urgent Hire failed.",
 );
 
 console.log("\nScreening bar (ID + vehicle; background check is not this bar):");

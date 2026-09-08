@@ -17,7 +17,7 @@ to be separate, because working a single late job used to take you across three 
 | Tab | What it's for |
 |---|---|
 | **Needs attention** | Jobs at risk right now, and finding cover for them. |
-| **Dispatch** | Getting cleaners onto jobs that don't have them. Urgent Hire lives here too. |
+| **Dispatch** | Getting cleaners onto jobs that don't have them. Urgent Hire launches from here. |
 | **Map** | Where cleaners and bookings are, and where we're thin. |
 | **Sync health** | Why a booking might not have appeared where you expected. |
 
@@ -45,8 +45,6 @@ If that number isn't zero, work it before anything else on this screen.
 - **At risk** — the live list, grouped so the worst is first: no-shows, then customers who
   haven't been told, then told-but-still-at-risk.
 - **Coverage** — jobs that need a cleaner found.
-- **Urgent Hire** — last-resort broadcast to pipeline applicants, plus the log and tunables
-  (radius, premium %, fill window, checklist freshness).
 - **On call** — who's designated as backup for a given day.
 - **Projections** — how long jobs actually take versus what we assumed.
 - **Thresholds** — the settings behind all of it.
@@ -100,7 +98,8 @@ says that rate applies to this job only. Recipients still need a valid supply ch
 signed agreement, and payout setup before they can accept — background check is **not**
 required on this path. First to finish those steps and accept wins; everyone else sees the
 job as no longer available and keeps any onboarding progress. If the fill window closes with
-nobody accepting, it surfaces on the **Urgent Hire** tab as still needing coverage.
+nobody accepting, it surfaces here as still needing coverage, with a link to the **Urgent Hire**
+log on Cleaners (`/admin/cleaners?section=urgent-hire`).
 
 The same **Urgent Hire** button is on understaffed Dispatch job cards.
 

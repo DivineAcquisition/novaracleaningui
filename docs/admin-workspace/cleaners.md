@@ -12,8 +12,8 @@ order: 6
 Everything about a contractor lives here: their status, their onboarding, their scores, their
 jobs, and their conduct record.
 
-The screen has three sections, switched at the top: **Contractors**, **Applicants** and
-**Crews**.
+The screen has four sections, switched at the top: **Contractors**, **Applicants**,
+**Urgent Hire** and **Crews**.
 
 ## The directory
 
@@ -213,14 +213,21 @@ relationship; without Stripe Connect there is no way to pay them, so activating 
 an angry contractor a fortnight later.
 :::
 
-**Urgent Hire** (from Dispatch or Coverage) is a last-resort path that does **not** wait on
-a background check. The same agreement + payout gates still apply, plus a completed and
-fresh supply checklist, before an applicant can accept the premium first-job offer. Losing
-the race does not discard onboarding progress.
-
 **Phone screening** has its own stops: an applicant under 18 can only be declined, failed
 hard qualifiers route to decline or hold, and answering "no" to the acknowledgment or the
 non-solicitation question blocks advancing.
+
+## Urgent Hire
+
+The **Urgent Hire** section on this screen is the log and the tunables (radius, premium %,
+fill window, checklist freshness). Launch a broadcast from **Dispatch** or **Coverage** when
+the assigned cleaner and backup pool can't cover a job.
+
+It reaches Screening-Passed (or later) applicants who are not yet Active and never Declined,
+within the configured radius. Background check is **not** required on this path. A valid
+supply checklist, signed agreement, and payout setup still are. First to finish those steps
+and accept wins; everyone else keeps their onboarding progress. An unfilled window surfaces
+on Needs Attention and links back here.
 
 ## Crews
 

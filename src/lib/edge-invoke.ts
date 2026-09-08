@@ -40,6 +40,13 @@ function stringifyReason(value: unknown): string {
   return value == null ? "" : String(value);
 }
 
+/** Never pass a raw object to toast.error — String(obj) is "[object Object]". */
+export function asErrorMessage(value: unknown, fallback = "Something went wrong."): string {
+  const s = stringifyReason(value).trim();
+  if (!s || s === "[object Object]") return fallback;
+  return s.slice(0, 400);
+}
+
 /** Pull the useful text out of an invoke() failure. Never throws. */
 export async function describeEdgeError(error: unknown, data?: unknown): Promise<string> {
   const err = error as InvokeErrorLike | null;
