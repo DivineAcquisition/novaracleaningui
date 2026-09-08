@@ -11,6 +11,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
+import UrgentHireReturnLink from "@/components/cleaner/UrgentHireReturnLink";
 
 type Payload = {
   ok: true;
@@ -39,6 +40,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           <p className="text-xs text-slate-500">Account setup</p>
         </div>
         {children}
+        <UrgentHireReturnLink />
       </div>
     </div>
   );

@@ -5,7 +5,7 @@ category: How the Tool Works
 summary: The contractor directory, what the scores mean, onboarding, pay tiers, and how conduct is handled.
 whoCanSee: Admins and VAs (some actions are admin-only)
 where: /admin/cleaners
-lastVerified: 2026-08-29
+lastVerified: 2026-09-08
 order: 6
 ---
 
@@ -212,6 +212,11 @@ Both are genuine prerequisites. Without a signed agreement we have no contractua
 relationship; without Stripe Connect there is no way to pay them, so activating just creates
 an angry contractor a fortnight later.
 :::
+
+**Urgent Hire** (from Dispatch or Coverage) is a last-resort path that does **not** wait on
+a background check. The same agreement + payout gates still apply, plus a completed and
+fresh supply checklist, before an applicant can accept the premium first-job offer. Losing
+the race does not discard onboarding progress.
 
 **Phone screening** has its own stops: an applicant under 18 can only be declined, failed
 hard qualifiers route to decline or hold, and answering "no" to the acknowledgment or the

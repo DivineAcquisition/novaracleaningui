@@ -22,6 +22,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 
 import { SignaturePad } from "@/components/booking/SignaturePad";
+import UrgentHireReturnLink from "@/components/cleaner/UrgentHireReturnLink";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -57,6 +58,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           <p className="text-xs text-slate-500">Independent Contractor Agreement</p>
         </div>
         {children}
+        <UrgentHireReturnLink />
       </div>
     </div>
   );

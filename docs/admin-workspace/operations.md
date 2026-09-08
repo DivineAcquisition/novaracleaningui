@@ -5,7 +5,7 @@ category: How the Tool Works
 summary: Running today — jobs at risk, finding cover, dispatching work, and why a booking might be missing.
 whoCanSee: Admins and VAs
 where: /admin/operations
-lastVerified: 2026-08-29
+lastVerified: 2026-09-08
 order: 5
 ---
 
@@ -17,7 +17,7 @@ to be separate, because working a single late job used to take you across three 
 | Tab | What it's for |
 |---|---|
 | **Needs attention** | Jobs at risk right now, and finding cover for them. |
-| **Dispatch** | Getting cleaners onto jobs that don't have them. |
+| **Dispatch** | Getting cleaners onto jobs that don't have them. Urgent Hire lives here too. |
 | **Map** | Where cleaners and bookings are, and where we're thin. |
 | **Sync health** | Why a booking might not have appeared where you expected. |
 
@@ -45,6 +45,8 @@ If that number isn't zero, work it before anything else on this screen.
 - **At risk** — the live list, grouped so the worst is first: no-shows, then customers who
   haven't been told, then told-but-still-at-risk.
 - **Coverage** — jobs that need a cleaner found.
+- **Urgent Hire** — last-resort broadcast to pipeline applicants, plus the log and tunables
+  (radius, premium %, fill window, checklist freshness).
 - **On call** — who's designated as backup for a given day.
 - **Projections** — how long jobs actually take versus what we assumed.
 - **Thresholds** — the settings behind all of it.
@@ -89,6 +91,18 @@ for the customer conversation, and an uncovered job that's still marked "sourcin
 customer nobody is calling.
 
 Once uncovered, **Credit the customer** applies goodwill. It needs an amount above zero.
+
+**Urgent Hire** is the last-resort step after the assigned cleaner and the designated backup
+pool can't cover it. It broadcasts **at once** (not staged) to applicants who are
+Screening-Passed or later, not yet Active, never Declined, and within a configurable radius
+of the job (default 25 miles). The offer states a premium first-job rate (default 45%) and
+says that rate applies to this job only. Recipients still need a valid supply checklist, a
+signed agreement, and payout setup before they can accept — background check is **not**
+required on this path. First to finish those steps and accept wins; everyone else sees the
+job as no longer available and keeps any onboarding progress. If the fill window closes with
+nobody accepting, it surfaces on the **Urgent Hire** tab as still needing coverage.
+
+The same **Urgent Hire** button is on understaffed Dispatch job cards.
 
 **Bench depth by day** shows how many jobs, how many STR turnovers, how many people on call
 and how much cover exists for each upcoming day. It's the early warning — a day with jobs and
@@ -202,9 +216,11 @@ outcome.
 **"Offers are going out that I didn't send."**
 Auto-offers is switched on. It's a toggle on the Dispatch tab.
 
-**"Everybody asked and nobody accepted."**
+**Everybody asked and nobody accepted.**
 Use **Assign now, skip the offer** if there's a reasonable person to assign, or mark it
-**Nobody can cover this** and start the customer conversation with a credit.
+**Nobody can cover this** and start the customer conversation with a credit. If the backup
+pool is exhausted, **Urgent Hire** on the same card (or on Dispatch) broadcasts a premium
+first-job offer to screening-passed applicants who aren't Active yet.
 
 **"Why is a job flagged at risk when it's on time?"**
 Usually a delay cascade — an earlier job in that crew's day is running over, so this one is

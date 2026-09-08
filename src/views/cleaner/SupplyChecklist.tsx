@@ -10,6 +10,7 @@ import { useParams } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import UrgentHireReturnLink from "@/components/cleaner/UrgentHireReturnLink";
 import {
   SUPPLY_CATEGORY_LABEL,
   SUPPLY_CHECKLIST_PDF,
@@ -51,6 +52,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           <p className="text-xs text-slate-500">Supply checklist</p>
         </div>
         {children}
+        <UrgentHireReturnLink />
       </div>
     </div>
   );

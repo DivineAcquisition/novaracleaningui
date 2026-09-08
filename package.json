@@ -35,6 +35,7 @@
     "docs:export": "tsx scripts/docs/export-knowledge.ts",
     "docs:preview": "tsx scripts/docs/preview.ts",
     "ops-assistant:verify": "tsx scripts/ops-assistant/verify.ts",
+    "urgent-hire:verify": "tsx scripts/verify-urgent-hire.ts",
     "commercial:verify:sql": "bash scripts/migrations/verify-commercial-onboarding.sh",
     "commercial:verify:ui": "tsx scripts/commercial/verify-onboarding-ui.ts",
     "commercial-onboarding:verify": "tsx scripts/verify-commercial-onboarding-session.ts",

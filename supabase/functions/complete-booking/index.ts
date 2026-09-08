@@ -111,7 +111,7 @@ serve(async (req) => {
     try {
       const { data: assigns } = await supabase
         .from("job_assignments")
-        .select("id, cleaner_id, role, pay_percentage_snapshot, estimated_pay_cents")
+        .select("id, cleaner_id, role, pay_percentage_snapshot, estimated_pay_cents, pay_source")
         .eq("job_id", booking.job_id || "")
         .in("status", ["Confirmed", "Accepted", "accepted", "In Progress", "completed"]);
 
@@ -142,7 +142,29 @@ serve(async (req) => {
         const shares = await computeCrewPay(supabase, revenue, performingCrew);
 
         const now = new Date().toISOString();
-        for (const a of (assigns || []) as { id: string; cleaner_id: string; estimated_pay_cents?: number | null }[]) {
+        for (const a of (assigns || []) as {
+          id: string;
+          cleaner_id: string;
+          estimated_pay_cents?: number | null;
+          pay_percentage_snapshot?: number | null;
+          pay_source?: string | null;
+        }[]) {
+          // Urgent Hire stamps a premium on THIS job only. Completing must not
+          // overwrite it with standing Foundation-tier pay. Later jobs are
+          // unstamped and use compute_crew_pay as usual.
+          if (String(a.pay_source || "") === "urgent_hire") {
+            const pct = Number(a.pay_percentage_snapshot) || 45;
+            const payCents = Math.round((revenue * pct) / 100);
+            await supabase
+              .from("job_assignments")
+              .update({
+                estimated_pay_cents: payCents,
+                pay_percentage_snapshot: pct,
+                pay_locked_at: now,
+              })
+              .eq("id", a.id);
+            continue;
+          }
           const share = shareFor(shares, a.cleaner_id);
           if (!share) continue;
           // Never drop an admin-locked assign payout below the formula. Scope
@@ -165,13 +187,24 @@ serve(async (req) => {
         // Stamp the lead cleaner's suggested share on the booking. Custom
         // Payout / Run Payroll may send a different confirmed amount via
         // Stripe Connect. Keep a higher assign-time lock if one was set.
-        const leadShare = shareFor(shares, booking.cleaner_id)
-          || shares[0]
-          || null;
-        if (leadShare) {
-          const assignedLead = Number(booking.cleaner_payout_cents) || 0;
-          recomputedPayoutCents = Math.max(assignedLead, leadShare.shareCents);
-          recomputedPayPct = leadShare.ratePercent;
+        const urgentLead = (assigns || []).find(
+          (a: { cleaner_id: string; pay_source?: string | null }) =>
+            String(a.pay_source || "") === "urgent_hire" &&
+            (!booking.cleaner_id || a.cleaner_id === booking.cleaner_id),
+        ) as { pay_percentage_snapshot?: number | null } | undefined;
+        if (urgentLead) {
+          const pct = Number(urgentLead.pay_percentage_snapshot) || 45;
+          recomputedPayoutCents = Math.round((revenue * pct) / 100);
+          recomputedPayPct = pct;
+        } else {
+          const leadShare = shareFor(shares, booking.cleaner_id)
+            || shares[0]
+            || null;
+          if (leadShare) {
+            const assignedLead = Number(booking.cleaner_payout_cents) || 0;
+            recomputedPayoutCents = Math.max(assignedLead, leadShare.shareCents);
+            recomputedPayPct = leadShare.ratePercent;
+          }
         }
 
         logStep("Recomputed payout (crew-size rate)", {

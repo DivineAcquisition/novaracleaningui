@@ -174,6 +174,46 @@ serve(async (req) => {
         break;
       }
 
+      case "urgent_hire": {
+        const first = data.firstName || "there";
+        const offerUrl = data.offerUrl || "https://contractor.novaracleaning.com";
+        const service = data.serviceType || "Cleaning";
+        const when = [data.dateLabel, data.timeWindow].filter(Boolean).join(" · ");
+        const zone = data.zone || "your area";
+        const pay = data.payDollars || "0.00";
+        const pct = data.payPercent != null ? `${data.payPercent}%` : "45%";
+        const firstJob = data.firstJobNote ||
+          `This ${pct} rate applies to your first job only; standard tier rates apply after.`;
+        const gate = data.needsChecklist
+          ? "Accepting requires finishing remaining steps first (supply checklist, signed agreement, and payout setup). Background check is not required for this job."
+          : "Accepting requires a signed agreement and payout setup if you haven't finished them. Background check is not required for this job.";
+        subject = `Urgent Hire — ${service} at ${pct}`;
+        html = `
+          <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#0f172a">
+            <h2 style="margin:0 0 8px;font-size:20px">Urgent Hire — can you take this job?</h2>
+            <p style="margin:0 0 16px;color:#475569">Hi ${first},</p>
+            <p style="margin:0 0 16px;color:#475569">
+              We have a job that needs coverage and you're in the area. First to finish remaining steps and accept gets it.
+            </p>
+            <div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:12px;padding:16px;margin:0 0 16px">
+              <div style="font-size:14px;color:#4c1d95;margin:0 0 8px"><strong>${service}</strong></div>
+              <div style="font-size:14px;color:#334155">${when || "Upcoming"}</div>
+              <div style="font-size:14px;color:#334155">Area: ${zone}</div>
+              <div style="font-size:22px;font-weight:800;color:#5C0FFE;margin-top:10px">$${pay} · ${pct}</div>
+              <div style="font-size:13px;color:#6d28d9;margin-top:6px">${firstJob}</div>
+            </div>
+            <p style="margin:0 0 16px;color:#475569;font-size:14px">${gate} The exact address is shared once you're assigned.</p>
+            <p style="margin:24px 0;text-align:center">
+              <a href="${offerUrl}"
+                 style="display:inline-block;background:#5C0FFE;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600">
+                Open the offer
+              </a>
+            </p>
+            <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">Novara Cleaning</p>
+          </div>`;
+        break;
+      }
+
       case "setup_request": {
         const first = data.firstName || "there";
         const setupUrl = data.setupUrl || "https://contractor.novaracleaning.com/cleaner/auth";

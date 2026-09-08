@@ -594,6 +594,9 @@ verify_jwt = false
 [functions.coverage-runner]
 verify_jwt = false
 
+[functions.urgent-hire]
+verify_jwt = false
+
 [functions.escalate-overdue-bookings]
 verify_jwt = false
 

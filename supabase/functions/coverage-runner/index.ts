@@ -142,6 +142,15 @@ serve(async (req) => {
       }
     }
 
+    // Urgent Hire fill windows close on the same clock. A blast that
+    // produces no accept must surface as unfilled — still needing coverage —
+    // rather than sitting open until someone notices.
+    try {
+      await admin.functions.invoke("urgent-hire", { body: { action: "expire" } });
+    } catch (err) {
+      log("urgent-hire expire failed", err instanceof Error ? err.message : String(err));
+    }
+
     // ── 2. Drain the queue ─────────────────────────────────────────────────
     const { data: queued, error: qErr } = await admin
       .from("coverage_notifications")

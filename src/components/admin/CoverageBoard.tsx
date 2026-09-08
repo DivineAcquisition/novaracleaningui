@@ -36,6 +36,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { callScheduleRisk } from "@/lib/schedule-risk-client";
+import { UrgentHireDialog, useUrgentHireLaunch } from "@/components/admin/UrgentHireDialog";
 import {
   COVERAGE_TRIGGER_LABELS,
   coverageHeadline,
@@ -91,10 +92,12 @@ function CoverageCard({
   row,
   tz,
   onChanged,
+  onUrgentHire,
 }: {
   row: CoverageRow;
   tz: string;
   onChanged: () => void;
+  onUrgentHire?: (jobId: string) => void;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [assigning, setAssigning] = useState(false);
@@ -345,6 +348,18 @@ function CoverageCard({
               )}
               Nobody can cover this
             </Button>
+            {row.job_id ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-violet-300 text-violet-800"
+                onClick={() => onUrgentHire?.(row.job_id as string)}
+                disabled={busy !== null}
+              >
+                <RiFlashlightLine className="mr-1.5 h-4 w-4" />
+                Urgent Hire
+              </Button>
+            ) : null}
             {giveUpIn != null ? (
               <span className="self-center text-[11px] text-slate-500">
                 {giveUpIn > 0
@@ -426,6 +441,18 @@ function CoverageCard({
                   {busy === "goodwill" ? <RiLoader4Line className="mr-1.5 h-4 w-4 animate-spin" /> : null}
                   Credit the customer
                 </Button>
+                {row.job_id ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-violet-300 text-violet-800"
+                    onClick={() => onUrgentHire?.(row.job_id as string)}
+                    disabled={busy !== null}
+                  >
+                    <RiFlashlightLine className="mr-1.5 h-4 w-4" />
+                    Urgent Hire
+                  </Button>
+                ) : null}
               </div>
             )}
           </div>
@@ -594,6 +621,7 @@ export default function CoverageBoard({
 }) {
   const [busy, setBusy] = useState(false);
   const [showClosed, setShowClosed] = useState(false);
+  const urgentHire = useUrgentHireLaunch();
 
   const uncovered = coverage.filter((r) => r.status === "uncovered" && !r.goodwill_applied_at);
   const live = coverage
@@ -646,7 +674,7 @@ export default function CoverageBoard({
             </p>
           </div>
           {uncovered.map((r) => (
-            <CoverageCard key={r.coverage_request_id} row={r} tz={tz} onChanged={onChanged} />
+            <CoverageCard key={r.coverage_request_id} row={r} tz={tz} onChanged={onChanged} onUrgentHire={(id) => void urgentHire.launch(id)} />
           ))}
         </div>
       ) : null}
@@ -661,7 +689,7 @@ export default function CoverageBoard({
             </p>
           </div>
           {live.map((r) => (
-            <CoverageCard key={r.coverage_request_id} row={r} tz={tz} onChanged={onChanged} />
+            <CoverageCard key={r.coverage_request_id} row={r} tz={tz} onChanged={onChanged} onUrgentHire={(id) => void urgentHire.launch(id)} />
           ))}
         </div>
       ) : uncovered.length === 0 ? (
@@ -689,11 +717,18 @@ export default function CoverageBoard({
           </button>
           {showClosed
             ? closed.map((r) => (
-                <CoverageCard key={r.coverage_request_id} row={r} tz={tz} onChanged={onChanged} />
+                <CoverageCard key={r.coverage_request_id} row={r} tz={tz} onChanged={onChanged} onUrgentHire={(id) => void urgentHire.launch(id)} />
               ))
             : null}
         </div>
       ) : null}
+      <UrgentHireDialog
+        open={urgentHire.open}
+        onOpenChange={urgentHire.setOpen}
+        preview={urgentHire.preview}
+        loading={urgentHire.loading}
+        onSent={onChanged}
+      />
     </div>
   );
 }

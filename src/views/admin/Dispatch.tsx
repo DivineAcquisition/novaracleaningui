@@ -50,11 +50,13 @@ import {
   RiShieldCheckLine,
   RiTimeLine,
   RiUserStarLine,
+  RiFlashlightLine,
 } from "@remixicon/react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { FocusedChecklistEditor } from "@/components/admin/FocusedChecklistEditor";
+import { UrgentHireDialog, useUrgentHireLaunch } from "@/components/admin/UrgentHireDialog";
 
 const RAMP = "linear-gradient(135deg,#5C0FFE 0%,#8F7BFD 100%)";
 const CONTRACTOR_BASE = "https://contractor.novaracleaning.com";
@@ -232,6 +234,7 @@ export default function AdminDispatch() {
   const [dateRange, setDateRange] = useState("active");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [settingBusy, setSettingBusy] = useState<string | null>(null);
+  const urgentHire = useUrgentHireLaunch();
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -587,6 +590,7 @@ export default function AdminDispatch() {
                         busy={busyId === job.id}
                         highlighted={job.id === highlightJobId}
                         onApprove={() => void approveJob(job.id)}
+                        onUrgentHire={() => void urgentHire.launch(job.id)}
                       />
                     </div>
                   ))}
@@ -607,6 +611,13 @@ export default function AdminDispatch() {
       )}
 
       <FocusedChecklistEditor />
+      <UrgentHireDialog
+        open={urgentHire.open}
+        onOpenChange={urgentHire.setOpen}
+        preview={urgentHire.preview}
+        loading={urgentHire.loading}
+        onSent={() => void load(true)}
+      />
     </div>
   );
 }
@@ -753,13 +764,14 @@ function AddonReviewCard({
 
 // ─── Job card ──────────────────────────────────────────────────────────────
 function JobCard({
-  job, stage, busy, highlighted, onApprove,
+  job, stage, busy, highlighted, onApprove, onUrgentHire,
 }: {
   job: DispatchJob;
   stage: StageKey;
   busy: boolean;
   highlighted: boolean;
   onApprove: () => void;
+  onUrgentHire: () => void;
 }) {
   const date = job.booking?.service_date ?? null;
   const window = job.booking?.time_slot || job.booking?.arrival_window || null;
@@ -905,21 +917,33 @@ function JobCard({
           <span className="text-xs text-slate-400">
             {money(job.booking?.total_estimate_cents)} job
           </span>
-          <Button
-            size="sm"
-            variant={isApprovalStage ? "solid" : "flat"}
-            color="primary"
-            className={isApprovalStage ? "font-semibold" : undefined}
-            startContent={isApprovalStage ? <RiShieldCheckLine className="w-4 h-4" /> : <RiRocket2Line className="w-4 h-4" />}
-            isLoading={busy}
-            onPress={onApprove}
-          >
-            {isApprovalStage
-              ? "Approve & send offers"
-              : confirmedCount >= needed
-                ? "Re-dispatch"
-                : "Send more offers"}
-          </Button>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {confirmedCount < needed ? (
+              <Button
+                size="sm"
+                variant="flat"
+                onPress={onUrgentHire}
+                startContent={<RiFlashlightLine className="w-4 h-4" />}
+              >
+                Urgent Hire
+              </Button>
+            ) : null}
+            <Button
+              size="sm"
+              variant={isApprovalStage ? "solid" : "flat"}
+              color="primary"
+              className={isApprovalStage ? "font-semibold" : undefined}
+              startContent={isApprovalStage ? <RiShieldCheckLine className="w-4 h-4" /> : <RiRocket2Line className="w-4 h-4" />}
+              isLoading={busy}
+              onPress={onApprove}
+            >
+              {isApprovalStage
+                ? "Approve & send offers"
+                : confirmedCount >= needed
+                  ? "Re-dispatch"
+                  : "Send more offers"}
+            </Button>
+          </div>
         </div>
       </CardBody>
     </Card>

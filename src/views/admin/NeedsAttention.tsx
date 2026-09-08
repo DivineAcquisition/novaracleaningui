@@ -50,6 +50,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import CoverageBoard from "@/components/admin/CoverageBoard";
+import UrgentHireLog from "@/components/admin/UrgentHireLog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -67,6 +68,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { callScheduleRisk } from "@/lib/schedule-risk-client";
+import { callUrgentHire } from "@/lib/urgent-hire-client";
 import { cn } from "@/lib/utils";
 import {
   DELAY_EVENT_LABELS,
@@ -84,7 +86,7 @@ import {
   type ScheduleGuardSettings,
 } from "@/lib/schedule-risk";
 
-type Tab = "risk" | "coverage" | "backups" | "projections" | "settings";
+type Tab = "risk" | "coverage" | "urgent" | "backups" | "projections" | "settings";
 
 interface BackupRow {
   id: string;
@@ -787,6 +789,7 @@ export default function NeedsAttention() {
   const [sweeping, setSweeping] = useState(false);
   const [onCallDate, setOnCallDate] = useState<string>("");
   const [showResolved, setShowResolved] = useState(false);
+  const [urgentUnfilled, setUrgentUnfilled] = useState(0);
 
   const load = useCallback(
     async (silent = false) => {
@@ -803,6 +806,10 @@ export default function NeedsAttention() {
         if (!res.ok || json.error) throw new Error(json.error || "Could not load the board.");
         setPayload(json);
         if (!onCallDate) setOnCallDate(json.onCallDate);
+        const uh = await callUrgentHire<{ broadcasts?: Array<{ status: string }> }>({ action: "log" });
+        if (uh.ok) {
+          setUrgentUnfilled((uh.data.broadcasts || []).filter((b) => b.status === "unfilled").length);
+        }
       } catch (e) {
         toast.error((e as Error).message);
       } finally {
@@ -900,7 +907,7 @@ export default function NeedsAttention() {
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-7">
         <StatCard label="At risk now" value={counts?.atRisk} tone={counts?.atRisk ? "warning" : "ok"} />
         <StatCard
           label="Customer not told yet"
@@ -915,11 +922,32 @@ export default function NeedsAttention() {
         />
         <StatCard label="Uncovered" value={counts?.uncovered} tone={counts?.uncovered ? "danger" : "ok"} />
         <StatCard
+          label="Urgent Hire unfilled"
+          value={urgentUnfilled}
+          tone={urgentUnfilled ? "danger" : "ok"}
+        />
+        <StatCard
           label="Days with no backup"
           value={counts?.daysWithoutBackup}
           tone={counts?.strDaysExposed ? "danger" : counts?.daysWithoutBackup ? "warning" : "ok"}
         />
       </div>
+
+      {urgentUnfilled ? (
+        <Card className="border-violet-200 bg-violet-50/50">
+          <CardContent className="flex flex-wrap items-center justify-between gap-2 py-3">
+            <p className="text-sm text-violet-950">
+              <span className="font-semibold">
+                {urgentUnfilled} Urgent Hire broadcast{urgentUnfilled === 1 ? "" : "s"} did not fill.
+              </span>{" "}
+              The job still needs coverage — this is not a silent expiry.
+            </p>
+            <Button size="sm" variant="outline" onClick={() => setTab("urgent")}>
+              Open Urgent Hire log
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {counts?.strDaysExposed ? (
         <Card className="border-red-200 bg-red-50/50">
@@ -943,6 +971,7 @@ export default function NeedsAttention() {
           [
             ["risk", "At risk", RiAlertLine],
             ["coverage", "Coverage", RiUserSharedLine],
+            ["urgent", "Urgent Hire", RiFlashlightLine],
             ["backups", "On call", RiLifebuoyLine],
             ["projections", "Projections", RiRulerLine],
             ["settings", "Thresholds", RiSettings3Line],
@@ -1080,6 +1109,8 @@ export default function NeedsAttention() {
             setTab("backups");
           }}
         />
+      ) : tab === "urgent" ? (
+        <UrgentHireLog onChanged={() => void load(true)} />
       ) : tab === "backups" ? (
         <BackupsTab
           payload={payload}
