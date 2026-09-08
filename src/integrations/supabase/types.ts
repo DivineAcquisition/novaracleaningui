@@ -2124,6 +2124,10 @@ export type Database = {
       }
     }
     Functions: {
+      is_staff_customer_email: {
+        Args: { _email: string }
+        Returns: boolean
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

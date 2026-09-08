@@ -3,6 +3,7 @@ import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getEstimatedHours } from "../_shared/payout-utils.ts";
 import { resolveSecret } from "../_shared/app-secrets.ts";
+import { isStaffCustomerEmail, STAFF_CUSTOMER_ERROR } from "../_shared/staff-customer.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -87,6 +88,20 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
+
+    if (await isStaffCustomerEmail(supabaseClient, customerEmail)) {
+      return new Response(
+        JSON.stringify({
+          error: STAFF_CUSTOMER_ERROR,
+          details: "Staff emails cannot check out as a customer. Use a personal customer email.",
+          code: "STAFF_EMAIL",
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
 
     // Read STRIPE_SECRET_KEY through the DB override layer first
     // (public.app_secrets.STRIPE_SECRET_KEY) and fall back to the env

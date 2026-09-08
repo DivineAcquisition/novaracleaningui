@@ -61,6 +61,7 @@ import { enforceTagPolicy, serviceTag, sourceTag, zipTag } from "../_shared/ghl-
 // import resolves inside the request, so a bundling miss becomes a 500 mid-
 // booking instead of a deploy-time error.
 import { invoicePaymentSettingsSaveCard } from "../_shared/stripe-invoice-save-card.ts";
+import { isStaffCustomerEmail, STAFF_CUSTOMER_ERROR } from "../_shared/staff-customer.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -656,6 +657,18 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     );
+
+    if (await isStaffCustomerEmail(supabase, body.email)) {
+      return new Response(
+        JSON.stringify({
+          error: `${STAFF_CUSTOMER_ERROR}. Book the job to a personal customer email.`,
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 400,
+        },
+      );
+    }
 
     // 1. Compute pricing
     const phoneE164 = toE164(body.phone);

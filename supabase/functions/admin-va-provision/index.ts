@@ -24,6 +24,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.80.0";
 import { Resend } from "https://esm.sh/resend@4.0.0";
 import { provisionGhlUserFromTemplate } from "../_shared/ghl-users.ts";
+import { deleteUnusedStaffCustomerAccount } from "../_shared/staff-customer.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -490,6 +491,11 @@ serve(async (req) => {
         rejected_reason: null,
         updated_at: new Date().toISOString(),
       }).eq("id", row.id);
+
+      await deleteUnusedStaffCustomerAccount(admin, row.email);
+      if (workspaceEmail && workspaceEmail !== String(row.email || "").trim().toLowerCase()) {
+        await deleteUnusedStaffCustomerAccount(admin, workspaceEmail);
+      }
 
       // 4) Audit log (who approved, what was granted).
       await admin.from("events").insert({

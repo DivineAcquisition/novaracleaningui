@@ -16,6 +16,7 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { isStaffCustomerEmail, STAFF_CUSTOMER_ERROR } from "../_shared/staff-customer.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -70,6 +71,9 @@ serve(async (req) => {
       customerName = `${customer.first_name || ""} ${customer.last_name || ""}`.trim();
     }
     if (!email || !email.includes("@")) return json({ error: "customerId or email required" }, 400);
+    if (await isStaffCustomerEmail(admin, email)) {
+      return json({ error: STAFF_CUSTOMER_ERROR }, 400);
+    }
 
     // deno-lint-ignore no-explicit-any
     const mintLink = () => admin.auth.admin.generateLink({

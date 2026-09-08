@@ -16,6 +16,7 @@ import {
 import { z } from "zod";
 import { SEO } from "@/components/SEO";
 import { AuthScaffold, AuthCard, GoogleIcon, AUTH_INPUT_CLS, AUTH_GRADIENT } from "@/components/auth/AuthScaffold";
+import { ADMIN_AUTH_URL, isStaffCustomerEmail, looksLikeNovaraStaffEmail, STAFF_CUSTOMER_ERROR } from "@/lib/staff-customer";
 
 // (accent color references below use #5C0FFE to match the brand scheme)
 const CUSTOMER_FEATURES = [
@@ -34,7 +35,7 @@ const passwordSchema = z.string().min(6, "Password must be at least 6 characters
 
 export default function Auth() {
   const router = useRouter();
-  const { user, signIn, signUp, signInWithGoogle } = useAuth();
+  const { user, signIn, signUp, signInWithGoogle, signOut } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -48,9 +49,22 @@ export default function Auth() {
   }, []);
 
   useEffect(() => {
-    if (user) {
-      router.replace("/account");
-    }
+    if (!user) return;
+    let cancelled = false;
+    void (async () => {
+      if (await isStaffCustomerEmail(user.email)) {
+        if (cancelled) return;
+        toast.message("Staff accounts use the admin workspace, not the customer portal.");
+        await signOut();
+        window.location.assign(ADMIN_AUTH_URL);
+        return;
+      }
+      if (!cancelled) router.replace("/account");
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, router]);
 
   const validateInputs = () => {
@@ -69,7 +83,12 @@ export default function Auth() {
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateInputs()) return;
-    
+    if (looksLikeNovaraStaffEmail(email)) {
+      toast.error(STAFF_CUSTOMER_ERROR);
+      window.location.assign(ADMIN_AUTH_URL);
+      return;
+    }
+
     setIsLoading(true);
     const { error } = await signIn(email, password);
     
@@ -89,6 +108,11 @@ export default function Auth() {
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateInputs()) return;
+    if (looksLikeNovaraStaffEmail(email)) {
+      toast.error(STAFF_CUSTOMER_ERROR);
+      window.location.assign(ADMIN_AUTH_URL);
+      return;
+    }
 
     setIsLoading(true);
     // signUp() now routes through our send-auth-email function so the

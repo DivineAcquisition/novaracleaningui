@@ -70,6 +70,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
+import { looksLikeNovaraStaffEmail } from "@/lib/staff-customer";
 import { useAvailability } from "@/hooks/use-availability";
 import { useDynamicQuote } from "@/hooks/use-dynamic-quote";
 import { PriceBreakdownCard } from "@/components/admin/PriceBreakdownCard";
@@ -1008,6 +1009,7 @@ export default function VaBooking() {
     const list: string[] = [];
     if (!firstName.trim()) list.push("First name");
     if (!isValidEmail(email)) list.push("Valid email");
+    else if (looksLikeNovaraStaffEmail(email)) list.push("A personal customer email (not @novaracleaning.com)");
     if (phoneDigits.length < 10) list.push("Phone (10+ digits)");
     if (zipDigits.length !== 5) list.push("ZIP (5 digits)");
     if (!selectedDate) list.push(isRecurring ? "First service date" : "Service date");

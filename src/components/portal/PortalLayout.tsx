@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   RiArrowRightLine,
@@ -14,11 +15,32 @@ import { WorkspaceShell } from "@/components/chrome/WorkspaceShell";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useMembershipCredits } from "@/hooks/use-membership-credits";
+import { ADMIN_AUTH_URL, isStaffCustomerEmail } from "@/lib/staff-customer";
+import { toast } from "sonner";
 
 export function PortalLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { user, signOut } = useAuth();
   const { credits, hasCredits } = useMembershipCredits();
+  const [staffBlocked, setStaffBlocked] = useState(false);
+
+  useEffect(() => {
+    if (!user?.email) return;
+    let cancelled = false;
+    void (async () => {
+      if (!(await isStaffCustomerEmail(user.email))) return;
+      if (cancelled) return;
+      setStaffBlocked(true);
+      toast.message("Staff accounts use the admin workspace, not the customer portal.");
+      await signOut();
+      window.location.assign(ADMIN_AUTH_URL);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // signOut is recreated every AuthProvider render — depend on email only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.email]);
 
   const userName = user
     ? user.user_metadata?.full_name ||
@@ -50,6 +72,14 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
       : []),
     { title: "Settings", url: "/account#settings", icon: RiSettings3Line, description: "Password · billing" },
   ];
+
+  if (staffBlocked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 text-sm text-slate-500">
+        Redirecting to the admin workspace…
+      </div>
+    );
+  }
 
   return (
     <WorkspaceShell

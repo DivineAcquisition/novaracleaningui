@@ -25,6 +25,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { Resend } from "https://esm.sh/resend@4.0.0";
+import { isStaffCustomerEmail } from "../_shared/staff-customer.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -244,6 +245,16 @@ serve(async (req) => {
   ]);
   if (!kind || !validKinds.has(kind) || !email || !email.includes("@")) {
     console.warn("[send-auth-email] rejected", { kind, hasEmail: Boolean(email) });
+    return json({ ok: true });
+  }
+
+  const customerKinds = new Set<Kind>([
+    "signup_customer",
+    "password_reset_customer",
+    "magic_link_customer",
+  ]);
+  if (customerKinds.has(kind) && await isStaffCustomerEmail(adminClient, email)) {
+    console.warn("[send-auth-email] skipped staff email for customer kind", kind, email);
     return json({ ok: true });
   }
 

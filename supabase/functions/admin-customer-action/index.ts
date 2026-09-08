@@ -12,6 +12,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.80.0";
 import { Resend } from "https://esm.sh/resend@4.0.0";
 import { resolveSecret } from "../_shared/app-secrets.ts";
 import { sendSms } from "../_shared/sms.ts";
+import { isStaffCustomerEmail, STAFF_CUSTOMER_ERROR } from "../_shared/staff-customer.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -231,6 +232,9 @@ serve(async (req) => {
         if (body.email !== undefined) {
           const email = String(body.email || "").toLowerCase().trim();
           if (!email.includes("@")) return json({ error: "invalid email" }, 400);
+          if (await isStaffCustomerEmail(admin, email)) {
+            return json({ error: STAFF_CUSTOMER_ERROR }, 400);
+          }
           patch.email = email;
         }
         if (body.address !== undefined) patch.address = body.address || null;

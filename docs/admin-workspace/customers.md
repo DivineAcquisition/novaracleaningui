@@ -5,13 +5,18 @@ category: How the Tool Works
 summary: Customer accounts, the credit wallet, refunds, billing links — and how referrals actually work.
 whoCanSee: Admins and VAs (impersonation and deletion are admin-only)
 where: /admin/customers
-lastVerified: 2026-08-29
+lastVerified: 2026-09-08
 order: 10
 ---
 
 Customers is the account-level view: everything about a person rather than a single job. Use
 it for credits, refunds, billing portal links, password resets, and finding someone by their
 referral code.
+
+Admins and VAs cannot also be customers. `@novaracleaning.com` emails, anyone with an admin
+or VA workspace role, and approved VAs (including their personal onboarding email) are
+blocked from getting a `customers` row — signup, internal booking, impersonation, and
+checkout all refuse them. Book jobs to a personal customer email instead.
 
 @screenshot customers-list
 

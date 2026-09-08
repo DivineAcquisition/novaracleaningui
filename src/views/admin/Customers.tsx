@@ -45,6 +45,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
+import { isStaffCustomerEmail, STAFF_CUSTOMER_ERROR } from "@/lib/staff-customer";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -1331,12 +1332,17 @@ function CreateCustomerDialog({
       toast.error("First name and email are required");
       return;
     }
+    const trimmedEmail = email.toLowerCase().trim();
+    if (await isStaffCustomerEmail(trimmedEmail)) {
+      toast.error(STAFF_CUSTOMER_ERROR);
+      return;
+    }
     setBusy(true);
     try {
       const { error } = await supabase.from("customers").insert({
         first_name: firstName,
         last_name: lastName || null,
-        email: email.toLowerCase().trim(),
+        email: trimmedEmail,
         phone: phone.replace(/\D/g, "") || null,
         zip: zip || null,
       });
@@ -1346,7 +1352,7 @@ function CreateCustomerDialog({
         await supabase.functions.invoke("send-auth-email", {
           body: {
             kind: "signup_customer",
-            email: email.toLowerCase().trim(),
+            email: trimmedEmail,
             metadata: { first_name: firstName, last_name: lastName },
             redirectTo: "https://app.novaracleaning.com/update-password",
           },

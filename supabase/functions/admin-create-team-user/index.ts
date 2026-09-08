@@ -18,6 +18,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.80.0";
 import { Resend } from "https://esm.sh/resend@4.0.0";
 import { resolveSecret } from "../_shared/app-secrets.ts";
+import { deleteUnusedStaffCustomerAccount } from "../_shared/staff-customer.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -293,6 +294,8 @@ serve(async (req) => {
           .upsert({ user_id: userId, role }, { onConflict: "user_id,role" });
         if (roleErr) throw roleErr;
 
+        await deleteUnusedStaffCustomerAccount(admin, email);
+
         const invite = await sendWorkspaceInviteEmail(admin, {
           email,
           firstName,
@@ -382,6 +385,7 @@ serve(async (req) => {
           .from("user_roles")
           .upsert({ user_id: userId, role }, { onConflict: "user_id,role" });
         if (error) throw error;
+        await deleteUnusedStaffCustomerAccount(admin, targetEmail);
         return json({ success: true, userId, role });
       }
 

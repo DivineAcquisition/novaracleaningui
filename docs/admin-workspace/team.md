@@ -5,7 +5,7 @@ category: How the Tool Works
 summary: Giving someone access to the workspace, the VA onboarding queue, and taking access away.
 whoCanSee: Full admins only
 where: /admin/team
-lastVerified: 2026-08-29
+lastVerified: 2026-09-08
 order: 15
 ---
 
@@ -65,7 +65,8 @@ for approved VAs who are leaving.
 
 Approving a rehire (someone who signed again after being offboarded) also unbans their
 workspace login, restores the VA role on their @novaracleaning.com account, and puts them
-back on the performance / EOD roster.
+back on the performance / EOD roster. It also removes any unused customer-portal account on
+their personal or work email — staff cannot hold customer accounts.
 
 ### What the VA sees
 
