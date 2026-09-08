@@ -84,7 +84,7 @@ function money(cents: number) {
 
 async function invoke(body: Record<string, unknown>): Promise<OfferPayload> {
   const { data, error } = await supabase.functions.invoke("urgent-hire", { body });
-  if (error) {
+    if (error) {
     let message = error.message || "Request failed.";
     try {
       const ctx = (error as { context?: Response }).context;
@@ -94,6 +94,9 @@ async function invoke(body: Record<string, unknown>): Promise<OfferPayload> {
       }
     } catch {
       /* keep */
+    }
+    if (/edge function|failed to send|not found/i.test(message)) {
+      message = "That link isn't valid.";
     }
     return { ok: false, error: message };
   }
