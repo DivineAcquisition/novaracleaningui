@@ -559,6 +559,39 @@ function VaOnboardingQueue() {
     }
   };
 
+  const reprovisionGhl = async (row: VaRow) => {
+    const name = `${row.first_name || ""} ${row.last_name || ""}`.trim() || row.email;
+    if (!confirm(
+      `Set up a GoHighLevel CRM seat for ${name}?\n\nThis creates (or reuses) their location user. They'll need the CRM login emailed or reset if the seat is new.`,
+    )) return;
+    setWorking(`ghl-${row.id}`);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-va-provision", {
+        body: { action: "reprovision_ghl", onboardingId: row.id },
+      });
+      const outcome = await edgeResult(error, data);
+      if (!outcome.ok) throw new Error(outcome.error || "Could not set up the CRM seat");
+      const d = data as {
+        ghlUserCreated?: boolean;
+        ghlError?: string | null;
+        ghlUserId?: string | null;
+        ghlPassword?: string | null;
+      };
+      if (d.ghlError) {
+        toast.warning(`CRM seat not created: ${d.ghlError}`);
+      } else if (d.ghlUserCreated && d.ghlPassword) {
+        toast.success(`CRM seat created. Temporary password: ${d.ghlPassword}`);
+      } else {
+        toast.success("CRM seat already existed and is linked.");
+      }
+      await loadRows();
+    } catch (e) {
+      toast.error((e as { message?: string })?.message || "Could not set up the CRM seat");
+    } finally {
+      setWorking(null);
+    }
+  };
+
   const act = async (row: VaRow, action: "approve" | "reject" | "offboard") => {
     const name = `${row.first_name || ""} ${row.last_name || ""}`.trim() || row.email;
     if (action === "approve" && !confirm(
@@ -676,11 +709,20 @@ function VaOnboardingQueue() {
               </>
             )}
             {r.status === "approved" && (
-              <Button size="sm" variant="outline" className="h-8 text-xs border-rose-200 text-rose-700"
-                disabled={working !== null}
-                onClick={() => act(r, "offboard")}>
-                {working === r.id ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin" /> : "Offboard (revoke all)"}
-              </Button>
+              <>
+                {!r.ghl_user_id ? (
+                  <Button size="sm" variant="outline" className="h-8 text-xs border-violet-200 text-violet-800"
+                    disabled={working !== null}
+                    onClick={() => void reprovisionGhl(r)}>
+                    {working === `ghl-${r.id}` ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin" /> : "Set up CRM seat"}
+                  </Button>
+                ) : null}
+                <Button size="sm" variant="outline" className="h-8 text-xs border-rose-200 text-rose-700"
+                  disabled={working !== null}
+                  onClick={() => act(r, "offboard")}>
+                  {working === r.id ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin" /> : "Offboard (revoke all)"}
+                </Button>
+              </>
             )}
           </div>
         </div>

@@ -138,6 +138,7 @@ async function deleteGhlUser(admin: DB, userId: string): Promise<boolean> {
 // deno-lint-ignore no-explicit-any
 async function findAuthUserByEmail(admin: any, email: string): Promise<{ id: string } | null> {
   const target = email.trim().toLowerCase();
+  if (!target.includes("@")) return null;
   let page = 1;
   for (let i = 0; i < 20; i++) {
     const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 200 });
@@ -148,6 +149,62 @@ async function findAuthUserByEmail(admin: any, email: string): Promise<{ id: str
     page++;
   }
   return null;
+}
+
+async function unbanAuthUser(admin: DB, userId: string, label: string) {
+  try {
+    await admin.auth.admin.updateUserById(userId, { ban_duration: "none" });
+  } catch (e) {
+    console.warn(
+      `[admin-va-provision] could not lift auth ban (${label})`,
+      e instanceof Error ? e.message : String(e),
+    );
+  }
+}
+
+/** Work inbox used for the admin workspace: firstname@novaracleaning.com. */
+function inferredNovaraEmail(firstName: string): string | null {
+  const first = String(firstName || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+  if (!first) return null;
+  return `${first}@novaracleaning.com`;
+}
+
+async function unbanRehireLogins(admin: DB, row: Row) {
+  const personal = await findAuthUserByEmail(admin, String(row.email || ""));
+  if (personal?.id) await unbanAuthUser(admin, personal.id, String(row.email || ""));
+  const workEmail = inferredNovaraEmail(String(row.first_name || ""));
+  if (workEmail && workEmail !== String(row.email || "").trim().toLowerCase()) {
+    const work = await findAuthUserByEmail(admin, workEmail);
+    if (work?.id) await unbanAuthUser(admin, work.id, workEmail);
+  }
+}
+
+/** After a rehire is approved: unban logins and put the Novara-domain seat back on VA. */
+async function restoreRehireWorkspace(admin: DB, row: Row): Promise<{
+  portalUserId: string | null;
+  workspaceEmail: string | null;
+  workspaceRestored: boolean;
+}> {
+  await unbanRehireLogins(admin, row);
+  const workEmail = inferredNovaraEmail(String(row.first_name || ""));
+  const work = workEmail ? await findAuthUserByEmail(admin, workEmail) : null;
+  if (work?.id && workEmail) {
+    const { error } = await admin.from("user_roles").upsert(
+      { user_id: work.id, role: "va" },
+      { onConflict: "user_id,role" },
+    );
+    if (error) {
+      console.warn("[admin-va-provision] could not restore workspace VA role", error.message);
+      return { portalUserId: work.id, workspaceEmail: workEmail, workspaceRestored: false };
+    }
+    return { portalUserId: work.id, workspaceEmail: workEmail, workspaceRestored: true };
+  }
+  const personal = await findAuthUserByEmail(admin, String(row.email || ""));
+  return {
+    portalUserId: personal?.id || row.portal_user_id || null,
+    workspaceEmail: workEmail,
+    workspaceRestored: false,
+  };
 }
 
 serve(async (req) => {
@@ -244,17 +301,7 @@ serve(async (req) => {
         if (updErr) throw updErr;
         rowId = existing.id;
         if (existingStatus === "offboarded") {
-          const authUser = await findAuthUserByEmail(admin, email);
-          if (authUser?.id) {
-            try {
-              await admin.auth.admin.updateUserById(authUser.id, { ban_duration: "none" });
-            } catch (e) {
-              console.warn(
-                "[admin-va-provision] could not lift auth ban on rehire",
-                e instanceof Error ? e.message : String(e),
-              );
-            }
-          }
+          await unbanRehireLogins(admin, { email, first_name: firstName });
         }
       } else {
         const { data: created, error } = await admin.from("va_onboarding")
@@ -393,11 +440,16 @@ serve(async (req) => {
 
       // 2) Internal Admin Workspace access ('va' role + invite email) via the
       //    existing team-user function — forwarding the caller's admin JWT.
-      //    Workspace access is Novara-domain only; personal emails (gmail, etc.)
-      //    stay on the onboarding/GHL track without admin console access.
-      let portalUserId: string | null = null;
+      //    Workspace access is Novara-domain only. Rehires often keep a personal
+      //    onboarding email and a firstname@novaracleaning.com login — restore
+      //    that work seat (unban + VA role) instead of skipping Gmail.
+      const rehireWorkspace = await restoreRehireWorkspace(admin, row);
+      let portalUserId: string | null = rehireWorkspace.portalUserId;
       let workspaceInviteSent = false;
-      const workspaceEmail = String(row.email || "").trim().toLowerCase();
+      const workspaceEmail = (
+        rehireWorkspace.workspaceEmail ||
+        String(row.email || "").trim().toLowerCase()
+      );
       if (!/^[^@\s]+@novaracleaning\.com$/i.test(workspaceEmail)) {
         console.warn(
           `[admin-va-provision] skipping workspace grant for non-Novara email: ${workspaceEmail}`,
@@ -423,7 +475,8 @@ serve(async (req) => {
         }
       }
 
-      // 3) Stamp the record.
+      // 3) Stamp the record. Rehire must land back on the performance roster
+      //    (offboarding sets performance_status = removed, which hides EODs).
       await admin.from("va_onboarding").update({
         status: "approved",
         approved_by: callerId,
@@ -431,6 +484,10 @@ serve(async (req) => {
         ghl_user_id: ghl.ghlUserId,
         portal_user_id: portalUserId,
         provisioned_at: new Date().toISOString(),
+        performance_status: "active",
+        offboarded_at: null,
+        offboarded_by: null,
+        rejected_reason: null,
         updated_at: new Date().toISOString(),
       }).eq("id", row.id);
 
@@ -439,7 +496,16 @@ serve(async (req) => {
         event_type: "va.provisioned",
         source: "admin-va-provision",
         summary: `✅ VA approved & provisioned — ${name} (${row.email}, ${row.va_role}). GHL user ${ghl.created ? "created" : "already existed"}; workspace access granted.`,
-        data: { vaOnboardingId: row.id, email: row.email, vaRole: row.va_role, ghlUserId: ghl.ghlUserId, portalUserId, approvedBy: callerId },
+        data: {
+          vaOnboardingId: row.id,
+          email: row.email,
+          workspaceEmail,
+          vaRole: row.va_role,
+          ghlUserId: ghl.ghlUserId,
+          portalUserId,
+          approvedBy: callerId,
+          workspaceRestored: rehireWorkspace.workspaceRestored,
+        },
       }).then(() => undefined, () => undefined);
 
       // 5) Send the VA their CRM login (workspace invite arrives separately),

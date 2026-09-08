@@ -59,8 +59,13 @@ terms in place.
 
 Approving asks you to confirm, then creates their CRM user and their workspace access.
 
-The other buttons are **Resend offer link** for people mid-flight, **Reject**, and **Offboard
-(revoke all)** for approved VAs who are leaving.
+The other buttons are **Resend offer link** for people mid-flight, **Reject**, **Set up CRM
+seat** when an approved VA is missing their GoHighLevel login, and **Offboard (revoke all)**
+for approved VAs who are leaving.
+
+Approving a rehire (someone who signed again after being offboarded) also unbans their
+workspace login, restores the VA role on their @novaracleaning.com account, and puts them
+back on the performance / EOD roster.
 
 ### What the VA sees
 
