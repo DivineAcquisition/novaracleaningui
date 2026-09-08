@@ -15,11 +15,13 @@ import {
   firstJobOnlySentence,
   isDeclinedPipelineStage,
   isUrgentHirePipelineStage,
+  isActiveRosterStatus,
   parseUrgentHireSettings,
   payoutsReady,
   remainingUrgentHireSteps,
   screeningQualifiersPass,
   supplyChecklistValid,
+  unfilledStillNeedsCoverage,
   urgentHirePayCents,
   URGENT_HIRE_DEFAULTS,
   URGENT_HIRE_ELIGIBLE_STAGES,
@@ -48,6 +50,28 @@ check("hold is not eligible", isUrgentHirePipelineStage("hold"), false);
 check("active roster is not eligible", isUrgentHirePipelineStage("active"), false);
 check("rejected is declined", isDeclinedPipelineStage("rejected"), true);
 check("withdrawn is declined", isDeclinedPipelineStage("withdrawn"), true);
+check("active roster status is excluded", isActiveRosterStatus("Active"), true);
+check("pending cleaner is not roster-active", isActiveRosterStatus("pending"), false);
+check(
+  "unfilled + still dispatching still needs coverage",
+  unfilledStillNeedsCoverage({ broadcastStatus: "unfilled", jobStatus: "Dispatching" }),
+  true,
+);
+check(
+  "unfilled + confirmed another way is not a gap",
+  unfilledStillNeedsCoverage({ broadcastStatus: "unfilled", jobStatus: "Confirmed" }),
+  false,
+);
+check(
+  "unfilled + completed is not a gap",
+  unfilledStillNeedsCoverage({ broadcastStatus: "unfilled", jobStatus: "Completed" }),
+  false,
+);
+check(
+  "open broadcasts are not unfilled gaps",
+  unfilledStillNeedsCoverage({ broadcastStatus: "open", jobStatus: "Broadcast" }),
+  false,
+);
 check("eligible stages never include excluded ones",
   URGENT_HIRE_ELIGIBLE_STAGES.some((s) => (URGENT_HIRE_EXCLUDED_STAGES as readonly string[]).includes(s)),
   false,

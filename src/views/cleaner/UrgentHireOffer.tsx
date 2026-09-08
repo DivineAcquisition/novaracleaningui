@@ -140,7 +140,11 @@ export default function UrgentHireOffer() {
       return;
     }
     const data = await invoke({ action: "get", token });
-    if (!data.ok && data.code === "not_found") {
+    if (data.taken || data.code === "taken" || data.code === "expired") {
+      setState({ kind: "ready", data: { ...data, taken: true } });
+      return;
+    }
+    if (!data.ok) {
       setState({ kind: "blocked", message: data.error || "That link isn't valid." });
       return;
     }
@@ -295,7 +299,7 @@ export default function UrgentHireOffer() {
         ) : null}
         <Button
           className="mt-5 w-full bg-violet-700 hover:bg-violet-800"
-          disabled={accepting || remaining.size > 0}
+          disabled={accepting || remaining.size > 0 || data.canAccept === false}
           onClick={() => void accept()}
         >
           {accepting ? (
@@ -305,6 +309,8 @@ export default function UrgentHireOffer() {
             </>
           ) : remaining.size > 0 ? (
             "Finish the steps above to accept"
+          ) : data.canAccept === false ? (
+            "This offer isn't open"
           ) : (
             "Accept this job"
           )}

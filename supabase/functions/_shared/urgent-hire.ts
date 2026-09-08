@@ -83,6 +83,22 @@ export function isUrgentHirePipelineStage(stage: string | null | undefined): boo
   return (URGENT_HIRE_ELIGIBLE_STAGES as readonly string[]).includes(s);
 }
 
+export function isActiveRosterStatus(status: string | null | undefined): boolean {
+  return String(status || "").toLowerCase() === "active";
+}
+
+export function unfilledStillNeedsCoverage(opts: {
+  broadcastStatus: string;
+  jobStatus?: string | null;
+}): boolean {
+  if (String(opts.broadcastStatus || "").toLowerCase() !== "unfilled") return false;
+  const s = String(opts.jobStatus || "").toLowerCase();
+  if (!s) return true;
+  if (/(cancel|complete|invoice)/.test(s)) return false;
+  if (/(confirm|assigned|in progress|in_progress)/.test(s)) return false;
+  return true;
+}
+
 export function screeningQualifiersPass(answers: unknown): boolean {
   const bag = answers && typeof answers === "object" ? (answers as Record<string, unknown>) : {};
   const qualifiers = (bag.qualifiers && typeof bag.qualifiers === "object"

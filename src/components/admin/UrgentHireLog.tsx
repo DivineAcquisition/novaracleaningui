@@ -26,6 +26,7 @@ interface BroadcastRow {
   reached_count: number;
   filled_at: string | null;
   unfilled_at: string | null;
+  stillNeedsCoverage?: boolean;
   job_snapshot: {
     ref?: string;
     serviceType?: string;
@@ -99,7 +100,9 @@ export default function UrgentHireLog({ onChanged }: { onChanged?: () => void })
     return map;
   }, [offers]);
 
-  const unfilled = broadcasts.filter((b) => b.status === "unfilled");
+  const unfilled = broadcasts.filter(
+    (b) => b.status === "unfilled" && b.stillNeedsCoverage !== false,
+  );
   const open = broadcasts.filter((b) => b.status === "open" || b.status === "sending");
 
   const saveSettings = async () => {

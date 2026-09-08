@@ -918,10 +918,11 @@ function JobCard({
             {money(job.booking?.total_estimate_cents)} job
           </span>
           <div className="flex flex-wrap items-center gap-1.5">
-            {confirmedCount < needed ? (
+            {confirmedCount < needed && stage !== "completed" && stage !== "in_progress" ? (
               <Button
                 size="sm"
                 variant="flat"
+                title="Last-resort broadcast to nearby pipeline applicants after backup coverage is exhausted"
                 onPress={onUrgentHire}
                 startContent={<RiFlashlightLine className="w-4 h-4" />}
               >

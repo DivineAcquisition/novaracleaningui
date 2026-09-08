@@ -80,6 +80,28 @@ export function isDeclinedPipelineStage(stage: string | null | undefined): boole
   return s === "rejected" || s === "withdrawn";
 }
 
+/** Active roster contractors are reached through dispatch/backup, not this blast. */
+export function isActiveRosterStatus(status: string | null | undefined): boolean {
+  return String(status || "").toLowerCase() === "active";
+}
+
+/**
+ * An unfilled broadcast stays on the Needs Attention surface only while the
+ * job itself is still an open coverage gap — not after it was staffed another
+ * way, completed, or cancelled.
+ */
+export function unfilledStillNeedsCoverage(opts: {
+  broadcastStatus: string;
+  jobStatus?: string | null;
+}): boolean {
+  if (String(opts.broadcastStatus || "").toLowerCase() !== "unfilled") return false;
+  const s = String(opts.jobStatus || "").toLowerCase();
+  if (!s) return true;
+  if (/(cancel|complete|invoice)/.test(s)) return false;
+  if (/(confirm|assigned|in progress|in_progress)/.test(s)) return false;
+  return true;
+}
+
 /** Screening bar for this pathway: valid photo ID and own vehicle both passed. */
 export function screeningQualifiersPass(answers: unknown): boolean {
   const bag = answers && typeof answers === "object" ? (answers as Record<string, unknown>) : {};

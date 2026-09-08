@@ -19,6 +19,7 @@ import {
   buildUrgentHireSms,
   dollarsFromCents,
   firstJobOnlySentence,
+  isActiveRosterStatus,
   isUrgentHirePipelineStage,
   mintHexToken,
   parseUrgentHireSettings,
@@ -27,6 +28,7 @@ import {
   screeningQualifiersPass,
   serviceTypeLabel,
   supplyChecklistValid,
+  unfilledStillNeedsCoverage,
   urgentHireOfferUrl,
   urgentHirePayCents,
   usablePhone,
@@ -206,7 +208,7 @@ async function findEligible(
   const applicantIds = rows.map((r) => String(r.id));
   const cleanerIds = rows.map((r) => r.cleaner_id).filter(Boolean).map(String);
 
-  const [{ data: screenings }, { data: cleaners }] = await Promise.all([
+  const [{ data: screenings }, { data: cleaners }, { data: activeRoster }] = await Promise.all([
     admin
       .from("phone_screenings")
       .select("applicant_id, recommendation, answers, submitted_at, status")
@@ -221,6 +223,7 @@ async function findEligible(
         )
         .in("id", cleanerIds)
       : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+    admin.from("cleaners").select("email, status").eq("status", "active"),
   ]);
 
   const latestScreening = new Map<string, Record<string, unknown>>();
@@ -231,6 +234,13 @@ async function findEligible(
   const cleanerById = new Map<string, Record<string, unknown>>();
   for (const c of (cleaners || []) as Record<string, unknown>[]) {
     cleanerById.set(String(c.id), c);
+  }
+  const activeEmails = new Set<string>();
+  for (const c of (activeRoster || []) as Record<string, unknown>[]) {
+    if (isActiveRosterStatus(String(c.status || ""))) {
+      const email = String(c.email || "").trim().toLowerCase();
+      if (email) activeEmails.add(email);
+    }
   }
 
   const eligible: EligibleRow[] = [];
@@ -246,7 +256,9 @@ async function findEligible(
     if (!screeningQualifiersPass(screening.answers)) continue;
 
     const cleaner = a.cleaner_id ? cleanerById.get(String(a.cleaner_id)) : null;
-    if (cleaner && String(cleaner.status || "").toLowerCase() === "active") continue;
+    if (cleaner && isActiveRosterStatus(String(cleaner.status || ""))) continue;
+    const email = String(a.email || "").trim().toLowerCase();
+    if (email && activeEmails.has(email)) continue;
 
     let lat: number | null = cleaner?.home_lat != null ? Number(cleaner.home_lat) : null;
     let lng: number | null = cleaner?.home_lng != null ? Number(cleaner.home_lng) : null;
@@ -341,10 +353,13 @@ async function ensurePendingCleaner(
   if (applicant.email) {
     const { data: found } = await admin
       .from("cleaners")
-      .select("id")
+      .select("id, status")
       .ilike("email", applicant.email)
       .maybeSingle();
     if (found?.id) {
+      if (isActiveRosterStatus(String(found.status || ""))) {
+        throw new Error("This applicant is already on the Active roster.");
+      }
       await admin
         .from("cleaner_applicants")
         .update({
@@ -556,6 +571,28 @@ async function activateForUrgentHire(admin: SB, cleanerId: string, applicantId: 
     .eq("id", applicantId);
 }
 
+/** If assignment fails after claim+activate, put them back in the pipeline. Progress stays. */
+async function revertUrgentHireActivation(admin: SB, cleanerId: string, applicantId: string) {
+  await admin
+    .from("cleaners")
+    .update({
+      status: "pending",
+      approved: false,
+      available_for_bookings: false,
+      activated_at: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", cleanerId);
+
+  await admin
+    .from("cleaner_applicants")
+    .update({
+      stage: "onboarding",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", applicantId);
+}
+
 async function assignWinner(
   admin: SB,
   opts: {
@@ -720,15 +757,33 @@ serve(async (req) => {
         .limit(80);
       if (error) throw error;
       const ids = (broadcasts || []).map((b: { id: string }) => b.id);
-      const { data: offers } = ids.length
-        ? await admin
-          .from("urgent_hire_offers")
-          .select(
-            "id, broadcast_id, applicant_id, cleaner_id, applicant_name, status, distance_miles, had_valid_checklist, last_step, viewed_at, accepted_at, sms_sent_at, email_sent_at, created_at",
-          )
-          .in("broadcast_id", ids)
-        : { data: [] as Record<string, unknown>[] };
-      return json({ ok: true, broadcasts: broadcasts || [], offers: offers || [] });
+      const jobIds = [
+        ...new Set((broadcasts || []).map((b: { job_id: string }) => String(b.job_id)).filter(Boolean)),
+      ];
+      const [{ data: offers }, { data: jobs }] = await Promise.all([
+        ids.length
+          ? admin
+            .from("urgent_hire_offers")
+            .select(
+              "id, broadcast_id, applicant_id, cleaner_id, applicant_name, status, distance_miles, had_valid_checklist, last_step, viewed_at, accepted_at, sms_sent_at, email_sent_at, created_at",
+            )
+            .in("broadcast_id", ids)
+          : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+        jobIds.length
+          ? admin.from("jobs").select("id, status").in("id", jobIds)
+          : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+      ]);
+      const jobStatus = new Map(
+        ((jobs || []) as { id: string; status: string | null }[]).map((j) => [j.id, j.status]),
+      );
+      const annotated = (broadcasts || []).map((b: { id: string; job_id: string; status: string }) => ({
+        ...b,
+        stillNeedsCoverage: unfilledStillNeedsCoverage({
+          broadcastStatus: b.status,
+          jobStatus: jobStatus.get(b.job_id) || null,
+        }),
+      }));
+      return json({ ok: true, broadcasts: annotated, offers: offers || [] });
     }
 
     if (action === "preview" || action === "send") {
@@ -930,6 +985,15 @@ serve(async (req) => {
           radius_miles: settings.radius_miles,
           initiated_by: actor?.email,
         },
+      });
+      await notifyDiscord(admin, {
+        title: "Urgent Hire sent",
+        description: `${snapshot.ref} — ${reached} of ${eligible.length} eligible applicant(s) reached at ${settings.pay_percent}% first-job. First to finish remaining steps and accept wins.`,
+        color: 0x5c0ffe,
+        fields: [
+          { name: "Reached", value: String(reached), inline: true },
+          { name: "Zone", value: String(snapshot.zone || "—"), inline: true },
+        ],
       });
 
       return json({
@@ -1157,6 +1221,7 @@ serve(async (req) => {
           p_offer_id: offer.id,
           p_error: err instanceof Error ? err.message : "activate failed",
         });
+        await revertUrgentHireActivation(admin, cleanerId, applicantId);
         throw err;
       }
 
@@ -1174,6 +1239,7 @@ serve(async (req) => {
       });
       if (assignError) {
         await admin.rpc("release_urgent_hire_claim", { p_offer_id: offer.id, p_error: assignError });
+        await revertUrgentHireActivation(admin, cleanerId, applicantId);
         log("assign failed after claim", { offerId: offer.id, assignError });
         return json({
           ok: false,
@@ -1193,6 +1259,11 @@ serve(async (req) => {
           pay_percent: broadcast.pay_percent,
           background_check_required: false,
         },
+      });
+      await notifyDiscord(admin, {
+        title: "Urgent Hire filled",
+        description: `${offer.applicant_name || "An applicant"} took ${snap.ref || "the job"} at ${broadcast.pay_percent}% (first job only). Background check was not required.`,
+        color: 0x047857,
       });
 
       try {

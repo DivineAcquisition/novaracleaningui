@@ -806,9 +806,15 @@ export default function NeedsAttention() {
         if (!res.ok || json.error) throw new Error(json.error || "Could not load the board.");
         setPayload(json);
         if (!onCallDate) setOnCallDate(json.onCallDate);
-        const uh = await callUrgentHire<{ broadcasts?: Array<{ status: string }> }>({ action: "log" });
+        const uh = await callUrgentHire<{
+          broadcasts?: Array<{ status: string; stillNeedsCoverage?: boolean }>;
+        }>({ action: "log" });
         if (uh.ok) {
-          setUrgentUnfilled((uh.data.broadcasts || []).filter((b) => b.status === "unfilled").length);
+          setUrgentUnfilled(
+            (uh.data.broadcasts || []).filter(
+              (b) => b.status === "unfilled" && b.stillNeedsCoverage !== false,
+            ).length,
+          );
         }
       } catch (e) {
         toast.error((e as Error).message);
