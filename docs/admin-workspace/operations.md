@@ -93,15 +93,15 @@ Once uncovered, **Credit the customer** applies goodwill. It needs an amount abo
 **Urgent Hire** is the last-resort step after the assigned cleaner and the designated backup
 pool can't cover it. It broadcasts **at once** (not staged) to applicants who are
 Screening-Passed or later, not yet Active, never rejected, and have a valid photo ID and
-own vehicle. Radius (default 25 miles) is an in-area threshold — everyone qualified still
-gets the offer, and applicants farther than the radius see mileage in the SMS. The message
-acknowledges they are receiving it because they applied in the past. The offer states a
-premium first-job rate (default 45%) and says that rate applies to this job only. Recipients
-still need a valid supply checklist, a signed agreement, and payout setup before they can
-accept — background check is **not** required on this path. First to finish those steps and
-accept wins; everyone else sees the job as no longer available and keeps any onboarding
-progress. If the fill window closes with nobody accepting, it surfaces here as still needing
-coverage, with a link to the **Urgent Hire** log on Cleaners (`/admin/cleaners?section=urgent-hire`).
+own vehicle. They must be within the max-miles window (45–55 miles, default 45). The offer
+pays the first-job share (default 45%) plus 70¢/mi mileage in one total, with company take
+floored at 40% of job value. The message acknowledges they are receiving it because they
+applied in the past. Recipients still need a valid supply checklist, a signed agreement, and
+payout setup before they can accept — background check is **not** required on this path. First
+to finish those steps and accept wins; everyone else sees the job as no longer available and
+keeps any onboarding progress. If the fill window closes with nobody accepting, it surfaces
+here as still needing coverage, with a link to the **Urgent Hire** log on Cleaners
+(`/admin/cleaners?section=urgent-hire`).
 
 The same **Urgent Hire** button is on understaffed Dispatch job cards.
 

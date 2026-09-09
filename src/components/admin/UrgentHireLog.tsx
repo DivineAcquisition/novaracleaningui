@@ -247,14 +247,14 @@ export default function UrgentHireLog({ onChanged }: { onChanged?: () => void })
             Urgent Hire settings
           </CardTitle>
           <CardDescription className="text-xs">
-            Radius is the in-area threshold for mileage copy in the SMS — it does not
-            exclude anyone. The 45% figure and first-job-only framing are both configurable.
+            Max miles is 45–55. Farther applicants are not offered the job. Payout is the
+            first-job share plus 70¢/mi mileage, with company take floored at 40% of job value.
             Background check stays off for this pathway.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1">
-            <Label className="text-xs">Radius (miles)</Label>
+            <Label className="text-xs">Max miles</Label>
             <Input
               inputMode="numeric"
               value={String(settings.radius_miles)}
@@ -263,7 +263,7 @@ export default function UrgentHireLog({ onChanged }: { onChanged?: () => void })
               }
             />
             <p className="text-[11px] text-slate-500">
-              Default 25. Farther applicants still get the offer; their SMS includes mileage.
+              45–55 miles. Applicants farther than this are not sent the offer.
             </p>
           </div>
           <div className="space-y-1">

@@ -1,10 +1,10 @@
 // urgent-hire
 //
 // Admin-initiated last-resort broadcast to qualified pipeline applicants
-// (valid photo ID + own vehicle, Screening-Passed+, not Active) when a job
-// needs coverage beyond the backup pool. Radius is mileage copy, not a
-// cutoff. Public token actions (get / accept) reuse the same first-claim-wins
-// RPC pattern as coverage offers.
+// (valid photo ID + own vehicle, Screening-Passed+, not Active, not rejected)
+// within 45–55 miles. Payout is first-job share plus mileage. Public token
+// actions (get / accept) reuse the same first-claim-wins RPC pattern as
+// coverage offers.
 //
 // Actions:
 //   preview / send / log / get_settings / save_settings / cancel  (admin/VA)
@@ -22,10 +22,11 @@ import {
   buildUrgentHireSms,
   dollarsFromCents,
   firstJobOnlySentence,
-  formatUrgentHireMileageLine,
+  formatUrgentHireMileagePayLine,
   isActiveRosterStatus,
   isBlockedFromUrgentHire,
   isUrgentHirePipelineStage,
+  isWithinUrgentHireRadius,
   mintHexToken,
   parseUrgentHireSettings,
   payoutsReady,
@@ -39,9 +40,10 @@ import {
   urgentHireOfferUrl,
   urgentHirePayCents,
   urgentHirePhoneDigits,
+  urgentHireTotalPayCents,
   usablePhone,
-  URGENT_HIRE_DEFAULTS,
   URGENT_HIRE_ELIGIBLE_STAGES,
+  URGENT_HIRE_MILEAGE_RATE_CENTS,
   URGENT_HIRE_PORTAL_BASE,
   URGENT_HIRE_SETTINGS_KEY,
   zoneLabel,
@@ -215,7 +217,7 @@ async function findEligible(
   admin: SB,
   jobCoords: { lat: number; lng: number } | null,
   settings: UrgentHireSettings,
-): Promise<{ eligible: EligibleRow[]; unknownMileage: number }> {
+): Promise<{ eligible: EligibleRow[]; unknownMileage: number; skippedTooFar: number }> {
   const { data: applicants, error } = await admin
     .from("cleaner_applicants")
     .select(
@@ -225,7 +227,7 @@ async function findEligible(
   if (error) throw error;
 
   const rows = (applicants || []) as Record<string, unknown>[];
-  if (rows.length === 0) return { eligible: [], unknownMileage: 0 };
+  if (rows.length === 0) return { eligible: [], unknownMileage: 0, skippedTooFar: 0 };
 
   const applicantIds = rows.map((r) => String(r.id));
   const cleanerIds = rows.map((r) => r.cleaner_id).filter(Boolean).map(String);
@@ -279,6 +281,7 @@ async function findEligible(
 
   const eligible: EligibleRow[] = [];
   let unknownMileage = 0;
+  let skippedTooFar = 0;
 
   for (const a of rows) {
     const stage = String(a.stage || "");
@@ -327,7 +330,14 @@ async function findEligible(
         }
       }
     }
-    if (distanceMiles == null) unknownMileage += 1;
+    if (distanceMiles == null) {
+      unknownMileage += 1;
+      continue;
+    }
+    if (!isWithinUrgentHireRadius(distanceMiles, settings.radius_miles)) {
+      skippedTooFar += 1;
+      continue;
+    }
 
     const checklist = supplyChecklistValid({
       inventory: (cleaner?.supply_inventory || {}) as Record<string, boolean>,
@@ -365,7 +375,7 @@ async function findEligible(
     if (y.distanceMiles == null) return -1;
     return x.distanceMiles - y.distanceMiles;
   });
-  return { eligible, unknownMileage };
+  return { eligible, unknownMileage, skippedTooFar };
 }
 
 async function ensurePendingCleaner(
@@ -530,7 +540,7 @@ function jobWhen(bundle: JobBundle): { dateLabel: string; timeWindow: string } {
 function offerCopyFor(
   bundle: JobBundle,
   settings: UrgentHireSettings,
-  payCents: number,
+  pay: ReturnType<typeof urgentHireTotalPayCents>,
   token: string,
   needsChecklist: boolean,
   miles: number | null,
@@ -547,12 +557,12 @@ function offerCopyFor(
     timeWindow,
     zone,
     payPercent: settings.pay_percent,
-    payDollars: dollarsFromCents(payCents),
+    payDollars: dollarsFromCents(pay.totalCents),
     firstJobOnly: settings.first_job_only,
     offerUrl: urgentHireOfferUrl(token),
     needsChecklist,
     miles,
-    radiusMiles: settings.radius_miles,
+    mileageCents: pay.mileageCents,
   };
 }
 
@@ -595,10 +605,7 @@ async function sendOfferComms(
             offerUrl: copy.offerUrl,
             needsChecklist: copy.needsChecklist,
             appliedAck: APPLIED_IN_PAST_ACK,
-            mileageLine: formatUrgentHireMileageLine(
-              copy.miles,
-              copy.radiusMiles ?? URGENT_HIRE_DEFAULTS.radius_miles,
-            ),
+            mileageLine: formatUrgentHireMileagePayLine(copy.miles, copy.mileageCents || 0),
           },
         },
       });
@@ -867,6 +874,12 @@ serve(async (req) => {
       }
 
       const coords = await resolveJobCoords(admin, bundle);
+      if (!coords) {
+        return json({
+          ok: false,
+          error: `This job has no mappable location yet, so we can't tell who's within ${settings.radius_miles} miles.`,
+        }, 409);
+      }
 
       let { data: open } = await admin
         .from("urgent_hire_broadcasts")
@@ -875,16 +888,10 @@ serve(async (req) => {
         .in("status", ["sending", "open"])
         .maybeSingle();
 
-      const { eligible, unknownMileage } = await findEligible(admin, coords, settings);
+      const { eligible, unknownMileage, skippedTooFar } = await findEligible(admin, coords, settings);
       const skippedNoLocation = unknownMileage;
-      const inRadiusCount = eligible.filter(
-        (e) => e.distanceMiles != null && e.distanceMiles <= settings.radius_miles,
-      ).length;
-      const fartherCount = eligible.filter(
-        (e) => e.distanceMiles != null && e.distanceMiles > settings.radius_miles,
-      ).length;
       const revenue = jobValueForPay(bundle.booking || {});
-      const payCents = urgentHirePayCents(revenue, settings.pay_percent);
+      const basePayCents = urgentHirePayCents(revenue, settings.pay_percent);
       const { dateLabel, timeWindow } = jobWhen(bundle);
       const preview = {
         jobId,
@@ -897,24 +904,35 @@ serve(async (req) => {
           String(bundle.booking?.zip_code || bundle.job.zip || ""),
         ),
         jobValueCents: revenue,
-        payCents,
+        payCents: basePayCents,
+        mileageRateCents: URGENT_HIRE_MILEAGE_RATE_CENTS,
         settings,
         eligibleCount: eligible.length,
         skippedNoLocation,
         unknownMileage,
-        inRadiusCount,
-        fartherCount,
+        skippedTooFar,
+        inRadiusCount: eligible.length,
+        fartherCount: skippedTooFar,
         canAcceptNow: eligible.filter((e) => e.remaining.length === 0).length,
         needChecklist: eligible.filter((e) => e.remaining.includes("supplies")).length,
         openBroadcast: open || null,
-        applicants: eligible.map((e) => ({
-          applicantId: e.applicantId,
-          name: e.name,
-          stage: e.stage,
-          miles: e.distanceMiles,
-          hadValidChecklist: e.hadValidChecklist,
-          remaining: e.remaining,
-        })),
+        applicants: eligible.map((e) => {
+          const pay = urgentHireTotalPayCents({
+            jobValueCents: revenue,
+            payPercent: settings.pay_percent,
+            miles: e.distanceMiles,
+          });
+          return {
+            applicantId: e.applicantId,
+            name: e.name,
+            stage: e.stage,
+            miles: e.distanceMiles,
+            payCents: pay.totalCents,
+            mileageCents: pay.mileageCents,
+            hadValidChecklist: e.hadValidChecklist,
+            remaining: e.remaining,
+          };
+        }),
       };
 
       if (action === "preview") return json({ ok: true, ...preview });
@@ -950,7 +968,7 @@ serve(async (req) => {
           ok: false,
           code: "nobody_eligible",
           error:
-            "Nobody in the applicant pipeline has a valid photo ID and own vehicle, is Screening-Passed or later, is not rejected, and is not yet Active.",
+            "Nobody in the applicant pipeline is qualified, within the max miles, Screening-Passed or later, not rejected, and not yet Active.",
           ...preview,
         }, 409);
       }
@@ -965,7 +983,7 @@ serve(async (req) => {
         timeWindow,
         zone: preview.zone,
         jobValueCents: revenue,
-        payCents,
+        payCents: basePayCents,
       };
 
       const { data: broadcast, error: bErr } = await admin
@@ -1013,10 +1031,15 @@ serve(async (req) => {
             log("offer insert failed", oErr.message);
             continue;
           }
+          const pay = urgentHireTotalPayCents({
+            jobValueCents: revenue,
+            payPercent: settings.pay_percent,
+            miles: row.distanceMiles,
+          });
           const copy = offerCopyFor(
             bundle,
             settings,
-            payCents,
+            pay,
             token,
             !row.hadValidChecklist,
             row.distanceMiles,
@@ -1076,7 +1099,7 @@ serve(async (req) => {
         eligibleCount: eligible.length,
         skippedNoLocation,
         fillDeadlineAt: fillDeadline,
-        payCents,
+        payCents: basePayCents,
         settings,
       });
     }
@@ -1208,10 +1231,17 @@ serve(async (req) => {
           ? "This job is no longer available — someone else finished first. Your onboarding progress is saved."
           : null;
 
+      const offerPay = urgentHireTotalPayCents({
+        jobValueCents: Number(snap.jobValueCents) || 0,
+        payPercent: Number(broadcast.pay_percent) || 45,
+        miles: offer.distance_miles,
+      });
+      const mileageLine = formatUrgentHireMileagePayLine(offer.distance_miles, offerPay.mileageCents);
+
       const payload = {
         ok: true,
         appliedAck: APPLIED_IN_PAST_ACK,
-        mileageLine: formatUrgentHireMileageLine(offer.distance_miles, settings.radius_miles),
+        mileageLine,
         offer: {
           id: offer.id,
           status: offer.status,
@@ -1229,7 +1259,9 @@ serve(async (req) => {
           dateLabel: snap.dateLabel || "",
           timeWindow: snap.timeWindow || "",
           zone: snap.zone || "",
-          payCents: Number(snap.payCents) || 0,
+          payCents: offerPay.totalCents,
+          basePayCents: offerPay.baseCents,
+          mileageCents: offerPay.mileageCents,
           firstJobNote: firstJobOnlySentence(
             broadcast.first_job_only !== false,
             Number(broadcast.pay_percent) || 45,
@@ -1301,16 +1333,17 @@ serve(async (req) => {
         throw err;
       }
 
-      const payCents = Number(snap.payCents) || urgentHirePayCents(
-        jobValueForPay(bundle.booking || {}),
-        Number(broadcast.pay_percent) || 45,
-      );
+      const pay = urgentHireTotalPayCents({
+        jobValueCents: Number(snap.jobValueCents) || jobValueForPay(bundle.booking || {}),
+        payPercent: Number(broadcast.pay_percent) || 45,
+        miles: offer.distance_miles,
+      });
       const assignError = await assignWinner(admin, {
         bookingId,
         jobId: String(offer.job_id),
         cleanerId,
         cleanerName: offer.applicant_name || "Applicant",
-        payCents,
+        payCents: pay.totalCents,
         payPercent: Number(broadcast.pay_percent) || 45,
       });
       if (assignError) {

@@ -203,8 +203,8 @@ serve(async (req) => {
               <div style="font-size:14px;color:#334155">${when || "Upcoming"}</div>
               <div style="font-size:14px;color:#334155">Area: ${zone}</div>
               ${mileageLine ? `<div style="font-size:14px;color:#6d28d9;margin-top:6px">${mileageLine}</div>` : ""}
-              <div style="font-size:22px;font-weight:800;color:#5C0FFE;margin-top:10px">$${pay} · ${pct}</div>
-              <div style="font-size:13px;color:#6d28d9;margin-top:6px">${firstJob}</div>
+              <div style="font-size:22px;font-weight:800;color:#5C0FFE;margin-top:10px">$${pay}</div>
+              <div style="font-size:13px;color:#6d28d9;margin-top:6px">${mileageLine ? `${pct} job share plus mileage. ${firstJob}` : firstJob}</div>
             </div>
             <p style="margin:0 0 16px;color:#475569;font-size:14px">${gate} The exact address is shared once you're assigned.</p>
             <p style="margin:24px 0;text-align:center">

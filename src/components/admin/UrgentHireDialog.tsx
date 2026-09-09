@@ -24,6 +24,7 @@ export interface UrgentHirePreview {
   zone: string;
   jobValueCents: number;
   payCents: number;
+  mileageRateCents?: number;
   settings: {
     radius_miles: number;
     pay_percent: number;
@@ -33,6 +34,7 @@ export interface UrgentHirePreview {
   eligibleCount: number;
   skippedNoLocation: number;
   unknownMileage?: number;
+  skippedTooFar?: number;
   inRadiusCount?: number;
   fartherCount?: number;
   canAcceptNow: number;
@@ -43,16 +45,23 @@ export interface UrgentHirePreview {
     name: string;
     stage: string;
     miles: number | null;
+    payCents?: number;
+    mileageCents?: number;
     hadValidChecklist: boolean;
     remaining: string[];
   }>;
 }
 
-function applicantMilesLabel(miles: number | null | undefined, radiusMiles: number): string {
-  if (miles == null || !Number.isFinite(Number(miles))) return "mileage unknown";
-  const n = Number(miles);
-  const label = `${n.toFixed(1)} mi`;
-  return n > radiusMiles ? `${label} · outside radius` : label;
+function applicantMilesLabel(
+  miles: number | null | undefined,
+  payCents?: number,
+): string {
+  const mi =
+    miles == null || !Number.isFinite(Number(miles))
+      ? "mileage unknown"
+      : `${Number(miles).toFixed(1)} mi`;
+  if (payCents != null) return `${mi} · $${(Math.max(0, payCents) / 100).toFixed(2)}`;
+  return mi;
 }
 
 function money(cents: number) {
@@ -100,11 +109,11 @@ export function UrgentHireDialog({
             Urgent Hire
           </DialogTitle>
           <DialogDescription>
-            Last-resort broadcast to every qualified pipeline applicant — valid photo ID
-            and own vehicle, Screening-Passed or later, not rejected, not yet Active.
-            Applicants farther than the radius still get the offer; their SMS includes
-            mileage. Background check is not required for this path. First to finish
-            remaining steps and accept gets the job.
+            Last-resort broadcast to qualified pipeline applicants within the max-miles
+            window (45–55). Valid photo ID and own vehicle, Screening-Passed or later,
+            not rejected, not Active. Payout is the first-job share plus mileage at 70¢/mi,
+            and company take stays at least 40%. First to finish remaining steps and
+            accept gets the job.
           </DialogDescription>
         </DialogHeader>
 
@@ -129,29 +138,27 @@ export function UrgentHireDialog({
                 <span className="text-slate-400">(zone only — not the exact address)</span>
               </p>
               <p className="mt-2 font-semibold text-violet-800">
-                {money(preview.payCents)} · {preview.settings.pay_percent}% of {money(preview.jobValueCents)}
+                {money(preview.payCents)} job share ({preview.settings.pay_percent}% of {money(preview.jobValueCents)})
+                {" "}+ 70¢/mi
               </p>
-              {preview.settings.first_job_only ? (
-                <p className="text-xs text-violet-700 mt-1">
-                  This rate applies to the first job only; standard Foundation / Novara Score
-                  tiers apply after.
-                </p>
-              ) : null}
+              <p className="text-xs text-violet-700 mt-1">
+                Each SMS shows that person&apos;s total (job share + mileage). Company take stays at least 40%.
+                {preview.settings.first_job_only
+                  ? " The job-share rate is first-job only; standard tiers apply after."
+                  : ""}
+              </p>
             </div>
 
             <div className="flex flex-wrap gap-2 text-xs">
               <Badge variant="secondary">{preview.eligibleCount} qualified</Badge>
               <Badge variant="secondary">{preview.canAcceptNow} can accept now</Badge>
               <Badge variant="secondary">{preview.needChecklist} still need supply checklist</Badge>
-              {(preview.inRadiusCount ?? 0) > 0 ? (
-                <Badge variant="outline">{preview.inRadiusCount} in radius</Badge>
-              ) : null}
-              {(preview.fartherCount ?? 0) > 0 ? (
-                <Badge variant="outline">{preview.fartherCount} farther than radius</Badge>
+              {(preview.fartherCount ?? preview.skippedTooFar ?? 0) > 0 ? (
+                <Badge variant="outline">{preview.fartherCount ?? preview.skippedTooFar} farther than {preview.settings.radius_miles} mi</Badge>
               ) : null}
               {(preview.unknownMileage ?? preview.skippedNoLocation) > 0 ? (
                 <Badge variant="outline">
-                  {preview.unknownMileage ?? preview.skippedNoLocation} mileage unknown
+                  {preview.unknownMileage ?? preview.skippedNoLocation} skipped — no location
                 </Badge>
               ) : null}
               <Badge variant="outline">{preview.settings.radius_miles} mi · {preview.settings.fill_window_minutes} min window</Badge>
@@ -163,8 +170,8 @@ export function UrgentHireDialog({
               </p>
             ) : preview.eligibleCount === 0 ? (
               <p className="text-sm text-rose-700">
-                Nobody in the applicant pipeline has a valid photo ID and own vehicle, is
-                Screening-Passed or later, is not rejected, and is not yet Active.
+                Nobody qualified is within {preview.settings.radius_miles} miles (ID + vehicle,
+                Screening-Passed or later, not rejected, not Active).
               </p>
             ) : (
               <ul className="max-h-40 overflow-auto rounded-md border border-slate-200 divide-y text-xs">
@@ -172,7 +179,7 @@ export function UrgentHireDialog({
                   <li key={a.applicantId} className="flex items-center justify-between gap-2 px-3 py-1.5">
                     <span className="font-medium text-slate-800">{a.name}</span>
                     <span className="text-slate-500">
-                      {applicantMilesLabel(a.miles, preview.settings.radius_miles)}
+                      {applicantMilesLabel(a.miles, a.payCents)}
                       {a.hadValidChecklist ? "" : " · needs checklist"}
                     </span>
                   </li>

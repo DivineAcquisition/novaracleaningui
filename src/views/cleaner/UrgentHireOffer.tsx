@@ -40,6 +40,8 @@ interface OfferPayload {
     timeWindow: string;
     zone: string;
     payCents: number;
+    basePayCents?: number;
+    mileageCents?: number;
     firstJobNote: string;
   };
   broadcast?: {
@@ -278,15 +280,16 @@ export default function UrgentHireOffer() {
               <RiMapPin2Line className="h-3.5 w-3.5" />
               {job?.zone} <span className="text-slate-400">· exact address after you&apos;re assigned</span>
             </p>
-            {data.mileageLine ? (
-              <p className="mt-1 text-sm font-medium text-violet-800">{data.mileageLine}</p>
-            ) : null}
             <p className="mt-3 text-2xl font-extrabold text-violet-800">
               {money(job?.payCents || 0)}
-              <span className="ml-2 text-sm font-semibold text-violet-600">
-                {data.broadcast?.payPercent}% of job value
-              </span>
             </p>
+            {data.mileageLine ? (
+              <p className="mt-1 text-sm font-medium text-violet-800">{data.mileageLine}</p>
+            ) : (
+              <p className="mt-1 text-sm font-semibold text-violet-600">
+                {data.broadcast?.payPercent}% of job value
+              </p>
+            )}
             <p className="mt-1 text-xs text-violet-800">{job?.firstJobNote}</p>
           </div>
         </div>

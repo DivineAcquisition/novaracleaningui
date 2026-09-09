@@ -224,12 +224,12 @@ fill window, checklist freshness). Launch a broadcast from **Dispatch** or **Cov
 the assigned cleaner and backup pool can't cover a job.
 
 It reaches Screening-Passed (or later) applicants who have a valid photo ID and own vehicle,
-are not yet Active, and were never rejected. Radius is not a cutoff — farther applicants still
-get the offer, with mileage in the SMS, plus an acknowledgement that they are getting it
-because they applied in the past. Background check is **not** required on this path. A valid
-supply checklist, signed agreement, and payout setup still are. First to finish those steps
-and accept wins; everyone else keeps their onboarding progress. An unfilled window surfaces
-on Needs Attention and links back here.
+are not yet Active, were never rejected, and live within the max-miles window (45–55).
+Payout is the first-job share plus 70¢/mi mileage in one total (company take at least 40%),
+plus an acknowledgement that they are getting it because they applied in the past. Background
+check is **not** required on this path. A valid supply checklist, signed agreement, and payout
+setup still are. First to finish those steps and accept wins; everyone else keeps their
+onboarding progress. An unfilled window surfaces on Needs Attention and links back here.
 
 ## Crews
 

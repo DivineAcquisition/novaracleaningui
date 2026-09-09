@@ -2,10 +2,11 @@
 //
 // Last-resort coverage: admin broadcasts a premium first-job offer to
 // pipeline applicants (Screening-Passed or later, not yet Active, never
-// rejected) who have a valid photo ID and own vehicle. Radius is an in-area
-// threshold for SMS mileage copy — it does not exclude anyone. Background
-// check is deliberately NOT required on this path. Signed agreement, payout
-// setup, and a valid supply checklist still are.
+// rejected) who have a valid photo ID and own vehicle and live within the
+// max-miles window (45–55). Payout is the first-job share plus mileage, with
+// company take floored at 40% of job value. Background check is deliberately
+// NOT required on this path. Signed agreement, payout setup, and a valid
+// supply checklist still are.
 //
 // This module is the source of truth for tunables and copy. The edge
 // function mirrors the pieces it needs in supabase/functions/_shared/urgent-hire.ts.
@@ -32,8 +33,18 @@ export interface UrgentHireSettings {
   checklist_freshness_days: number;
 }
 
+/** Max miles an Urgent Hire recipient can be from the job. */
+export const URGENT_HIRE_RADIUS_MIN = 45;
+export const URGENT_HIRE_RADIUS_MAX = 55;
+
+/** Same default as Extra Pay — 70¢ per mile, one-way home to job. */
+export const URGENT_HIRE_MILEAGE_RATE_CENTS = 70;
+
+/** Company keeps at least this % of job value after job-share + mileage. */
+export const URGENT_HIRE_COMPANY_PROFIT_FLOOR_PERCENT = 40;
+
 export const URGENT_HIRE_DEFAULTS: UrgentHireSettings = {
-  radius_miles: 25,
+  radius_miles: 45,
   pay_percent: 45,
   first_job_only: true,
   fill_window_minutes: 90,
@@ -48,7 +59,12 @@ export function parseUrgentHireSettings(raw: unknown): UrgentHireSettings {
     return Math.min(max, Math.max(min, n));
   };
   return {
-    radius_miles: num(src.radius_miles, URGENT_HIRE_DEFAULTS.radius_miles, 5, 80),
+    radius_miles: num(
+      src.radius_miles,
+      URGENT_HIRE_DEFAULTS.radius_miles,
+      URGENT_HIRE_RADIUS_MIN,
+      URGENT_HIRE_RADIUS_MAX,
+    ),
     pay_percent: num(src.pay_percent, URGENT_HIRE_DEFAULTS.pay_percent, 20, 60),
     first_job_only: src.first_job_only === false ? false : true,
     fill_window_minutes: num(
@@ -70,6 +86,55 @@ export function urgentHirePayCents(jobValueCents: number, payPercent: number): n
   const value = Math.max(0, Math.round(Number(jobValueCents) || 0));
   const pct = Math.max(0, Number(payPercent) || 0);
   return Math.round((value * pct) / 100);
+}
+
+export function dollarsFromCents(cents: number): string {
+  return (Math.max(0, cents) / 100).toFixed(2);
+}
+
+export function urgentHireMileageCents(miles: number | null | undefined): number {
+  const n = Number(miles);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.round(n * URGENT_HIRE_MILEAGE_RATE_CENTS);
+}
+
+export interface UrgentHirePayBreakdown {
+  baseCents: number;
+  mileageCents: number;
+  totalCents: number;
+  companyPercent: number;
+  capped: boolean;
+}
+
+/** Job share + mileage, capped so company take stays at least 40% of job value. */
+export function urgentHireTotalPayCents(opts: {
+  jobValueCents: number;
+  payPercent: number;
+  miles?: number | null;
+}): UrgentHirePayBreakdown {
+  const job = Math.max(0, Math.round(Number(opts.jobValueCents) || 0));
+  const baseCents = urgentHirePayCents(job, opts.payPercent);
+  const rawMileage = urgentHireMileageCents(opts.miles);
+  const ceiling = Math.round((job * (100 - URGENT_HIRE_COMPANY_PROFIT_FLOOR_PERCENT)) / 100);
+  let total = baseCents + rawMileage;
+  let capped = false;
+  if (job > 0 && total > ceiling) {
+    total = Math.max(baseCents, ceiling);
+    capped = total < baseCents + rawMileage;
+  }
+  const mileageCents = Math.max(0, total - baseCents);
+  const companyPercent = job > 0 ? Math.round(((job - total) / job) * 1000) / 10 : 100;
+  return { baseCents, mileageCents, totalCents: total, companyPercent, capped };
+}
+
+export function isWithinUrgentHireRadius(
+  miles: number | null | undefined,
+  radiusMiles: number,
+): boolean {
+  if (miles == null) return false;
+  const n = Number(miles);
+  if (!Number.isFinite(n) || n < 0) return false;
+  return n <= radiusMiles;
 }
 
 export function isUrgentHirePipelineStage(stage: string | null | undefined): boolean {
@@ -246,28 +311,27 @@ export interface UrgentHireOfferCopy {
   offerUrl: string;
   needsChecklist: boolean;
   miles?: number | null;
-  radiusMiles?: number;
+  mileageCents?: number;
 }
 
 /** Why this person got a last-resort blast — they applied; they are not on the Active roster. */
 export const APPLIED_IN_PAST_ACK =
   "You're getting this because you applied to Novara.";
 
-/** Mileage line only when the applicant is farther than the in-area radius. */
-export function formatUrgentHireMileageLine(
+export function formatUrgentHireMileagePayLine(
   miles: number | null | undefined,
-  radiusMiles: number,
+  mileageCents: number,
 ): string | null {
+  if (!(mileageCents > 0)) return null;
   const n = Number(miles);
-  if (!Number.isFinite(n) || n < 0) return null;
-  if (n <= radiusMiles) return null;
-  const rounded = Math.max(1, Math.round(n));
-  return `About ${rounded} mile${rounded === 1 ? "" : "s"} from the job.`;
+  const rounded = Number.isFinite(n) && n > 0 ? Math.max(1, Math.round(n)) : 0;
+  if (!rounded) return `Includes $${dollarsFromCents(mileageCents)} mileage.`;
+  return `Includes $${dollarsFromCents(mileageCents)} mileage (${rounded} mile${rounded === 1 ? "" : "s"}).`;
 }
 
 export function firstJobOnlySentence(firstJobOnly: boolean, payPercent: number): string {
   if (firstJobOnly) {
-    return `This ${payPercent}% rate applies to your first job only; standard tier rates apply after.`;
+    return `This ${payPercent}% job share applies to your first job only; standard tier rates apply after.`;
   }
   return `This job pays ${payPercent}% of the job value.`;
 }
@@ -277,7 +341,10 @@ export function buildUrgentHireSms(copy: UrgentHireOfferCopy): string {
     ? `${copy.dateLabel} · ${copy.timeWindow}`
     : copy.dateLabel;
   const firstJob = firstJobOnlySentence(copy.firstJobOnly, copy.payPercent);
-  const mileage = formatUrgentHireMileageLine(copy.miles, copy.radiusMiles ?? URGENT_HIRE_DEFAULTS.radius_miles);
+  const mileagePay = formatUrgentHireMileagePayLine(copy.miles, copy.mileageCents || 0);
+  const payLine = mileagePay
+    ? `Your pay: $${copy.payDollars}`
+    : `Your pay: $${copy.payDollars} (${copy.payPercent}% of job value)`;
   const gate = copy.needsChecklist
     ? "Accepting requires finishing remaining steps first (supply checklist, agreement, payout setup) — the job goes to whoever finishes and accepts soonest."
     : "Accepting requires a signed agreement and payout setup if you haven't finished them — the job goes to whoever finishes and accepts soonest.";
@@ -287,8 +354,8 @@ export function buildUrgentHireSms(copy: UrgentHireOfferCopy): string {
     `${copy.serviceType}\n` +
     `${when}\n` +
     `Area: ${copy.zone}\n` +
-    (mileage ? `${mileage}\n` : "") +
-    `Your pay: $${copy.payDollars} (${copy.payPercent}% of job value)\n` +
+    `${payLine}\n` +
+    (mileagePay ? `${mileagePay}\n` : "") +
     `${firstJob}\n\n` +
     `${gate}\n\n` +
     `${copy.offerUrl}`
