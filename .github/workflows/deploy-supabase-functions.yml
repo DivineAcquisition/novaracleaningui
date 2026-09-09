@@ -32,10 +32,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Pin the CLI and authenticate GitHub's releases API. `version: latest`
+      # does an unauthenticated /releases/latest lookup and fails the whole
+      # deploy when the shared runner IP is rate-limited.
       - name: Set up Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.117.0
+          github-token: ${{ github.token }}
 
       - name: Guard — require access token
         run: |
