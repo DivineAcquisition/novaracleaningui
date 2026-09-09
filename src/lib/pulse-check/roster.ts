@@ -1,5 +1,6 @@
 import type { PulseDraft, PulseRosterAction, PulseTimeAway } from "@/lib/pulse-check/answers";
 import { rosterActionFromDraft, timeAwayDays } from "@/lib/pulse-check/answers";
+import { notifyContractorTerminated } from "@/lib/termination-sms";
 
 export const PULSE_REAPPLY_DAYS = 90;
 
@@ -175,10 +176,21 @@ export async function applyPulseRosterChange(args: {
     reasonLabel = rosterChangeSummary(action, args.draft);
   }
 
+  const { data: before } = await args.supabase
+    .from("cleaners")
+    .select("status, phone")
+    .eq("id", args.cleanerId)
+    .maybeSingle();
+  const alreadyTerminated = String(before?.status || "").toLowerCase() === "terminated";
+
   const { error } = await args.supabase.from("cleaners").update(patch).eq("id", args.cleanerId);
   if (error) throw new Error(error.message);
 
   const reassignedJobs = await releaseFutureAssignments(args.supabase, args.cleanerId, `pulse_check:${action}`);
+
+  if (action === "terminate" && !alreadyTerminated) {
+    await notifyContractorTerminated(args.supabase, before?.phone as string | null);
+  }
 
   if (action === "terminate") {
     await args.supabase

@@ -20,6 +20,7 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { notifyContractorTerminated } from "../_shared/termination-sms.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -158,23 +159,16 @@ async function sendPulse(
     }
   }
 
-  if (phone && cleaner.sms_notifications_enabled !== false) {
-    let message: string;
-    if (kind === "closed") {
-      const until = opts?.reapplyDate
-        ? ` You can apply again after ${opts.reapplyDate}.`
-        : " You can apply again in 3 months.";
-      message =
-        `Hi ${firstName} — we didn't hear back on your Novara pulse check, so your contractor account is closed.${until} Reply STOP to opt out.`;
-    } else if (kind === "followup") {
-      message =
-        `Hi ${firstName} — last reminder from Novara Cleaning. Respond to your pulse check or we'll close ` +
-        `your contractor account: ${link} Reply STOP to opt out.`;
-    } else {
-      message =
-        `Hi ${firstName} — Novara Cleaning pulse check. Confirm you're still a contractor within ${days} days ` +
+  // Closed = official termination notice: send even if they opted out of
+  // pulse marketing SMS. STOP at GHL still drops the message.
+  if (kind === "closed") {
+    smsSent = await notifyContractorTerminated(admin, cleaner);
+  } else if (phone && cleaner.sms_notifications_enabled !== false) {
+    const message = kind === "followup"
+      ? `Hi ${firstName} — last reminder from Novara Cleaning. Respond to your pulse check or we'll close ` +
+        `your contractor account: ${link} Reply STOP to opt out.`
+      : `Hi ${firstName} — Novara Cleaning pulse check. Confirm you're still a contractor within ${days} days ` +
         `or we'll close your account (no reapply for 3 months): ${link} Reply STOP to opt out.`;
-    }
     try {
       const { data, error } = await admin.functions.invoke("send-ghl-sms", {
         body: {
@@ -183,7 +177,7 @@ async function sendPulse(
           firstName,
           lastName: cleaner.last_name || undefined,
           message,
-          type: kind === "followup" ? "pulse_check_followup" : kind === "closed" ? "pulse_check_closed" : "pulse_check",
+          type: kind === "followup" ? "pulse_check_followup" : "pulse_check",
         },
       });
       smsSent = !error && !(data as { error?: string } | null)?.error;

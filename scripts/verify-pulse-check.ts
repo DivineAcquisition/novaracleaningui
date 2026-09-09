@@ -47,6 +47,7 @@ import {
 } from "../src/lib/pulse-check/settings";
 import { pulseSilenceAction } from "../src/lib/pulse-check/silence";
 import { pulseSmsMessage } from "../src/lib/pulse-check/send";
+import { buildTerminationSms } from "../src/lib/termination-sms";
 import { jobValueForPay, serviceTypeLabel, zoneLabel } from "../src/lib/pulse-check/jobs";
 import { scoreCleanerForJob } from "../src/lib/dispatch-scoring";
 
@@ -379,6 +380,11 @@ check(
   "follow-up SMS warns the account will close",
   pulseSmsMessage("Maya", "https://x/p/abc", "followup").includes("close"),
   true,
+);
+check(
+  "closed SMS is the shared termination notice",
+  pulseSmsMessage("Maya", "https://x/p/abc", "closed"),
+  buildTerminationSms(),
 );
 
 console.log("\nSilence close:");

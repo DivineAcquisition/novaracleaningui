@@ -20,6 +20,7 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { notifyContractorTerminated } from "../_shared/termination-sms.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -215,14 +216,18 @@ serve(async (req) => {
           })
           .eq("id", cleanerId).select().maybeSingle();
         const reassigned = await markFutureAssignmentsForReassignment(adminClient, cleanerId, callerId, `cleaner_terminated:${reason}`);
+        let smsSent = false;
+        if (String(cleaner.status || "").toLowerCase() !== "terminated") {
+          smsSent = await notifyContractorTerminated(adminClient, cleaner);
+        }
         await adminClient.from("events").insert({
           event_type: "cleaner.terminated", cleaner_id: cleanerId, source: "cleaner-admin-action",
           summary: `Cleaner ${cleaner.first_name || ""} ${cleaner.last_name || ""} terminated — ${reason}`,
-          data: { reason, by: callerId, reassigned_jobs: reassigned.length },
+          data: { reason, by: callerId, reassigned_jobs: reassigned.length, sms_sent: smsSent },
         });
         adminClient.functions.invoke("sync-cleaner-to-ghl", { body: { cleanerId } })
           .catch((e: any) => console.warn("[cleaner-admin-action] GHL sync failed", e?.message || e));
-        return json({ ok: true, cleaner: updated, reassignedJobs: reassigned });
+        return json({ ok: true, cleaner: updated, reassignedJobs: reassigned, smsSent });
       }
 
       case "set_status": {
@@ -329,13 +334,19 @@ serve(async (req) => {
             by: callerId,
             skip_compliance: skipCompliance,
             reassigned_jobs: reassigned.length,
+            sms_sent: newStatus === "terminated" && prevStatus !== "terminated",
           },
         });
 
         adminClient.functions.invoke("sync-cleaner-to-ghl", { body: { cleanerId } })
           .catch((e: any) => console.warn("[cleaner-admin-action] GHL sync failed", e?.message || e));
 
-        return json({ ok: true, cleaner: updated, reassignedJobs: reassigned });
+        let smsSent = false;
+        if (newStatus === "terminated" && prevStatus !== "terminated") {
+          smsSent = await notifyContractorTerminated(adminClient, cleaner);
+        }
+
+        return json({ ok: true, cleaner: updated, reassignedJobs: reassigned, smsSent });
       }
 
       case "reactivate": {
