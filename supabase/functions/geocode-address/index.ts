@@ -4,13 +4,13 @@
 // parsed { street, city, state, zipCode } bag the client can drop into
 // individual form fields.
 //
+// ZIP-only requests never go through freeform `q=` / `address=` search.
+// That path treats "20735" as a street number and has returned Puerto Rico,
+// Iowa, Indiana, Texas, … which then showed up as 400–1,600 miles in SMS.
+//
 // Provider precedence:
-//   1. Google Geocoding API (when app_secrets.GOOGLE_GEOCODING_API_KEY
-//      is set). Higher-quality data, better for complete street
-//      addresses, and consistent with what Google Places returns
-//      browser-side.
-//   2. Nominatim (OpenStreetMap, free, no key) as fallback. Used when
-//      the Google key is missing or its API call fails.
+//   ZIP-only: Google postal_code components → Nominatim postalcode= → Zippopotam
+//   Street:   Google Geocoding API → Nominatim freeform
 //
 // We always return the SAME shape regardless of provider:
 //   { lat, lng, display_name, parsed: { street, city, state, zipCode } }
@@ -18,11 +18,28 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { resolveSecret } from "../_shared/app-secrets.ts";
+import {
+  buildGeocodeQuery,
+  geocodeCacheZipKey,
+  googleAddressGeocodeUrl,
+  googleZipGeocodeUrl,
+  isValidLatLng,
+  isZipOnlyGeocodeInput,
+  looksLikeBareZip,
+  nominatimAddressGeocodeUrl,
+  nominatimZipGeocodeUrl,
+  requestedZip,
+  zipMatchesResult,
+  zippopotamUrl,
+  type GeocodeInput,
+} from "../_shared/geocode.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+const NOMINATIM_HEADERS = { "User-Agent": "CleaningDispatchSystem/1.0" };
 
 const log = (step: string, details?: unknown) => {
   const tail = details ? ` - ${JSON.stringify(details)}` : "";
@@ -51,8 +68,14 @@ interface ParsedAddress {
   zipCode: string;
 }
 
-// Reduce Nominatim's `address` object to the four shapes the client
-// cares about.
+interface GeocodeResult {
+  lat: number;
+  lng: number;
+  display_name: string;
+  parsed: ParsedAddress;
+  provider: string;
+}
+
 function pickNominatimParts(addr: any): ParsedAddress {
   if (!addr || typeof addr !== "object") {
     return { street: "", city: "", state: "", zipCode: "" };
@@ -79,7 +102,6 @@ function pickNominatimParts(addr: any): ParsedAddress {
   return { street, city, state, zipCode };
 }
 
-// Reduce Google's `address_components` array to the same shape.
 function pickGoogleParts(components: any[]): ParsedAddress {
   if (!Array.isArray(components)) {
     return { street: "", city: "", state: "", zipCode: "" };
@@ -105,11 +127,20 @@ function pickGoogleParts(components: any[]): ParsedAddress {
   return { street: `${streetNumber} ${route}`.trim(), city, state, zipCode };
 }
 
-// ─── Google Geocoding ──────────────────────────────────────────────
-async function geocodeViaGoogle(query: string, key: string): Promise<{
+function asResult(
+  lat: unknown,
+  lng: unknown,
+  display_name: string,
+  parsed: ParsedAddress,
+  provider: string,
+): GeocodeResult | null {
+  if (!isValidLatLng(lat, lng)) return null;
+  return { lat: Number(lat), lng: Number(lng), display_name, parsed, provider };
+}
+
+async function geocodeViaGoogleUrl(url: string): Promise<{
   lat: number; lng: number; display_name: string; parsed: ParsedAddress;
 } | null> {
-  const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&components=country:US&key=${encodeURIComponent(key)}`;
   const r = await fetch(url);
   if (!r.ok) {
     log("Google geocode HTTP error", { status: r.status });
@@ -122,55 +153,132 @@ async function geocodeViaGoogle(query: string, key: string): Promise<{
   }
   const top = j.results[0];
   const loc = top.geometry?.location;
-  if (!loc?.lat || !loc?.lng) return null;
+  if (!isValidLatLng(loc?.lat, loc?.lng)) return null;
   return {
-    lat: loc.lat,
-    lng: loc.lng,
-    display_name: top.formatted_address || query,
+    lat: Number(loc.lat),
+    lng: Number(loc.lng),
+    display_name: top.formatted_address || "",
     parsed: pickGoogleParts(top.address_components),
   };
 }
 
-// ─── Nominatim fallback ────────────────────────────────────────────
-async function geocodeViaNominatim(args: {
-  query: string;
-  zip?: string;
-}): Promise<{
-  lat: number; lng: number; display_name: string; parsed: ParsedAddress;
-} | null> {
-  const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&countrycodes=us&q=${encodeURIComponent(args.query)}&limit=1`;
-  const r = await fetch(url, { headers: { "User-Agent": "CleaningDispatchSystem/1.0" } });
+async function geocodeZipViaNominatim(zip: string): Promise<GeocodeResult | null> {
+  const r = await fetch(nominatimZipGeocodeUrl(zip), { headers: NOMINATIM_HEADERS });
   if (!r.ok) return null;
   const data = await r.json();
-  if (Array.isArray(data) && data.length > 0) {
-    const top = data[0];
-    return {
-      lat: parseFloat(top.lat),
-      lng: parseFloat(top.lon),
-      display_name: top.display_name,
-      parsed: pickNominatimParts(top.address),
-    };
-  }
-  // Zip-only fallback: OSM is sometimes too strict on freeform queries.
-  if (args.zip) {
-    const zr = await fetch(
-      `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&postalcode=${args.zip}&country=US&limit=1`,
-      { headers: { "User-Agent": "CleaningDispatchSystem/1.0" } },
-    );
-    if (zr.ok) {
-      const zd = await zr.json();
-      if (Array.isArray(zd) && zd.length > 0) {
-        const top = zd[0];
-        return {
-          lat: parseFloat(top.lat),
-          lng: parseFloat(top.lon),
-          display_name: top.display_name,
-          parsed: pickNominatimParts(top.address),
-        };
+  if (!Array.isArray(data) || data.length === 0) return null;
+  const top = data[0];
+  const parsed = pickNominatimParts(top.address);
+  if (!parsed.zipCode) parsed.zipCode = zip;
+  const result = asResult(parseFloat(top.lat), parseFloat(top.lon), top.display_name || zip, parsed, "nominatim-zip");
+  if (result && !zipMatchesResult(zip, result.parsed.zipCode)) return null;
+  return result;
+}
+
+async function geocodeZipViaZippopotam(zip: string): Promise<GeocodeResult | null> {
+  const r = await fetch(zippopotamUrl(zip), { headers: { "Accept": "application/json" } });
+  if (!r.ok) return null;
+  const j = await r.json();
+  const place = Array.isArray(j?.places) ? j.places[0] : null;
+  if (!place) return null;
+  const parsed: ParsedAddress = {
+    street: "",
+    city: String(place["place name"] || "").trim(),
+    state: String(place["state abbreviation"] || place.state || "").trim(),
+    zipCode: zip,
+  };
+  return asResult(
+    parseFloat(place.latitude),
+    parseFloat(place.longitude),
+    `${parsed.city}${parsed.state ? `, ${parsed.state}` : ""} ${zip}`.trim(),
+    parsed,
+    "zippopotam",
+  );
+}
+
+async function geocodeZip(zip: string, googleKey: string): Promise<GeocodeResult | null> {
+  if (googleKey) {
+    try {
+      const g = await geocodeViaGoogleUrl(googleZipGeocodeUrl(zip, googleKey));
+      if (g) {
+        if (!g.parsed.zipCode) g.parsed.zipCode = zip;
+        if (zipMatchesResult(zip, g.parsed.zipCode) && isValidLatLng(g.lat, g.lng)) {
+          return { ...g, provider: "google-zip" };
+        }
       }
+    } catch (err) {
+      log("Google zip geocode threw", { error: err instanceof Error ? err.message : String(err) });
     }
   }
+  try {
+    const n = await geocodeZipViaNominatim(zip);
+    if (n) return n;
+  } catch (err) {
+    log("Nominatim zip geocode threw", { error: err instanceof Error ? err.message : String(err) });
+  }
+  try {
+    const z = await geocodeZipViaZippopotam(zip);
+    if (z) return z;
+  } catch (err) {
+    log("Zippopotam geocode threw", { error: err instanceof Error ? err.message : String(err) });
+  }
   return null;
+}
+
+async function geocodeViaNominatimAddress(query: string): Promise<GeocodeResult | null> {
+  const r = await fetch(nominatimAddressGeocodeUrl(query), { headers: NOMINATIM_HEADERS });
+  if (!r.ok) return null;
+  const data = await r.json();
+  if (!Array.isArray(data) || data.length === 0) return null;
+  const top = data[0];
+  return asResult(
+    parseFloat(top.lat),
+    parseFloat(top.lon),
+    top.display_name || query,
+    pickNominatimParts(top.address),
+    "nominatim",
+  );
+}
+
+async function geocodeStreet(
+  query: string,
+  googleKey: string,
+): Promise<GeocodeResult | null> {
+  if (googleKey) {
+    try {
+      const g = await geocodeViaGoogleUrl(googleAddressGeocodeUrl(query, googleKey));
+      if (g && isValidLatLng(g.lat, g.lng)) {
+        return { ...g, provider: "google" };
+      }
+      log("Google returned no result, falling back to Nominatim");
+    } catch (err) {
+      log("Google geocode threw, falling back to Nominatim", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+  return geocodeViaNominatimAddress(query);
+}
+
+async function cacheZipResult(
+  supabase: ReturnType<typeof createClient>,
+  zip: string,
+  result: GeocodeResult,
+) {
+  try {
+    await supabase.from("geocode_cache").upsert({
+      address_key: geocodeCacheZipKey(zip),
+      lat: result.lat,
+      lng: result.lng,
+      formatted_address: result.display_name,
+      city: result.parsed.city || null,
+      state: result.parsed.state || null,
+      zip,
+      geocoded_at: new Date().toISOString(),
+    }, { onConflict: "address_key" });
+  } catch (err) {
+    log("geocode_cache upsert failed", { error: err instanceof Error ? err.message : String(err) });
+  }
 }
 
 serve(async (req) => {
@@ -179,53 +287,64 @@ serve(async (req) => {
   }
 
   try {
-    const { address, city, state, zip } = await req.json();
-    log("Geocoding request", { city, state, zip });
+    const body = await req.json();
+    const input: GeocodeInput = {
+      address: body?.address,
+      city: body?.city,
+      state: body?.state,
+      zip: body?.zip,
+    };
+    log("Geocoding request", { city: input.city, state: input.state, zip: input.zip, zipOnly: isZipOnlyGeocodeInput(input) });
 
-    const query = `${address || ""}, ${city || ""}, ${state || ""} ${zip || ""}`.trim();
-    if (!query || query === ",") {
-      throw new Error("Address information required");
-    }
-
-    // Provider 1: Google Geocoding API. We pull the key from the
-    // app_secrets table so it can be rotated without a redeploy.
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     );
-    const googleKey = await resolveSecret(supabase, "GOOGLE_GEOCODING_API_KEY");
+    const googleKey = (await resolveSecret(supabase, "GOOGLE_GEOCODING_API_KEY")) || "";
 
-    if (googleKey) {
-      try {
-        const result = await geocodeViaGoogle(query, googleKey);
-        if (result) {
-          log("Geocoded via Google", { lat: result.lat, lng: result.lng });
-          return new Response(JSON.stringify({ ...result, provider: "google" }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-            status: 200,
-          });
-        }
-        log("Google returned no result, falling back to Nominatim");
-      } catch (err) {
-        log("Google geocode threw, falling back to Nominatim", {
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
+    const zip = requestedZip(input);
+    let result: GeocodeResult | null = null;
+
+    if (isZipOnlyGeocodeInput(input) && zip) {
+      result = await geocodeZip(zip, googleKey);
     } else {
-      log("GOOGLE_GEOCODING_API_KEY not configured, using Nominatim");
+      const query = buildGeocodeQuery(input);
+      if (!query) {
+        throw new Error("Address information required");
+      }
+      result = await geocodeStreet(query, googleKey);
+      // Freeform search still sometimes latches onto a house number that
+      // happens to equal the ZIP. Only replace with the ZIP centroid when
+      // the "address" itself was zip-like — don't move a real street pin.
+      if (
+        zip &&
+        result &&
+        !zipMatchesResult(zip, result.parsed.zipCode) &&
+        looksLikeBareZip(input.address)
+      ) {
+        log("Street result ZIP mismatch, retrying as postal code", {
+          requested: zip,
+          got: result.parsed.zipCode,
+          provider: result.provider,
+        });
+        const zipResult = await geocodeZip(zip, googleKey);
+        if (zipResult) result = zipResult;
+      }
     }
 
-    // Provider 2: Nominatim
-    const result = await geocodeViaNominatim({ query, zip });
-    if (result) {
-      log("Geocoded via Nominatim", { lat: result.lat, lng: result.lng });
-      return new Response(JSON.stringify({ ...result, provider: "nominatim" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 200,
-      });
+    if (!result) {
+      throw new Error("Address not found");
     }
 
-    throw new Error("Address not found");
+    log("Geocoded", { lat: result.lat, lng: result.lng, provider: result.provider });
+    if (zip && zipMatchesResult(zip, result.parsed.zipCode)) {
+      await cacheZipResult(supabase, zip, result);
+    }
+
+    return new Response(JSON.stringify(result), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 200,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     log("ERROR", { message });

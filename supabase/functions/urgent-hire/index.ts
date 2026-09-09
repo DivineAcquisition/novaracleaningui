@@ -14,6 +14,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { haversineMiles } from "../_shared/dispatch-scoring.ts";
+import { isValidLatLng } from "../_shared/geocode.ts";
 import { notifyDiscord } from "../_shared/discord.ts";
 import { jobValueForPay } from "../_shared/reclean.ts";
 import { formatServiceDate, formatTimeSlot, sendSms } from "../_shared/sms.ts";
@@ -156,7 +157,7 @@ async function loadJobBundle(admin: SB, jobId: string): Promise<JobBundle> {
 
 async function resolveJobCoords(admin: SB, bundle: JobBundle): Promise<{ lat: number; lng: number } | null> {
   const job = bundle.job;
-  if (job.lat && job.lng) return { lat: Number(job.lat), lng: Number(job.lng) };
+  if (isValidLatLng(job.lat, job.lng)) return { lat: Number(job.lat), lng: Number(job.lng) };
   const booking = bundle.booking;
   try {
     const geo = await admin.functions.invoke("geocode-address", {
@@ -168,9 +169,9 @@ async function resolveJobCoords(admin: SB, bundle: JobBundle): Promise<{ lat: nu
       },
     });
     const g = (geo?.data as { lat?: number; lng?: number }) || {};
-    if (g.lat && g.lng) {
+    if (isValidLatLng(g.lat, g.lng)) {
       await admin.from("jobs").update({ lat: g.lat, lng: g.lng }).eq("id", job.id);
-      return { lat: g.lat, lng: g.lng };
+      return { lat: Number(g.lat), lng: Number(g.lng) };
     }
   } catch (err) {
     log("geocode job failed", err instanceof Error ? err.message : String(err));
@@ -188,11 +189,11 @@ async function coordsForZip(admin: SB, zip: string | null | undefined): Promise<
     .not("lat", "is", null)
     .limit(1)
     .maybeSingle();
-  if (cached?.lat && cached?.lng) return { lat: Number(cached.lat), lng: Number(cached.lng) };
+  if (isValidLatLng(cached?.lat, cached?.lng)) return { lat: Number(cached.lat), lng: Number(cached.lng) };
   try {
-    const geo = await admin.functions.invoke("geocode-address", { body: { zip: z, address: z } });
+    const geo = await admin.functions.invoke("geocode-address", { body: { zip: z } });
     const g = (geo?.data as { lat?: number; lng?: number }) || {};
-    if (g.lat && g.lng) return { lat: g.lat, lng: g.lng };
+    if (isValidLatLng(g.lat, g.lng)) return { lat: Number(g.lat), lng: Number(g.lng) };
   } catch {
     /* zip geocode is best-effort */
   }
