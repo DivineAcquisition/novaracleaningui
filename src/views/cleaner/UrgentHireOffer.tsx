@@ -20,6 +20,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { asErrorMessage } from "@/lib/edge-invoke";
 import { supabase } from "@/integrations/supabase/client";
+import { APPLIED_IN_PAST_ACK } from "@/lib/urgent-hire";
 
 interface OfferPayload {
   ok: boolean;
@@ -31,6 +32,8 @@ interface OfferPayload {
   remaining?: string[];
   backgroundCheckRequired?: boolean;
   portalUrl?: string;
+  appliedAck?: string;
+  mileageLine?: string | null;
   job?: {
     serviceType: string;
     dateLabel: string;
@@ -263,7 +266,10 @@ export default function UrgentHireOffer() {
           <RiFlashlightLine className="mt-0.5 h-5 w-5 text-violet-700" />
           <div>
             <p className="text-lg font-semibold text-slate-900">{job?.serviceType || "Cleaning"}</p>
-            <p className="mt-1 flex items-center gap-1 text-sm text-slate-600">
+            <p className="mt-2 text-sm text-slate-600">
+              {data.appliedAck || APPLIED_IN_PAST_ACK}
+            </p>
+            <p className="mt-2 flex items-center gap-1 text-sm text-slate-600">
               <RiTimeLine className="h-3.5 w-3.5" />
               {job?.dateLabel}
               {job?.timeWindow ? ` · ${job.timeWindow}` : ""}
@@ -272,6 +278,9 @@ export default function UrgentHireOffer() {
               <RiMapPin2Line className="h-3.5 w-3.5" />
               {job?.zone} <span className="text-slate-400">· exact address after you&apos;re assigned</span>
             </p>
+            {data.mileageLine ? (
+              <p className="mt-1 text-sm font-medium text-violet-800">{data.mileageLine}</p>
+            ) : null}
             <p className="mt-3 text-2xl font-extrabold text-violet-800">
               {money(job?.payCents || 0)}
               <span className="ml-2 text-sm font-semibold text-violet-600">

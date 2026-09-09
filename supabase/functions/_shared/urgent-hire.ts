@@ -213,19 +213,38 @@ export interface UrgentHireOfferCopy {
   firstJobOnly: boolean;
   offerUrl: string;
   needsChecklist: boolean;
+  miles?: number | null;
+  radiusMiles?: number;
+}
+
+export const APPLIED_IN_PAST_ACK =
+  "You're getting this because you applied to Novara.";
+
+export function formatUrgentHireMileageLine(
+  miles: number | null | undefined,
+  radiusMiles: number,
+): string | null {
+  const n = Number(miles);
+  if (!Number.isFinite(n) || n < 0) return null;
+  if (n <= radiusMiles) return null;
+  const rounded = Math.max(1, Math.round(n));
+  return `About ${rounded} mile${rounded === 1 ? "" : "s"} from the job.`;
 }
 
 export function buildUrgentHireSms(copy: UrgentHireOfferCopy): string {
   const when = copy.timeWindow ? `${copy.dateLabel} · ${copy.timeWindow}` : copy.dateLabel;
   const firstJob = firstJobOnlySentence(copy.firstJobOnly, copy.payPercent);
+  const mileage = formatUrgentHireMileageLine(copy.miles, copy.radiusMiles ?? URGENT_HIRE_DEFAULTS.radius_miles);
   const gate = copy.needsChecklist
     ? "Accepting requires finishing remaining steps first (supply checklist, agreement, payout setup) — the job goes to whoever finishes and accepts soonest."
     : "Accepting requires a signed agreement and payout setup if you haven't finished them — the job goes to whoever finishes and accepts soonest.";
   return (
     `Novara — Urgent Hire\n\n` +
+    `${APPLIED_IN_PAST_ACK}\n\n` +
     `${copy.serviceType}\n` +
     `${when}\n` +
     `Area: ${copy.zone}\n` +
+    (mileage ? `${mileage}\n` : "") +
     `Your pay: $${copy.payDollars} (${copy.payPercent}% of job value)\n` +
     `${firstJob}\n\n` +
     `${gate}\n\n` +

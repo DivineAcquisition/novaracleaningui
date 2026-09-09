@@ -32,6 +32,9 @@ export interface UrgentHirePreview {
   };
   eligibleCount: number;
   skippedNoLocation: number;
+  unknownMileage?: number;
+  inRadiusCount?: number;
+  fartherCount?: number;
   canAcceptNow: number;
   needChecklist: number;
   openBroadcast: { id: string; status: string; reached_count: number } | null;
@@ -39,10 +42,17 @@ export interface UrgentHirePreview {
     applicantId: string;
     name: string;
     stage: string;
-    miles: number;
+    miles: number | null;
     hadValidChecklist: boolean;
     remaining: string[];
   }>;
+}
+
+function applicantMilesLabel(miles: number | null | undefined, radiusMiles: number): string {
+  if (miles == null || !Number.isFinite(Number(miles))) return "mileage unknown";
+  const n = Number(miles);
+  const label = `${n.toFixed(1)} mi`;
+  return n > radiusMiles ? `${label} · outside radius` : label;
 }
 
 function money(cents: number) {
@@ -90,9 +100,11 @@ export function UrgentHireDialog({
             Urgent Hire
           </DialogTitle>
           <DialogDescription>
-            Last-resort broadcast to pipeline applicants who passed screening and
-            aren&apos;t Active yet. Background check is not required for this path.
-            First to finish remaining steps and accept gets the job.
+            Last-resort broadcast to every qualified pipeline applicant — valid photo ID
+            and own vehicle, Screening-Passed or later, not yet Active. Applicants farther
+            than the radius still get the offer; their SMS includes mileage. Background
+            check is not required for this path. First to finish remaining steps and
+            accept gets the job.
           </DialogDescription>
         </DialogHeader>
 
@@ -128,11 +140,19 @@ export function UrgentHireDialog({
             </div>
 
             <div className="flex flex-wrap gap-2 text-xs">
-              <Badge variant="secondary">{preview.eligibleCount} in radius</Badge>
+              <Badge variant="secondary">{preview.eligibleCount} qualified</Badge>
               <Badge variant="secondary">{preview.canAcceptNow} can accept now</Badge>
               <Badge variant="secondary">{preview.needChecklist} still need supply checklist</Badge>
-              {preview.skippedNoLocation > 0 ? (
-                <Badge variant="outline">{preview.skippedNoLocation} skipped — no location</Badge>
+              {(preview.inRadiusCount ?? 0) > 0 ? (
+                <Badge variant="outline">{preview.inRadiusCount} in radius</Badge>
+              ) : null}
+              {(preview.fartherCount ?? 0) > 0 ? (
+                <Badge variant="outline">{preview.fartherCount} farther than radius</Badge>
+              ) : null}
+              {(preview.unknownMileage ?? preview.skippedNoLocation) > 0 ? (
+                <Badge variant="outline">
+                  {preview.unknownMileage ?? preview.skippedNoLocation} mileage unknown
+                </Badge>
               ) : null}
               <Badge variant="outline">{preview.settings.radius_miles} mi · {preview.settings.fill_window_minutes} min window</Badge>
             </div>
@@ -143,7 +163,8 @@ export function UrgentHireDialog({
               </p>
             ) : preview.eligibleCount === 0 ? (
               <p className="text-sm text-rose-700">
-                Nobody in the applicant pipeline is Screening-Passed, in-radius, and not yet Active.
+                Nobody in the applicant pipeline has a valid photo ID and own vehicle, is
+                Screening-Passed or later, and is not yet Active.
               </p>
             ) : (
               <ul className="max-h-40 overflow-auto rounded-md border border-slate-200 divide-y text-xs">
@@ -151,7 +172,7 @@ export function UrgentHireDialog({
                   <li key={a.applicantId} className="flex items-center justify-between gap-2 px-3 py-1.5">
                     <span className="font-medium text-slate-800">{a.name}</span>
                     <span className="text-slate-500">
-                      {a.miles.toFixed(1)} mi
+                      {applicantMilesLabel(a.miles, preview.settings.radius_miles)}
                       {a.hadValidChecklist ? "" : " · needs checklist"}
                     </span>
                   </li>

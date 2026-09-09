@@ -1,9 +1,11 @@
 // ─── Urgent Hire — shared settings, copy, and qualification helpers ──────────
 //
 // Last-resort coverage: admin broadcasts a premium first-job offer to
-// pipeline applicants (Screening-Passed or later, not yet Active) who are
-// in radius. Background check is deliberately NOT required on this path.
-// Signed agreement, payout setup, and a valid supply checklist still are.
+// pipeline applicants (Screening-Passed or later, not yet Active) who have
+// a valid photo ID and own vehicle. Radius is an in-area threshold for SMS
+// mileage copy — it does not exclude anyone. Background check is deliberately
+// NOT required on this path. Signed agreement, payout setup, and a valid
+// supply checklist still are.
 //
 // This module is the source of truth for tunables and copy. The edge
 // function mirrors the pieces it needs in supabase/functions/_shared/urgent-hire.ts.
@@ -206,6 +208,24 @@ export interface UrgentHireOfferCopy {
   firstJobOnly: boolean;
   offerUrl: string;
   needsChecklist: boolean;
+  miles?: number | null;
+  radiusMiles?: number;
+}
+
+/** Why this person got a last-resort blast — they applied; they are not on the Active roster. */
+export const APPLIED_IN_PAST_ACK =
+  "You're getting this because you applied to Novara.";
+
+/** Mileage line only when the applicant is farther than the in-area radius. */
+export function formatUrgentHireMileageLine(
+  miles: number | null | undefined,
+  radiusMiles: number,
+): string | null {
+  const n = Number(miles);
+  if (!Number.isFinite(n) || n < 0) return null;
+  if (n <= radiusMiles) return null;
+  const rounded = Math.max(1, Math.round(n));
+  return `About ${rounded} mile${rounded === 1 ? "" : "s"} from the job.`;
 }
 
 export function firstJobOnlySentence(firstJobOnly: boolean, payPercent: number): string {
@@ -220,14 +240,17 @@ export function buildUrgentHireSms(copy: UrgentHireOfferCopy): string {
     ? `${copy.dateLabel} · ${copy.timeWindow}`
     : copy.dateLabel;
   const firstJob = firstJobOnlySentence(copy.firstJobOnly, copy.payPercent);
+  const mileage = formatUrgentHireMileageLine(copy.miles, copy.radiusMiles ?? URGENT_HIRE_DEFAULTS.radius_miles);
   const gate = copy.needsChecklist
     ? "Accepting requires finishing remaining steps first (supply checklist, agreement, payout setup) — the job goes to whoever finishes and accepts soonest."
     : "Accepting requires a signed agreement and payout setup if you haven't finished them — the job goes to whoever finishes and accepts soonest.";
   return (
     `Novara — Urgent Hire\n\n` +
+    `${APPLIED_IN_PAST_ACK}\n\n` +
     `${copy.serviceType}\n` +
     `${when}\n` +
     `Area: ${copy.zone}\n` +
+    (mileage ? `${mileage}\n` : "") +
     `Your pay: $${copy.payDollars} (${copy.payPercent}% of job value)\n` +
     `${firstJob}\n\n` +
     `${gate}\n\n` +

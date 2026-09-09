@@ -247,8 +247,9 @@ export default function UrgentHireLog({ onChanged }: { onChanged?: () => void })
             Urgent Hire settings
           </CardTitle>
           <CardDescription className="text-xs">
-            Radius uses the same geo-matching as normal dispatch. The 45% figure and first-job-only
-            framing are both configurable. Background check stays off for this pathway.
+            Radius is the in-area threshold for mileage copy in the SMS — it does not
+            exclude anyone. The 45% figure and first-job-only framing are both configurable.
+            Background check stays off for this pathway.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
@@ -261,7 +262,9 @@ export default function UrgentHireLog({ onChanged }: { onChanged?: () => void })
                 setSettings((s) => ({ ...s, radius_miles: Number(e.target.value.replace(/[^\d.]/g, "")) || 0 }))
               }
             />
-            <p className="text-[11px] text-slate-500">Default 25 (spec range 20–30).</p>
+            <p className="text-[11px] text-slate-500">
+              Default 25. Farther applicants still get the offer; their SMS includes mileage.
+            </p>
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Premium pay %</Label>

@@ -184,6 +184,8 @@ serve(async (req) => {
         const pct = data.payPercent != null ? `${data.payPercent}%` : "45%";
         const firstJob = data.firstJobNote ||
           `This ${pct} rate applies to your first job only; standard tier rates apply after.`;
+        const appliedAck = data.appliedAck || "You're getting this because you applied to Novara.";
+        const mileageLine = data.mileageLine ? String(data.mileageLine) : "";
         const gate = data.needsChecklist
           ? "Accepting requires finishing remaining steps first (supply checklist, signed agreement, and payout setup). Background check is not required for this job."
           : "Accepting requires a signed agreement and payout setup if you haven't finished them. Background check is not required for this job.";
@@ -192,13 +194,15 @@ serve(async (req) => {
           <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#0f172a">
             <h2 style="margin:0 0 8px;font-size:20px">Urgent Hire — can you take this job?</h2>
             <p style="margin:0 0 16px;color:#475569">Hi ${first},</p>
+            <p style="margin:0 0 8px;color:#475569">${appliedAck}</p>
             <p style="margin:0 0 16px;color:#475569">
-              We have a job that needs coverage and you're in the area. First to finish remaining steps and accept gets it.
+              We have a job that needs coverage. First to finish remaining steps and accept gets it.
             </p>
             <div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:12px;padding:16px;margin:0 0 16px">
               <div style="font-size:14px;color:#4c1d95;margin:0 0 8px"><strong>${service}</strong></div>
               <div style="font-size:14px;color:#334155">${when || "Upcoming"}</div>
               <div style="font-size:14px;color:#334155">Area: ${zone}</div>
+              ${mileageLine ? `<div style="font-size:14px;color:#6d28d9;margin-top:6px">${mileageLine}</div>` : ""}
               <div style="font-size:22px;font-weight:800;color:#5C0FFE;margin-top:10px">$${pay} · ${pct}</div>
               <div style="font-size:13px;color:#6d28d9;margin-top:6px">${firstJob}</div>
             </div>

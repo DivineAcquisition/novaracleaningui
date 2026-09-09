@@ -3,6 +3,8 @@
 // Locks the rules the feature is built around:
 //   • pipeline eligibility (Screening-Passed+, not Active, never Declined)
 //   • screening bar still requires photo ID + own vehicle
+//   • radius is mileage copy, not an audience filter
+//   • SMS always acknowledges they applied in the past
 //   • supply checklist must be complete AND fresh before accept
 //   • 45% is first-job-only copy + pay math
 //   • remaining steps never include background check
@@ -11,8 +13,10 @@
 
 import { neededSupplyItems, scoreSupplyInventory } from "../src/lib/cleaner-supplies";
 import {
+  APPLIED_IN_PAST_ACK,
   buildUrgentHireSms,
   firstJobOnlySentence,
+  formatUrgentHireMileageLine,
   isDeclinedPipelineStage,
   isUrgentHirePipelineStage,
   isActiveRosterStatus,
@@ -193,6 +197,33 @@ check("SMS states 45%", sms.includes("45%"), true);
 check("SMS states first job only", sms.includes("first job only"), true);
 check("SMS uses zone not a street", sms.includes("Takoma Park 20912") && !sms.includes("Lee Ave"), true);
 check("SMS says finish remaining steps first", sms.includes("finishing remaining steps first"), true);
+check("SMS always includes applied-in-past ack", sms.includes(APPLIED_IN_PAST_ACK), true);
+check("in-radius SMS omits mileage", sms.includes("from the job."), false);
+
+console.log("\nOut-of-radius mileage:");
+check("in-radius mileage line is omitted", formatUrgentHireMileageLine(10, 25), null);
+check("at-radius mileage line is omitted", formatUrgentHireMileageLine(25, 25), null);
+check(
+  "out-of-radius mileage line",
+  formatUrgentHireMileageLine(42, 25),
+  "About 42 miles from the job.",
+);
+check("unknown mileage is omitted", formatUrgentHireMileageLine(null, 25), null);
+const smsFar = buildUrgentHireSms({
+  serviceType: "Standard clean",
+  dateLabel: "Tue, Sep 8",
+  timeWindow: "8:00 AM – 12:00 PM",
+  zone: "Takoma Park 20912",
+  payPercent: 45,
+  payDollars: "90.00",
+  firstJobOnly: true,
+  offerUrl: "https://contractor.novaracleaning.com/cleaner/urgent-hire/abc",
+  needsChecklist: true,
+  miles: 42,
+  radiusMiles: 25,
+});
+check("out-of-radius SMS includes mileage", smsFar.includes("About 42 miles from the job."), true);
+check("out-of-radius SMS still includes ack", smsFar.includes(APPLIED_IN_PAST_ACK), true);
 
 if (failures) {
   console.error(`\n${failures} check(s) failed.`);

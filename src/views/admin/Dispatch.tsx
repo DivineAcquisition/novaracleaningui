@@ -922,7 +922,7 @@ function JobCard({
               <Button
                 size="sm"
                 variant="flat"
-                title="Last-resort broadcast to nearby pipeline applicants after backup coverage is exhausted"
+                title="Last-resort broadcast to qualified pipeline applicants after backup coverage is exhausted"
                 onPress={onUrgentHire}
                 startContent={<RiFlashlightLine className="w-4 h-4" />}
               >

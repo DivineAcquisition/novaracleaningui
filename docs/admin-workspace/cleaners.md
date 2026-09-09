@@ -223,8 +223,10 @@ The **Urgent Hire** section on this screen is the log and the tunables (radius, 
 fill window, checklist freshness). Launch a broadcast from **Dispatch** or **Coverage** when
 the assigned cleaner and backup pool can't cover a job.
 
-It reaches Screening-Passed (or later) applicants who are not yet Active and never Declined,
-within the configured radius. Background check is **not** required on this path. A valid
+It reaches Screening-Passed (or later) applicants who have a valid photo ID and own vehicle,
+are not yet Active, and were never Declined. Radius is not a cutoff — farther applicants still
+get the offer, with mileage in the SMS, plus an acknowledgement that they are getting it
+because they applied in the past. Background check is **not** required on this path. A valid
 supply checklist, signed agreement, and payout setup still are. First to finish those steps
 and accept wins; everyone else keeps their onboarding progress. An unfilled window surfaces
 on Needs Attention and links back here.
