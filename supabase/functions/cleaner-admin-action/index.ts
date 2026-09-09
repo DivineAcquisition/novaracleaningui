@@ -322,6 +322,11 @@ serve(async (req) => {
           );
         }
 
+        let smsSent = false;
+        if (newStatus === "terminated" && prevStatus !== "terminated") {
+          smsSent = await notifyContractorTerminated(adminClient, cleaner);
+        }
+
         await adminClient.from("events").insert({
           event_type: "cleaner.status_changed",
           cleaner_id: cleanerId,
@@ -334,17 +339,12 @@ serve(async (req) => {
             by: callerId,
             skip_compliance: skipCompliance,
             reassigned_jobs: reassigned.length,
-            sms_sent: newStatus === "terminated" && prevStatus !== "terminated",
+            sms_sent: smsSent,
           },
-        });
+        }).then(() => undefined, () => undefined);
 
         adminClient.functions.invoke("sync-cleaner-to-ghl", { body: { cleanerId } })
           .catch((e: any) => console.warn("[cleaner-admin-action] GHL sync failed", e?.message || e));
-
-        let smsSent = false;
-        if (newStatus === "terminated" && prevStatus !== "terminated") {
-          smsSent = await notifyContractorTerminated(adminClient, cleaner);
-        }
 
         return json({ ok: true, cleaner: updated, reassignedJobs: reassigned, smsSent });
       }
