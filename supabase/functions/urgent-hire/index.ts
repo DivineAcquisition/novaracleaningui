@@ -279,28 +279,23 @@ async function findEligible(
     const email = String(a.email || "").trim().toLowerCase();
     if (email && activeEmails.has(email)) continue;
 
-    let lat: number | null = cleaner?.home_lat != null ? Number(cleaner.home_lat) : null;
-    let lng: number | null = cleaner?.home_lng != null ? Number(cleaner.home_lng) : null;
-    if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) {
-      const zip = String(cleaner?.home_zip || a.zip_code || "").trim();
-      const fromZip = await coordsForZip(admin, zip);
-      if (fromZip) {
-        lat = fromZip.lat;
-        lng = fromZip.lng;
-      }
-    }
-
     let distanceMiles: number | null = null;
-    if (
-      jobCoords &&
-      lat != null &&
-      lng != null &&
-      Number.isFinite(lat) &&
-      Number.isFinite(lng)
-    ) {
-      const miles = haversineMiles(lat, lng, jobCoords.lat, jobCoords.lng);
-      if (Number.isFinite(miles) && miles >= 0) {
-        distanceMiles = Math.round(miles * 10) / 10;
+    if (jobCoords) {
+      let lat: number | null = cleaner?.home_lat != null ? Number(cleaner.home_lat) : null;
+      let lng: number | null = cleaner?.home_lng != null ? Number(cleaner.home_lng) : null;
+      if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+        const zip = String(cleaner?.home_zip || a.zip_code || "").trim();
+        const fromZip = await coordsForZip(admin, zip);
+        if (fromZip) {
+          lat = fromZip.lat;
+          lng = fromZip.lng;
+        }
+      }
+      if (lat != null && lng != null && Number.isFinite(lat) && Number.isFinite(lng)) {
+        const miles = haversineMiles(lat, lng, jobCoords.lat, jobCoords.lng);
+        if (Number.isFinite(miles) && miles >= 0) {
+          distanceMiles = Math.round(miles * 10) / 10;
+        }
       }
     }
     if (distanceMiles == null) unknownMileage += 1;
