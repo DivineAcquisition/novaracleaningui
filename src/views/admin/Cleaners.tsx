@@ -114,7 +114,7 @@ const SECTION_COPY: Record<CleanerSection, { title: string; subtitle: string }> 
   "urgent-hire": {
     title: "Urgent Hire",
     subtitle:
-      "Last-resort broadcasts to qualified pipeline applicants (ID + vehicle). Launch from Dispatch or Coverage; the log and tunables live here.",
+      "Last-resort broadcasts to qualified pipeline applicants (ID + vehicle, never rejected). Launch from Dispatch or Coverage; the log and tunables live here.",
   },
 };
 

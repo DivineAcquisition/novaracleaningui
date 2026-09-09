@@ -101,10 +101,10 @@ export function UrgentHireDialog({
           </DialogTitle>
           <DialogDescription>
             Last-resort broadcast to every qualified pipeline applicant — valid photo ID
-            and own vehicle, Screening-Passed or later, not yet Active. Applicants farther
-            than the radius still get the offer; their SMS includes mileage. Background
-            check is not required for this path. First to finish remaining steps and
-            accept gets the job.
+            and own vehicle, Screening-Passed or later, not rejected, not yet Active.
+            Applicants farther than the radius still get the offer; their SMS includes
+            mileage. Background check is not required for this path. First to finish
+            remaining steps and accept gets the job.
           </DialogDescription>
         </DialogHeader>
 
@@ -164,7 +164,7 @@ export function UrgentHireDialog({
             ) : preview.eligibleCount === 0 ? (
               <p className="text-sm text-rose-700">
                 Nobody in the applicant pipeline has a valid photo ID and own vehicle, is
-                Screening-Passed or later, and is not yet Active.
+                Screening-Passed or later, is not rejected, and is not yet Active.
               </p>
             ) : (
               <ul className="max-h-40 overflow-auto rounded-md border border-slate-200 divide-y text-xs">

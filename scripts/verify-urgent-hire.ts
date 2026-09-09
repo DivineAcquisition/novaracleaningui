@@ -1,7 +1,7 @@
 // ─── Offline verification of Urgent Hire behaviour (no network/DB) ───────────
 //
 // Locks the rules the feature is built around:
-//   • pipeline eligibility (Screening-Passed+, not Active, never Declined)
+//   • pipeline eligibility (Screening-Passed+, not Active, never rejected)
 //   • screening bar still requires photo ID + own vehicle
 //   • radius is mileage copy, not an audience filter
 //   • SMS always acknowledges they applied in the past
@@ -17,6 +17,8 @@ import {
   buildUrgentHireSms,
   firstJobOnlySentence,
   formatUrgentHireMileageLine,
+  isBlockedFromUrgentHire,
+  isDeclineRecommendation,
   isDeclinedPipelineStage,
   isUrgentHirePipelineStage,
   isActiveRosterStatus,
@@ -55,6 +57,34 @@ check("hold is not eligible", isUrgentHirePipelineStage("hold"), false);
 check("active roster is not eligible", isUrgentHirePipelineStage("active"), false);
 check("rejected is declined", isDeclinedPipelineStage("rejected"), true);
 check("withdrawn is declined", isDeclinedPipelineStage("withdrawn"), true);
+check("decline recommendation is a no", isDeclineRecommendation("decline"), true);
+check("Decline casing is a no", isDeclineRecommendation("Decline"), true);
+check("no hire is a no", isDeclineRecommendation("no_hire"), true);
+check("advance recommendation is allowed", isDeclineRecommendation("advance"), false);
+check(
+  "rejected stage is blocked",
+  isBlockedFromUrgentHire({ stage: "rejected", screeningRecommendation: "advance" }),
+  true,
+);
+check(
+  "uncleared rejection reason is blocked even in onboarding",
+  isBlockedFromUrgentHire({ stage: "onboarding", rejectionReason: "Failed a hard qualifier" }),
+  true,
+);
+check(
+  "decline screening is blocked even in screening stage",
+  isBlockedFromUrgentHire({ stage: "screening", screeningRecommendation: "decline" }),
+  true,
+);
+check(
+  "reinstated onboarding with advance is not blocked",
+  isBlockedFromUrgentHire({
+    stage: "onboarding",
+    rejectionReason: null,
+    screeningRecommendation: "advance",
+  }),
+  false,
+);
 check("active roster status is excluded", isActiveRosterStatus("Active"), true);
 check("pending cleaner is not roster-active", isActiveRosterStatus("pending"), false);
 check(

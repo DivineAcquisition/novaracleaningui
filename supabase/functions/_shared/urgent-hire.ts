@@ -83,6 +83,42 @@ export function isUrgentHirePipelineStage(stage: string | null | undefined): boo
   return (URGENT_HIRE_ELIGIBLE_STAGES as readonly string[]).includes(s);
 }
 
+export function isDeclinedPipelineStage(stage: string | null | undefined): boolean {
+  const s = String(stage || "").toLowerCase();
+  return s === "rejected" || s === "withdrawn";
+}
+
+export function isDeclineRecommendation(rec: string | null | undefined): boolean {
+  const s = String(rec || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[_-]+/g, " ");
+  return s === "decline" || s === "declined" || s === "rejected" || s === "reject" || s === "no hire";
+}
+
+export function urgentHireEmailKey(email: string | null | undefined): string | null {
+  const e = String(email || "").trim().toLowerCase();
+  return e && e.includes("@") ? e : null;
+}
+
+export function urgentHirePhoneDigits(input: string | null | undefined): string | null {
+  const digits = String(input || "").replace(/[^0-9]/g, "");
+  if (digits.length === 10) return digits;
+  if (digits.length === 11 && digits.startsWith("1")) return digits.slice(1);
+  return null;
+}
+
+export function isBlockedFromUrgentHire(opts: {
+  stage?: string | null;
+  rejectionReason?: string | null;
+  screeningRecommendation?: string | null;
+}): boolean {
+  if (isDeclinedPipelineStage(opts.stage)) return true;
+  if (String(opts.rejectionReason || "").trim()) return true;
+  if (isDeclineRecommendation(opts.screeningRecommendation)) return true;
+  return false;
+}
+
 export function isActiveRosterStatus(status: string | null | undefined): boolean {
   return String(status || "").toLowerCase() === "active";
 }

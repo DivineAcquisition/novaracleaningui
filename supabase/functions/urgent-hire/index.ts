@@ -24,6 +24,7 @@ import {
   firstJobOnlySentence,
   formatUrgentHireMileageLine,
   isActiveRosterStatus,
+  isBlockedFromUrgentHire,
   isUrgentHirePipelineStage,
   mintHexToken,
   parseUrgentHireSettings,
@@ -33,9 +34,11 @@ import {
   serviceTypeLabel,
   supplyChecklistValid,
   unfilledStillNeedsCoverage,
+  urgentHireEmailKey,
   urgentHireErrorMessage,
   urgentHireOfferUrl,
   urgentHirePayCents,
+  urgentHirePhoneDigits,
   usablePhone,
   URGENT_HIRE_DEFAULTS,
   URGENT_HIRE_ELIGIBLE_STAGES,
@@ -216,7 +219,7 @@ async function findEligible(
   const { data: applicants, error } = await admin
     .from("cleaner_applicants")
     .select(
-      "id, email, phone, full_name, first_name, last_name, zip_code, stage, cleaner_id",
+      "id, email, phone, full_name, first_name, last_name, zip_code, stage, cleaner_id, rejection_reason",
     )
     .in("stage", [...URGENT_HIRE_ELIGIBLE_STAGES]);
   if (error) throw error;
@@ -227,7 +230,7 @@ async function findEligible(
   const applicantIds = rows.map((r) => String(r.id));
   const cleanerIds = rows.map((r) => r.cleaner_id).filter(Boolean).map(String);
 
-  const [{ data: screenings }, { data: cleaners }, { data: activeRoster }] = await Promise.all([
+  const [{ data: screenings }, { data: cleaners }, { data: activeRoster }, { data: blockedRows }] = await Promise.all([
     admin
       .from("phone_screenings")
       .select("applicant_id, recommendation, answers, submitted_at, status")
@@ -243,6 +246,10 @@ async function findEligible(
         .in("id", cleanerIds)
       : Promise.resolve({ data: [] as Record<string, unknown>[] }),
     admin.from("cleaners").select("email, status").eq("status", "active"),
+    admin
+      .from("cleaner_applicants")
+      .select("email, phone")
+      .in("stage", ["rejected", "withdrawn"]),
   ]);
 
   const latestScreening = new Map<string, Record<string, unknown>>();
@@ -257,9 +264,17 @@ async function findEligible(
   const activeEmails = new Set<string>();
   for (const c of (activeRoster || []) as Record<string, unknown>[]) {
     if (isActiveRosterStatus(String(c.status || ""))) {
-      const email = String(c.email || "").trim().toLowerCase();
+      const email = urgentHireEmailKey(c.email as string | null);
       if (email) activeEmails.add(email);
     }
+  }
+  const blockedEmails = new Set<string>();
+  const blockedPhones = new Set<string>();
+  for (const r of (blockedRows || []) as Record<string, unknown>[]) {
+    const email = urgentHireEmailKey(r.email as string | null);
+    if (email) blockedEmails.add(email);
+    const phone = urgentHirePhoneDigits(r.phone as string | null);
+    if (phone) blockedPhones.add(phone);
   }
 
   const eligible: EligibleRow[] = [];
@@ -270,14 +285,28 @@ async function findEligible(
     if (!isUrgentHirePipelineStage(stage)) continue;
 
     const screening = latestScreening.get(String(a.id));
+    if (
+      isBlockedFromUrgentHire({
+        stage,
+        rejectionReason: a.rejection_reason as string | null,
+        screeningRecommendation: (screening?.recommendation as string | null) ?? null,
+      })
+    ) {
+      continue;
+    }
     if (!screening) continue;
-    if (String(screening.recommendation || "") === "decline") continue;
     if (!screeningQualifiersPass(screening.answers)) continue;
 
     const cleaner = a.cleaner_id ? cleanerById.get(String(a.cleaner_id)) : null;
     if (cleaner && isActiveRosterStatus(String(cleaner.status || ""))) continue;
-    const email = String(a.email || "").trim().toLowerCase();
-    if (email && activeEmails.has(email)) continue;
+    const email = urgentHireEmailKey(
+      ((a.email as string | null) || (cleaner?.email as string | null)) ?? null,
+    );
+    if (email && (activeEmails.has(email) || blockedEmails.has(email))) continue;
+    const phoneDigits = urgentHirePhoneDigits(
+      ((a.phone as string | null) || (cleaner?.phone as string | null)) ?? null,
+    );
+    if (phoneDigits && blockedPhones.has(phoneDigits)) continue;
 
     let distanceMiles: number | null = null;
     if (jobCoords) {
@@ -921,7 +950,7 @@ serve(async (req) => {
           ok: false,
           code: "nobody_eligible",
           error:
-            "Nobody in the applicant pipeline has a valid photo ID and own vehicle, is Screening-Passed or later, and is not yet Active.",
+            "Nobody in the applicant pipeline has a valid photo ID and own vehicle, is Screening-Passed or later, is not rejected, and is not yet Active.",
           ...preview,
         }, 409);
       }
