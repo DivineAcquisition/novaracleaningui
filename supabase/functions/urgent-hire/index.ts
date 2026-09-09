@@ -14,6 +14,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { haversineMiles } from "../_shared/dispatch-scoring.ts";
+import { resolveSecret } from "../_shared/app-secrets.ts";
 import { isValidLatLng } from "../_shared/geocode.ts";
 import { notifyDiscord } from "../_shared/discord.ts";
 import { jobValueForPay } from "../_shared/reclean.ts";
@@ -53,7 +54,7 @@ import {
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -83,6 +84,11 @@ function json(payload: unknown, status = 200): Response {
 // deno-lint-ignore no-explicit-any
 type SB = any;
 
+async function opsAdminActor(admin: SB): Promise<{ id: string; email: string }> {
+  const { data } = await admin.from("user_roles").select("user_id").eq("role", "admin").limit(1).maybeSingle();
+  return { id: String(data?.user_id || ""), email: "ops@novaracleaning.com" };
+}
+
 async function ensureAdminOrVa(admin: SB, jwt: string): Promise<{ id: string; email: string }> {
   const userClient = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
@@ -95,6 +101,23 @@ async function ensureAdminOrVa(admin: SB, jwt: string): Promise<{ id: string; em
   const allowed = (roles || []).some((r: { role: string }) => ["admin", "va"].includes(r.role));
   if (!allowed) throw new Error("Admins or VAs only.");
   return { id: u.user.id, email: u.user.email || "" };
+}
+
+/** Admin JWT, service-role bearer, or x-cron-secret (same pattern as other ops functions). */
+async function authorizeAdminAction(
+  req: Request,
+  admin: SB,
+  jwt: string,
+): Promise<{ id: string; email: string }> {
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  if (jwt && serviceKey && jwt === serviceKey) return opsAdminActor(admin);
+  const cronHeader = (req.headers.get("x-cron-secret") || "").trim();
+  if (cronHeader) {
+    const expected = (await resolveSecret(admin, "CRON_SECRET")).trim();
+    if (expected && cronHeader === expected) return opsAdminActor(admin);
+  }
+  if (!jwt) throw new Error("Not signed in.");
+  return ensureAdminOrVa(admin, jwt);
 }
 
 async function loadSettings(admin: SB): Promise<UrgentHireSettings> {
@@ -760,8 +783,11 @@ serve(async (req) => {
     const needsAdmin = ["preview", "send", "log", "get_settings", "save_settings", "cancel"].includes(action);
     let actor: { id: string; email: string } | null = null;
     if (needsAdmin) {
-      if (!jwt) return json({ error: "Not signed in.", ok: false }, 401);
-      actor = await ensureAdminOrVa(admin, jwt);
+      try {
+        actor = await authorizeAdminAction(req, admin, jwt);
+      } catch (err) {
+        return json({ error: err instanceof Error ? err.message : "Not signed in.", ok: false }, 401);
+      }
     }
 
     // ── settings ──────────────────────────────────────────────────────────
