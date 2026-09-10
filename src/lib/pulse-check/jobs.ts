@@ -89,6 +89,7 @@ export function zoneLabel(args: {
 export function jobValueForPay(booking: {
   is_reclean?: boolean | null;
   reclean_assessed_value_cents?: number | null;
+  pay_basis_cents?: number | null;
   final_charge_cents?: number | null;
   total_estimate_cents?: number | null;
 }): number {
@@ -99,6 +100,8 @@ export function jobValueForPay(booking: {
     }
     return assessed;
   }
+  const explicit = Math.round(Number(booking.pay_basis_cents) || 0);
+  if (explicit > 0) return explicit;
   return Math.max(
     0,
     Math.round(Number(booking.final_charge_cents) || Number(booking.total_estimate_cents) || 0),

@@ -38,6 +38,7 @@ import {
   cancelTurnover,
   isPmServiceType,
   publicTurnover,
+  syncOpenTurnovers,
 } from "@/lib/property-manager/turnovers";
 import { describeCustomerPaymentMethod, netTermsLabel } from "./stripe-billing";
 import type { PartnerIdentity } from "./identity";
@@ -79,6 +80,10 @@ export async function propertyManagerOverview(identity: PartnerIdentity, unitId?
   }
   const supabase = getAdminSupabase();
   const pmAccountId = ids[0];
+
+  // The manager should see an approved scope adjustment the moment it is
+  // approved, not the moment we happen to invoice it.
+  await syncOpenTurnovers(supabase, pmAccountId).catch(() => null);
 
   const [{ data: account }, { data: units }, { data: turnovers }, { data: agreements }] =
     await Promise.all([

@@ -175,6 +175,7 @@ export function recleanRequestColumns(opts: {
 export interface PayBasisBooking {
   is_reclean?: boolean | null;
   reclean_assessed_value_cents?: number | null;
+  pay_basis_cents?: number | null;
   final_charge_cents?: number | null;
   total_estimate_cents?: number | null;
 }
@@ -185,6 +186,11 @@ export interface PayBasisBooking {
  * For a re-clean this is ALWAYS the assessed scope value — never the $0
  * customer charge. Throws if a re-clean is missing a positive assessed
  * value: that path would produce unpaid corrective work, which is prohibited.
+ *
+ * An explicit pay_basis_cents wins next. It is set when the customer charge is
+ * deliberately below the value of the work — a property manager's portfolio
+ * volume discount is funded from Company margin, so the crew is paid off the
+ * full pre-discount value of the turnover.
  */
 export function jobValueForPay(booking: PayBasisBooking): number {
   if (booking.is_reclean) {
@@ -194,6 +200,8 @@ export function jobValueForPay(booking: PayBasisBooking): number {
     }
     return assessed;
   }
+  const explicit = Math.round(Number(booking.pay_basis_cents) || 0);
+  if (explicit > 0) return explicit;
   return Math.max(0, Math.round(
     Number(booking.final_charge_cents) || Number(booking.total_estimate_cents) || 0,
   ));

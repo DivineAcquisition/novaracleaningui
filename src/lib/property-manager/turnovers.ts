@@ -400,6 +400,11 @@ async function createTurnoverBooking(
       base_price_cents: priceCents,
       total_estimate_cents: priceCents,
       final_charge_cents: priceCents,
+      // The manager is charged the discounted rate; the crew is paid off the
+      // full pre-discount value. Every pay path reads this column, so the
+      // discount is invisible to a payout by construction rather than by
+      // remembering to special-case it.
+      pay_basis_cents: basisCents,
       deposit_cents: 0,
       cleaner_payout_cents: cleanerPayoutCents,
       platform_fee_cents: Math.max(0, priceCents - cleanerPayoutCents),
@@ -522,7 +527,58 @@ export async function syncTurnoverFromBooking(
     .maybeSingle();
   if (!booking) return { ok: true, changed: false };
 
-  const bookingRow = booking as Row;
+  return applyBookingState(supabase, row, booking as Row);
+}
+
+/**
+ * Bring every open turnover on an account into step with its job in one pass.
+ *
+ * This is pull-based on purpose. A scope adjustment is approved deep inside
+ * the existing booking flow, which knows nothing about property managers;
+ * rather than teaching that flow a new callback, the portal and the invoice
+ * run reconcile before they read. Both are idempotent, so reconciling twice
+ * costs nothing and missing a webhook costs nothing either.
+ */
+export async function syncOpenTurnovers(
+  supabase: Admin,
+  pmAccountId: string,
+): Promise<{ ok: boolean; changed: number }> {
+  const { data: turnovers } = await supabase
+    .from("property_manager_turnovers")
+    .select(TURNOVER_COLS)
+    .eq("pm_account_id", pmAccountId)
+    .not("booking_id", "is", null)
+    .not("status", "in", "(cancelled)")
+    .is("invoice_id", null)
+    .limit(500);
+
+  const rows = (turnovers || []) as Row[];
+  if (rows.length === 0) return { ok: true, changed: 0 };
+
+  const { data: bookings } = await supabase
+    .from("bookings")
+    .select("id, status, service_date, final_charge_cents, total_estimate_cents, completed_at, pay_basis_cents")
+    .in(
+      "id",
+      rows.map((r) => String(r.booking_id)),
+    );
+  const byId = new Map(((bookings || []) as Row[]).map((b) => [String(b.id), b]));
+
+  let changed = 0;
+  for (const row of rows) {
+    const booking = byId.get(String(row.booking_id));
+    if (!booking) continue;
+    const result = await applyBookingState(supabase, row, booking);
+    if (result.changed) changed++;
+  }
+  return { ok: true, changed };
+}
+
+async function applyBookingState(
+  supabase: Admin,
+  row: Row,
+  bookingRow: Row,
+): Promise<{ ok: boolean; changed: boolean }> {
   const bookedCents = Number(row.price_cents || 0);
   const finalCents = Math.round(
     Number(bookingRow.final_charge_cents) || Number(bookingRow.total_estimate_cents) || bookedCents,
@@ -539,8 +595,22 @@ export async function syncTurnoverFromBooking(
   if (mapped && mapped !== row.status) patch.status = mapped;
   if (bookingRow.completed_at && !row.completed_at) patch.completed_at = bookingRow.completed_at;
 
-  if (Object.keys(patch).length === 0) return { ok: true, changed: false };
-  await supabase.from("property_manager_turnovers").update(patch).eq("id", turnoverId);
+  // An approved scope adjustment raises what the crew is owed, so the job's
+  // pay basis has to move with it. The discount stays out of it either way:
+  // the basis is the full pre-discount value plus the approved delta, never
+  // the discounted charge.
+  const listCents = Number(row.list_price_cents || bookedCents);
+  const nextBasis = payBasisCents({ listPriceCents: listCents, scopeAdjustmentCents: delta });
+  const basisChanged = nextBasis !== Math.round(Number(bookingRow.pay_basis_cents) || 0);
+  if (basisChanged) {
+    await supabase
+      .from("bookings")
+      .update({ pay_basis_cents: nextBasis })
+      .eq("id", bookingRow.id as string);
+  }
+
+  if (Object.keys(patch).length === 0) return { ok: true, changed: basisChanged };
+  await supabase.from("property_manager_turnovers").update(patch).eq("id", row.id as string);
   return { ok: true, changed: true };
 }
 

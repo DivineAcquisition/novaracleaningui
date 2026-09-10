@@ -42,6 +42,7 @@ import {
   lineDescription,
   periodFor,
 } from "../src/lib/property-manager/billing";
+import { jobValueForPay } from "../src/lib/pulse-check/jobs";
 
 let failures = 0;
 function check(name: string, actual: unknown, expected: unknown): void {
@@ -110,6 +111,49 @@ const migration = readFileSync(
 check(
   "the stored pay_basis_cents column matches payBasisCents()",
   migration.includes("list_price_cents + GREATEST(scope_adjustment_cents, 0)"),
+  true,
+);
+
+// The booking's pay basis is what every payout path actually reads, so the
+// rule has to hold there and not only in the property-manager module.
+console.log("\nThe payout path reads the pre-discount basis, not the charge:");
+check(
+  "an ordinary booking still pays off the customer charge",
+  jobValueForPay({ final_charge_cents: 280_00 }),
+  280_00,
+);
+check(
+  "a discounted turnover pays off its stored pay basis",
+  jobValueForPay({ final_charge_cents: 308_00, pay_basis_cents: 350_00 }),
+  350_00,
+);
+check(
+  "a scope-adjusted turnover pays off basis plus the approved delta",
+  jobValueForPay({ final_charge_cents: 398_00, pay_basis_cents: 440_00 }),
+  440_00,
+);
+check(
+  "a re-clean still overrides everything — unpaid corrective work is prohibited",
+  jobValueForPay({ is_reclean: true, reclean_assessed_value_cents: 200_00, pay_basis_cents: 350_00, final_charge_cents: 0 }),
+  200_00,
+);
+check(
+  "a zero basis falls through rather than paying nothing",
+  jobValueForPay({ pay_basis_cents: 0, final_charge_cents: 280_00 }),
+  280_00,
+);
+
+// The Deno edge functions run their own copy of this function. If the two
+// drift, the portal and the payout disagree about the same job.
+const denoPayBasis = readFileSync(
+  join(process.cwd(), "supabase/functions/_shared/reclean.ts"),
+  "utf8",
+);
+check(
+  "the edge-function copy of jobValueForPay honours pay_basis_cents too",
+  /const explicit = Math\.round\(Number\(booking\.pay_basis_cents\) \|\| 0\);\s*\n\s*if \(explicit > 0\) return explicit;/.test(
+    denoPayBasis,
+  ),
   true,
 );
 

@@ -169,7 +169,7 @@ async function loadJobBundle(admin: SB, jobId: string): Promise<JobBundle> {
   const { data: booking } = await admin
     .from("bookings")
     .select(
-      "id, booking_number, job_id, status, service_date, time_slot, arrival_window, service_type, first_name, last_name, city, state, zip_code, address, total_estimate_cents, final_charge_cents, is_reclean, reclean_assessed_value_cents",
+      "id, booking_number, job_id, status, service_date, time_slot, arrival_window, service_type, first_name, last_name, city, state, zip_code, address, total_estimate_cents, final_charge_cents, pay_basis_cents, is_reclean, reclean_assessed_value_cents",
     )
     .eq("job_id", jobId)
     .order("created_at", { ascending: false })

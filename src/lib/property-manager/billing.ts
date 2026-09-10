@@ -19,6 +19,7 @@ import { resolveAppSecret, stripeCall } from "@/lib/stripe-rest";
 import { facingInvoiceStatus, netTermsLabel } from "@/lib/partner-portal/stripe-billing";
 import { PM_SERVICE_LABELS, formatRate, unitDisplayName, type PmServiceType } from "./pricing";
 import { clip } from "./registry";
+import { syncOpenTurnovers } from "./turnovers";
 
 type Admin = ReturnType<typeof getAdminSupabase>;
 type Row = Record<string, unknown>;
@@ -146,6 +147,11 @@ export async function buildInvoiceDraft(
   supabase: Admin,
   input: { pmAccountId: string; period: BillingPeriod; netTerms?: string | null },
 ): Promise<InvoiceDraft> {
+  // Reconcile before reading. A scope adjustment approved on the job hasn't
+  // touched the turnover yet, and billing the pre-adjustment amount would be
+  // wrong in the direction that is hardest to notice.
+  await syncOpenTurnovers(supabase, input.pmAccountId);
+
   const { data: rows } = await supabase
     .from("property_manager_turnovers")
     .select(
