@@ -39,9 +39,18 @@ async function sendMagicLink(email: string): Promise<{ ok: true }> {
   });
 
   const link = enterUrl(raw);
-  const name = (identity.displayName || identity.hosts[0]?.name || identity.accounts[0]?.contactName || "there")
-    .split(" ")[0];
-  const phone = identity.phone || identity.hosts[0]?.phone || identity.accounts[0]?.phone;
+  const name = (
+    identity.displayName ||
+    identity.hosts[0]?.name ||
+    identity.accounts[0]?.contactName ||
+    identity.propertyManagers[0]?.contactName ||
+    "there"
+  ).split(" ")[0];
+  const phone =
+    identity.phone ||
+    identity.hosts[0]?.phone ||
+    identity.accounts[0]?.phone ||
+    identity.propertyManagers[0]?.phone;
 
   await sendPortalMagicLink(supabase, {
     email,
@@ -61,7 +70,8 @@ export async function mintHandoffToken(input: {
   identityId: string;
   hostId?: string | null;
   accountId?: string | null;
-  kind: "host" | "commercial";
+  pmAccountId?: string | null;
+  kind: "host" | "commercial" | "property_manager";
 }): Promise<{ raw: string; url: string; expiresAt: Date }> {
   const supabase = getAdminSupabase();
   const settings = await loadPortalSettings(supabase);
@@ -74,6 +84,7 @@ export async function mintHandoffToken(input: {
     purpose: "onboarding_handoff",
     host_id: input.hostId || null,
     business_account_id: input.accountId || null,
+    pm_account_id: input.pmAccountId || null,
     onboarding_kind: input.kind,
     expires_at: expiresAt.toISOString(),
   });

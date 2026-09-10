@@ -26,6 +26,7 @@ import {
   ratesToColumns,
   zipFromAddress,
   type PmPricingContext,
+  type StandingRateResult,
 } from "./pricing-server";
 
 type Admin = ReturnType<typeof getAdminSupabase>;
@@ -202,7 +203,7 @@ export async function registerUnit(
   // The tier this unit is priced at includes itself: registering the fifth
   // unit is what puts the portfolio in the 5+ band.
   const existingCount = await countRegisteredUnits(supabase, input.pmAccountId);
-  const computed = pricingCtx
+  const computed: StandingRateResult = pricingCtx
     ? await computeStandingRates(supabase, pricingCtx, {
         address,
         zipCode: zip,
@@ -212,11 +213,11 @@ export async function registerUnit(
         flaggedNonStandard: !!input.flaggedNonStandard,
         unitCount: existingCount + 1,
       })
-    : ({
-        ok: false as const,
-        reason: "pricing_unavailable" as const,
+    : {
+        ok: false,
+        reason: "pricing_unavailable",
         message: "We couldn't reach the pricing tables. Our team will set this unit's rates.",
-      });
+      };
 
   const patch: Row = computed.ok
     ? { ...base, ...ratesToColumns(computed.rates), status: "active", review_reason: null }
@@ -465,7 +466,7 @@ export async function approveUnit(
     // Re-run the engine with whatever the admin corrected.
     const ctx = await loadPmPricingContext(supabase);
     const unitCount = await countRegisteredUnits(supabase, pmAccountId);
-    const computed = ctx
+    const computed: StandingRateResult | null = ctx
       ? await computeStandingRates(supabase, ctx, {
           address: (row.address as string) || null,
           zipCode: (patch.zip_code as string) || (row.zip_code as string) || null,

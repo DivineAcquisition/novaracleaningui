@@ -233,9 +233,20 @@ export interface StandingRateInput {
   unitCount: number;
 }
 
-export type StandingRateResult =
-  | { ok: true; rates: StandingRateSet; discount: ResolvedDiscount }
-  | { ok: false; reason: UnitReviewReason; message: string };
+/**
+ * Flat rather than a discriminated union: this project compiles with
+ * `strictNullChecks` off, where an `ok: true | false` discriminant does not
+ * narrow. Callers branch on `ok` and read the side they asked for.
+ */
+export interface StandingRateResult {
+  ok: boolean;
+  rates?: StandingRateSet;
+  discount?: ResolvedDiscount;
+  /** Why the unit could not be auto-priced, when `ok` is false. */
+  reason?: UnitReviewReason;
+  /** Manager-facing explanation, when `ok` is false. */
+  message?: string;
+}
 
 /**
  * Compute one unit's full rate set. This is the only place standing rates are
