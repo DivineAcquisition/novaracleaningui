@@ -12,8 +12,15 @@ import { cn } from "@/lib/utils";
 import PartnerMagicLink from "@/views/partner/PartnerMagicLink";
 import HostPortalView from "@/views/partner/HostPortalView";
 import CommercialPortal from "@/views/partner/CommercialPortal";
+import PropertyManagerPortal from "@/views/partner/PropertyManagerPortal";
 
-type Kind = "host" | "commercial";
+type Kind = "host" | "commercial" | "property_manager";
+
+const KIND_LABELS: Record<Kind, string> = {
+  host: "Host",
+  commercial: "Commercial",
+  property_manager: "Portfolio",
+};
 
 interface Me {
   ok: boolean;
@@ -48,13 +55,10 @@ export default function PartnerPortal() {
           const kinds = json.kinds as Kind[];
           const requested = previewFromLocation()
             ? null
-            : (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("kind")) || null;
+            : ((typeof window !== "undefined" &&
+                new URLSearchParams(window.location.search).get("kind")) as Kind | null) || null;
           setMe(json);
-          if (requested === "host" || requested === "commercial") {
-            setView(kinds.includes(requested) ? requested : kinds[0]);
-          } else {
-            setView(kinds.includes("host") && !kinds.includes("commercial") ? "host" : kinds[0]);
-          }
+          setView(requested && kinds.includes(requested) ? requested : kinds[0]);
         } else {
           setMe(null);
         }
@@ -72,7 +76,7 @@ export default function PartnerPortal() {
   }
   if (!me) return <PartnerMagicLink notice={linkNotice()} />;
 
-  const mixed = me.kinds.includes("host") && me.kinds.includes("commercial");
+  const mixed = me.kinds.length > 1;
 
   const signOut = async () => {
     await fetch("/api/partner-portal/logout", { method: "POST" });
@@ -94,30 +98,27 @@ export default function PartnerPortal() {
         </div>
         {mixed && (
           <div className="mx-auto flex max-w-4xl gap-2 px-4 pb-3">
-            <button
-              onClick={() => setView("host")}
-              className={cn(
-                "rounded-full px-4 py-1.5 text-sm font-medium",
-                view === "host" ? "bg-white text-[#5C0FFE]" : "bg-white/15 text-white",
-              )}
-            >
-              Host
-            </button>
-            <button
-              onClick={() => setView("commercial")}
-              className={cn(
-                "rounded-full px-4 py-1.5 text-sm font-medium",
-                view === "commercial" ? "bg-white text-[#5C0FFE]" : "bg-white/15 text-white",
-              )}
-            >
-              Commercial
-            </button>
+            {me.kinds.map((kind) => (
+              <button
+                key={kind}
+                onClick={() => setView(kind)}
+                className={cn(
+                  "rounded-full px-4 py-1.5 text-sm font-medium",
+                  view === kind ? "bg-white text-[#5C0FFE]" : "bg-white/15 text-white",
+                )}
+              >
+                {KIND_LABELS[kind] || kind}
+              </button>
+            ))}
           </div>
         )}
       </header>
       <main className="mx-auto max-w-4xl px-4 py-6">
         {view === "host" && me.kinds.includes("host") ? <HostPortalView /> : null}
         {view === "commercial" && me.kinds.includes("commercial") ? <CommercialPortal /> : null}
+        {view === "property_manager" && me.kinds.includes("property_manager") ? (
+          <PropertyManagerPortal />
+        ) : null}
       </main>
     </div>
   );
