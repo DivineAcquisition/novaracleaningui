@@ -45,6 +45,7 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { AddressAutocomplete } from "@/components/admin/AddressAutocomplete";
 import PauseRecurringDialog from "@/components/admin/PauseRecurringDialog";
+import { recurringResumeClearFields } from "@/lib/recurring-pause";
 import { MEMBERSHIP_PRICES } from "@/lib/pricing";
 import { sendCustomerChecklist, sendMembershipAgreement } from "@/lib/membership-admin";
 import { cn } from "@/lib/utils";
@@ -1680,9 +1681,7 @@ function ScheduleRow({
                 }
                 onPatch(s.id, {
                   active: true,
-                  pause_reason: null,
-                  pause_reason_code: null,
-                  paused_at: null,
+                  ...recurringResumeClearFields(),
                 });
               }}
             >
