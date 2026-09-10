@@ -43,6 +43,7 @@
     "zones:verify": "tsx scripts/verify-site-zones.ts",
     "pulse:verify": "tsx scripts/verify-pulse-check.ts",
     "termination-sms:verify": "tsx scripts/verify-termination-sms.ts",
+    "recurring-pause:verify": "tsx scripts/verify-recurring-pause.ts",
     "eas:supabase:connect": "npm --prefix contractor-app run eas:supabase:connect"
   },
   "dependencies": {
