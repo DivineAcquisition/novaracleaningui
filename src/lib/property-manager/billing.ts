@@ -7,7 +7,7 @@
 // once and still reconcile each line against a specific apartment.
 //
 // Invoiced is the default for this relationship type. Auto-Pay accounts get
-    10|// the same consolidated document — the only difference is Stripe charges the
+// the same consolidated document — the only difference is Stripe charges the
 // card on file instead of sending a payable invoice.
 //
 // This uses the existing Stripe Invoicing integration. There is no parallel
@@ -17,7 +17,7 @@
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import { resolveAppSecret, stripeCall } from "@/lib/stripe-rest";
 import { facingInvoiceStatus, netTermsLabel } from "@/lib/partner-portal/stripe-billing";
-    20|import { PM_SERVICE_LABELS, formatRate, unitDisplayName, type PmServiceType } from "./pricing";
+import { PM_SERVICE_LABELS, formatRate, unitDisplayName, type PmServiceType } from "./pricing";
 import { clip } from "./registry";
 
 type Admin = ReturnType<typeof getAdminSupabase>;
@@ -27,7 +27,7 @@ export type InvoiceCycle = "weekly" | "biweekly" | "monthly";
 
 const DAYS_UNTIL_DUE: Record<string, number> = {
   on_receipt: 0,
-    30|  net_15: 15,
+  net_15: 15,
   net_30: 30,
   net_45: 45,
 };
@@ -37,7 +37,7 @@ const DAYS_UNTIL_DUE: Record<string, number> = {
 export interface BillingPeriod {
   start: string;
   end: string;
-    40|  label: string;
+  label: string;
 }
 
 function addDays(day: string, n: number): string {
@@ -47,7 +47,7 @@ function addDays(day: string, n: number): string {
 }
 
 function monthLabel(day: string): string {
-    50|  return new Date(`${day}T12:00:00Z`).toLocaleDateString("en-US", {
+  return new Date(`${day}T12:00:00Z`).toLocaleDateString("en-US", {
     timeZone: "UTC",
     month: "long",
     year: "numeric",
@@ -57,7 +57,7 @@ function monthLabel(day: string): string {
 function shortDay(day: string): string {
   return new Date(`${day}T12:00:00Z`).toLocaleDateString("en-US", {
     timeZone: "UTC",
-    60|    month: "short",
+    month: "short",
     day: "numeric",
   });
 }
@@ -67,7 +67,7 @@ function shortDay(day: string): string {
  * because that is what a property manager's own books run on; weekly and
  * biweekly run Monday-anchored so a period never splits a weekend turnover
  * from the job that caused it.
-    70| */
+ */
 export function periodFor(cycle: InvoiceCycle, anchorDay: string): BillingPeriod {
   const day = String(anchorDay).slice(0, 10);
   if (cycle === "monthly") {
@@ -77,7 +77,7 @@ export function periodFor(cycle: InvoiceCycle, anchorDay: string): BillingPeriod
     const end = addDays(d.toISOString().slice(0, 10), -1);
     return { start, end, label: monthLabel(start) };
   }
-    80|  const span = cycle === "biweekly" ? 14 : 7;
+  const span = cycle === "biweekly" ? 14 : 7;
   // Anchored on a fixed Monday so consecutive periods tile without drifting,
   // whatever day of the week the caller happens to ask on.
   const EPOCH_MONDAY = Date.UTC(1970, 0, 5, 12, 0, 0);
@@ -89,7 +89,7 @@ export function periodFor(cycle: InvoiceCycle, anchorDay: string): BillingPeriod
   return { start, end, label: `${shortDay(start)} – ${shortDay(end)}` };
 }
 
-    90|/** The most recently CLOSED period — the one that is ready to bill. */
+/** The most recently CLOSED period — the one that is ready to bill. */
 export function lastClosedPeriod(cycle: InvoiceCycle, today = new Date()): BillingPeriod {
   const day = today.toISOString().slice(0, 10);
   const current = periodFor(cycle, day);
@@ -99,7 +99,7 @@ export function lastClosedPeriod(cycle: InvoiceCycle, today = new Date()): Billi
 export function dueDateFor(periodEnd: string, netTerms: string | null | undefined): string {
   return addDays(periodEnd, DAYS_UNTIL_DUE[String(netTerms || "net_15")] ?? 15);
 }
-   100|
+
 
 // ─── Building the statement ────────────────────────────────────────────────
 
@@ -109,7 +109,7 @@ export interface InvoiceTurnoverLine {
   serviceLabel: string;
   /** The day the work actually happened, falling back to the deadline. */
   servicedOn: string;
-   110|  amountCents: number;
+  amountCents: number;
   /** Non-zero when an approved scope adjustment moved this turnover's value. */
   scopeAdjustmentCents: number;
 }
@@ -119,7 +119,7 @@ export interface InvoiceUnitLine {
   unitLabel: string;
   address: string | null;
   turnovers: InvoiceTurnoverLine[];
-   120|  subtotalCents: number;
+  subtotalCents: number;
 }
 
 export interface InvoiceDraft {
@@ -129,7 +129,7 @@ export interface InvoiceDraft {
   turnoverCount: number;
   unitCount: number;
   subtotalCents: number;
-   130|  dueDate: string;
+  dueDate: string;
   netTermsLabel: string | null;
 }
 
@@ -139,7 +139,7 @@ export interface InvoiceDraft {
  *
  * A turnover's billable amount is its final value: the standing rate, or the
  * adjusted total when an approved scope adjustment moved it. Cancelled work
-   140| * and work still in flight are simply not on this period's invoice — they
+ * and work still in flight are simply not on this period's invoice — they
  * fall into whichever period they complete in.
  */
 export async function buildInvoiceDraft(
@@ -149,7 +149,7 @@ export async function buildInvoiceDraft(
   const { data: rows } = await supabase
     .from("property_manager_turnovers")
     .select(
-   150|      "id, unit_id, service_type, needed_by_date, scheduled_date, completed_at, price_cents, final_price_cents, scope_adjustment_cents, status, invoice_id",
+      "id, unit_id, service_type, needed_by_date, scheduled_date, completed_at, price_cents, final_price_cents, scope_adjustment_cents, status, invoice_id",
     )
     .eq("pm_account_id", input.pmAccountId)
     .eq("status", "completed")
@@ -159,7 +159,7 @@ export async function buildInvoiceDraft(
   const inPeriod = ((rows || []) as Row[]).filter((r) => {
     const day = servicedDay(r);
     return day >= input.period.start && day <= input.period.end;
-   160|  });
+  });
 
   const unitIds = Array.from(new Set(inPeriod.map((r) => String(r.unit_id))));
   const unitsById = new Map<string, Row>();
@@ -169,7 +169,7 @@ export async function buildInvoiceDraft(
       .select("id, unit_label, address, city, state")
       .in("id", unitIds);
     for (const u of (units || []) as Row[]) unitsById.set(String(u.id), u);
-   170|  }
+  }
 
   const grouped = new Map<string, InvoiceUnitLine>();
   for (const row of inPeriod) {
@@ -179,7 +179,7 @@ export async function buildInvoiceDraft(
       grouped.set(unitId, {
         unitId,
         unitLabel: unit
-   180|          ? unitDisplayName(unit as { unit_label?: string | null; address?: string | null })
+          ? unitDisplayName(unit as { unit_label?: string | null; address?: string | null })
           : "Unit",
         address: (unit?.address as string) || null,
         turnovers: [],
@@ -189,7 +189,7 @@ export async function buildInvoiceDraft(
     const line = grouped.get(unitId)!;
     const service = String(row.service_type) as PmServiceType;
     const amount = Math.max(
-   190|      0,
+      0,
       Math.round(Number(row.final_price_cents ?? row.price_cents ?? 0)),
     );
     line.turnovers.push({
@@ -199,7 +199,7 @@ export async function buildInvoiceDraft(
       servicedOn: servicedDay(row),
       amountCents: amount,
       scopeAdjustmentCents: Math.round(Number(row.scope_adjustment_cents || 0)),
-   200|    });
+    });
     line.subtotalCents += amount;
   }
 
@@ -209,7 +209,7 @@ export async function buildInvoiceDraft(
   for (const u of units) u.turnovers.sort((a, b) => a.servicedOn.localeCompare(b.servicedOn));
 
   return {
-   210|    pmAccountId: input.pmAccountId,
+    pmAccountId: input.pmAccountId,
     period: input.period,
     units,
     turnoverCount: inPeriod.length,
@@ -219,7 +219,7 @@ export async function buildInvoiceDraft(
     netTermsLabel: netTermsLabel(input.netTerms),
   };
 }
-   220|
+
 
 function servicedDay(row: Row): string {
   const completed = row.completed_at ? String(row.completed_at).slice(0, 10) : "";
@@ -229,7 +229,7 @@ function servicedDay(row: Row): string {
   return String(row.needed_by_date || "").slice(0, 10);
 }
 
-   230|/** The line as it reads on the invoice: unit first, so it sorts by property. */
+/** The line as it reads on the invoice: unit first, so it sorts by property. */
 export function lineDescription(unit: InvoiceUnitLine, turnover: InvoiceTurnoverLine): string {
   const base = `${unit.unitLabel} — ${turnover.serviceLabel} · ${shortDay(turnover.servicedOn)}`;
   return turnover.scopeAdjustmentCents > 0
@@ -239,7 +239,7 @@ export function lineDescription(unit: InvoiceUnitLine, turnover: InvoiceTurnover
 
 // ─── Issuing ───────────────────────────────────────────────────────────────
 
-   240|export interface IssueInvoiceResult {
+export interface IssueInvoiceResult {
   ok: boolean;
   status: number;
   message: string;
@@ -249,7 +249,7 @@ export function lineDescription(unit: InvoiceUnitLine, turnover: InvoiceTurnover
   subtotalCents?: number;
   unitCount?: number;
   turnoverCount?: number;
-   250|}
+}
 
 /**
  * Issue the period's consolidated invoice.
@@ -259,7 +259,7 @@ export function lineDescription(unit: InvoiceUnitLine, turnover: InvoiceTurnover
  * the invoice id only after Stripe accepts it, so a Stripe failure leaves
  * them billable next run instead of stranding them as invoiced-but-unsent.
  */
-   260|export async function issueConsolidatedInvoice(
+export async function issueConsolidatedInvoice(
   supabase: Admin,
   input: {
     pmAccountId: string;
@@ -269,7 +269,7 @@ export function lineDescription(unit: InvoiceUnitLine, turnover: InvoiceTurnover
     dryRun?: boolean;
   },
 ): Promise<IssueInvoiceResult> {
-   270|  const { data: account } = await supabase
+  const { data: account } = await supabase
     .from("property_manager_accounts")
     .select(
       "id, company_name, email, billing_method, invoice_cycle, net_terms, stripe_customer_id, default_payment_method_id",
@@ -279,7 +279,7 @@ export function lineDescription(unit: InvoiceUnitLine, turnover: InvoiceTurnover
   if (!account) return { ok: false, status: 404, message: "Property manager account not found." };
 
   const acct = account as Row;
-   280|  const cycle = (String(acct.invoice_cycle || "monthly") as InvoiceCycle) || "monthly";
+  const cycle = (String(acct.invoice_cycle || "monthly") as InvoiceCycle) || "monthly";
   const period = input.period || lastClosedPeriod(cycle);
 
   const { data: existing } = await supabase
@@ -289,7 +289,7 @@ export function lineDescription(unit: InvoiceUnitLine, turnover: InvoiceTurnover
     .eq("period_start", period.start)
     .eq("period_end", period.end)
     .maybeSingle();
-   290|  if (existing && String((existing as Row).status) !== "draft") {
+  if (existing && String((existing as Row).status) !== "draft") {
     const row = existing as Row;
     return {
       ok: true,
@@ -299,7 +299,7 @@ export function lineDescription(unit: InvoiceUnitLine, turnover: InvoiceTurnover
       stripeInvoiceId: (row.stripe_invoice_id as string) || null,
       hostedInvoiceUrl: (row.hosted_invoice_url as string) || null,
       subtotalCents: Number(row.subtotal_cents || 0),
-   300|      unitCount: Number(row.unit_count || 0),
+      unitCount: Number(row.unit_count || 0),
       turnoverCount: Number(row.turnover_count || 0),
     };
   }
@@ -309,7 +309,7 @@ export function lineDescription(unit: InvoiceUnitLine, turnover: InvoiceTurnover
     period,
     netTerms: acct.net_terms as string,
   });
-   310|  if (draft.turnoverCount === 0) {
+  if (draft.turnoverCount === 0) {
     return {
       ok: true,
       status: 200,
@@ -319,7 +319,7 @@ export function lineDescription(unit: InvoiceUnitLine, turnover: InvoiceTurnover
       turnoverCount: 0,
     };
   }
-   320|
+
 
   const recordPatch: Row = {
     pm_account_id: input.pmAccountId,
@@ -329,7 +329,7 @@ export function lineDescription(unit: InvoiceUnitLine, turnover: InvoiceTurnover
     turnover_count: draft.turnoverCount,
     unit_count: draft.unitCount,
     subtotal_cents: draft.subtotalCents,
-   330|    due_date: draft.dueDate,
+    due_date: draft.dueDate,
     status: "draft",
     created_by_name: clip(input.actorName, 120) || null,
   };
@@ -339,7 +339,7 @@ export function lineDescription(unit: InvoiceUnitLine, turnover: InvoiceTurnover
         .from("property_manager_invoices")
         .update(recordPatch)
         .eq("id", (existing as Row).id as string)
-   340|        .select("id")
+        .select("id")
         .single()
     : await supabase.from("property_manager_invoices").insert(recordPatch).select("id").single();
   if (recordError || !record) {
@@ -349,7 +349,7 @@ export function lineDescription(unit: InvoiceUnitLine, turnover: InvoiceTurnover
 
   if (input.dryRun) {
     return {
-   350|      ok: true,
+      ok: true,
       status: 200,
       message: `${period.label}: ${draft.turnoverCount} turnover${draft.turnoverCount === 1 ? "" : "s"} across ${draft.unitCount} unit${draft.unitCount === 1 ? "" : "s"} — ${formatRate(draft.subtotalCents)}.`,
       invoiceId,
@@ -359,7 +359,7 @@ export function lineDescription(unit: InvoiceUnitLine, turnover: InvoiceTurnover
     };
   }
 
-   360|  const stripeKey = await resolveAppSecret("STRIPE_SECRET_KEY");
+  const stripeKey = await resolveAppSecret("STRIPE_SECRET_KEY");
   if (!stripeKey) {
     return { ok: false, status: 503, message: "Stripe is not configured on this environment." };
   }
@@ -369,7 +369,7 @@ export function lineDescription(unit: InvoiceUnitLine, turnover: InvoiceTurnover
     return { ok: false, status: 409, message: "Add a billing email to this account before invoicing." };
   }
 
-   370|  try {
+  try {
     const customerId = await ensurePmCustomer(stripeKey, {
       accountId: input.pmAccountId,
       email,
@@ -379,7 +379,7 @@ export function lineDescription(unit: InvoiceUnitLine, turnover: InvoiceTurnover
     if (customerId !== acct.stripe_customer_id) {
       await supabase
         .from("property_manager_accounts")
-   380|        .update({ stripe_customer_id: customerId })
+        .update({ stripe_customer_id: customerId })
         .eq("id", input.pmAccountId);
     }
 
@@ -389,7 +389,7 @@ export function lineDescription(unit: InvoiceUnitLine, turnover: InvoiceTurnover
       collection_method: autoPay ? "charge_automatically" : "send_invoice",
       description: `Turnover services — ${period.label}`,
       footer:
-   390|        `Consolidated statement for ${draft.unitCount} unit${draft.unitCount === 1 ? "" : "s"} ` +
+        `Consolidated statement for ${draft.unitCount} unit${draft.unitCount === 1 ? "" : "s"} ` +
         `across ${draft.turnoverCount} turnover${draft.turnoverCount === 1 ? "" : "s"}.`,
       auto_advance: "false",
       "metadata[pm_account_id]": input.pmAccountId,
@@ -399,7 +399,7 @@ export function lineDescription(unit: InvoiceUnitLine, turnover: InvoiceTurnover
       "metadata[kind]": "property_manager_consolidated",
     };
     if (!autoPay) {
-   400|      params.days_until_due = String(DAYS_UNTIL_DUE[String(acct.net_terms || "net_15")] ?? 15);
+      params.days_until_due = String(DAYS_UNTIL_DUE[String(acct.net_terms || "net_15")] ?? 15);
     }
     const invoice = await stripeCall(stripeKey, "POST", "invoices", params);
     const stripeInvoiceId = String(invoice.id);
@@ -409,7 +409,7 @@ export function lineDescription(unit: InvoiceUnitLine, turnover: InvoiceTurnover
     for (const unit of draft.units) {
       for (const turnover of unit.turnovers) {
         await stripeCall(stripeKey, "POST", "invoiceitems", {
-   410|          customer: customerId,
+          customer: customerId,
           invoice: stripeInvoiceId,
           amount: String(turnover.amountCents),
           currency: "usd",
@@ -419,7 +419,7 @@ export function lineDescription(unit: InvoiceUnitLine, turnover: InvoiceTurnover
         });
       }
     }
-   420|
+
     const finalized = await stripeCall(
       stripeKey,
       "POST",
@@ -429,7 +429,7 @@ export function lineDescription(unit: InvoiceUnitLine, turnover: InvoiceTurnover
 
     const hostedUrl = (finalized.hosted_invoice_url as string) || (finalized.invoice_pdf as string) || null;
     await supabase
-   430|      .from("property_manager_invoices")
+      .from("property_manager_invoices")
       .update({
         stripe_invoice_id: stripeInvoiceId,
         stripe_customer_id: customerId,
@@ -439,7 +439,7 @@ export function lineDescription(unit: InvoiceUnitLine, turnover: InvoiceTurnover
       })
       .eq("id", invoiceId);
 
-   440|    const turnoverIds = draft.units.flatMap((u) => u.turnovers.map((t) => t.turnoverId));
+    const turnoverIds = draft.units.flatMap((u) => u.turnovers.map((t) => t.turnoverId));
     await supabase
       .from("property_manager_turnovers")
       .update({ invoice_id: invoiceId, invoiced_at: new Date().toISOString() })
@@ -449,7 +449,7 @@ export function lineDescription(unit: InvoiceUnitLine, turnover: InvoiceTurnover
       event_type: "property_manager.invoice.issued",
       source: "property-manager",
       summary:
-   450|        `Consolidated ${period.label} invoice issued to ${clip(acct.company_name, 120)} — ` +
+        `Consolidated ${period.label} invoice issued to ${clip(acct.company_name, 120)} — ` +
         `${draft.turnoverCount} turnovers across ${draft.unitCount} units, ${formatRate(draft.subtotalCents)}.`,
       data: {
         pm_account_id: input.pmAccountId,
@@ -459,7 +459,7 @@ export function lineDescription(unit: InvoiceUnitLine, turnover: InvoiceTurnover
         period_end: period.end,
         unit_count: draft.unitCount,
         turnover_count: draft.turnoverCount,
-   460|        subtotal_cents: draft.subtotalCents,
+        subtotal_cents: draft.subtotalCents,
       },
     });
 
@@ -469,7 +469,7 @@ export function lineDescription(unit: InvoiceUnitLine, turnover: InvoiceTurnover
       message: `${period.label} invoiced: ${draft.turnoverCount} turnover${draft.turnoverCount === 1 ? "" : "s"} across ${draft.unitCount} unit${draft.unitCount === 1 ? "" : "s"}, ${formatRate(draft.subtotalCents)}.`,
       invoiceId,
       stripeInvoiceId,
-   470|      hostedInvoiceUrl: hostedUrl,
+      hostedInvoiceUrl: hostedUrl,
       subtotalCents: draft.subtotalCents,
       unitCount: draft.unitCount,
       turnoverCount: draft.turnoverCount,
@@ -479,7 +479,7 @@ export function lineDescription(unit: InvoiceUnitLine, turnover: InvoiceTurnover
     await supabase.from("events").insert({
       event_type: "property_manager.invoice.failed",
       source: "property-manager",
-   480|      summary: `Could not issue the ${period.label} invoice for ${clip(acct.company_name, 120)}.`,
+      summary: `Could not issue the ${period.label} invoice for ${clip(acct.company_name, 120)}.`,
       data: { pm_account_id: input.pmAccountId, invoice_id: invoiceId, error: message },
     });
     return { ok: false, status: 502, message: `Stripe rejected the invoice: ${message}` };
@@ -489,7 +489,7 @@ export function lineDescription(unit: InvoiceUnitLine, turnover: InvoiceTurnover
 async function ensurePmCustomer(
   stripeKey: string,
   args: { accountId: string; email: string; companyName: string; existingId?: string | null },
-   490|): Promise<string> {
+): Promise<string> {
   if (args.existingId) return args.existingId;
   const found = await stripeCall(stripeKey, "GET", "customers", { email: args.email, limit: "1" });
   const existing = found?.data?.[0]?.id as string | undefined;
@@ -499,7 +499,7 @@ async function ensurePmCustomer(
     name: args.companyName,
     "metadata[pm_account_id]": args.accountId,
     "metadata[kind]": "property_manager",
-   500|  });
+  });
   return String(created.id);
 }
 
@@ -509,7 +509,7 @@ export interface PortalInvoice {
   id: string;
   periodLabel: string;
   periodStart: string;
-   510|  periodEnd: string;
+  periodEnd: string;
   amountCents: number;
   unitCount: number;
   turnoverCount: number;
@@ -519,7 +519,7 @@ export interface PortalInvoice {
   url: string | null;
   /** Per-unit breakdown, so the portal can show what each property cost. */
   units: InvoiceUnitLine[];
-   520|}
+}
 
 export function publicInvoice(row: Row, nowDay?: string): PortalInvoice {
   const status = facingInvoiceStatus({
@@ -529,7 +529,7 @@ export function publicInvoice(row: Row, nowDay?: string): PortalInvoice {
   });
   return {
     id: String(row.id),
-   530|    periodLabel: periodLabelFor(String(row.period_start), String(row.period_end)),
+    periodLabel: periodLabelFor(String(row.period_start), String(row.period_end)),
     periodStart: String(row.period_start),
     periodEnd: String(row.period_end),
     amountCents: Number(row.subtotal_cents || 0),
@@ -539,7 +539,7 @@ export function publicInvoice(row: Row, nowDay?: string): PortalInvoice {
     statusLabel: status === "paid" ? "Paid" : status === "overdue" ? "Past due" : "Due",
     dueDate: (row.due_date as string) || null,
     url: (row.hosted_invoice_url as string) || null,
-   540|    units: Array.isArray(row.line_items) ? (row.line_items as InvoiceUnitLine[]) : [],
+    units: Array.isArray(row.line_items) ? (row.line_items as InvoiceUnitLine[]) : [],
   };
 }
 
@@ -549,7 +549,7 @@ export function periodLabelFor(start: string, end: string): string {
   return sameMonth && firstOfMonth ? monthLabel(start) : `${shortDay(start)} – ${shortDay(end)}`;
 }
 
-   550|export async function listPmInvoices(
+export async function listPmInvoices(
   supabase: Admin,
   pmAccountId: string,
 ): Promise<PortalInvoice[]> {
@@ -559,7 +559,7 @@ export function periodLabelFor(start: string, end: string): string {
       "id, period_start, period_end, subtotal_cents, unit_count, turnover_count, status, due_date, hosted_invoice_url, line_items",
     )
     .eq("pm_account_id", pmAccountId)
-   560|    .neq("status", "draft")
+    .neq("status", "draft")
     .order("period_start", { ascending: false })
     .limit(24);
   const today = new Date().toISOString().slice(0, 10);
@@ -569,7 +569,7 @@ export function periodLabelFor(start: string, end: string): string {
 /** Refresh local status from Stripe. Stripe stays the source of truth. */
 export async function syncInvoiceStatus(
   supabase: Admin,
-   570|  invoiceId: string,
+  invoiceId: string,
 ): Promise<{ ok: boolean; status: string | null }> {
   const { data } = await supabase
     .from("property_manager_invoices")
@@ -579,7 +579,7 @@ export async function syncInvoiceStatus(
   const row = data as Row | null;
   if (!row?.stripe_invoice_id) return { ok: false, status: null };
 
-   580|  const stripeKey = await resolveAppSecret("STRIPE_SECRET_KEY");
+  const stripeKey = await resolveAppSecret("STRIPE_SECRET_KEY");
   if (!stripeKey) return { ok: false, status: null };
   try {
     const invoice = await stripeCall(stripeKey, "GET", `invoices/${String(row.stripe_invoice_id)}`);
@@ -589,7 +589,7 @@ export async function syncInvoiceStatus(
         .from("property_manager_invoices")
         .update({ status, hosted_invoice_url: invoice.hosted_invoice_url || null })
         .eq("id", invoiceId);
-   590|    }
+    }
     return { ok: true, status };
   } catch {
     return { ok: false, status: null };
