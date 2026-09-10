@@ -294,7 +294,11 @@ export async function POST(req: Request): Promise<NextResponse> {
       return NextResponse.json({ error: "pmAccountId is required." }, { status: 400 });
     }
     const result = await repricePortfolio(supabase, pmAccountId, { actorName });
-    return NextResponse.json({ ok: result.ok, ...result });
+    return NextResponse.json({
+      ok: result.ok,
+      message: `Repriced ${result.repriced} unit${result.repriced === 1 ? "" : "s"} at ${result.discountPercent}% off.`,
+      ...result,
+    });
   }
 
   if (action === "set_discount_tiers") {

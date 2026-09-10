@@ -480,7 +480,7 @@ export default function PropertyManagerAdmin() {
                     size="sm"
                     variant="outline"
                     disabled={busy === "reprice"}
-                    onClick={() => act("reprice", { action: "reprice", pmAccountId: selected.id })}
+                    onClick={() => act("reprice", { action: "reprice", pmAccountId: selected.id }, "Portfolio repriced.")}
                   >
                     Reprice portfolio
                   </Button>
