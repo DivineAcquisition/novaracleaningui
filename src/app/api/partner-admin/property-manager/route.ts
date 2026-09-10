@@ -23,7 +23,7 @@ import {
 import { onboardingUrl } from "@/lib/property-manager/onboarding/session";
 import { DEFAULT_VOLUME_DISCOUNTS, type VolumeDiscountTier } from "@/lib/property-manager/pricing";
 import { loadVolumeDiscounts } from "@/lib/property-manager/pricing-server";
-import { approveUnit, publicUnit, repricePortfolio } from "@/lib/property-manager/registry";
+import { approveUnit, publicUnit, registerUnit, repricePortfolio, UNIT_COLS } from "@/lib/property-manager/registry";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -74,23 +74,54 @@ export async function GET(req: Request): Promise<NextResponse> {
   }
 
   const supabase = getAdminSupabase();
-  const [attention, review, discounts, { data: accounts }] = await Promise.all([
+  const accountId = new URL(req.url).searchParams.get("accountId") || "";
+  const [attention, review, discounts, accountsRes, unitCountRes] = await Promise.all([
     pmOnboardingAttention(supabase),
     pmUnitsAwaitingReview(supabase),
     loadVolumeDiscounts(supabase),
     supabase
       .from("property_manager_accounts")
       .select(
-        "id, company_name, contact_name, email, status, billing_method, invoice_cycle, net_terms, " +
+        "id, company_name, contact_name, email, phone, status, billing_method, invoice_cycle, net_terms, " +
           "volume_discount_percent, volume_discount_label, portal_provisioned_at, created_at",
       )
       .order("created_at", { ascending: false })
       .limit(200),
+    supabase
+      .from("property_manager_units")
+      .select("pm_account_id, status")
+      .neq("status", "inactive"),
   ]);
+
+  const counts = new Map<string, { unitCount: number; activeUnits: number; pendingReview: number }>();
+  for (const raw of unitCountRes.data || []) {
+    const u = raw as Row;
+    const id = String(u.pm_account_id || "");
+    if (!id) continue;
+    const cur = counts.get(id) || { unitCount: 0, activeUnits: 0, pendingReview: 0 };
+    cur.unitCount += 1;
+    if (u.status === "active") cur.activeUnits += 1;
+    if (u.status === "pending_review") cur.pendingReview += 1;
+    counts.set(id, cur);
+  }
+
+  let units: ReturnType<typeof publicUnit>[] | undefined;
+  if (accountId) {
+    const { data: unitRows } = await supabase
+      .from("property_manager_units")
+      .select(UNIT_COLS)
+      .eq("pm_account_id", accountId)
+      .neq("status", "inactive")
+      .order("created_at", { ascending: true });
+    units = ((unitRows || []) as unknown as Row[]).map((u) => publicUnit(u));
+  }
 
   return NextResponse.json({
     ok: true,
-    accounts: accounts || [],
+    accounts: ((accountsRes.data || []) as unknown as Row[]).map((a) => ({
+      ...a,
+      ...(counts.get(String(a.id)) || { unitCount: 0, activeUnits: 0, pendingReview: 0 }),
+    })),
     attention,
     reviewQueue: (review as Row[]).map((u) => ({
       ...publicUnit(u),
@@ -101,6 +132,7 @@ export async function GET(req: Request): Promise<NextResponse> {
     })),
     discounts,
     defaultDiscounts: DEFAULT_VOLUME_DISCOUNTS,
+    units,
   });
 }
 
@@ -116,6 +148,74 @@ export async function POST(req: Request): Promise<NextResponse> {
   const action = String(body.action || "");
   const supabase = getAdminSupabase();
   const actorName = principal.email;
+
+  if (action === "create_account") {
+    const companyName = String(body.companyName || body.name || "").trim();
+    const contactName = String(body.contactName || "").trim();
+    const email = String(body.email || "").trim();
+    const phone = String(body.phone || "").trim();
+    if (!companyName || !contactName || !email) {
+      return NextResponse.json({ error: "companyName, contactName, and email are required." }, { status: 400 });
+    }
+    const { data: existing } = await supabase
+      .from("property_manager_accounts")
+      .select("id, company_name")
+      .ilike("email", email)
+      .limit(1)
+      .maybeSingle();
+    if (existing) {
+      return NextResponse.json(
+        { error: `An account with that email already exists (${(existing as Row).company_name}).` },
+        { status: 409 },
+      );
+    }
+    const { data, error } = await supabase
+      .from("property_manager_accounts")
+      .insert({
+        company_name: companyName.slice(0, 200),
+        contact_name: contactName.slice(0, 120),
+        email: email.slice(0, 200),
+        phone: phone ? phone.slice(0, 40) : null,
+        created_by_name: actorName,
+      })
+      .select("id, company_name, contact_name, email, phone, status")
+      .single();
+    if (error || !data) {
+      return NextResponse.json({ error: error?.message || "Could not create that account." }, { status: 400 });
+    }
+    await supabase.from("events").insert({
+      event_type: "property_manager.account.created",
+      source: "partner-admin",
+      summary: `${actorName} created property manager ${companyName} (${email}).`,
+      data: { pm_account_id: (data as Row).id },
+    });
+    return NextResponse.json({ ok: true, account: data });
+  }
+
+  if (action === "add_unit") {
+    const pmAccountId = String(body.pmAccountId || body.accountId || "");
+    if (!pmAccountId) {
+      return NextResponse.json({ error: "pmAccountId is required." }, { status: 400 });
+    }
+    const result = await registerUnit(supabase, {
+      pmAccountId,
+      unitLabel: (body.unitLabel as string) || null,
+      address: String(body.address || ""),
+      city: (body.city as string) || null,
+      state: (body.state as string) || null,
+      zipCode: (body.zipCode as string) || (body.zip as string) || null,
+      sqft: numOrNull(body.sqft),
+      bedrooms: numOrNull(body.bedrooms),
+      bathrooms: numOrNull(body.bathrooms),
+      accessMethod: (body.accessMethod as string) || null,
+      accessNotes: (body.accessNotes as string) || null,
+      notes: (body.notes as string) || null,
+      flaggedNonStandard: body.flaggedNonStandard === true || body.flaggedForReview === true,
+      source: "admin",
+      actorName,
+    });
+    return NextResponse.json(result, { status: result.status });
+  }
 
   if (action === "send" || action === "send_pm_onboarding") {
     const pmAccountId = String(body.pmAccountId || "");

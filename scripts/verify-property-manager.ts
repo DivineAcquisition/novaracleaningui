@@ -363,6 +363,33 @@ check(
 check("rates render without trailing cents when they are round", formatRate(322_00), "$322");
 check("and with cents when they are not", formatRate(322_50), "$322.50");
 
+console.log("\nAdmin ops can create a portfolio and register units:");
+const adminRoute = readFileSync(
+  join(process.cwd(), "src/app/api/partner-admin/property-manager/route.ts"),
+  "utf8",
+);
+check("create_account is a first-class admin action", adminRoute.includes('action === "create_account"'), true);
+check(
+  "add_unit registers through the standing-rate engine",
+  adminRoute.includes('action === "add_unit"') && adminRoute.includes("registerUnit"),
+  true,
+);
+const hub = readFileSync(join(process.cwd(), "src/views/admin/CommercialHub.tsx"), "utf8");
+check(
+  "Commercial hub has a Portfolio workspace",
+  hub.includes('"portfolio"') && hub.includes("PropertyManagerAdmin"),
+  true,
+);
+const commsTemplate = readFileSync(
+  join(process.cwd(), "supabase/migrations/20260910230000_property_manager_comms_template.sql"),
+  "utf8",
+);
+check(
+  "onboarding link template is seeded in repo SQL",
+  commsTemplate.includes("property_manager_onboarding_link"),
+  true,
+);
+
 console.log(
   failures === 0
     ? "\nAll property-manager checks passed."

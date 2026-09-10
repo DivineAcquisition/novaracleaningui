@@ -256,7 +256,7 @@ export async function decideUnit(
         `<p style="border-left:3px solid #7c3aed;padding-left:12px;white-space:pre-wrap">${escapeHtml(
           clip(input.note, 1000),
         )}</p>`,
-        `<p>This does not block the rest of their session. Review it in Partnerships → Property Managers.</p>`,
+        `<p>This does not block the rest of their session. Review it in Commercial → Portfolio.</p>`,
       ].join(""),
       eventType: "property_manager.onboarding.unit_flagged",
       summary: `${input.byName} flagged ${unit.unit_label || "a unit"}: ${clip(input.note, 180)}`,

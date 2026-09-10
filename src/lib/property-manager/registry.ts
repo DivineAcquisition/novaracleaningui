@@ -242,7 +242,7 @@ export async function registerUnit(
         `<p>A unit was added to <strong>${escapeHtml(String(account.company_name))}</strong>'s registry and did not auto-price.</p>`,
         `<p><strong>${escapeHtml(label)}</strong><br/>${escapeHtml(address)}</p>`,
         `<p>Reason: <strong>${escapeHtml(computed.reason)}</strong> — ${escapeHtml(computed.message)}</p>`,
-        `<p>Set its Move-Out / Move-In / Standard rates in Partnerships → Property Managers. It is not bookable until then.</p>`,
+        `<p>Set its Move-Out / Move-In / Standard rates in Commercial → Portfolio. It is not bookable until then.</p>`,
       ].join(""),
       eventType: "property_manager.unit.review_required",
       summary: `Unit "${label}" routed for review (${computed.reason}).`,
