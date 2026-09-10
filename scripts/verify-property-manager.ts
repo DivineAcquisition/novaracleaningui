@@ -105,7 +105,7 @@ check(
 // The SQL generated column and the TypeScript helper must agree, or the
 // invoice and the payout disagree about the same job.
 const migration = readFileSync(
-  join(process.cwd(), "supabase/migrations/20260910200000_property_manager_portfolio.sql"),
+  join(process.cwd(), "supabase/migrations/20260910222015_property_manager_portfolio.sql"),
   "utf8",
 ).replace(/\s+/g, " ");
 check(
@@ -381,7 +381,7 @@ check(
   true,
 );
 const commsTemplate = readFileSync(
-  join(process.cwd(), "supabase/migrations/20260910230000_property_manager_comms_template.sql"),
+  join(process.cwd(), "supabase/migrations/20260910222310_property_manager_comms_template_and_grants.sql"),
   "utf8",
 );
 check(
