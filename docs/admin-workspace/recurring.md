@@ -133,7 +133,9 @@ now, pause or resume, and edit.
 auto-booking stops. Presets cover a cleaner leaving, finding coverage, a quality hold, or a
 customer request — or you can write the message. Resume is still one click and does not send
 another notice. Already-created visits and Glow billing are not changed by pausing the
-schedule.
+schedule. Resume (admin or customer) clears the stored reason; if the customer pauses from
+their manage link or portal, the hub shows "Paused by the customer." instead of leftover
+admin wording.
 
 Two more in the expanded panel:
 

@@ -18,6 +18,9 @@
 //   { token, action:'skip_next' }                 → skip one visit (cancels
 //       the generated booking for that date when one exists)
 //   { token, action:'pause' } / { action:'resume' }
+//       pause stamps pause_reason "Paused by the customer."; resume clears
+//       pause_reason / pause_reason_code / paused_at so the hub never keeps
+//       stale admin wording.
 //   { token, action:'request_new_cleaner' }
 //
 // Every change writes a `recurring.customer_update` event → internal
@@ -26,6 +29,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { advanceDate, previewDates } from "../_shared/recurring-manage.ts";
+import { customerSelfPauseFields, recurringResumeClearFields } from "../_shared/recurring-pause.ts";
 import { parseTimeSlotToClock } from "../_shared/sms.ts";
 import { checkScheduleBuffer } from "../_shared/schedule-buffer.ts";
 
@@ -170,10 +174,10 @@ serve(async (req) => {
       let summary = "";
 
       if (action === "pause") {
-        patch.active = false;
+        Object.assign(patch, { active: false, ...customerSelfPauseFields() });
         summary = `${sched.email} paused their ${sched.cadence} recurring plan from the manage link.`;
       } else if (action === "resume") {
-        patch.active = true;
+        Object.assign(patch, { active: true, ...recurringResumeClearFields() });
         summary = `${sched.email} resumed their ${sched.cadence} recurring plan.`;
       } else if (action === "skip_next") {
         if (!sched.next_service_date) return json({ error: "No upcoming clean to skip" }, 400);
