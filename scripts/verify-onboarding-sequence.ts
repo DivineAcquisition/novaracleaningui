@@ -455,6 +455,81 @@ async function checkSupplyTokenPage(browser: Browser): Promise<void> {
   await page.close();
 }
 
+async function checkAdminView(browser: Browser): Promise<void> {
+  console.log("\nThe admin onboarding panel at /admin/cleaners");
+
+  // Reuses the admin documentation harness, so this reads the same invented
+  // directory the guides are captured from rather than a second fixture.
+  const { DEMO_ADMIN } = await import("./docs/capture/demo-data");
+  const { handleApiRoute, handleSupabase } = await import("./docs/capture/supabase-mock");
+
+  const context = await browser.newContext({
+    viewport: { width: 1440, height: 1200 },
+    reducedMotion: "reduce",
+    colorScheme: "light",
+  });
+  await context.route("**/*.supabase.co/**", (route, request) => handleSupabase(route, request));
+  await context.route("**/api/**", (route, request) => handleApiRoute(route, request));
+  await context.route(/googleapis|gstatic|googletagmanager|facebook|js\.stripe|sentry|posthog/, (r) =>
+    r.abort(),
+  );
+  await context.addInitScript(
+    ([key, session]) => {
+      window.localStorage.setItem(key as string, JSON.stringify(session));
+    },
+    [
+      AUTH_STORAGE_KEY,
+      {
+        access_token: "verify-admin-token",
+        refresh_token: "verify-admin-refresh",
+        token_type: "bearer",
+        expires_in: 3600,
+        expires_at: Math.floor(Date.now() / 1000) + 3600,
+        user: {
+          id: DEMO_ADMIN.id,
+          email: DEMO_ADMIN.email,
+          aud: "authenticated",
+          role: "authenticated",
+          app_metadata: { provider: "email" },
+          user_metadata: {},
+          created_at: new Date().toISOString(),
+        },
+      },
+    ] as const,
+  );
+
+  const page = await context.newPage();
+  await page.goto(`${BASE_URL}/admin/cleaners`, { waitUntil: "networkidle" });
+  await page.getByText("Dana Whitfield").first().waitFor({ timeout: 30_000 });
+  await page.getByText("Dana Whitfield").first().click();
+  await page.getByRole("tab", { name: /Onboarding/i }).click();
+
+  const panel = await page.locator("body").innerText();
+  check("the supply checkoff is one of the steps admin sees", panel.includes("Supply checklist submitted"), true);
+  check(
+    "and readiness is stated as all three",
+    panel.includes("Portal ready (phone + supplies + Stripe)"),
+    true,
+  );
+  // The demo directory predates the supply columns, so these contractors read
+  // as outstanding — which is the honest answer and the state that used to be
+  // reported as complete.
+  check(
+    "a contractor who was never asked now reads as incomplete",
+    panel.includes("Account setup incomplete"),
+    true,
+  );
+  check(
+    "with a link that offers to ask them",
+    await page.getByRole("button", { name: /Send setup link/ }).isVisible(),
+    true,
+  );
+
+  mkdirSync(SHOTS_DIR, { recursive: true });
+  await page.screenshot({ path: resolve(SHOTS_DIR, "admin-onboarding-panel.png"), fullPage: true });
+  await context.close();
+}
+
 async function main(): Promise<void> {
   checkSequence();
 
@@ -471,6 +546,7 @@ async function main(): Promise<void> {
     await checkSetupLanding(browser);
     await checkSupplyTokenPage(browser);
     await checkPortal(browser);
+    await checkAdminView(browser);
   } finally {
     await browser.close();
   }
