@@ -84,6 +84,8 @@ interface TourContextValue {
   back: () => void;
   /** Stop and remember how far they got. Not a failure state. */
   skip: () => void;
+  /** Mark a walkthrough finished (watched the clip, or guided to the end). */
+  completeTour: (tourId: string) => void;
   dismissSuggestion: () => void;
 }
 
@@ -390,6 +392,20 @@ export function TourProvider({ children }: { children: ReactNode }) {
     finish(tour, "skipped", active.stepIndex);
   }, [active, finish]);
 
+  const completeTour = useCallback(
+    (tourId: string) => {
+      const tour = getTour(tourId);
+      if (!tour) return;
+      const last = Math.max(0, tour.steps.length - 1);
+      if (active?.tourId === tourId) {
+        finish(tour, "completed", last);
+        return;
+      }
+      persist(tour, "completed", last);
+    },
+    [active, finish, persist],
+  );
+
   const dismissSuggestion = useCallback(() => {
     setSuggestion(null);
     writeJson(session(), DISMISS_KEY, true);
@@ -436,9 +452,10 @@ export function TourProvider({ children }: { children: ReactNode }) {
       next,
       back,
       skip,
+      completeTour,
       dismissSuggestion,
     }),
-    [active, back, dismissSuggestion, loaded, next, skip, standings, start, suggestion],
+    [active, back, completeTour, dismissSuggestion, loaded, next, skip, standings, start, suggestion],
   );
 
   return (

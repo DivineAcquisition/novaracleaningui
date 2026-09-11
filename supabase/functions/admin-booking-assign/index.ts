@@ -47,6 +47,11 @@ import {
   complianceBlockMessage,
   logComplianceBlock,
 } from "../_shared/commercial-config.ts";
+import {
+  filterReadyForFirstJob,
+  FIRST_JOB_READY_COLUMNS,
+  isCleanerReadyForFirstJob,
+} from "../_shared/first-job-ready.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -201,15 +206,16 @@ async function suggestCleaners(
   const { data: cleaners } = await admin
     .from("cleaners")
     .select(
-      "id, first_name, last_name, email, phone, status, approved, available_for_bookings, home_lat, home_lng, average_rating, total_ratings, workload_score, acceptance_rate, on_time_rate, preferred_work_days, max_travel_miles, max_weekly_bookings, supply_inventory",
+      `id, first_name, last_name, email, phone, status, approved, available_for_bookings, home_lat, home_lng, average_rating, total_ratings, workload_score, acceptance_rate, on_time_rate, preferred_work_days, max_travel_miles, max_weekly_bookings, supply_inventory, ${FIRST_JOB_READY_COLUMNS}`,
     )
     .eq("approved", true)
     .eq("available_for_bookings", true)
     .eq("status", "active");
 
-  if (!cleaners?.length) return [];
+  const readyPool = filterReadyForFirstJob(cleaners || []);
+  if (!readyPool.length) return [];
 
-  const cleanerIds = cleaners.map((c: { id: string }) => c.id);
+  const cleanerIds = readyPool.map((c: { id: string }) => c.id);
   const { data: upcomingJobsData } = await admin
     .from("job_assignments")
     .select("cleaner_id, jobs(start_datetime)")
@@ -224,7 +230,7 @@ async function suggestCleaners(
 
   const ranked: RankedCleaner[] = [];
 
-  for (const c of cleaners) {
+  for (const c of readyPool) {
     const upcoming = upcomingJobsMap.get(c.id) || 0;
     let score = 0;
     let distance: number | null = null;
@@ -312,13 +318,17 @@ serve(async (req) => {
       const { data: directory, error: dirErr } = await admin
         .from("cleaners")
         .select(
-          "id, first_name, last_name, phone, status, approved, available_for_bookings, pay_tier, pay_percentage, home_city, home_zip, state",
+          `id, first_name, last_name, phone, status, approved, available_for_bookings, pay_tier, pay_percentage, home_city, home_zip, state, ${FIRST_JOB_READY_COLUMNS}`,
         )
         .neq("status", "terminated")
         .order("last_name", { ascending: true })
         .order("first_name", { ascending: true });
       if (dirErr) return json({ error: dirErr.message }, 500);
-      return json({ success: true, cleaners: directory || [] });
+      const listed = (directory || []).map((c: Record<string, unknown>) => ({
+        ...c,
+        ready_for_first_job: isCleanerReadyForFirstJob(c),
+      }));
+      return json({ success: true, cleaners: listed });
     }
 
     if (!bookingId) return json({ error: "bookingId required" }, 400);

@@ -26,6 +26,7 @@
 import { useState } from "react";
 import {
   RiAlertLine,
+  RiCheckboxCircleLine,
   RiClosedCaptioningLine,
   RiLoader4Line,
   RiPlayCircleLine,
@@ -119,10 +120,9 @@ export function TourRecordings() {
       <Card className="border-border/60">
         <CardContent className="p-4 space-y-1.5">
           <p className="text-xs text-foreground/90 leading-snug">
-            Short clips of the dashboard itself — the same seven walkthroughs you
-            can run live from <span className="font-semibold">Help &amp; training</span>.
-            Every clip is recorded on a test account, so no real client or
-            contractor information appears in any of them.
+            These seven walkthroughs are required before your first job.
+            Watch the clip through to the end, or run the live guided version
+            and finish it. Skipping does not count.
           </p>
           <p className="text-[11px] text-muted-foreground">
             {recorded === 0
@@ -136,13 +136,15 @@ export function TourRecordings() {
         {rows.map((row) => {
           const isPlaying = playing === row.tourId;
           const source = sources[row.tourId];
+          const watched = tours?.standings[row.tourId] === "completed";
 
           return (
             <Card
               key={row.tourId}
               className={cn(
                 "border-border/60 overflow-hidden",
-                row.stale && "border-amber-500/40",
+                watched && "border-emerald-500/30",
+                row.stale && !watched && "border-amber-500/40",
               )}
             >
               <CardContent className="p-4 space-y-3">
@@ -150,6 +152,14 @@ export function TourRecordings() {
                   <div className="min-w-0 space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="text-sm font-semibold">{row.title}</h3>
+                      {watched ? (
+                        <Badge
+                          variant="secondary"
+                          className="bg-emerald-500/10 text-emerald-700 text-[10px] px-1.5 py-0 border-0"
+                        >
+                          Watched
+                        </Badge>
+                      ) : null}
                       {row.recording ? (
                         <Badge
                           variant="secondary"
@@ -169,6 +179,11 @@ export function TourRecordings() {
                     <p className="text-xs text-muted-foreground leading-snug">
                       {row.summary}
                     </p>
+                    {!row.recording ? (
+                      <p className="text-[11px] text-muted-foreground">
+                        No clip yet — tap Guide me and finish the live walkthrough.
+                      </p>
+                    ) : null}
                   </div>
 
                   <div className="flex flex-col gap-1.5 flex-shrink-0">
@@ -181,10 +196,12 @@ export function TourRecordings() {
                       >
                         {loadingId === row.tourId ? (
                           <RiLoader4Line className="w-3.5 h-3.5 mr-1 animate-spin" />
+                        ) : watched ? (
+                          <RiCheckboxCircleLine className="w-3.5 h-3.5 mr-1" />
                         ) : (
                           <RiVideoLine className="w-3.5 h-3.5 mr-1" />
                         )}
-                        Watch
+                        {watched ? "Rewatch" : "Watch"}
                       </Button>
                     )}
                     {tours && (
@@ -219,6 +236,7 @@ export function TourRecordings() {
                       // Silent by design — captions carry the narration. Muted
                       // also keeps autoplay from being blocked.
                       muted
+                      onEnded={() => tours?.completeTour(row.tourId)}
                       className="w-full rounded-lg bg-black"
                     >
                       {source.captionUrl && (

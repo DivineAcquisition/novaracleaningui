@@ -23,6 +23,7 @@ import { requireUser, AdminAuthError } from "@/lib/admin-auth";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import { getTour, tourCatalogSignature } from "@/lib/tours/catalog";
 import {
+  isRequiredTrainingWatched,
   normalizeTourSettings,
   type TourProgressRecord,
   type TourStatus,
@@ -215,6 +216,28 @@ export async function POST(req: Request): Promise<NextResponse> {
       );
 
     if (error) throw error;
+
+    // First-job gate: every catalog walkthrough must be finished, not
+    // skipped. Once that's true we stamp the cleaner row; we never unstamp
+    // it from a later skip — that would yank eligibility because someone
+    // dismissed a refresher.
+    if (status === "completed") {
+      const { data: progressRows } = await admin
+        .from("cleaner_tour_progress")
+        .select("tour_id, version, status, last_step_index, started_at, completed_at, updated_at")
+        .eq("cleaner_id", cleanerId);
+      const records = ((progressRows || []) as ProgressRow[]).map(toRecord);
+      if (isRequiredTrainingWatched(records)) {
+        await (admin.from as any)("cleaners")
+          .update({
+            ob_training_complete: true,
+            ob_training_complete_at: now,
+            updated_at: now,
+          })
+          .eq("id", cleanerId)
+          .eq("ob_training_complete", false);
+      }
+    }
 
     return NextResponse.json({ ok: true, stored: true });
   } catch (err) {

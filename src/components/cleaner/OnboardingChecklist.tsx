@@ -16,6 +16,7 @@ import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { PhoneVerificationDialog } from "./PhoneVerificationDialog";
+import { isCleanerReadyForFirstJob } from "@/lib/cleaner-supplies";
 
 interface ChecklistItem {
   id: string;
@@ -82,7 +83,23 @@ export function OnboardingChecklist({ cleaner, onRefresh }: OnboardingChecklistP
     }
   };
 
+  const firstJobReady = isCleanerReadyForFirstJob(cleaner);
+
   const checklist: ChecklistItem[] = [
+    ...(!firstJobReady
+      ? [
+          {
+            id: "first-job",
+            label: "Finish onboarding & training before your first job",
+            completed: false,
+            icon: RiCalendarLine,
+            actionLabel: "Open onboarding",
+            onAction: () => {
+              window.location.href = "/cleaner/ob-portal";
+            },
+          },
+        ]
+      : []),
     {
       id: "stripe",
       label: "Complete Stripe Connect",
@@ -124,10 +141,11 @@ export function OnboardingChecklist({ cleaner, onRefresh }: OnboardingChecklistP
               {allComplete ? "✅ All Set!" : "Complete Your Setup"}
             </h3>
             <p className="text-xs text-muted-foreground">
-              {allComplete 
-                ? "You're ready to receive job offers" 
-                : `${completedCount} of ${checklist.length} steps complete`
-              }
+              {allComplete
+                ? "You're ready to receive job offers"
+                : firstJobReady
+                ? `${completedCount} of ${checklist.length} steps complete`
+                : "Finish onboarding and the training videos before your first job"}
             </p>
           </div>
           {allComplete && (

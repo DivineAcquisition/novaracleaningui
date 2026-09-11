@@ -8,15 +8,17 @@
 //
 // Two things are deliberately kept apart:
 //
-//   Finished vs. skipped. Both stop us pestering someone — a walkthrough that
-//   re-offers itself after you dismissed it is an obstacle, and the rule is
-//   that these never obstruct. But admin sees the difference, because
-//   "skipped it" and "read it" are not the same fact when someone says they
-//   were never told.
-//
-//   Completion vs. performance. Completion is context for a conversation. It
-//   is not an input to the Novara Score and it triggers nothing automatically.
-//   Nothing in this file returns a number that could be mistaken for a grade.
+//     Finished vs. skipped. Both stop us pestering someone — a walkthrough that
+  //   re-offers itself after you dismissed it is an obstacle, and the rule is
+  //   that these never obstruct. But admin sees the difference, because
+  //   "skipped it" and "read it" are not the same fact when someone says they
+  //   were never told.
+  //
+  //   Completion vs. performance. Completion is not an input to the Novara
+  //   Score, pay, or ranking. It *does* now gate a contractor's first job:
+  //   dispatch will not offer work to someone who has never completed a job
+  //   until every required walkthrough is actually finished (not skipped).
+  //   That is a yes/no eligibility fact, not a grade.
 
 import { TOURS, type Tour, type TourId } from "./catalog";
 
@@ -181,6 +183,28 @@ export function standingRows(
     const orderOf = (id: TourId) => TOURS.findIndex((t) => t.id === id);
     return orderOf(a.tourId) - orderOf(b.tourId);
   });
+}
+
+/**
+ * Every required walkthrough has been finished — watched or guided to the
+ * end. Skipped does not count: the first-job gate is "must watch", not
+ * "must have dismissed".
+ */
+export function requiredTrainingWatchedCount(
+  records: TourProgressRecord[] | null | undefined,
+): { watched: number; total: number } {
+  const total = TOURS.length;
+  const watched = TOURS.filter(
+    (tour) => findProgress(records, tour.id)?.status === "completed",
+  ).length;
+  return { watched, total };
+}
+
+export function isRequiredTrainingWatched(
+  records: TourProgressRecord[] | null | undefined,
+): boolean {
+  const { watched, total } = requiredTrainingWatchedCount(records);
+  return total > 0 && watched === total;
 }
 
 export const STANDING_LABEL: Record<TourStanding, string> = {
