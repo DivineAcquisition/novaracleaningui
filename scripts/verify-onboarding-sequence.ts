@@ -557,15 +557,15 @@ async function checkPortal(browser: Browser): Promise<void> {
 
   await page.getByRole("button", { name: "Open training hub" }).click();
   await page.getByText("Required videos").waitFor({ timeout: 20_000 });
+  const hub = await page.locator("body").innerText();
   check(
     "the hub asks for all seven walkthroughs",
-    (await page.locator("main").innerText()).includes(`0 / ${TOURS.length}`) ||
-      (await page.locator("body").innerText()).includes(`0 / ${TOURS.length}`),
+    hub.includes(`0 / ${TOURS.length}`),
     true,
   );
   check(
     "and says skipping does not count",
-    (await page.locator("body").innerText()).includes("Skipping does not count"),
+    hub.includes("Skipping does not count"),
     true,
   );
   check(
