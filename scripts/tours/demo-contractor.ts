@@ -400,6 +400,26 @@ function portalJob(
     customerName,
     serviceType,
     homeSizeId: null,
+    // The job-lookup portal formats these without a guard, so a row missing
+    // its service date takes the whole page down. Deriving them from the
+    // booking keeps one job fixture serving both screens.
+    bookingNumber: booking.booking_number,
+    status: booking.status,
+    serviceDate: booking.service_date,
+    timeSlot: booking.time_slot,
+    address: booking.address,
+    city: booking.city,
+    state: booking.state,
+    zip: booking.zip_code,
+    checkInTime: null,
+    qcToken: null,
+    tipCents: 0,
+    photoUploadToken: PHOTO_TOKEN,
+    photoViewToken: null,
+    beforePhotos: [],
+    afterPhotos: [],
+    crew: [],
+    commercial: null,
     isReclean: false,
     recleanScope: null,
     recleanAssessedValueCents: null,
@@ -487,65 +507,14 @@ export const portalPayload = {
   ],
 };
 
-/** The lookup page's own job rows (a flatter shape than the dashboard's). */
-export const lookupJobs = [
-  {
-    id: BOOKING_1,
-    bookingId: BOOKING_1,
-    jobId: JOB_1,
-    bookingNumber: 4821,
-    status: "assigned",
-    serviceDate: isoDate(1),
-    timeSlot: "1:00 PM - 5:00 PM",
-    serviceType: "deep_clean",
-    homeSizeId: null,
-    customerName: "Marguerite Hale",
-    address: "418 Ridgemont Terrace",
-    city: "Bethesda",
-    state: "MD",
-    zip: "20814",
-    checkInTime: null,
-    qcToken: null,
-    tipCents: 0,
-    photoUploadToken: PHOTO_TOKEN,
-    photoViewToken: null,
-    beforePhotos: [],
-    afterPhotos: [],
-    pay: pay(17_200, false),
-    crew: [],
-    commercial: null,
-    customerDetails: portalPayload.jobs[0].customerDetails,
-    internalDetails: portalPayload.jobs[0].internalDetails,
-  },
-  {
-    id: BOOKING_4,
-    bookingId: BOOKING_4,
-    jobId: JOB_4,
-    bookingNumber: 4788,
-    status: "completed",
-    serviceDate: isoDate(-3),
-    timeSlot: "2:00 PM - 5:00 PM",
-    serviceType: "standard",
-    homeSizeId: null,
-    customerName: "Colin Reyes",
-    address: "52 Arden Mill Way",
-    city: "Bethesda",
-    state: "MD",
-    zip: "20816",
-    checkInTime: isoTime(-3, 14),
-    qcToken: null,
-    tipCents: 2_000,
-    photoUploadToken: null,
-    photoViewToken: null,
-    beforePhotos: [],
-    afterPhotos: [],
-    pay: pay(11_200, true),
-    crew: [],
-    commercial: null,
-    customerDetails: portalPayload.jobs[3].customerDetails,
-    internalDetails: portalPayload.jobs[3].internalDetails,
-  },
-];
+/**
+ * The job-lookup portal's rows.
+ *
+ * Same objects the dashboard gets: the two screens read the same payload from
+ * get-cleaner-portal, so keeping two fixtures in step would only mean one of
+ * them quietly going wrong.
+ */
+export const lookupJobs = portalPayload.jobs;
 
 // ─── cleaner-job-checklist ──────────────────────────────────────────────────
 //
