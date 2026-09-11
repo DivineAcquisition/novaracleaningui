@@ -25,6 +25,7 @@ import { format } from "date-fns";
 
 import { supabase } from "@/integrations/supabase/client";
 import { resolveCleanerAuth } from "@/lib/cleaner-auth";
+import { TOUR, tourAnchor } from "@/lib/tours/anchors";
 import {
   Card,
   CardContent,
@@ -117,7 +118,7 @@ export default function JobOffersList() {
   };
 
   return (
-    <div className="mx-auto max-w-2xl space-y-3">
+    <div className="mx-auto max-w-2xl space-y-3" {...tourAnchor(TOUR.offersList)}>
         {loading ? (
           <>
             <Skeleton className="h-32 w-full rounded-2xl" />
@@ -150,6 +151,7 @@ export default function JobOffersList() {
               <Card
                 key={o.id}
                 className="border border-slate-200 shadow-sm rounded-2xl"
+                {...tourAnchor(TOUR.offerCard)}
               >
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between gap-3">
@@ -228,6 +230,7 @@ export default function JobOffersList() {
                       asChild
                       size="lg"
                       className="w-full mt-3 bg-emerald-600 hover:bg-emerald-700 text-white"
+                      {...tourAnchor(TOUR.offerReview)}
                     >
                       <Link href={`/cleaner/job-offer/${o.response_token}`}>
                         Review & respond

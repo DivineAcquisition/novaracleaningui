@@ -62,6 +62,7 @@ import { Panel } from "@/components/ui/panel";
 import SuspensionBanner from "@/components/cleaner/SuspensionBanner";
 import { BRAND } from "@/lib/brand";
 import { parseServiceDate } from "@/lib/service-date";
+import { TOUR, tourAnchor } from "@/lib/tours/anchors";
 
 interface JobPay {
   actualCents: number | null;
@@ -783,7 +784,7 @@ export default function ContractorJobs() {
               <p className="text-muted-foreground text-sm">Look up your jobs to check in, mark complete, or view history</p>
             </div>
 
-            <Panel className="p-6">
+            <Panel className="p-6" {...tourAnchor(TOUR.lookupForm)}>
               <form onSubmit={handleSearch} className="space-y-5">
                   <Tabs value={lookupType} onValueChange={(v) => setLookupType(v as "email" | "phone")}>
                     <TabsList className="grid w-full grid-cols-2 mb-4">
@@ -852,7 +853,7 @@ export default function ContractorJobs() {
               </div>
 
               {summary && (
-                <div className="mt-4 grid grid-cols-3 gap-2.5">
+                <div className="mt-4 grid grid-cols-3 gap-2.5" {...tourAnchor(TOUR.payTiles)}>
                   <div className="rounded-2xl bg-white/12 ring-1 ring-white/15 backdrop-blur px-3 py-2.5">
                     <p className="text-[10px] uppercase tracking-wider text-violet-100/90 flex items-center gap-1">
                       <RiWallet3Line className="w-3 h-3" /> Paid to you
@@ -876,7 +877,7 @@ export default function ContractorJobs() {
 
               {/* Your scores — yours only, never other cleaners'. */}
               {scores && (scores.novara != null || scores.quality != null || scores.overall != null) && (
-                <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                <div className="mt-2.5 flex flex-wrap items-center gap-1.5" {...tourAnchor(TOUR.scoreTiles)}>
                   {scores.overall != null && (
                     <span className="text-[10px] font-bold bg-white/20 ring-1 ring-white/25 rounded-full px-2 py-0.5">
                       Overall {Math.round(scores.overall)}
@@ -950,7 +951,7 @@ export default function ContractorJobs() {
 
             {/* ── Tips preview — every tip, 100% yours, separate from job pay ── */}
             {tips.length > 0 && (
-              <section className="rounded-3xl bg-white ring-1 ring-emerald-100 shadow-sm p-4 space-y-2.5">
+              <section className="rounded-3xl bg-white ring-1 ring-emerald-100 shadow-sm p-4 space-y-2.5" {...tourAnchor(TOUR.tips)}>
                 <div className="flex items-center justify-between px-1">
                   <h2 className="text-[11px] font-bold text-emerald-700 uppercase tracking-[0.16em]">
                     💜 Tips from customers
