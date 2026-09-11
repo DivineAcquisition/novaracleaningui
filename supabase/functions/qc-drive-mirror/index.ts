@@ -39,6 +39,16 @@ import {
 } from "../_shared/google-drive.ts";
 import { getContractorChecklist } from "../_shared/contractor-checklists.ts";
 import { labeledZonePhotos, siteZoneNames } from "../_shared/site-zones.ts";
+import {
+  POLICY_REFS,
+  POLICY_URLS,
+  parseRepresentment,
+  wrapPacketText,
+  type ChecklistDelivery,
+  type DisputeRepresentment,
+  type PacketMessage,
+} from "../_shared/dispute-packet.ts";
+import { loadGhlConversation } from "../_shared/ghl-conversation.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -62,72 +72,6 @@ const MAX_ATTEMPTS = 8;
 // edge-function memory on pathological sets — photos beyond it are still in
 // the Drive folders, and the packet notes the truncation.
 const MAX_PDF_PHOTO_BYTES = 100 * 1024 * 1024;
-
-// Policies the client agreed to at booking — cited BY SECTION against the
-// live published policies so every claim in the packet maps to the exact
-// clause. URLs included so a processor/adjuster can verify the source.
-const POLICY_URLS: Array<{ label: string; url: string }> = [
-  { label: "Terms of Service", url: "https://novaracleaning.com/terms" },
-  { label: "Refund Policy", url: "https://novaracleaning.com/refund-policy" },
-  { label: "Cancellation Policy", url: "https://novaracleaning.com/cancellation-policy" },
-  { label: "Disclaimer", url: "https://novaracleaning.com/disclaimer" },
-];
-
-interface PolicyRef { claim: string; cite: string }
-const POLICY_REFS: PolicyRef[] = [
-  {
-    claim: "Acceptance is binding on booking: clicking agree, submitting a booking, providing payment, or granting property access constitutes acceptance of all policies.",
-    cite: "Terms of Service §1.2, §1.4",
-  },
-  {
-    claim: "All sales are final once service has been rendered; completed-service payments are non-refundable outside the narrow stated exceptions.",
-    cite: "Terms of Service §6.3 · Refund Policy §1.1",
-  },
-  {
-    claim: "The primary and default remedy for any legitimate quality concern is a complimentary re-clean — not a refund.",
-    cite: "Terms of Service §7.1, §7.3 · Refund Policy §1.2, §2.1",
-  },
-  {
-    claim: "Concerns must be reported IN WRITING within 24 hours of completion, with specific itemized areas and timestamped photos; the property must be undisturbed.",
-    cite: "Terms of Service §7.1 · Refund Policy §3.1–3.4",
-  },
-  {
-    claim: "Subjective dissatisfaction, buyer's remorse, and services performed to the checklist standard are never refundable.",
-    cite: "Terms of Service §6.4 · Refund Policy §5.1–5.2, §6 · Disclaimer §1.3",
-  },
-  {
-    claim: "Tasks not included in the purchased package (e.g. inside fridge/oven, add-ons never booked) are not refundable events.",
-    cite: "Refund Policy §5.7",
-  },
-  {
-    claim: "Cancellations require 24-hour notice; late cancellations incur the published fee, and same-day cancellations / no-shows (including access failures caused by the customer) forfeit 100% of the service amount.",
-    cite: "Cancellation Policy §1.1, §2.1–2.3, §10 · Terms of Service §6.1",
-  },
-  {
-    claim: "Before initiating any chargeback the customer is contractually required to complete written dispute resolution and allow 72 hours for investigation; unauthorized chargebacks constitute material breach and fraud, with a $150 administrative fee plus full liability.",
-    cite: "Terms of Service §10.1–10.4 · Refund Policy §8.2–8.5",
-  },
-  {
-    claim: "The customer expressly consented to comprehensive service documentation — timestamped before/after photographs, GPS/service records, checklists, and communication logs — retained a minimum of four (4) years and usable in dispute resolution and chargeback defense.",
-    cite: "Terms of Service §13.1–13.4 · Refund Policy §3.3, §9.2 · Disclaimer §8.4",
-  },
-  {
-    claim: "Documented on-site findings such as light pest presence or minor surface mold are billable in-scope work. The amount is computed by the published pricing engine (Focused Clean area rate or Heavy condition multiplier); before/after photos and the QC record are retained as chargeback evidence. Active infestation, bed bugs, and mold beyond the size/porosity threshold remain excluded and are stop-and-report, not billed as a minor finding.",
-    cite: "Terms of Service §1.2, §6.3 · Refund Policy §5.7 · Disclaimer §8.4",
-  },
-  {
-    claim: "Liability is capped at the amount actually paid for the service; damage claims must be reported within 24 hours.",
-    cite: "Terms of Service §11.2–11.3",
-  },
-  {
-    claim: "Memberships: recurring billing is authorized and cancellation requires 14 days' written notice before the next billing cycle.",
-    cite: "Terms of Service §6.2 · Refund Policy §10.1",
-  },
-  {
-    claim: "Disputes are subject to binding arbitration with a class-action waiver, governed by Maryland law.",
-    cite: "Terms of Service §14.1, §14.5, §14.7",
-  },
-];
 
 interface IssueForPacket {
   issue_number: number;
@@ -160,6 +104,31 @@ async function loadIssuesForPacket(supabase: SB, bookingId: string | null): Prom
     return (data || []) as IssueForPacket[];
   } catch {
     return [];
+  }
+}
+
+async function loadChecklistDelivery(supabase: SB, bookingId: string | null, serviceType: string | null): Promise<ChecklistDelivery> {
+  const checklist_url = serviceType && serviceType !== "standard"
+    ? `https://try.novaracleaning.com/checklist/${String(serviceType).replace(/_/g, "-")}-clean`
+    : "https://try.novaracleaning.com/checklist/standard-clean";
+  const empty: ChecklistDelivery = { confirmation_email_sent: false, emails: [], checklist_url };
+  if (!bookingId) return empty;
+  try {
+    const [{ data: booking }, { data: emails }] = await Promise.all([
+      supabase.from("bookings").select("confirmation_email_sent, email").eq("id", bookingId).maybeSingle(),
+      supabase.from("booking_emails_sent").select("kind, sent_at, recipient_email").eq("booking_id", bookingId).order("sent_at", { ascending: true }),
+    ]);
+    return {
+      confirmation_email_sent: Boolean(booking?.confirmation_email_sent),
+      emails: (emails || []).map((e: { kind?: string; sent_at?: string; recipient_email?: string }) => ({
+        kind: String(e.kind || ""),
+        sent_at: e.sent_at || null,
+        recipient_email: e.recipient_email || null,
+      })),
+      checklist_url,
+    };
+  } catch {
+    return empty;
   }
 }
 
@@ -224,6 +193,7 @@ interface DocRow {
   before_photos: string[];
   after_photos: string[];
   notes: string | null;
+  representment?: unknown;
   completed_at: string | null;
   mirror_attempts: number;
   drive_folder_id: string | null;
@@ -635,6 +605,9 @@ async function buildSummaryPdf(doc: DocRow, extras: {
   photos: Array<{ label: string; bytes: Uint8Array }>;
   pageCapture?: PageCaptureData | null;
   realCaptures?: RealPageCapture[];
+  representment?: DisputeRepresentment | null;
+  comms?: PacketMessage[];
+  checklistDelivery?: ChecklistDelivery | null;
 }): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
   const font = await pdf.embedFont(StandardFonts.Helvetica);
@@ -647,11 +620,21 @@ async function buildSummaryPdf(doc: DocRow, extras: {
   let page = pdf.addPage([PAGE_W, PAGE_H]);
   let y = PAGE_H - MARGIN;
 
+  const ascii = (text: string) =>
+    String(text || "")
+      .replace(/[→–—•]/g, (ch) => ({ "→": "->", "–": "-", "—": "-", "•": "-" }[ch] || "-"))
+      .replace(/[^\x09\x0a\x0d\x20-\x7e\xA0-\xFF]/g, "");
   const line = (text: string, opts: { size?: number; font?: typeof font; color?: ReturnType<typeof rgb>; gap?: number } = {}) => {
     const size = opts.size ?? 11;
     if (y < MARGIN + size) { page = pdf.addPage([PAGE_W, PAGE_H]); y = PAGE_H - MARGIN; }
-    page.drawText(text.slice(0, 110), { x: MARGIN, y, size, font: opts.font ?? font, color: opts.color ?? dark });
+    page.drawText(ascii(text).slice(0, 110), { x: MARGIN, y, size, font: opts.font ?? font, color: opts.color ?? dark });
     y -= size + (opts.gap ?? 6);
+  };
+  const para = (text: string, opts: { size?: number; font?: typeof font; color?: ReturnType<typeof rgb>; gap?: number; width?: number } = {}) => {
+    const size = opts.size ?? 9;
+    for (const chunk of wrapPacketText(text, opts.width ?? 100)) {
+      line(chunk, { size, font: opts.font ?? font, color: opts.color ?? gray, gap: opts.gap ?? 3 });
+    }
   };
 
   /**
@@ -741,8 +724,59 @@ async function buildSummaryPdf(doc: DocRow, extras: {
   if (doc.notes) {
     y -= 8;
     line("Notes", { size: 12, font: bold, color: violet, gap: 8 });
-    for (const chunk of doc.notes.split(/\n+/).flatMap((p) => p.match(/.{1,100}(\s|$)/g) || [])) {
-      line(chunk.trim(), { size: 10, color: gray, gap: 4 });
+    for (const chunk of wrapPacketText(doc.notes, 100)) {
+      line(chunk, { size: 10, color: gray, gap: 4 });
+    }
+  }
+
+  const representment = extras.representment || parseRepresentment(doc.representment);
+  if (representment) {
+    y -= 8;
+    line("Merchant Representment", { size: 12, font: bold, color: violet, gap: 8 });
+    if (representment.headline) para(representment.headline, { size: 10, color: dark, gap: 4 });
+    for (const finding of representment.findings) {
+      line(`${finding.ruling.replace(/_/g, " ").toUpperCase()} — ${finding.claim.slice(0, 80)}`, {
+        size: 9, font: bold, color: dark, gap: 3,
+      });
+      if (finding.claim.length > 80) para(finding.claim, { size: 9, gap: 2.5 });
+      if (finding.evidence) para(finding.evidence, { size: 8.5, gap: 5 });
+    }
+    if (representment.remedy) {
+      line("Remedy offered", { size: 9, font: bold, color: dark, gap: 3 });
+      para(representment.remedy, { size: 9, gap: 4 });
+    }
+    if (representment.updated_at) {
+      line(`Recorded ${new Date(representment.updated_at).toUTCString()}${representment.updated_by ? ` by ${representment.updated_by}` : ""}`, {
+        size: 8, color: gray, gap: 4,
+      });
+    }
+  }
+
+  const delivery = extras.checklistDelivery;
+  if (delivery) {
+    y -= 6;
+    line("Scope checklist delivered to customer", { size: 12, font: bold, color: violet, gap: 8 });
+    line(`Published checklist: ${delivery.checklist_url}`, { size: 8.5, color: gray, gap: 3 });
+    line(`Confirmation email sent: ${delivery.confirmation_email_sent ? "yes" : "not recorded"}`, { size: 9, color: dark, gap: 3 });
+    if (delivery.emails.length === 0) {
+      line("No booking_emails_sent rows on file (confirmation may still have gone via the dedicated flag).", { size: 8, color: gray, gap: 3 });
+    } else {
+      for (const e of delivery.emails.slice(0, 12)) {
+        const when = e.sent_at ? new Date(e.sent_at).toUTCString() : "—";
+        line(`   ${e.kind || "email"} — ${when}`, { size: 8.5, color: gray, gap: 2.5 });
+      }
+    }
+  }
+
+  const comms = extras.comms || [];
+  if (comms.length > 0) {
+    y -= 6;
+    line("Customer communication log (SMS / calls)", { size: 12, font: bold, color: violet, gap: 8 });
+    for (const m of comms.slice(0, 80)) {
+      const who = m.direction === "inbound" ? "CUSTOMER" : "NOVARA";
+      const when = m.at ? new Date(m.at).toUTCString() : "";
+      line(`${who} · ${m.channel} · ${when}`, { size: 8, font: bold, color: dark, gap: 2 });
+      para(m.body, { size: 8, gap: 4, width: 102 });
     }
   }
 
@@ -773,8 +807,13 @@ async function buildSummaryPdf(doc: DocRow, extras: {
   y -= 8;
   line("Complaint & QC Issue Record for This Job", { size: 12, font: bold, color: violet, gap: 8 });
   if (packIssues.length === 0) {
-    line("No complaints or quality issues were reported on this job.", { size: 10, color: gray, gap: 4 });
-    line("(Concerns must be reported in writing within 24 hours of completion — Terms of Service §7.1.)", { size: 8, color: gray, gap: 4 });
+    const inbound = comms.some((m) => m.direction === "inbound");
+    if (representment || inbound) {
+      line("No QC issue row was opened. The customer communication log and merchant representment above are the record of the concern.", { size: 9, color: gray, gap: 4 });
+    } else {
+      line("No complaints or quality issues were reported on this job.", { size: 10, color: gray, gap: 4 });
+      line("(Concerns must be reported in writing within 24 hours of completion — Terms of Service §7.1.)", { size: 8, color: gray, gap: 4 });
+    }
   } else {
     for (const iss of packIssues) {
       line(`Issue #${iss.issue_number} — ${iss.issue_type.replace(/_/g, " ")} · severity: ${iss.severity} · status: ${iss.status.replace(/_/g, " ")}`, { size: 10, font: bold, color: dark, gap: 3 });
@@ -1076,6 +1115,17 @@ async function mirrorOne(supabase: SB, token: string, rootFolderId: string, doc:
   // images + ALL photos + the signed agreement, regenerated on every mirror.
   const payment = doc.booking_id ? await loadPaymentRecord(supabase, doc.booking_id) : { rows: [] };
   const packetIssues = await loadIssuesForPacket(supabase, doc.booking_id);
+  const checklistDelivery = await loadChecklistDelivery(supabase, doc.booking_id, doc.service_type);
+  let comms: PacketMessage[] = [];
+  if (doc.booking_id) {
+    try {
+      const { data: b } = await supabase.from("bookings").select("email, phone").eq("id", doc.booking_id).maybeSingle();
+      comms = await loadGhlConversation(String(b?.email || doc.client_email || ""), String(b?.phone || ""));
+    } catch (e) {
+      log("GHL conversation pull failed (non-blocking)", { error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+  const representment = parseRepresentment(doc.representment);
   const pageCapture = await loadPageCaptureData(supabase, doc.booking_id, {
     clientName: doc.client_name,
     clientEmail: doc.client_email,
@@ -1106,6 +1156,9 @@ async function mirrorOne(supabase: SB, token: string, rootFolderId: string, doc:
     photos: photoBytes,
     pageCapture,
     realCaptures,
+    representment,
+    comms,
+    checklistDelivery,
   });
   const pdfName = `${safeName(docRef)} — Completion Summary.pdf`;
   let pdfId = doc.drive_pdf_id;
@@ -1193,7 +1246,7 @@ serve(async (req) => {
 
     let query = supabase
       .from("job_documentation")
-      .select("id, booking_id, job_id, booking_ref, client_name, client_email, service_type, service_date, address, cleaner_names, before_photos, after_photos, notes, completed_at, mirror_attempts, drive_folder_id, drive_pdf_id")
+      .select("id, booking_id, job_id, booking_ref, client_name, client_email, service_type, service_date, address, cleaner_names, before_photos, after_photos, notes, representment, completed_at, mirror_attempts, drive_folder_id, drive_pdf_id")
       .lt("mirror_attempts", MAX_ATTEMPTS)
       .order("completed_at", { ascending: true })
       .limit(BATCH_SIZE);

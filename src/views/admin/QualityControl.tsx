@@ -53,6 +53,7 @@ import RecleanWorkflow from "@/components/admin/RecleanWorkflow";
 import { ChecklistItemPicker } from "@/components/checklists/ChecklistItemPicker";
 import QcStatementPanel, { statementStatusLabel } from "@/components/admin/QcStatementPanel";
 import { statementRequiredByDefault } from "@/lib/qc-statement";
+import { FINDING_RULINGS, type DisputeRepresentment, type FindingRuling, type RepresentmentFinding } from "@/lib/dispute-packet";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -1513,6 +1514,13 @@ interface CaseFile {
     evidence_gaps?: string[];
     field_reports?: Record<string, any>;
   };
+  representment?: DisputeRepresentment | null;
+  checklist_delivery?: {
+    confirmation_email_sent: boolean;
+    emails: Array<{ kind: string; sent_at: string | null }>;
+    checklist_url: string;
+  };
+  comms?: Array<{ at: string; direction: string; channel: string; body: string }>;
 }
 
 const cents = (c: number | null | undefined) => (c != null ? `$${(Number(c) / 100).toFixed(2)}` : "—");
@@ -1652,6 +1660,38 @@ export function CaseFileSheet({ bookingId, caseRef, onClose }: { bookingId: stri
                 </a>
               )}
             </section>
+
+            <RepresentmentEditor bookingId={bookingId} initial={cf.representment || null} />
+
+            {cf.checklist_delivery && (
+              <section className="rounded-xl border border-slate-200 p-4 space-y-1.5">
+                <p className="text-sm font-bold text-slate-800">Checklist delivered</p>
+                <p className="text-xs text-slate-600">
+                  Confirmation email: {cf.checklist_delivery.confirmation_email_sent ? "sent" : "not recorded"}
+                </p>
+                <a href={cf.checklist_delivery.checklist_url} target="_blank" rel="noreferrer" className="text-xs text-violet-600 font-semibold hover:underline">
+                  {cf.checklist_delivery.checklist_url}
+                </a>
+                {(cf.checklist_delivery.emails || []).map((e, i) => (
+                  <p key={i} className="text-[11px] text-slate-500">{e.kind} — {e.sent_at ? fmtDT(e.sent_at) : "—"}</p>
+                ))}
+              </section>
+            )}
+
+            {(cf.comms || []).length > 0 && (
+              <section className="rounded-xl border border-slate-200 p-4 space-y-1.5">
+                <p className="text-sm font-bold text-slate-800">Customer communication log</p>
+                <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                  {cf.comms!.map((m, i) => (
+                    <p key={i} className="text-[11px] text-slate-600">
+                      <span className="font-semibold text-slate-800">{m.direction === "inbound" ? "CUSTOMER" : "NOVARA"}</span>
+                      {" · "}{m.channel}{m.at ? ` · ${fmtDT(m.at)}` : ""}
+                      <span className="block text-slate-500">{m.body}</span>
+                    </p>
+                  ))}
+                </div>
+              </section>
+            )}
 
             {/* Photos */}
             <section className="rounded-xl border border-slate-200 p-4 space-y-2">
@@ -2493,5 +2533,114 @@ function SiteFindingTemplatesButton() {
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+function emptyFinding(): RepresentmentFinding {
+  return { claim: "", ruling: "completed", evidence: "" };
+}
+
+function RepresentmentEditor({ bookingId, initial }: { bookingId: string; initial: DisputeRepresentment | null }) {
+  const [headline, setHeadline] = useState(initial?.headline || "");
+  const [remedy, setRemedy] = useState(initial?.remedy || "");
+  const [findings, setFindings] = useState<RepresentmentFinding[]>(
+    initial?.findings?.length ? initial.findings : [emptyFinding()],
+  );
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const representment: DisputeRepresentment = {
+        headline: headline.trim(),
+        remedy: remedy.trim(),
+        findings: findings.filter((f) => f.claim.trim()),
+      };
+      const { data, error } = await supabase.functions.invoke("qc-case-file", {
+        body: { action: "save_representment", bookingId, representment },
+      });
+      if (error) throw error;
+      if ((data as { ok?: boolean; error?: string })?.ok === false) {
+        throw new Error((data as { error?: string }).error || "Save failed");
+      }
+      toast.success("Representment saved — remirror the job to bake it into the PDF");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't save representment");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <section className="rounded-xl border border-violet-200 bg-violet-50/40 p-4 space-y-3">
+      <p className="text-sm font-bold text-violet-950">Merchant representment</p>
+      <p className="text-[11px] text-violet-800/80">
+        This is what the bank sees. Answer the customer&apos;s list item by item. Do not include chargeback-fee or fraud language.
+      </p>
+      <Textarea
+        value={headline}
+        onChange={(e) => setHeadline(e.target.value)}
+        placeholder="Headline: service completed to checklist; only verified miss is kitchen/bath trash; re-clean offered and declined."
+        className="min-h-[72px] bg-white"
+      />
+      <div className="space-y-2">
+        {findings.map((f, i) => (
+          <div key={i} className="rounded-lg border border-violet-100 bg-white p-2 space-y-1.5">
+            <div className="flex gap-2">
+              <Select
+                value={f.ruling}
+                onValueChange={(v) => {
+                  const next = [...findings];
+                  next[i] = { ...f, ruling: v as FindingRuling };
+                  setFindings(next);
+                }}
+              >
+                <SelectTrigger className="h-8 w-36 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {FINDING_RULINGS.map((r) => (
+                    <SelectItem key={r} value={r}>{r.replace(/_/g, " ")}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Input
+                value={f.claim}
+                onChange={(e) => {
+                  const next = [...findings];
+                  next[i] = { ...f, claim: e.target.value };
+                  setFindings(next);
+                }}
+                placeholder="Customer claim"
+                className="h-8 text-xs"
+              />
+            </div>
+            <Input
+              value={f.evidence}
+              onChange={(e) => {
+                const next = [...findings];
+                next[i] = { ...f, evidence: e.target.value };
+                setFindings(next);
+              }}
+              placeholder="Evidence / photo note"
+              className="h-8 text-xs"
+            />
+          </div>
+        ))}
+        <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={() => setFindings([...findings, emptyFinding()])}>
+          Add finding
+        </Button>
+      </div>
+      <Textarea
+        value={remedy}
+        onChange={(e) => setRemedy(e.target.value)}
+        placeholder="Remedy offered (re-clean / declined / date)."
+        className="min-h-[64px] bg-white"
+      />
+      {initial?.updated_at && (
+        <p className="text-[10px] text-violet-700/70">Last saved {fmtDT(initial.updated_at)}{initial.updated_by ? ` by ${initial.updated_by}` : ""}</p>
+      )}
+      <Button size="sm" onClick={() => void save()} disabled={saving}>
+        {saving ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin" /> : "Save representment"}
+      </Button>
+    </section>
   );
 }

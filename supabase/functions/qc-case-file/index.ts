@@ -23,6 +23,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getContractorChecklist } from "../_shared/contractor-checklists.ts";
 import { labeledZonePhotos, parseZoneCompletions, siteZoneNames } from "../_shared/site-zones.ts";
 import { assembleIncidentEvidence } from "../_shared/qc-case-assemble.ts";
+import { POLICY_HIGHLIGHTS, parseRepresentment } from "../_shared/dispute-packet.ts";
+import { loadGhlConversation } from "../_shared/ghl-conversation.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -39,26 +41,6 @@ const log = (s: string, d?: unknown) =>
 
 // deno-lint-ignore no-explicit-any
 type SB = any;
-
-// Policies the client agreed to at booking — cited by section against the
-// live published policies so VAs quote the exact clause when handling
-// disputes. Full texts: novaracleaning.com/terms · /refund-policy ·
-// /cancellation-policy · /disclaimer.
-const POLICY_HIGHLIGHTS: string[] = [
-  "Booking = binding acceptance of all policies (ToS §1.2, §1.4).",
-  "All sales final once service is rendered (ToS §6.3 · Refund §1.1).",
-  "Primary remedy is a complimentary re-clean, not a refund (ToS §7.1, §7.3 · Refund §1.2, §2.1). Declining it waives further refund eligibility (Refund §2.5).",
-  "Concerns must be reported IN WRITING within 24h with itemized areas + timestamped photos, property undisturbed (ToS §7.1 · Refund §3.1–3.4).",
-  "Subjective dissatisfaction is never refundable (ToS §6.4 · Refund §5.2, §6).",
-  "Out-of-scope tasks (fridge/oven/add-ons never booked) are not refundable (Refund §5.7).",
-  "24h cancellation notice; same-day cancel/no-show/access failure forfeits 100% (Cancellation §1.1, §2.2–2.3, §10 · ToS §6.1).",
-  "72h written dispute resolution is REQUIRED before any chargeback; unauthorized chargebacks = fraud + $150 fee + full liability (ToS §10.1–10.4 · Refund §8.2–8.5).",
-  "Documented light pest / minor surface mold is billable in-scope work priced by the engine (Focused Clean area rate or Heavy condition) with before/after photos as dispute evidence. Active infestation, bed bugs, and mold past the size/porosity threshold remain stop-and-report (ToS §1.2, §6.3 · Refund §5.7).",
-  "Client consented to photo/GPS/checklist evidence retention (4 years) usable in disputes (ToS §13.1–13.4 · Disclaimer §8.4).",
-  "Liability capped at the amount paid; damage claims within 24h (ToS §11.2–11.3).",
-  "Memberships: 14 days' written notice to cancel (ToS §6.2 · Refund §10.1).",
-  "Binding arbitration + class-action waiver, Maryland law (ToS §14.1, §14.5, §14.7).",
-];
 
 async function resolveSecret(supabase: SB, key: string): Promise<string> {
   try {
@@ -172,6 +154,45 @@ serve(async (req) => {
     const bookingId = String(body?.bookingId || "");
     if (!bookingId) return json({ ok: false, error: "bookingId required" }, 400);
 
+    if (String(body?.action || "") === "save_representment") {
+      const parsed = parseRepresentment(body?.representment);
+      if (!parsed) return json({ ok: false, error: "representment requires a headline, findings, or remedy" }, 400);
+      const { data: u } = await createClient(
+        Deno.env.get("SUPABASE_URL") ?? "",
+        Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+        { global: { headers: { Authorization: `Bearer ${jwt}` } } },
+      ).auth.getUser();
+      parsed.updated_at = new Date().toISOString();
+      parsed.updated_by = String(u?.user?.user_metadata?.full_name || u?.user?.email || "Team");
+      const { data: existingDoc } = await admin
+        .from("job_documentation")
+        .select("id")
+        .eq("booking_id", bookingId)
+        .maybeSingle();
+      if (existingDoc?.id) {
+        const { error: upErr } = await admin
+          .from("job_documentation")
+          .update({ representment: parsed, updated_at: parsed.updated_at })
+          .eq("id", existingDoc.id);
+        if (upErr) return json({ ok: false, error: upErr.message }, 500);
+      } else {
+        const { error: insErr } = await admin.from("job_documentation").insert({
+          booking_id: bookingId,
+          representment: parsed,
+          documented: false,
+        });
+        if (insErr) return json({ ok: false, error: insErr.message }, 500);
+      }
+      const narrative = [
+        parsed.headline,
+        ...parsed.findings.map((f) => `${f.ruling}: ${f.claim}${f.evidence ? ` — ${f.evidence}` : ""}`),
+        parsed.remedy,
+      ].filter(Boolean).join("\n");
+      await admin.from("bookings").update({ issues_notes: narrative }).eq("id", bookingId)
+        .then(() => undefined, () => undefined);
+      return json({ ok: true, representment: parsed });
+    }
+
     // ── Booking (the case anchor) ─────────────────────────────────────────
     const { data: booking } = await admin
       .from("bookings")
@@ -181,7 +202,7 @@ serve(async (req) => {
         "total_estimate_cents, final_charge_cents, deposit_cents, applied_credit_cents, tip_cents, cancel_fee_cents, reschedule_fee_cents, " +
         "payment_option, payment_method, payment_received_at, payment_intent_id, hosted_invoice_url, stripe_invoice_id, checkout_session_id, " +
         "completion_hold_pi_id, completion_hold_status, completion_hold_captured_amount, completion_hold_captured_at, " +
-        "add_ons, membership_plan, is_recurring, team_notes, issues_notes, access_notes, check_in_time, check_out_time, pets, focused_areas, " +
+        "add_ons, membership_plan, is_recurring, team_notes, issues_notes, access_notes, check_in_time, check_out_time, pets, focused_areas, confirmation_email_sent, " +
         "before_photos, after_photos, photo_upload_submitted_at, num_cleaners_assigned, " +
         "is_reclean, reclean_of_booking_id, reclean_qc_issue_id, reclean_scope, reclean_assessed_value_cents, " +
         "photo_zones, reclean_zones, scope_level",
@@ -197,7 +218,7 @@ serve(async (req) => {
     // ── Parallel live pulls ───────────────────────────────────────────────
     const [
       customerRes, docRes, checklistRes, agreementsRes, docusealRes,
-      addonChargesRes, issuesRes, eventsRes, assignsRes, recleanChildRes,
+      addonChargesRes, issuesRes, eventsRes, emailsRes, assignsRes, recleanChildRes,
     ] = await Promise.all([
       booking.customer_id
         ? admin.from("customers").select("id, email, first_name, last_name, phone, address, city, state, zip, membership_status, membership_plan, stripe_customer_id, created_at").eq("id", booking.customer_id).maybeSingle()
@@ -215,6 +236,7 @@ serve(async (req) => {
       admin.from("booking_addon_charges").select("id, added_addons, removed_addons, amount_cents, status, stripe_payment_intent_id, hosted_invoice_url, note, created_at").eq("booking_id", bookingId).order("created_at", { ascending: true }),
       admin.from("qc_issues").select("*").eq("booking_id", bookingId).order("created_at", { ascending: false }),
       admin.from("events").select("event_type, occurred_at, source, summary, data").eq("booking_id", bookingId).order("occurred_at", { ascending: true }).limit(400),
+      admin.from("booking_emails_sent").select("kind, sent_at, recipient_email").eq("booking_id", bookingId).order("sent_at", { ascending: true }),
       booking.job_id
         ? admin.from("job_assignments").select("status, cleaner_id, cleaners(first_name, last_name, phone)").eq("job_id", booking.job_id)
         : Promise.resolve({ data: [] }),
@@ -492,6 +514,13 @@ serve(async (req) => {
         timeline: eventsRes.data || [],
         policy_highlights: POLICY_HIGHLIGHTS,
         incident,
+        representment: parseRepresentment(doc?.representment),
+        checklist_delivery: {
+          confirmation_email_sent: Boolean(booking.confirmation_email_sent),
+          emails: emailsRes.data || [],
+          checklist_url: "https://try.novaracleaning.com/checklist/standard-clean",
+        },
+        comms: await loadGhlConversation(String(booking.email || ""), String(booking.phone || "")),
       },
     });
   } catch (e) {
