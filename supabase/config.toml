@@ -749,3 +749,12 @@ verify_jwt = false
 # uses the service role internally and never changes roster status.
 [functions.pulse-check-runner]
 verify_jwt = false
+
+# Contractor statement form: reminder + overdue flag (never a penalty) and
+# Drive/PDF retry. JWT verified in-function (cron secret / service role / admin).
+[functions.qc-statement-runner]
+verify_jwt = false
+
+# Per-case Drive folder for contractor statement uploads + branded PDF.
+[functions.qc-statement-drive]
+verify_jwt = false

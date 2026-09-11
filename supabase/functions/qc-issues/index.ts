@@ -34,6 +34,11 @@ import {
   recleanSourceForIntake,
 } from "../_shared/reclean.ts";
 import { matchNamedZones, siteZoneNames } from "../_shared/site-zones.ts";
+import {
+  factualReportSummary,
+  statementRequiredByDefault,
+} from "../_shared/qc-statement.ts";
+import { loadQcStatementSettings, requestQcStatement } from "../_shared/qc-statement-ops.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -51,11 +56,12 @@ const log = (s: string, d?: unknown) =>
 // deno-lint-ignore no-explicit-any
 type SB = any;
 
-const ISSUE_TYPES = ["complaint", "reclean", "damage", "no_show", "late", "quality_flag", "payment", "other", "site_finding", "addon"];
+const ISSUE_TYPES = ["complaint", "reclean", "damage", "no_show", "late", "quality_flag", "payment", "other", "site_finding", "addon", "serious_allegation", "conduct"];
 const SEVERITIES = ["low", "medium", "high", "critical"];
 const STATUSES = ["open", "investigating", "awaiting_customer", "resolved", "escalated"];
+const SUSPENSION_FLAGS = ["none", "pending_admin", "suspended", "cleared"];
 
-async function ensureAdminOrVa(admin: SB, jwt: string): Promise<{ id: string; name: string }> {
+async function ensureAdminOrVa(admin: SB, jwt: string): Promise<{ id: string; name: string; isAdmin: boolean }> {
   const userClient = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_ANON_KEY") ?? "",
@@ -64,12 +70,19 @@ async function ensureAdminOrVa(admin: SB, jwt: string): Promise<{ id: string; na
   const { data: u } = await userClient.auth.getUser();
   if (!u?.user?.id) throw new Error("Not signed in.");
   const { data: roles } = await admin.from("user_roles").select("role").eq("user_id", u.user.id);
-  const allowed = (roles || []).some((r: { role: string }) => ["admin", "va"].includes(r.role));
+  const roleList = (roles || []).map((r: { role: string }) => r.role);
+  const allowed = roleList.some((r: string) => ["admin", "va"].includes(r));
   if (!allowed) throw new Error("Admins or VAs only.");
   const name = String(
     u.user.user_metadata?.full_name || u.user.user_metadata?.name || u.user.email || "Team",
   );
-  return { id: u.user.id, name };
+  return { id: u.user.id, name, isAdmin: roleList.includes("admin") };
+}
+
+function assertCanMutateIssue(actor: { isAdmin: boolean }, issue: { admin_only?: boolean | null; issue_type?: string | null }) {
+  if ((issue.admin_only || issue.issue_type === "serious_allegation") && !actor.isAdmin) {
+    throw new Error("Admins only.");
+  }
 }
 
 interface BookingLite {
@@ -167,6 +180,7 @@ async function createIssue(admin: SB, opts: {
   requestReclean?: boolean;
   zoneId?: string | null;
   zoneName?: string | null;
+  statementRequired?: boolean | null;
 }) {
   const ref = bookingRef(opts.booking);
   // ALL cleaners on the job get attached; the reporter (field reports) or
@@ -194,8 +208,9 @@ async function createIssue(admin: SB, opts: {
   const zoneName = taggedZones[0] || String(opts.zoneName || "").trim() || null;
   const zoneId = String(opts.zoneId || "").trim() || zoneName;
 
+  const isIncident = opts.issueType === "serious_allegation";
   const recleanStamp: Record<string, unknown> = {};
-  const wantsReclean = !opts.booking.is_reclean && intakeCreatesRecleanRequest({
+  const wantsReclean = !isIncident && !opts.booking.is_reclean && intakeCreatesRecleanRequest({
     issueType: opts.issueType,
     reportedVia: opts.reportedVia,
     requestReclean: opts.requestReclean,
@@ -229,13 +244,31 @@ async function createIssue(admin: SB, opts: {
       client_email: opts.booking.email,
       booking_ref: ref,
       issue_type: opts.issueType,
-      severity: opts.severity,
-      status: "open",
+      severity: isIncident ? "critical" : opts.severity,
+      status: isIncident ? "investigating" : "open",
       title: opts.title,
       description: opts.description,
+      retain_permanently: isIncident,
+      admin_only: isIncident,
+      score_exempt: isIncident,
+      contractor_suspension_flag: isIncident ? "pending_admin" : "none",
+      statement_required: false,
+      statement_status: "none",
+      statement_report_summary: factualReportSummary({
+        description: opts.description,
+        title: opts.title,
+        clientName: `${opts.booking.first_name || ""} ${opts.booking.last_name || ""}`.trim() || null,
+      }),
       details: {
         ...(opts.details && typeof opts.details === "object" ? opts.details : {}),
         ...(zoneName ? { zone_name: zoneName, zone_id: zoneId } : {}),
+        ...(isIncident ? {
+          allegation_not_finding: true,
+          no_auto_score_penalty: true,
+          no_auto_accountability: true,
+          no_auto_suspension: true,
+          insurance_notification_is_prompt_only: true,
+        } : {}),
       },
       zone_id: zoneId,
       zone_name: zoneName,
@@ -251,11 +284,20 @@ async function createIssue(admin: SB, opts: {
   await admin.from("qc_issue_events").insert({
     issue_id: issue.id,
     action: "created",
-    to_status: "open",
+    to_status: isIncident ? "investigating" : "open",
     note: opts.description,
     actor_id: opts.reporterId,
     actor_name: opts.reporterName,
-    data: { issue_type: opts.issueType, severity: opts.severity, via: opts.reportedVia },
+    data: {
+      issue_type: opts.issueType,
+      severity: isIncident ? "critical" : opts.severity,
+      via: opts.reportedVia,
+      ...(isIncident ? {
+        allegation_not_finding: true,
+        no_auto_score_penalty: true,
+        no_auto_accountability: true,
+      } : {}),
+    },
   });
 
   if (wantsReclean) {
@@ -289,6 +331,31 @@ async function createIssue(admin: SB, opts: {
         `\nReported by ${opts.reporterName} via ${opts.reportedVia}. Review in the QC console.`,
       data: { issue_id: issue.id, severity: opts.severity, issue_type: opts.issueType },
     }).then(() => undefined, () => undefined);
+  }
+
+  const settings = await loadQcStatementSettings(admin);
+  const wantsStatement = opts.statementRequired === true
+    ? true
+    : opts.statementRequired === false
+      ? false
+      : statementRequiredByDefault(opts.issueType, isIncident ? "critical" : opts.severity, settings);
+  if (wantsStatement) {
+    const sent = await requestQcStatement(admin, {
+      issue,
+      actorId: opts.reporterId,
+      actorName: opts.reporterName,
+      settings,
+    });
+    if (!sent.ok) {
+      await admin.from("qc_issues").update({
+        statement_required: true,
+        statement_status: "requested",
+        updated_at: new Date().toISOString(),
+      }).eq("id", issue.id);
+      log("statement request deferred", { issueId: issue.id, error: sent.error });
+    }
+    const { data: fresh } = await admin.from("qc_issues").select("*").eq("id", issue.id).maybeSingle();
+    return fresh || issue;
   }
 
   return issue;
@@ -331,7 +398,8 @@ serve(async (req) => {
 
       const c = Array.isArray(assignment.cleaners) ? assignment.cleaners[0] : assignment.cleaners;
       const cleanerName = c ? `${c.first_name || ""} ${c.last_name || ""}`.trim() || "Cleaner" : "Cleaner";
-      const issueType = ISSUE_TYPES.includes(String(body?.issueType)) ? String(body.issueType) : "quality_flag";
+      let issueType = ISSUE_TYPES.includes(String(body?.issueType)) ? String(body.issueType) : "quality_flag";
+      if (issueType === "serious_allegation") issueType = "quality_flag";
       // Field reports default HIGH — the stop-and-flag SOP means a cleaner
       // raising a problem on site needs immediate dispatch eyes.
       const severity = SEVERITIES.includes(String(body?.severity)) ? String(body.severity) : "high";
@@ -374,7 +442,12 @@ serve(async (req) => {
       if (!bookingId) return json({ ok: false, error: "bookingId required — every issue links to a job." }, 400);
       if (!title) return json({ ok: false, error: "title required" }, 400);
       const issueType = ISSUE_TYPES.includes(String(body?.issueType)) ? String(body.issueType) : "complaint";
-      const severity = SEVERITIES.includes(String(body?.severity)) ? String(body.severity) : "medium";
+      if (issueType === "serious_allegation" && !actor.isAdmin) {
+        return json({ ok: false, error: "Serious allegation cases are admin/owner only." }, 403);
+      }
+      const severity = issueType === "serious_allegation"
+        ? "critical"
+        : (SEVERITIES.includes(String(body?.severity)) ? String(body.severity) : "medium");
       const booking = await loadBooking(admin, bookingId);
       if (!booking) return json({ ok: false, error: "Booking not found." }, 404);
 
@@ -399,16 +472,23 @@ serve(async (req) => {
         severity,
         title,
         description: String(body?.description || "").trim().slice(0, 4000) || null,
-        reportedVia: "va",
+        reportedVia: issueType === "serious_allegation" ? "admin" : "va",
         reporterId: actor.id,
         reporterName: actor.name,
-        requestReclean: body?.requestReclean === true
-          ? true
-          : body?.requestReclean === false
-            ? false
-            : undefined,
+        requestReclean: issueType === "serious_allegation"
+          ? false
+          : body?.requestReclean === true
+            ? true
+            : body?.requestReclean === false
+              ? false
+              : undefined,
         zoneName: zoneName || null,
         zoneId: zoneId || null,
+        statementRequired: body?.statementRequired === true
+          ? true
+          : body?.statementRequired === false
+            ? false
+            : undefined,
       });
       return json({ ok: true, issue });
     }
@@ -418,6 +498,129 @@ serve(async (req) => {
     if (!issueId) return json({ ok: false, error: "issueId required" }, 400);
     const { data: issue } = await admin.from("qc_issues").select("*").eq("id", issueId).maybeSingle();
     if (!issue) return json({ ok: false, error: "Issue not found." }, 404);
+    assertCanMutateIssue(actor, issue);
+
+    if (action === "update_incident") {
+      if (issue.issue_type !== "serious_allegation" && !issue.admin_only) {
+        return json({ ok: false, error: "Incident fields apply to serious allegation cases only." }, 400);
+      }
+      const patch: Record<string, unknown> = { updated_at: nowIso };
+      const notes: string[] = [];
+      if (body?.managerAccount !== undefined) {
+        patch.manager_account = String(body.managerAccount || "").slice(0, 20000) || null;
+        notes.push("manager account");
+      }
+      if (body?.statementReportSummary !== undefined) {
+        patch.statement_report_summary = String(body.statementReportSummary || "").slice(0, 20000) || null;
+        notes.push("statement report summary");
+      }
+      if (body?.contractorStatement !== undefined) {
+        patch.contractor_statement = String(body.contractorStatement || "").slice(0, 20000) || null;
+        notes.push("contractor statement");
+      }
+      if (body?.clientWrittenCommunication !== undefined) {
+        patch.client_written_communication = String(body.clientWrittenCommunication || "").slice(0, 50000) || null;
+        notes.push("client written communication");
+      }
+      if (body?.clientFollowupDocuments !== undefined) {
+        const docs = Array.isArray(body.clientFollowupDocuments) ? body.clientFollowupDocuments : [];
+        patch.client_followup_documents = docs.slice(0, 40).map((d: Record<string, unknown>) => ({
+          received_at: String(d?.received_at || nowIso),
+          kind: String(d?.kind || "document").slice(0, 80),
+          description: String(d?.description || "").slice(0, 500),
+          url: d?.url ? String(d.url).slice(0, 2000) : null,
+          filename: d?.filename ? String(d.filename).slice(0, 200) : null,
+          entered_by: actor.name,
+        }));
+        notes.push("client follow-up documents");
+      }
+      if (body?.contractorSuspensionFlag !== undefined) {
+        const flag = String(body.contractorSuspensionFlag);
+        if (!SUSPENSION_FLAGS.includes(flag)) {
+          return json({ ok: false, error: "Invalid contractor suspension flag." }, 400);
+        }
+        patch.contractor_suspension_flag = flag;
+        notes.push(`suspension flag → ${flag} (does not change contractor status)`);
+      }
+      if (body?.insuranceNotified === true) {
+        patch.insurance_notified_at = body?.insuranceNotifiedAt
+          ? new Date(String(body.insuranceNotifiedAt)).toISOString()
+          : nowIso;
+        patch.insurance_notified_by_name = actor.name;
+        notes.push("insurance notification recorded (prompt only; carrier is not contacted by the system)");
+      }
+      if (body?.insuranceNotified === false) {
+        patch.insurance_notified_at = null;
+        patch.insurance_notified_by_name = null;
+        notes.push("insurance notification cleared");
+      }
+      if (Object.keys(patch).length <= 1) {
+        return json({ ok: false, error: "No incident fields to update." }, 400);
+      }
+      const { error: upErr } = await admin.from("qc_issues").update(patch).eq("id", issueId);
+      if (upErr) throw upErr;
+      await admin.from("qc_issue_events").insert({
+        issue_id: issueId,
+        action: "updated",
+        note: `Incident record updated: ${notes.join(", ")}.`,
+        actor_id: actor.id,
+        actor_name: actor.name,
+        data: { fields: notes },
+      });
+      const { data: fresh } = await admin.from("qc_issues").select("*").eq("id", issueId).maybeSingle();
+      return json({ ok: true, issue: fresh });
+    }
+
+    if (action === "request_statement" || action === "request_statement_supplemental") {
+      if (!issue.cleaner_id) {
+        return json({ ok: false, error: "Attach a contractor before requesting a statement." }, 400);
+      }
+      if (body?.statementReportSummary !== undefined) {
+        await admin.from("qc_issues").update({
+          statement_report_summary: String(body.statementReportSummary || "").slice(0, 20000) || null,
+          updated_at: nowIso,
+        }).eq("id", issueId);
+        issue.statement_report_summary = String(body.statementReportSummary || "").slice(0, 20000) || null;
+      }
+      const sent = await requestQcStatement(admin, {
+        issue,
+        actorId: actor.id,
+        actorName: actor.name,
+        supplemental: action === "request_statement_supplemental",
+        resend: action === "request_statement",
+      });
+      if (!sent.ok) return json({ ok: false, error: sent.error || "Could not request statement." }, 400);
+      const { data: fresh } = await admin.from("qc_issues").select("*").eq("id", issueId).maybeSingle();
+      return json({ ok: true, issue: fresh, emailed: sent.emailed, smsSent: sent.smsSent, emailError: sent.emailError, smsError: sent.smsError, reused: sent.reused });
+    }
+
+    if (action === "set_statement_required") {
+      const required = body?.statementRequired === true;
+      if (!required) {
+        await admin.from("qc_issues").update({
+          statement_required: false,
+          updated_at: nowIso,
+        }).eq("id", issueId);
+        await admin.from("qc_issue_events").insert({
+          issue_id: issueId,
+          action: "updated",
+          note: "Statement required cleared. Existing submissions were not changed.",
+          actor_id: actor.id,
+          actor_name: actor.name,
+        });
+        const { data: fresh } = await admin.from("qc_issues").select("*").eq("id", issueId).maybeSingle();
+        return json({ ok: true, issue: fresh });
+      }
+      const sent = await requestQcStatement(admin, {
+        issue,
+        actorId: actor.id,
+        actorName: actor.name,
+        resend: true,
+      });
+      if (!sent.ok) return json({ ok: false, error: sent.error || "Could not request statement." }, 400);
+      const { data: fresh } = await admin.from("qc_issues").select("*").eq("id", issueId).maybeSingle();
+      return json({ ok: true, issue: fresh, emailed: sent.emailed, smsSent: sent.smsSent });
+    }
 
     // Tag which checklist items this case relates to. Optional by design —
     // a scheduling complaint has no checklist item, and forcing a tag would

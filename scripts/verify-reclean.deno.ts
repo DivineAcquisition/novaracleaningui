@@ -104,6 +104,10 @@ assert(countsTowardQualityScore({ issue_type: "complaint", reclean_status: "appr
   "quality-miss re-clean does hit Score");
 assert(countsTowardQualityScore({ issue_type: "addon" }) === false, "addon rows are documentation, not failures");
 assert(countsTowardQualityScore({ issue_type: "site_finding" }) === false, "site findings are documentation, not failures");
+assert(countsTowardQualityScore({ issue_type: "serious_allegation", reclean_status: "none" }) === false,
+  "serious allegation under investigation does not hit Score");
+assert(countsTowardQualityScore({ issue_type: "complaint", score_exempt: true }) === false,
+  "score_exempt rows never hit Score");
 
 assert(countsTowardReliability({ reliability_neutral: true }) === false,
   "declining a re-clean offer is not a reliability event");
@@ -118,6 +122,10 @@ assert(intakeCreatesRecleanRequest({ issueType: "complaint", reportedVia: "custo
 assert(intakeCreatesRecleanRequest({ issueType: "damage", reportedVia: "va" }) === false, "damage does not auto-request");
 assert(intakeCreatesRecleanRequest({ issueType: "damage", reportedVia: "va", requestReclean: true }) === true, "explicit requestReclean overrides");
 assert(intakeCreatesRecleanRequest({ issueType: "complaint", reportedVia: "va", requestReclean: false }) === false, "explicit false suppresses");
+assert(intakeCreatesRecleanRequest({ issueType: "serious_allegation", reportedVia: "admin" }) === false,
+  "serious allegation never auto-requests a re-clean");
+assert(intakeCreatesRecleanRequest({ issueType: "serious_allegation", reportedVia: "admin", requestReclean: true }) === false,
+  "serious allegation ignores requestReclean override");
 
 assert(recleanSourceForIntake({ issueType: "complaint", reportedVia: "customer" }) === "review_gating", "feedback source");
 assert(recleanSourceForIntake({ issueType: "quality_flag", reportedVia: "va" }) === "internal_qc", "internal QC source");
