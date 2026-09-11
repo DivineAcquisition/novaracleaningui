@@ -125,7 +125,7 @@ export default function ProposalChecklistEditor({
       const out = await proposalApi.saveChecklists({ action: "save", catalog: local });
       onSaved(out.catalog);
       setLocal(out.catalog);
-      toast.success("Site findings saved — office and commercial walkthroughs share this list. STR skips the visit.");
+      toast.success("Site findings saved — office and commercial walkthroughs share this list. STR and property managers skip the visit.");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not save");
     } finally {
@@ -160,7 +160,7 @@ export default function ProposalChecklistEditor({
         <div>
           <h2 className="font-bold text-slate-900">Site findings</h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            One setup for office and commercial walkthroughs. STR properties skip the visit —
+            One setup for office and commercial walkthroughs. STR and property-manager portfolios skip the visit —
             they are residential and priced from bedrooms, bathrooms, and linen on the host record.
             Assigned-cleaner job lists stay on a separate token after dispatch.
           </p>

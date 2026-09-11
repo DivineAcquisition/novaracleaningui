@@ -165,8 +165,9 @@ export const TERM_OPTIONS: Array<{ id: "month_to_month" | "annual"; label: strin
   { id: "annual", label: "12-month term", sub: "Locked rate for the year" },
 ];
 
-/** Canonical Commercial hub — old /admin/partner bookmarks redirect here. */
-export const COMMERCIAL_HUB_PATH = "/admin/commercial";
+/** Canonical Accounts hub — old /admin/commercial and /admin/partner bookmarks redirect here. */
+export const ACCOUNTS_HUB_PATH = "/admin/accounts";
+export const COMMERCIAL_HUB_PATH = ACCOUNTS_HUB_PATH;
 
 /** Dedicated Proposals tab — intake, onsite docs, send, and pipeline. */
 export const PROPOSALS_HUB_PATH = "/admin/proposals";

@@ -67,11 +67,14 @@ export async function PUT(req: Request): Promise<NextResponse> {
       key,
       label,
       shortLabel: String(body.shortLabel || label).slice(0, 40),
-      accountKind: body.accountKind === "str" || body.accountKind === "office" ? body.accountKind : "commercial",
+      accountKind:
+        body.accountKind === "str" || body.accountKind === "office" || body.accountKind === "property_manager"
+          ? body.accountKind
+          : "commercial",
       facilityTypeKey: String(body.facilityTypeKey || "other").slice(0, 40),
       sort: Math.max(...current.types.map((t) => t.sort), 0) + 10,
       active: true,
-      requiresWalkthrough: body.accountKind !== "str",
+      requiresWalkthrough: body.accountKind !== "str" && body.accountKind !== "property_manager",
     };
     const scopeTemplate = defaultScopeTemplateForType(key, def.accountKind);
     next = {

@@ -156,13 +156,18 @@ export default function CommercialProposalSend({
   initialAccountId = "",
   inProposalsHub = false,
   walkthroughsHref,
+  lockedAccountType,
 }: {
   initialAccountId?: string;
   inProposalsHub?: boolean;
   walkthroughsHref?: string;
+  lockedAccountType?: "commercial" | "office";
 }) {
   const [accountMode, setAccountMode] = useState<"new" | "existing">(initialAccountId ? "existing" : "new");
-  const [accountType, setAccountType] = useState<"commercial" | "office">("commercial");
+  const [accountType, setAccountType] = useState<"commercial" | "office">(lockedAccountType || "commercial");
+  useEffect(() => {
+    if (lockedAccountType) setAccountType(lockedAccountType);
+  }, [lockedAccountType]);
   const [search, setSearch] = useState("");
   const [hits, setHits] = useState<AccountHit[]>([]);
   const [searching, setSearching] = useState(false);
@@ -220,7 +225,7 @@ export default function CommercialProposalSend({
     setCity(a.city || "");
     setStateVal(a.state || "");
     setZipCode(a.zip_code || "");
-    if (a.account_type === "office" || a.account_type === "commercial") {
+    if (!lockedAccountType && (a.account_type === "office" || a.account_type === "commercial")) {
       setAccountType(a.account_type);
     }
     if (a.recurring_frequency) {
@@ -491,11 +496,12 @@ export default function CommercialProposalSend({
           </span>
         </div>
         <h2 className="font-jakarta text-[22px] leading-tight font-bold tracking-tight text-slate-900">
-          Send a commercial proposal
+          {accountType === "office" ? "Send an office proposal" : "Send a commercial proposal"}
         </h2>
         <p className="text-sm text-slate-500 mt-1 max-w-2xl">
-          Same motion as Internal Booking: type the business, site, rate, and recipient — then send.
-          An existing account is optional prefill. No client portal login is required.
+          {accountType === "office"
+            ? "Walk-in office quote: type the company, site, rate, and decision-maker — then send. They accept, sign, and set invoice or Stripe Pre-Auth."
+            : "Walk-in commercial quote for retail, medical, gym, warehouse, and the rest. Same accept → sign → pay motion as office."}
         </p>
       </header>
 
@@ -524,24 +530,26 @@ export default function CommercialProposalSend({
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              {(["commercial", "office"] as const).map((id) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setAccountType(id)}
-                  className={cn(
-                    "text-left rounded-xl border-2 bg-white p-3 transition-all",
-                    accountType === id ? "border-violet-500 shadow-sm" : "border-slate-200 hover:border-violet-300",
-                  )}
-                >
-                  <p className="text-sm font-semibold text-slate-900">{id === "office" ? "Office" : "Commercial"}</p>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    {id === "office" ? "Corporate and coworking" : "Retail, medical, gym, warehouse…"}
-                  </p>
-                </button>
-              ))}
-            </div>
+            {!lockedAccountType && (
+              <div className="grid grid-cols-2 gap-2">
+                {(["commercial", "office"] as const).map((id) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setAccountType(id)}
+                    className={cn(
+                      "text-left rounded-xl border-2 bg-white p-3 transition-all",
+                      accountType === id ? "border-violet-500 shadow-sm" : "border-slate-200 hover:border-violet-300",
+                    )}
+                  >
+                    <p className="text-sm font-semibold text-slate-900">{id === "office" ? "Office" : "Commercial"}</p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      {id === "office" ? "Corporate and coworking" : "Retail, medical, gym, warehouse…"}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            )}
 
             {accountMode === "existing" && (
               <div className="space-y-2">

@@ -97,6 +97,12 @@ export async function GET(req: Request): Promise<NextResponse> {
     return {
       ...r,
       requires_walkthrough: typeRequiresWalkthrough(type),
+      pm_account_id:
+        r.pm_account_id
+        || (r.intake_answers && typeof r.intake_answers === "object"
+          ? (r.intake_answers as { _pm_account_id?: string })._pm_account_id
+          : null)
+        || null,
       status_label: proposalRequestStatusLabel(status, type, String(r.property_type_key || "")),
       sites: sitesByRequest.get(String(r.id)) || [],
     };
@@ -163,10 +169,19 @@ export async function POST(req: Request): Promise<NextResponse> {
     ? [firstSite.address, firstSite.city, firstSite.state].filter(Boolean).join(", ")
     : String(request.requester_company || "your property");
 
+  const isPm = type?.accountKind === "property_manager";
   const mail = await sendProposalEmail(supabase, {
     to: String(request.requester_email),
-    subject: needsWalk ? settings.pendingEmailSubject : settings.pendingStrEmailSubject,
-    body: needsWalk ? settings.pendingEmailBody : settings.pendingStrEmailBody,
+    subject: needsWalk
+      ? settings.pendingEmailSubject
+      : isPm
+        ? settings.pendingPmEmailSubject
+        : settings.pendingStrEmailSubject,
+    body: needsWalk
+      ? settings.pendingEmailBody
+      : isPm
+        ? settings.pendingPmEmailBody
+        : settings.pendingStrEmailBody,
     vars: { name: String(request.requester_name || ""), address },
     templateKey: "commercial_proposal_intake",
     trigger: "proposal-request.intake",
@@ -186,7 +201,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       subject: `New proposal request — ${request.requester_name}`,
       body:
         `A proposal request was submitted for ${address} (${request.property_type_key}). ` +
-        `Status: ${needsWalk ? "Pending — Assigning Walkthrough Agent" : "Pending — Price host properties (no walkthrough)"}. This is not a booking.`,
+        `Status: ${needsWalk ? "Pending — Assigning Walkthrough Agent" : isPm ? "Pending — Price portfolio units (no walkthrough)" : "Pending — Price host properties (no walkthrough)"}. This is not a booking.`,
       vars: { name: "team", address },
       templateKey: "commercial_proposal_intake",
       role: "admin",

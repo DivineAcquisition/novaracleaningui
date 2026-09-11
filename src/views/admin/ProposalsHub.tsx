@@ -22,8 +22,9 @@ import ProposalRequestQueue from "@/views/admin/ProposalRequestQueue";
 import ProposalChecklistEditor from "@/views/admin/ProposalChecklistEditor";
 import ProposalRequestSettingsView from "@/views/admin/ProposalRequestSettings";
 import CommercialWalkthroughs from "@/views/admin/CommercialWalkthroughs";
-import CommercialProposalSend from "@/views/admin/CommercialProposalSend";
+import ProposalSendHub from "@/views/admin/ProposalSendHub";
 import CommercialProposals from "@/views/admin/CommercialProposals";
+import { isProposalSendFlow, type ProposalSendFlow } from "@/lib/proposal-offer-send";
 
 const TABS = [
   { id: "new", label: "New request", icon: RiFileEditLine },
@@ -43,6 +44,9 @@ export default function ProposalsHub() {
   const raw = searchParams?.get("tab") || "new";
   const tab: Tab = TABS.some((t) => t.id === raw) ? (raw as Tab) : "new";
   const accountFromUrl = searchParams?.get("account") || "";
+  const hostFromUrl = searchParams?.get("host") || "";
+  const pmFromUrl = searchParams?.get("pm") || "";
+  const flowFromUrl = searchParams?.get("flow") || "";
 
   const [catalog, setCatalog] = useState<ProposalChecklists>(DEFAULT_CHECKLISTS);
   const [settings, setSettings] = useState<ProposalRequestSettings>(DEFAULT_PROPOSAL_SETTINGS);
@@ -52,7 +56,12 @@ export default function ProposalsHub() {
   const setTab = (next: Tab, extra?: Record<string, string>) => {
     const params = new URLSearchParams(searchParams?.toString() || "");
     params.set("tab", next);
-    if (next !== "send") params.delete("account");
+    if (next !== "send") {
+      params.delete("account");
+      params.delete("host");
+      params.delete("pm");
+      params.delete("flow");
+    }
     if (extra) {
       for (const [k, v] of Object.entries(extra)) {
         if (v) params.set(k, v);
@@ -92,11 +101,11 @@ export default function ProposalsHub() {
             Proposals
           </span>
           <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-400">
-            STR · Commercial · Office
+            STR · Office · Commercial · Property Manager
           </span>
         </div>
         <p className="text-sm text-muted-foreground">
-          Request → site findings (office / commercial) → firm price → send. STR skips the walkthrough — price the host record, then send host onboarding. A request never creates a job.
+          Request → site findings (office / commercial) → firm price → send. STR and property managers skip the walkthrough. Send mails the agreement and payment setup for that line of business. A request never creates a job.
         </p>
       </div>
 
@@ -132,15 +141,23 @@ export default function ProposalsHub() {
           rows={rows}
           loading={loading}
           onRefresh={() => void load()}
-          onSend={(accountId) => setTab("send", { account: accountId })}
+          onSend={(target) => setTab("send", {
+            flow: target.flow,
+            account: target.accountId || "",
+            host: target.hostId || "",
+            pm: target.pmAccountId || "",
+          })}
         />
       ) : tab === "price" ? (
         <CommercialWalkthroughs />
       ) : tab === "send" ? (
-        <CommercialProposalSend
-          initialAccountId={accountFromUrl}
-          inProposalsHub
+        <ProposalSendHub
+          flow={isProposalSendFlow(flowFromUrl) ? flowFromUrl : ""}
+          accountId={accountFromUrl}
+          hostId={hostFromUrl}
+          pmAccountId={pmFromUrl}
           walkthroughsHref={proposalsHubTab("price")}
+          onChooseFlow={(next: ProposalSendFlow | "") => setTab("send", { flow: next })}
         />
       ) : tab === "pipeline" ? (
         <CommercialProposals />

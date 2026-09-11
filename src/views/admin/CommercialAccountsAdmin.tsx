@@ -656,7 +656,7 @@ export function AccountSheet({ account, onClose, reload }: { account: AccountRow
           )}>
             <div className="flex items-center justify-between">
               <p className="text-xs font-bold text-slate-800">Certificate of insurance</p>
-              <a href="/admin/commercial?tab=compliance"
+              <a href="/admin/accounts?tab=compliance"
                 className="text-[11px] font-semibold text-violet-700 hover:underline">
                 Manage in Compliance →
               </a>

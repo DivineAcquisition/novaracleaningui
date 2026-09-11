@@ -2,16 +2,18 @@
 title: Proposals & Walkthroughs
 area: Proposals
 category: How the Tool Works
-summary: Taking a commercial or office enquiry from first call to a sent proposal, and what blocks each step.
+summary: Taking an STR, office, commercial, or property-manager enquiry from first call to a mailed offer, and what blocks each step.
 whoCanSee: Admins and VAs
 where: /admin/proposals
-lastVerified: 2026-08-31
+lastVerified: 2026-09-11
 order: 11
 ---
 
-When a business — an office, a warehouse, a gym, an Airbnb host — wants recurring cleaning,
-it does not go through the residential booking flow. It goes through Proposals: request, then
-a walkthrough, then a firm price, then a proposal document.
+When a business — an office, a warehouse, a gym, an Airbnb host, or a property manager —
+wants recurring cleaning, it does not go through the residential booking flow. It goes
+through Proposals: request, then (for office and commercial) a walkthrough and firm price,
+then Send. Send is the execution of the offer — the agreement and payment setup — and it
+has four unique mail paths.
 
 @screenshot proposals-hub
 
@@ -22,7 +24,7 @@ The tabs run left to right in the order work moves through them:
 | **New request** | Take the enquiry. |
 | **Queue** | Assign a walkthrough agent and track the visit. |
 | **Firm price** | Turn the findings into a price. |
-| **Send** | Build and send the proposal. |
+| **Send** | Pick STR, Office, Commercial, or Property Manager, then mail that offer. |
 | **Pipeline** | Track sent proposals to signature and billing. |
 | **Site findings** | Edit the walkthrough agent's findings. Crew lists are a separate job token. |
 | **Settings** | Requester email templates and walkthrough pay. |
@@ -163,14 +165,22 @@ as fast.
 
 ## Sending the proposal
 
-The Send tab builds the document: the account, the sites and their rates, the terms, and the
-recipient.
+Send opens with four cards. Each line of business mails a different offer:
 
-Recipient, cadence, and per-visit rates **pull from the walkthrough** (and the
-proposal request behind it). A client portal login is **not** required to send.
-If a field is empty — no firm price yet, no requester email on the account —
-type it on the Send tab. That override goes on this proposal; the walkthrough
-record is left as it was.
+| Flow | What gets mailed |
+|---|---|
+| **STR (Host)** | Host onboarding — partnership agreement + payment setup. Type the host and a turnover rate. No walkthrough document. |
+| **Office** | Commercial proposal document, then agreement and invoice or Stripe Pre-Auth. |
+| **Commercial** | Same accept → sign → pay motion as office, for retail / medical / gym / warehouse. |
+| **Property Manager** | Portfolio onboarding — standing unit rates, agreement, and payment. No walkthrough document. |
+
+A saved account is optional prefill, the same way Internal Booking does not require a saved
+customer. A client portal login is **not** required to send.
+
+For office and commercial, recipient, cadence, and per-visit rates **pull from the walkthrough**
+when an existing account has them. If a field is empty — no firm price yet, no requester email —
+type it on the Send tab. That override goes on this proposal; the walkthrough record is left as
+it was.
 
 **Frequency** options are Weekly (~4.3 visits a month), Twice a week (~8.7), 3× a week (~13),
 Monthly, or a custom cadence. **Term** is month-to-month or a 12-month locked rate. **Billing**
@@ -208,7 +218,7 @@ A site becomes **dispatch-eligible** only when all four of these are true:
 
 :::gate All four, or no work gets scheduled
 Missing any one means the site cannot be dispatched. The most commonly forgotten is the
-fourth — see [Commercial](/docs/commercial) for how insurance blocks work.
+fourth — see [Accounts](/docs/commercial) for how insurance blocks work.
 :::
 
 ## Checklists and settings

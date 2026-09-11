@@ -45,7 +45,7 @@ export const PROPOSAL_STATUS_LABELS: Record<ProposalRequestStatus, string> = {
   cancelled: "Cancelled",
 };
 
-export type AccountKind = "commercial" | "office" | "str";
+export type AccountKind = "commercial" | "office" | "str" | "property_manager";
 export type ChecklistFieldKind =
   | "number"
   | "integer"
@@ -86,8 +86,8 @@ export interface PropertyTypeDef {
   active: boolean;
   /**
    * Office and commercial get a tokenized site-findings visit.
-   * STR properties are residential — priced from beds/baths/linen on the
-   * host record, then host onboarding. No walkthrough agent.
+   * STR and property-manager portfolios are residential-priced — no
+   * walkthrough agent. Send is host onboarding or PM onboarding.
    */
   requiresWalkthrough: boolean;
 }
@@ -116,6 +116,8 @@ export interface ProposalRequestSettings {
   pendingEmailBody: string;
   pendingStrEmailSubject: string;
   pendingStrEmailBody: string;
+  pendingPmEmailSubject: string;
+  pendingPmEmailBody: string;
   scheduledEmailSubject: string;
   scheduledEmailBody: string;
   adminNotifyEmail: string;
@@ -197,6 +199,7 @@ export const ACCESS_OPTIONS: SelectOption[] = [
 
 export const DEFAULT_PROPERTY_TYPES: PropertyTypeDef[] = [
   { key: "str", label: "STR / Short-Term Rental", shortLabel: "STR", accountKind: "str", facilityTypeKey: "other", sort: 10, active: true, requiresWalkthrough: false },
+  { key: "property_manager", label: "Property Manager", shortLabel: "PM", accountKind: "property_manager", facilityTypeKey: "other", sort: 15, active: true, requiresWalkthrough: false },
   { key: "office", label: "Office", shortLabel: "Office", accountKind: "office", facilityTypeKey: "office", sort: 20, active: true, requiresWalkthrough: true },
   { key: "retail", label: "Commercial — Retail", shortLabel: "Retail", accountKind: "commercial", facilityTypeKey: "retail", sort: 30, active: true, requiresWalkthrough: true },
   { key: "warehouse", label: "Commercial — Warehouse / Industrial", shortLabel: "Warehouse", accountKind: "commercial", facilityTypeKey: "warehouse", sort: 40, active: true, requiresWalkthrough: true },
@@ -446,6 +449,10 @@ const INTAKE: Record<string, ChecklistItem[]> = {
       ],
     },
     { key: "typical_turnover_window", label: "Typical checkout → check-in window", kind: "text", help: "The hard deadline that will govern every future job." },
+  ],
+  property_manager: [
+    { key: "approx_units", label: "Approximate unit count", kind: "integer" },
+    { key: "portfolio_area", label: "Primary market / area", kind: "text", help: "City or metro the portfolio is concentrated in." },
   ],
   office: [
     { key: "approx_desks", label: "Approximate workstation / desk count", kind: "integer" },
@@ -773,6 +780,13 @@ export const DEFAULT_PROPOSAL_SETTINGS: ProposalRequestSettings = {
     "don't send a walkthrough agent. We'll set your per-turnover rates and send a host " +
     "onboarding link so you can review the partnership agreement and payment setup.\n\n" +
     "If anything about the property has changed, just reply to this email.",
+  pendingPmEmailSubject: "Your NovaraCleaning property-manager request — next steps",
+  pendingPmEmailBody:
+    "Hi [Name], thank you for requesting a proposal for [property/address]. Property-manager " +
+    "portfolios are priced per unit from bedrooms, bathrooms, and size — we don't send a " +
+    "walkthrough agent. We'll set standing rates and send an onboarding link so you can " +
+    "review the agreement and payment setup.\n\n" +
+    "If anything about the portfolio has changed, just reply to this email.",
   scheduledEmailSubject: "Your NovaraCleaning walkthrough is scheduled",
   scheduledEmailBody:
     "Hi [Name], a walkthrough agent has been assigned for [property/address]. The visit is " +
@@ -881,7 +895,7 @@ export function mergeChecklists(saved: unknown): ProposalChecklists {
       active: extra.active !== false,
       requiresWalkthrough: typeof extra.requiresWalkthrough === "boolean"
         ? extra.requiresWalkthrough
-        : extra.accountKind !== "str",
+        : extra.accountKind !== "str" && extra.accountKind !== "property_manager",
     });
   }
   types.sort((a, b) => a.sort - b.sort);
@@ -935,6 +949,8 @@ export function mergeProposalSettings(saved: unknown): ProposalRequestSettings {
       : DEFAULT_PROPOSAL_SETTINGS.tokenTtlHours,
     pendingStrEmailSubject: raw.pendingStrEmailSubject || DEFAULT_PROPOSAL_SETTINGS.pendingStrEmailSubject,
     pendingStrEmailBody: raw.pendingStrEmailBody || DEFAULT_PROPOSAL_SETTINGS.pendingStrEmailBody,
+    pendingPmEmailSubject: raw.pendingPmEmailSubject || DEFAULT_PROPOSAL_SETTINGS.pendingPmEmailSubject,
+    pendingPmEmailBody: raw.pendingPmEmailBody || DEFAULT_PROPOSAL_SETTINGS.pendingPmEmailBody,
   };
 }
 
@@ -951,7 +967,16 @@ export function typeRequiresWalkthrough(
 ): boolean {
   if (!type) return true;
   if (typeof type.requiresWalkthrough === "boolean") return type.requiresWalkthrough;
-  return type.accountKind !== "str";
+  return type.accountKind !== "str" && type.accountKind !== "property_manager";
+}
+
+export function proposalSendFlowForType(
+  type: Pick<PropertyTypeDef, "accountKind" | "key"> | null | undefined,
+): "str" | "office" | "commercial" | "property_manager" {
+  if (type?.accountKind === "str" || type?.key === "str") return "str";
+  if (type?.accountKind === "property_manager" || type?.key === "property_manager") return "property_manager";
+  if (type?.accountKind === "office" || type?.key === "office") return "office";
+  return "commercial";
 }
 
 export function proposalRequestStatusLabel(
@@ -961,9 +986,11 @@ export function proposalRequestStatusLabel(
 ): string {
   const skipWalk = type
     ? !typeRequiresWalkthrough(type)
-    : propertyTypeKey === "str";
+    : propertyTypeKey === "str" || propertyTypeKey === "property_manager";
   if (status === "pending_assign" && skipWalk) {
-    return "Pending — Price host properties";
+    return type?.accountKind === "property_manager" || propertyTypeKey === "property_manager"
+      ? "Pending — Price portfolio units"
+      : "Pending — Price host properties";
   }
   return PROPOSAL_STATUS_LABELS[status as ProposalRequestStatus] || status;
 }

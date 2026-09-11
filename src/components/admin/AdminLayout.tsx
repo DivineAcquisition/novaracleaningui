@@ -9,7 +9,7 @@
 //   3. Cleaners           (directory + onboarding + management)
 //   4. Dispatch           (staff jobs, offers, re-dispatch)
 //   5. Internal Booking   (VA-driven booking submission, formerly "CSR Form")
-//   6. Commercial         (walkthrough → proposal → billing → dispatch; STR and property-manager portfolios)
+//   6. Accounts           (clients · STR · portfolio · compliance · commercial jobs)
 //   8. Customers          (full account control)
 //   9. Operational Map    (cleaner coverage × booking heatmap)
 //  10. Payroll            (Stripe Connect cleaner payouts)
@@ -114,7 +114,7 @@ const NAV_ITEMS: NavItem[] = [
     title: "Proposals",
     url: "/admin/proposals",
     icon: RiMailSendLine,
-    description: "Requests · onsite docs · send · pipeline",
+    description: "Offers · send · agreement · payment",
   },
   {
     title: "Quotes",
@@ -131,10 +131,10 @@ const NAV_ITEMS: NavItem[] = [
     adminOnly: true,
   },
   {
-    title: "Commercial",
-    url: "/admin/commercial",
+    title: "Accounts",
+    url: "/admin/accounts",
     icon: RiHotelLine,
-    description: "Commercial jobs · cancel · reschedule",
+    description: "Clients · STR · portfolio · compliance",
     adminOnly: true,
   },
   {

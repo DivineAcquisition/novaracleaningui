@@ -236,12 +236,19 @@ export async function createProposalRequest(
   }
 
   const phone = s(input.requesterPhone, 40).replace(/\D/g, "");
-  const company = s(input.requesterCompany, 160) || (type.accountKind === "str" ? `${name}'s STR` : `${name}'s business`);
+  const company = s(input.requesterCompany, 160)
+    || (type.accountKind === "str"
+      ? `${name}'s STR`
+      : type.accountKind === "property_manager"
+        ? `${name}'s portfolio`
+        : `${name}'s business`);
   const statedSqft = n(input.clientStatedSqft);
   const firstAddress = siteLine(sites[0]);
 
-  // Prospective account — never a booking. STR also gets a host record.
+  // Prospective account — never a booking. STR also gets a host record;
+  // property managers get a portfolio account.
   let hostId: string | null = null;
+  let pmAccountId: string | null = null;
   if (type.accountKind === "str") {
     const { data: existingHost } = await supabase
       .from("hosts")
@@ -272,7 +279,43 @@ export async function createProposalRequest(
     }
   }
 
-  const accountType = type.accountKind === "office" ? "office" : type.accountKind === "str" ? "partnership" : "commercial";
+  if (type.accountKind === "property_manager") {
+    const { data: existingPm } = await supabase
+      .from("property_manager_accounts")
+      .select("id")
+      .ilike("email", email)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (existingPm?.id) {
+      pmAccountId = existingPm.id;
+      await supabase.from("property_manager_accounts").update({
+        company_name: company,
+        contact_name: name,
+        phone: phone || null,
+      }).eq("id", pmAccountId);
+    } else {
+      const { data: createdPm, error: pmErr } = await supabase
+        .from("property_manager_accounts")
+        .insert({
+          company_name: company,
+          contact_name: name,
+          email,
+          phone: phone || null,
+          created_by_name: input.actorName || null,
+        })
+        .select("id")
+        .maybeSingle();
+      if (pmErr) return { ok: false, error: pmErr.message, status: 400 };
+      pmAccountId = createdPm?.id ?? null;
+    }
+  }
+
+  const accountType = type.accountKind === "office"
+    ? "office"
+    : type.accountKind === "str" || type.accountKind === "property_manager"
+      ? "partnership"
+      : "commercial";
   const { data: existingAcct } = await supabase
     .from("business_accounts")
     .select("id")
@@ -301,6 +344,7 @@ export async function createProposalRequest(
       intake: input.intakeAnswers || {},
       lead_source: s(input.leadSource, 80) || null,
       start_timeframe: s(input.startTimeframe, 60) || null,
+      pm_account_id: pmAccountId,
     },
   };
 
@@ -318,32 +362,40 @@ export async function createProposalRequest(
   }
   if (!accountId) return { ok: false, error: "Could not create the prospective account.", status: 500 };
 
-  const { data: request, error: reqErr } = await supabase
+  const requestInsert: Record<string, unknown> = {
+    property_type_key: type.key,
+    status: "pending_assign",
+    requester_name: name,
+    requester_company: company,
+    requester_email: email,
+    requester_phone: phone || null,
+    requester_role: s(input.requesterRole, 80) || null,
+    desired_frequency: s(input.frequency, 60) || null,
+    desired_start_timeframe: s(input.startTimeframe, 60) || null,
+    lead_source: s(input.leadSource, 80) || null,
+    client_stated_sqft: statedSqft,
+    site_contact_name: s(input.siteContactName, 120) || name,
+    site_contact_phone: s(input.siteContactPhone, 40) || phone || null,
+    site_contact_email: s(input.siteContactEmail, 200) || email,
+    intake_answers: { ...(input.intakeAnswers || {}), _pm_account_id: pmAccountId },
+    notes: s(input.notes, 4000) || null,
+    business_account_id: accountId,
+    host_id: hostId,
+    pm_account_id: pmAccountId,
+    created_by: input.actorId || null,
+    created_by_name: input.actorName || null,
+  };
+  let { data: request, error: reqErr } = await supabase
     .from("proposal_requests")
-    .insert({
-      property_type_key: type.key,
-      status: "pending_assign",
-      requester_name: name,
-      requester_company: company,
-      requester_email: email,
-      requester_phone: phone || null,
-      requester_role: s(input.requesterRole, 80) || null,
-      desired_frequency: s(input.frequency, 60) || null,
-      desired_start_timeframe: s(input.startTimeframe, 60) || null,
-      lead_source: s(input.leadSource, 80) || null,
-      client_stated_sqft: statedSqft,
-      site_contact_name: s(input.siteContactName, 120) || name,
-      site_contact_phone: s(input.siteContactPhone, 40) || phone || null,
-      site_contact_email: s(input.siteContactEmail, 200) || email,
-      intake_answers: input.intakeAnswers || {},
-      notes: s(input.notes, 4000) || null,
-      business_account_id: accountId,
-      host_id: hostId,
-      created_by: input.actorId || null,
-      created_by_name: input.actorName || null,
-    })
+    .insert(requestInsert)
     .select("*")
     .maybeSingle();
+  if (reqErr && /pm_account_id|schema cache|could not find/i.test(reqErr.message || "")) {
+    const { pm_account_id: _drop, ...withoutPmCol } = requestInsert;
+    const retry = await supabase.from("proposal_requests").insert(withoutPmCol).select("*").maybeSingle();
+    request = retry.data;
+    reqErr = retry.error;
+  }
   if (reqErr || !request) {
     return { ok: false, error: reqErr?.message || "Could not create the proposal request.", status: 400 };
   }
@@ -497,7 +549,9 @@ export async function createProposalRequest(
 
   const walkCopy = typeRequiresWalkthrough(type)
     ? "Pending — assigning walkthrough agent. Onsite documentation tokenized. Not a booking."
-    : "Pending — price host properties, then send host onboarding. No walkthrough (STR is residential). Not a booking.";
+    : type.accountKind === "property_manager"
+      ? "Pending — price portfolio units, then send property-manager onboarding. No walkthrough. Not a booking."
+      : "Pending — price host properties, then send host onboarding. No walkthrough (STR is residential). Not a booking.";
 
   await supabase.from("events").insert({
     event_type: "proposal_request.created",
@@ -512,6 +566,7 @@ export async function createProposalRequest(
       proposal_request_id: requestId,
       business_account_id: accountId,
       host_id: hostId,
+      pm_account_id: pmAccountId,
       property_type_key: type.key,
       site_count: sites.length,
       requires_walkthrough: typeRequiresWalkthrough(type),

@@ -165,7 +165,9 @@ export default function ProposalRequestIntake({
         <Section n={1} title="Property type">
           <p className="text-xs text-slate-500 -mt-1">
             {type && !typeRequiresWalkthrough(type)
-              ? "STR properties skip the walkthrough — they are residential. Intake stays light; you price beds, baths, and linen on the host record, then send host onboarding."
+              ? type.accountKind === "property_manager"
+                ? "Property-manager portfolios skip the walkthrough. Intake stays light; you price units on the portfolio, then send PM onboarding."
+                : "STR properties skip the walkthrough — they are residential. Intake stays light; you price beds, baths, and linen on the host record, then send host onboarding."
               : "Routes the walkthrough agent's site findings (not the crew job list). Intake stays light — the on-site visit captures the rest."}
           </p>
           <div className="grid sm:grid-cols-2 gap-2">
@@ -185,7 +187,9 @@ export default function ProposalRequestIntake({
                   <p className="text-[11px] text-slate-500 mt-0.5">
                     {t.accountKind === "str"
                       ? "No walkthrough — host record, then host onboarding"
-                      : `Prospective ${t.accountKind} account · site findings visit`}
+                      : t.accountKind === "property_manager"
+                        ? "No walkthrough — portfolio account, then PM onboarding"
+                        : `Prospective ${t.accountKind} account · site findings visit`}
                   </p>
                 </button>
               );
