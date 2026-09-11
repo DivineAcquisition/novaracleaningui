@@ -91,7 +91,7 @@ export function JobDayGuides({
             <img
               src={guide.image}
               alt={guide.alt}
-              loading="lazy"
+              loading="eager"
               onError={() => setImageBroken(true)}
               className="w-full"
             />

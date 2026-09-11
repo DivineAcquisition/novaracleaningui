@@ -254,12 +254,6 @@ function freshCleaner(): Record<string, unknown> {
   };
 }
 
-// A valid 1×1 PNG. The guide graphics are served from this so the portal
-// checks behave the same whether or not the real artwork has landed yet; the
-// artwork's presence is reported separately by checkGuides().
-const PNG_1PX =
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
-
 function minimalPdf(): Buffer {
   const stream = Buffer.from("BT /F1 24 Tf 72 720 Td (Independent Contractor Agreement) Tj ET\n");
   const objs = [
@@ -420,15 +414,12 @@ async function checkPortal(browser: Browser): Promise<void> {
   await mountHarness(page, row);
 
   let guideImagesBroken = false;
-  await page.route("**/onboarding/*", (route) =>
-    guideImagesBroken
-      ? route.abort()
-      : route.fulfill({
-          status: 200,
-          contentType: "image/png",
-          body: Buffer.from(PNG_1PX, "base64"),
-        }),
-  );
+  await page.route("**/onboarding/**", (route, request) => {
+    const url = request.url();
+    if (!/\.(png|jpe?g|webp)$/i.test(url)) return route.continue();
+    if (guideImagesBroken) return route.abort();
+    return route.continue();
+  });
 
   await page.goto(`${BASE_URL}/cleaner/ob-portal`, { waitUntil: "networkidle" });
   await page.getByText("Welcome, Imani!").waitFor({ timeout: 20_000 });
@@ -537,9 +528,11 @@ async function checkPortal(browser: Browser): Promise<void> {
 
   // ── Dress code: must tick agree ──
   const dress = ONBOARDING_GUIDES.find((g) => g.id === "dress_code")!;
+  const dressImg = page.locator(`main img[alt="${dress.alt}"]`);
+  await dressImg.scrollIntoViewIfNeeded();
   check(
     "the dress code graphic is on the page",
-    await page.locator(`main img[alt="${dress.alt}"]`).isVisible(),
+    await dressImg.isVisible(),
     true,
   );
   const agreeBtn = page.getByRole("button", { name: dress.actionLabel });
