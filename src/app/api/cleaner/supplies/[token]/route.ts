@@ -5,7 +5,10 @@ import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import {
   SUPPLY_ITEMS,
   SUPPLY_READY_PERCENT,
+  sanitizeSupplyInventory,
   scoreSupplyInventory,
+  supplySubmissionEvent,
+  supplySubmissionPatch,
   type SupplyInventory,
 } from "@/lib/cleaner-supplies";
 
@@ -118,47 +121,29 @@ export async function POST(req: Request, ctx: Ctx): Promise<NextResponse> {
     );
   }
 
-  const allowed = new Set(SUPPLY_ITEMS.map((i) => i.id));
-  const ownedIn = body.owned && typeof body.owned === "object" ? body.owned : {};
-  const inventory: SupplyInventory = {};
-  for (const [id, val] of Object.entries(ownedIn)) {
-    if (!allowed.has(id)) continue;
-    inventory[id] = val === true;
-  }
-
+  const inventory = sanitizeSupplyInventory(body.owned);
   const now = new Date().toISOString();
   const score = scoreSupplyInventory(inventory);
 
   const { error: upErr } = await (supabase.from as any)("cleaners")
-    .update({
-      supply_inventory: inventory,
-      supply_checklist_submitted_at: now,
-      ob_supplies_checklist_viewed: true,
-      ob_supplies_checklist_viewed_at: now,
-      updated_at: now,
-    })
+    .update(supplySubmissionPatch(inventory, now))
     .eq("id", cleaner.id);
 
   if (upErr) {
     return NextResponse.json({ error: upErr.message }, { status: 500 });
   }
 
-  await supabase.from("events").insert({
-    event_type: "cleaner.supply_checklist_submitted",
-    cleaner_id: cleaner.id,
-    source: "cleaner-supplies-token",
-    summary:
-      `${cleaner.first_name || "Cleaner"} submitted supply checklist — ` +
-      `${score.ownedNeeded}/${score.totalNeeded} job-needed (${score.percent}%, ready=${score.ready})`,
-    data: {
-      owned_needed: score.ownedNeeded,
-      total_needed: score.totalNeeded,
-      percent: score.percent,
-      ready: score.ready,
-      threshold: score.threshold,
-      inventory,
-    },
-  }).then(() => undefined, () => undefined);
+  await supabase
+    .from("events")
+    .insert(
+      supplySubmissionEvent({
+        cleanerId: cleaner.id,
+        firstName: cleaner.first_name,
+        inventory,
+        source: "cleaner-supplies-token",
+      }),
+    )
+    .then(() => undefined, () => undefined);
 
   return NextResponse.json({
     ok: true,
