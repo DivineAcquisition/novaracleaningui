@@ -53,6 +53,9 @@ import RecleanWorkflow from "@/components/admin/RecleanWorkflow";
 import { ChecklistItemPicker } from "@/components/checklists/ChecklistItemPicker";
 import QcStatementPanel, { statementStatusLabel } from "@/components/admin/QcStatementPanel";
 import { statementRequiredByDefault } from "@/lib/qc-statement";
+import { QcIssueMediaGrid, QcIssueMediaPicker } from "@/components/qc/QcIssueMedia";
+import { legacyResolutionHttpUrls, normalizeQcIssueMedia, type QcIssueMediaFile } from "@/lib/qc-issue-media";
+import { uploadQcIssueMedia } from "@/lib/qc-issue-media-client";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -84,6 +87,7 @@ interface IssueRow {
   reported_by_name: string | null;
   resolution_note: string | null;
   resolution_photos: string[] | null;
+  evidence_files?: QcIssueMediaFile[] | null;
   resolved_at: string | null;
   resolved_by_name: string | null;
   created_at: string;
@@ -650,7 +654,7 @@ function IssueSheet({ issue, doc, onClose, reload }: {
         .order("created_at", { ascending: true });
       setEvents((data || []) as IssueEvent[]);
     })();
-  }, [issue.id]);
+  }, [issue.id, issue.updated_at]);
 
   // Everyone assigned to this job — the pool the attach picker draws from.
   useEffect(() => {
@@ -764,6 +768,32 @@ function IssueSheet({ issue, doc, onClose, reload }: {
 
   const beforePhotos = (doc?.before_photos || []).filter((u) => u.startsWith("http"));
   const afterPhotos = (doc?.after_photos || []).filter((u) => u.startsWith("http"));
+  const caseMedia = normalizeQcIssueMedia(issue.evidence_files);
+  const legacyMedia = legacyResolutionHttpUrls(issue.resolution_photos);
+
+  const addCaseMedia = async (next: QcIssueMediaFile[]) => {
+    void next;
+    await reload();
+  };
+
+  const removeCaseMedia = async (mediaId: string) => {
+    setBusy("media");
+    try {
+      const { data, error } = await supabase.functions.invoke("qc-issues", {
+        body: { action: "remove_evidence", issueId: issue.id, mediaId },
+      });
+      if (error) throw error;
+      if ((data as { ok?: boolean; error?: string })?.ok === false) {
+        throw new Error((data as { error?: string }).error || "Couldn't remove that file");
+      }
+      toast.success("Removed from this QC report.");
+      await reload();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't remove that file");
+    } finally {
+      setBusy(null);
+    }
+  };
 
   return (
     <Sheet open onOpenChange={(o) => !o && onClose()}>
@@ -964,6 +994,27 @@ function IssueSheet({ issue, doc, onClose, reload }: {
             )}
           </div>
 
+          <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+            <p className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+              <RiCameraLine className="w-4 h-4 text-violet-600" /> Case photos &amp; videos
+            </p>
+            <p className="text-[11px] text-slate-500">
+              Extra photos and videos on this QC report — separate from the job&apos;s before/after. Kept with the case (not the 14-day job-photo purge).
+            </p>
+            <QcIssueMediaGrid
+              files={caseMedia}
+              httpUrls={legacyMedia}
+              onRemove={busy ? undefined : (id) => void removeCaseMedia(id)}
+              emptyHint="None on this case yet. Job before/after still live in Job evidence above."
+            />
+            <QcIssueMediaPicker
+              issueId={issue.id}
+              attached={caseMedia}
+              onChange={(next) => void addCaseMedia(next)}
+              disabled={!!busy}
+            />
+          </div>
+
           {/* ─── Cleaners on this case + accountability ───────────────── */}
           <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-4 space-y-3">
             <p className="text-sm font-bold text-amber-900">Cleaners on this case</p>
@@ -1066,6 +1117,8 @@ function IssueSheet({ issue, doc, onClose, reload }: {
                       : e.action === "note" ? "added a note"
                       : e.action === "resolved" ? "resolved the issue"
                       : e.action === "escalated" ? "escalated the issue"
+                      : e.action === "evidence_added" ? "added photos or videos to this report"
+                      : e.action === "evidence_removed" ? "removed a photo or video from this report"
                       : `moved ${label(e.from_status || "?")} → ${label(e.to_status || "?")}`}
                     {e.note ? <span className="block text-slate-500 mt-0.5 whitespace-pre-wrap">“{e.note}”</span> : null}
                   </span>
@@ -1167,6 +1220,7 @@ function CreateIssueDialog({ onClose, reload }: { onClose: () => void; reload: (
   const [zoneName, setZoneName] = useState("");
   const [saving, setSaving] = useState(false);
   const [statementRequired, setStatementRequired] = useState(false);
+  const [pendingMedia, setPendingMedia] = useState<File[]>([]);
 
   useEffect(() => {
     const sev = issueType === "serious_allegation" ? "critical" : severity;
@@ -1216,6 +1270,21 @@ function CreateIssueDialog({ onClose, reload }: { onClose: () => void; reload: (
       });
       if (error) throw error;
       if ((data as { ok?: boolean; error?: string })?.ok === false) throw new Error((data as { error?: string }).error || "Failed");
+      const createdId = (data as { issue?: { id?: string } })?.issue?.id;
+      if (createdId && pendingMedia.length) {
+        let uploaded = 0;
+        for (const file of pendingMedia) {
+          try {
+            await uploadQcIssueMedia({ file, issueId: createdId });
+            uploaded += 1;
+          } catch (mediaErr) {
+            toast.error(mediaErr instanceof Error ? mediaErr.message : "A photo/video didn't attach");
+          }
+        }
+        if (uploaded) {
+          toast.success(`Attached ${uploaded} photo${uploaded === 1 ? "" : "s"} or video${uploaded === 1 ? "" : "s"} to the case.`);
+        }
+      }
       toast.success(
         issueType === "serious_allegation"
           ? "Incident case opened under investigation. No Score penalty. No automatic accountability action."
@@ -1306,6 +1375,19 @@ function CreateIssueDialog({ onClose, reload }: { onClose: () => void; reload: (
                 );
               })()}
               <Textarea placeholder="Details — what the customer said, what was found…" value={description} onChange={(e) => setDescription(e.target.value)} rows={4} />
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-semibold text-slate-500">Photos &amp; videos on this report (optional)</p>
+                <input
+                  type="file"
+                  accept="image/*,video/*"
+                  multiple
+                  className="block w-full text-xs text-slate-600"
+                  onChange={(e) => setPendingMedia(Array.from(e.target.files || []))}
+                />
+                {pendingMedia.length > 0 && (
+                  <p className="text-[11px] text-slate-500">{pendingMedia.length} file{pendingMedia.length === 1 ? "" : "s"} will upload after the case is created.</p>
+                )}
+              </div>
               {issueType === "serious_allegation" && (
                 <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-900 space-y-1">
                   <p className="font-semibold">Highest severity. Status will be Open — Under Investigation.</p>
@@ -1876,6 +1958,14 @@ export function CaseFileSheet({ bookingId, caseRef, onClose }: { bookingId: stri
                     <span className="text-xs text-slate-400 ml-auto">{fmtDT(i.created_at)}</span>
                   </div>
                   <p className="font-medium text-slate-800 mt-1">{i.title}</p>
+                  {(normalizeQcIssueMedia(i.evidence_files).length > 0 || legacyResolutionHttpUrls(i.resolution_photos).length > 0) && (
+                    <div className="mt-2">
+                      <QcIssueMediaGrid
+                        files={normalizeQcIssueMedia(i.evidence_files)}
+                        httpUrls={legacyResolutionHttpUrls(i.resolution_photos)}
+                      />
+                    </div>
+                  )}
                   {cf.issue_events.filter((e) => e.issue_id === i.id).map((e, j) => (
                     <p key={j} className="text-[11px] text-slate-500 mt-0.5">
                       {fmtDT(String(e.created_at))} — <strong>{String(e.actor_name || "System")}</strong> {String(e.action)}{e.note ? `: “${String(e.note)}”` : ""}

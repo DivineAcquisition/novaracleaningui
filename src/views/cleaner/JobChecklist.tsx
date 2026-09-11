@@ -35,6 +35,8 @@ import { toast } from "sonner";
 import { SEO } from "@/components/SEO";
 import { cn } from "@/lib/utils";
 import { isZoneStatus, type ZoneCompletion, type ZoneStatus } from "@/lib/site-zones";
+import { QcIssueMediaPicker } from "@/components/qc/QcIssueMedia";
+import type { QcIssueMediaFile } from "@/lib/qc-issue-media";
 
 // ─── Types (mirror cleaner-job-checklist edge fn payload) ────────────────
 interface ChecklistSection {
@@ -219,6 +221,7 @@ export default function CleanerJobChecklistPage() {
   const [issueOpen, setIssueOpen] = useState(false);
   const [issueText, setIssueText] = useState("");
   const [issueSending, setIssueSending] = useState(false);
+  const [issueEvidence, setIssueEvidence] = useState<QcIssueMediaFile[]>([]);
   const [skipKey, setSkipKey] = useState<string | null>(null);
   const [skipReason, setSkipReason] = useState("");
   const [scopeOpen, setScopeOpen] = useState(false);
@@ -430,6 +433,7 @@ export default function CleanerJobChecklistPage() {
           token,
           description,
           zoneName: issueZone || undefined,
+          evidence: issueEvidence,
         },
       });
       if (invokeError) throw invokeError;
@@ -440,6 +444,7 @@ export default function CleanerJobChecklistPage() {
       setIssueOpen(false);
       setIssueText("");
       setIssueZone("");
+      setIssueEvidence([]);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't send report — call dispatch instead");
     } finally {
@@ -1323,11 +1328,17 @@ export default function CleanerJobChecklistPage() {
                   </select>
                 )}
                 <textarea
-                  placeholder="What's wrong? Be specific — dispatch acts on exactly what you write here."
+                  placeholder="What's wrong? Be specific — dispatch acts on exactly what you write here. Add a photo or short video if you have it."
                   value={issueText}
                   onChange={(e) => setIssueText(e.target.value)}
                   rows={3}
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-300"
+                />
+                <QcIssueMediaPicker
+                  token={token}
+                  attached={issueEvidence}
+                  onChange={setIssueEvidence}
+                  disabled={issueSending}
                 />
                 <div className="flex gap-2">
                   <Button

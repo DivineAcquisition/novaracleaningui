@@ -62,6 +62,8 @@ import { Panel } from "@/components/ui/panel";
 import SuspensionBanner from "@/components/cleaner/SuspensionBanner";
 import { BRAND } from "@/lib/brand";
 import { parseServiceDate } from "@/lib/service-date";
+import { QcIssueMediaPicker } from "@/components/qc/QcIssueMedia";
+import type { QcIssueMediaFile } from "@/lib/qc-issue-media";
 
 interface JobPay {
   actualCents: number | null;
@@ -1364,6 +1366,7 @@ function QcReportBlock({ job }: { job: Job }) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
+  const [evidence, setEvidence] = useState<QcIssueMediaFile[]>([]);
 
   const submit = async () => {
     const description = text.trim();
@@ -1371,7 +1374,13 @@ function QcReportBlock({ job }: { job: Job }) {
     setSending(true);
     try {
       const { data, error } = await supabase.functions.invoke("qc-issues", {
-        body: { action: "field_report", token: job.qcToken, issueType, description },
+        body: {
+          action: "field_report",
+          token: job.qcToken,
+          issueType,
+          description,
+          evidence,
+        },
       });
       if (error) throw error;
       if ((data as { ok?: boolean; error?: string })?.ok === false) {
@@ -1381,6 +1390,7 @@ function QcReportBlock({ job }: { job: Job }) {
       setSent(true);
       setOpen(false);
       setText("");
+      setEvidence([]);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Couldn't send report — text dispatch instead");
     } finally {
@@ -1391,7 +1401,7 @@ function QcReportBlock({ job }: { job: Job }) {
   if (sent) {
     return (
       <p className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 text-center">
-        ✓ QC report submitted — the office has it with this job's photos attached as evidence.
+        ✓ QC report submitted — the office has it with this job&apos;s photos and any photos or videos you attached.
       </p>
     );
   }
@@ -1419,11 +1429,17 @@ function QcReportBlock({ job }: { job: Job }) {
             </SelectContent>
           </Select>
           <Textarea
-            placeholder="What happened? Be specific — this becomes part of the job's QC record with your photos as evidence."
+            placeholder="What happened? Be specific — this becomes part of the job's QC record. Add photos or a short video below."
             value={text}
             onChange={(e) => setText(e.target.value)}
             rows={3}
             className="text-sm"
+          />
+          <QcIssueMediaPicker
+            token={job.qcToken || undefined}
+            attached={evidence}
+            onChange={setEvidence}
+            disabled={sending}
           />
           <div className="flex gap-2">
             <Button size="sm" className="flex-1 h-9 bg-amber-600 hover:bg-amber-700 text-white" disabled={!text.trim() || sending} onClick={() => void submit()}>
