@@ -26,3 +26,9 @@ out
 *.sw?
 tsconfig.tsbuildinfo
 supabase/.temp/
+
+# Generated walkthrough recordings. The clips are published to the
+# contractor-tour-recordings bucket; src/lib/tours/recordings.manifest.json is
+# the committed record of what exists. Re-create with `npm run tours:record`.
+docs/contractor-tours/recordings/*.webm
+docs/contractor-tours/recordings/*.vtt
