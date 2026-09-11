@@ -527,18 +527,45 @@ export default function ContractorJobs() {
     };
   }, [cleanerId, loadJobs, scheduleRefetch]);
 
-  // Remembered lookup → auto-reload the portal on return visits.
+  // Remembered lookup → auto-reload the portal on return visits. Failing
+  // that, a signed-in contractor is looked up by their session email: the
+  // page stays usable without an account, but somebody who is already
+  // authenticated shouldn't have to type their own address to see their own
+  // jobs — and the pay walkthrough sends them straight here.
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(LOOKUP_STORAGE_KEY);
-      if (!saved) return;
-      const parsed = JSON.parse(saved) as { type: "email" | "phone"; value: string };
-      if (parsed?.value) {
+    let cancelled = false;
+
+    const remembered = (): boolean => {
+      try {
+        const saved = localStorage.getItem(LOOKUP_STORAGE_KEY);
+        if (!saved) return false;
+        const parsed = JSON.parse(saved) as { type: "email" | "phone"; value: string };
+        if (!parsed?.value) return false;
         setLookupType(parsed.type || "email");
         setLookupValue(parsed.value);
         void runLookup(parsed.type || "email", parsed.value);
+        return true;
+      } catch {
+        return false;
       }
-    } catch { /* ignore */ }
+    };
+
+    if (remembered()) return;
+
+    void supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        const email = data.session?.user?.email;
+        if (cancelled || !email) return;
+        setLookupType("email");
+        setLookupValue(email);
+        void runLookup("email", email);
+      })
+      .catch(() => null);
+
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
