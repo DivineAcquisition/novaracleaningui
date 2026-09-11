@@ -12,14 +12,13 @@ order: 12
 Commercial is admin-only. VAs are sent back to the dashboard with **"Admins only."**
 
 That's worth knowing before you go looking: VAs *can* use [Proposals](/docs/proposals) for
-walkthroughs, pricing and sending. What lives only here is account management, insurance
-compliance, commercial job booking and the STR side.
+walkthroughs, pricing and sending.
 
 @screenshot commercial-hub
 
-Commercial works like the Bookings tab: book the job, then keep the account next to it.
-The strip is **Book**, **Recurring**, **Accounts**, **Checklists**, **Compliance**, **STR**,
-and **Portfolio**.
+Commercial is the Bookings tab for commercial and office jobs: search, filter, open a
+job, then cancel / reschedule / refund / mark complete. **New commercial job** is the
+internal-booking form for a negotiated quote.
 
 Sending proposals, firm price, and the deal pipeline live on [Proposals](/docs/proposals).
 Old `?tab=send`, `?tab=pipeline`, and `?tab=walkthroughs` links still redirect there.
