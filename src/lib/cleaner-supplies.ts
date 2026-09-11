@@ -149,16 +149,141 @@ export function scoreSupplyInventory(inventory: SupplyInventory | null | undefin
   };
 }
 
-/** Account setup complete = phone verified + Stripe Connect started/ready. */
-export function isCleanerSetupComplete(c: {
+/** Keep only ids that exist in the catalog, so a stale form can't write junk. */
+export function sanitizeSupplyInventory(
+  submitted: Record<string, unknown> | null | undefined,
+): SupplyInventory {
+  const allowed = new Set(SUPPLY_ITEMS.map((i) => i.id));
+  const inventory: SupplyInventory = {};
+  for (const [id, val] of Object.entries(submitted || {})) {
+    if (allowed.has(id)) inventory[id] = val === true;
+  }
+  return inventory;
+}
+
+/**
+ * The exact columns a supply submission writes. Shared so the tokenized page
+ * and the onboarding portal leave a contractor's row in the same state — the
+ * portal step reads supply_checklist_submitted_at back as "done", and it can
+ * only do that if both writers set it.
+ */
+export function supplySubmissionPatch(
+  inventory: SupplyInventory,
+  now: string = new Date().toISOString(),
+) {
+  return {
+    supply_inventory: inventory,
+    supply_checklist_submitted_at: now,
+    ob_supplies_checklist_viewed: true,
+    ob_supplies_checklist_viewed_at: now,
+    updated_at: now,
+  };
+}
+
+/** Timeline entry for a submission, so admin sees it whichever route was used. */
+export function supplySubmissionEvent(args: {
+  cleanerId: string;
+  firstName?: string | null;
+  inventory: SupplyInventory;
+  source: string;
+}) {
+  const score = scoreSupplyInventory(args.inventory);
+  return {
+    event_type: "cleaner.supply_checklist_submitted",
+    cleaner_id: args.cleanerId,
+    source: args.source,
+    summary:
+      `${args.firstName || "Cleaner"} submitted supply checklist — ` +
+      `${score.ownedNeeded}/${score.totalNeeded} job-needed (${score.percent}%, ready=${score.ready})`,
+    data: {
+      owned_needed: score.ownedNeeded,
+      total_needed: score.totalNeeded,
+      percent: score.percent,
+      ready: score.ready,
+      threshold: score.threshold,
+      inventory: args.inventory,
+    },
+  };
+}
+
+// ─── Account setup sequence ──────────────────────────────────────────────
+//
+// One ordered definition of onboarding, shared by the portal a contractor
+// works through, the page a mailed setup link lands on, and the admin action
+// that sends that link. Before this existed each of those three decided the
+// order for itself, so they could disagree about what was left to do.
+
+export interface CleanerSetupState {
   phone_verified?: boolean | null;
+  supply_checklist_submitted_at?: string | null;
+  ob_supplies_checklist_viewed?: boolean | null;
   payouts_enabled?: boolean | null;
   ob_payouts_setup?: boolean | null;
   stripe_account_id?: string | null;
-}): boolean {
-  const stripe =
+}
+
+export type CleanerSetupStepId = "phone" | "supplies" | "payouts";
+
+export interface CleanerSetupStep {
+  id: CleanerSetupStepId;
+  /** Sentence-case label, reused in the portal and on the mailed link page. */
+  title: string;
+  done: boolean;
+}
+
+/**
+ * The supply checkoff counts as done once it has been submitted — not once a
+ * contractor owns SUPPLY_READY_PERCENT of the kit. Onboarding asks what they
+ * already have; it never waits on them buying a vacuum. Readiness stays
+ * visible to dispatch either way.
+ *
+ * ob_supplies_checklist_viewed is the legacy flag the old checklist page set
+ * alongside the timestamp, honoured here so contractors who did this before
+ * the timestamp existed are not asked twice.
+ */
+export function isSupplyChecklistSubmitted(c: CleanerSetupState): boolean {
+  return (
+    Boolean(c.supply_checklist_submitted_at) ||
+    Boolean(c.ob_supplies_checklist_viewed)
+  );
+}
+
+/** Stripe Connect reached, whether or not payouts have finished enabling. */
+export function isPayoutSetupStarted(c: CleanerSetupState): boolean {
+  return (
     Boolean(c.payouts_enabled) ||
     Boolean(c.ob_payouts_setup) ||
-    Boolean(c.stripe_account_id);
-  return Boolean(c.phone_verified) && stripe;
+    Boolean(c.stripe_account_id)
+  );
+}
+
+/**
+ * Onboarding in the order everything presents it.
+ *
+ * Payouts sit last deliberately: bank details and tax identity are the most
+ * friction in the flow and the step a contractor is most likely to abandon,
+ * so it is asked only once the cheap steps are behind them.
+ */
+export function cleanerSetupSteps(c: CleanerSetupState): CleanerSetupStep[] {
+  return [
+    {
+      id: "phone",
+      title: "Verify your phone number",
+      done: Boolean(c.phone_verified),
+    },
+    {
+      id: "supplies",
+      title: "Check off your supplies",
+      done: isSupplyChecklistSubmitted(c),
+    },
+    {
+      id: "payouts",
+      title: "Set up payouts (Stripe)",
+      done: isPayoutSetupStarted(c),
+    },
+  ];
+}
+
+export function isCleanerSetupComplete(c: CleanerSetupState): boolean {
+  return cleanerSetupSteps(c).every((s) => s.done);
 }
