@@ -49,5 +49,20 @@ jobs:
           fi
           echo "Access token present (${#SUPABASE_ACCESS_TOKEN} chars)."
 
+      # Docker edge-runtime bundling sometimes dies with exit 135 (SIGBUS)
+      # mid-fleet. Retry the whole deploy; unchanged functions are skipped
+      # by checksum so later attempts finish the remainder.
       - name: Deploy all edge functions
-        run: supabase functions deploy --project-ref "$PROJECT_REF"
+        run: |
+          set +e
+          for attempt in 1 2 3; do
+            echo "Deploy attempt ${attempt}/3"
+            supabase functions deploy --project-ref "$PROJECT_REF"
+            status=$?
+            if [ "$status" -eq 0 ]; then
+              exit 0
+            fi
+            echo "Deploy attempt ${attempt} failed with exit ${status}"
+            sleep $((attempt * 15))
+          done
+          exit 1
