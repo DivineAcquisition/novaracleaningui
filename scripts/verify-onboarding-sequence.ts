@@ -260,12 +260,41 @@ function freshCleaner(): Record<string, unknown> {
 const PNG_1PX =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
 
-// Tiny valid PDF so PdfViewer has something to fetch when the portal opens
-// the agreement step. The real document is streamed from DocuSeal in prod.
-const MINIMAL_PDF = Buffer.from(
-  "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]>>endobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000052 00000 n \n0000000101 00000 n \ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n178\n%%EOF\n",
-  "utf8",
-);
+function minimalPdf(): Buffer {
+  const stream = Buffer.from("BT /F1 24 Tf 72 720 Td (Independent Contractor Agreement) Tj ET\n");
+  const objs = [
+    Buffer.from("1 0 obj<< /Type /Catalog /Pages 2 0 R >>endobj\n"),
+    Buffer.from("2 0 obj<< /Type /Pages /Count 1 /Kids [3 0 R] >>endobj\n"),
+    Buffer.from(
+      "3 0 obj<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>endobj\n",
+    ),
+    Buffer.concat([
+      Buffer.from(`4 0 obj<< /Length ${stream.length} >>\nstream\n`),
+      stream,
+      Buffer.from("endstream\nendobj\n"),
+    ]),
+    Buffer.from("5 0 obj<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>endobj\n"),
+  ];
+  const header = Buffer.from("%PDF-1.4\n");
+  const chunks: Buffer[] = [header];
+  const offsets = [0];
+  let pos = header.length;
+  for (const obj of objs) {
+    offsets.push(pos);
+    chunks.push(obj);
+    pos += obj.length;
+  }
+  const xrefStart = pos;
+  let xref = "xref\n0 6\n0000000000 65535 f \n";
+  for (const off of offsets.slice(1)) {
+    xref += `${String(off).padStart(10, "0")} 00000 n \n`;
+  }
+  const trailer = `trailer<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF\n`;
+  chunks.push(Buffer.from(xref), Buffer.from(trailer));
+  return Buffer.concat(chunks);
+}
+
+const MINIMAL_PDF = minimalPdf();
 
 const CORS = {
   "access-control-allow-origin": "*",
