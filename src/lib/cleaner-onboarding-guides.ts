@@ -27,6 +27,10 @@ export interface OnboardingGuide {
   points: string[];
   /** Optional closing line under the graphic. */
   footnote?: string;
+  /** Button label on the onboarding step. */
+  actionLabel: string;
+  /** When set, the contractor must tick this before the action enables. */
+  agreeLabel?: string;
 }
 
 export const ONBOARDING_GUIDES: OnboardingGuide[] = [
@@ -50,6 +54,8 @@ export const ONBOARDING_GUIDES: OnboardingGuide[] = [
       "The working test: if you would not be comfortable bending down to pick something up in " +
       "front of a client, the outfit is not right for the job. This is about the client's " +
       "comfort in their own home and your own safety while working — not style.",
+    actionLabel: "I agree to follow this dress code",
+    agreeLabel: "I agree to wear this on every Novara job.",
   },
   {
     id: "job_day",
@@ -68,6 +74,7 @@ export const ONBOARDING_GUIDES: OnboardingGuide[] = [
     ],
     footnote:
       "The walkthroughs on your Training page cover each of these steps in the real app.",
+    actionLabel: "I've read the job-day journey",
   },
 ];
 

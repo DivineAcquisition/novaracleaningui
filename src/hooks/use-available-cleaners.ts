@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { isCleanerReadyForFirstJob } from '@/lib/cleaner-supplies';
 
 export interface AvailableCleaner {
   id: string;
@@ -50,7 +51,14 @@ export function useAvailableCleaners(options: UseAvailableCleanersOptions = {}) 
             completed_bookings,
             service_zip_codes,
             skillset,
-            status_today
+            status_today,
+            ob_agreement_signed,
+            phone_verified,
+            supply_checklist_submitted_at,
+            ob_supplies_checklist_viewed,
+            ob_dress_code_ack,
+            ob_job_day_guides_ack,
+            ob_training_complete
           `)
           .eq('approved', true)
           .eq('available_for_bookings', true)
@@ -61,7 +69,9 @@ export function useAvailableCleaners(options: UseAvailableCleanersOptions = {}) 
         if (cleanersError) throw cleanersError;
 
         // Filter by zip code if provided
-        let filteredCleaners = cleanersData || [];
+        let filteredCleaners = (cleanersData || []).filter((cleaner) =>
+          isCleanerReadyForFirstJob(cleaner),
+        );
         if (zipCode) {
           filteredCleaners = filteredCleaners.filter(
             (cleaner) =>

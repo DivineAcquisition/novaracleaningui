@@ -214,16 +214,26 @@ export function supplySubmissionEvent(args: {
 // order for itself, so they could disagree about what was left to do.
 
 export interface CleanerSetupState {
+  ob_agreement_signed?: boolean | null;
   phone_verified?: boolean | null;
-  ob_job_day_guides_ack?: boolean | null;
   supply_checklist_submitted_at?: string | null;
   ob_supplies_checklist_viewed?: boolean | null;
+  ob_dress_code_ack?: boolean | null;
+  ob_job_day_guides_ack?: boolean | null;
+  ob_training_complete?: boolean | null;
+  completed_bookings?: number | null;
   payouts_enabled?: boolean | null;
   ob_payouts_setup?: boolean | null;
   stripe_account_id?: string | null;
 }
 
-export type CleanerSetupStepId = "phone" | "guides" | "supplies" | "payouts";
+export type CleanerSetupStepId =
+  | "agreement"
+  | "phone"
+  | "supplies"
+  | "dress_code"
+  | "job_day"
+  | "training";
 
 export interface CleanerSetupStep {
   id: CleanerSetupStepId;
@@ -249,15 +259,33 @@ export function isSupplyChecklistSubmitted(c: CleanerSetupState): boolean {
   );
 }
 
+export function isAgreementSigned(c: CleanerSetupState): boolean {
+  return Boolean(c.ob_agreement_signed);
+}
+
 /**
- * The dress code and job-day graphics have been read.
+ * The contractor agreed to the dress code, not merely saw it.
  *
- * One acknowledgment covers both: they are shown together as a single step,
- * and splitting the record would let a contractor sit half-acknowledged
- * forever with nothing able to describe that state usefully.
+ * Contractors who acknowledged the old combined "guides" step are treated as
+ * having agreed: that step showed the same graphic, and asking them to tick
+ * a new box for the same picture is theatre.
  */
-export function isJobDayGuidesAcknowledged(c: CleanerSetupState): boolean {
+export function isDressCodeAgreed(c: CleanerSetupState): boolean {
+  return Boolean(c.ob_dress_code_ack) || Boolean(c.ob_job_day_guides_ack);
+}
+
+/** The job-day journey graphic has been read. */
+export function isJobDayAcknowledged(c: CleanerSetupState): boolean {
   return Boolean(c.ob_job_day_guides_ack);
+}
+
+/** @deprecated Use isJobDayAcknowledged — kept so older imports keep compiling. */
+export function isJobDayGuidesAcknowledged(c: CleanerSetupState): boolean {
+  return isJobDayAcknowledged(c);
+}
+
+export function isRequiredTrainingComplete(c: CleanerSetupState): boolean {
+  return Boolean(c.ob_training_complete);
 }
 
 /** Stripe Connect reached, whether or not payouts have finished enabling. */
@@ -272,25 +300,23 @@ export function isPayoutSetupStarted(c: CleanerSetupState): boolean {
 /**
  * Onboarding in the order everything presents it.
  *
- * The job-day graphics come before the supply checkoff because they are what
- * makes the checkoff make sense: you cannot usefully answer "what kit do you
- * own" until you have seen what a job actually asks of you.
- *
- * Payouts sit last deliberately: bank details and tax identity are the most
- * friction in the flow and the step a contractor is most likely to abandon,
- * so it is asked only once the cheap steps are behind them.
+ * Agreement first: nothing else is asked until the contractor is actually
+ * engaged. Training last: the videos only make sense once they have seen
+ * the dress code, the kit, and what a job day looks like. Payouts stay on
+ * the dashboard — they are how we pay, not how someone becomes eligible
+ * for a first job.
  */
 export function cleanerSetupSteps(c: CleanerSetupState): CleanerSetupStep[] {
   return [
     {
+      id: "agreement",
+      title: "Sign the contractor agreement",
+      done: isAgreementSigned(c),
+    },
+    {
       id: "phone",
       title: "Verify your phone number",
       done: Boolean(c.phone_verified),
-    },
-    {
-      id: "guides",
-      title: "Read the dress code and job-day guide",
-      done: isJobDayGuidesAcknowledged(c),
     },
     {
       id: "supplies",
@@ -298,13 +324,47 @@ export function cleanerSetupSteps(c: CleanerSetupState): CleanerSetupStep[] {
       done: isSupplyChecklistSubmitted(c),
     },
     {
-      id: "payouts",
-      title: "Set up payouts (Stripe)",
-      done: isPayoutSetupStarted(c),
+      id: "dress_code",
+      title: "Agree to the dress code",
+      done: isDressCodeAgreed(c),
+    },
+    {
+      id: "job_day",
+      title: "Read the job-day journey",
+      done: isJobDayAcknowledged(c),
+    },
+    {
+      id: "training",
+      title: "Watch the training videos",
+      done: isRequiredTrainingComplete(c),
     },
   ];
 }
 
 export function isCleanerSetupComplete(c: CleanerSetupState): boolean {
   return cleanerSetupSteps(c).every((s) => s.done);
+}
+
+/** Whether every step before `id` is done — used to lock later portal cards. */
+export function isSetupStepUnlocked(
+  c: CleanerSetupState,
+  id: CleanerSetupStepId,
+): boolean {
+  const steps = cleanerSetupSteps(c);
+  const idx = steps.findIndex((s) => s.id === id);
+  if (idx <= 0) return true;
+  return steps.slice(0, idx).every((s) => s.done);
+}
+
+/**
+ * First-job eligibility.
+ *
+ * Someone who has already completed a job is past this gate — we do not
+ * yank offers from people already on the roster. Everyone else has to
+ * finish the sequence, including the training videos, before dispatch
+ * will offer them work.
+ */
+export function isCleanerReadyForFirstJob(c: CleanerSetupState): boolean {
+  if (Number(c.completed_bookings || 0) > 0) return true;
+  return isCleanerSetupComplete(c);
 }

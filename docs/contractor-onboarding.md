@@ -1,20 +1,17 @@
 # Contractor account setup
 
-Four steps, in this order:
+Six steps, in this order:
 
-1. **Verify your phone number** — dispatch has to be able to reach them.
-2. **Read the dress code and job-day guide** — two graphics: what to wear, and
-   what a job day looks like from offer to payout.
+1. **Sign the contractor agreement** — the Independent Contractor Agreement, with a signature.
+2. **Verify your phone number** — dispatch has to be able to reach them.
 3. **Check off your supplies** — what kit do they already own?
-4. **Set up payouts (Stripe)** — bank details and tax identity.
+4. **Agree to the dress code** — the graphic, with an explicit agree tick. Viewing is not enough.
+5. **Read the job-day journey** — what a job looks like from offer to payout.
+6. **Watch the training videos** — all seven walkthroughs on the training hub. Skipping does not count.
 
-Payouts is last on purpose. It is the step with the most friction and the one
-a contractor is most likely to walk away from, so it is only asked once the
-cheap steps are behind them.
+A contractor with zero completed jobs **cannot be offered a first job** until every step is done, including the videos. People who have already completed a job are past this gate — we do not yank offers from the roster.
 
-The guides sit before the supply checkoff because they are what makes the
-checkoff make sense: you cannot usefully answer "what kit do you own" until
-you have seen what a job actually asks of you.
+Payouts (Stripe) stay on the dashboard. They are how we pay, not how someone becomes eligible for work.
 
 ## One definition, four readers
 
@@ -29,14 +26,16 @@ what "complete" meant — for itself:
 | `src/views/cleaner/SetupContinue.tsx` | Renders that list, in that order |
 | `src/views/admin/Cleaners.tsx` | Whether setup is incomplete, and the progress % |
 
+First-job eligibility is `isCleanerReadyForFirstJob()` in the same file,
+mirrored in `supabase/functions/_shared/first-job-ready.ts` and
+`public.cleaner_ready_for_first_job()`. Dispatch, broadcast, suggested
+assignees, and offer-accept all use that gate. An admin who picks a
+specific contractor can still assign them.
+
 The database agrees too. `mint_cleaner_setup_token` returns `NULL` to mean
 "nothing left to send", and `cleaner_setup_status_v1.setup_complete` reports
-standing; both count all four steps
-(`supabase/migrations/20260911210538_onboarding_job_day_guides.sql`, which
-supersedes `20260911200210_setup_sequence_includes_supplies.sql`). Without
-that, a contractor who had done phone and Stripe but had never been asked
-about the dress code or their supplies would look finished to the token
-minter, and admin could not send them a setup link at all.
+standing; both count all six steps
+(`supabase/migrations/20260911220636_onboarding_agreement_first_training_gate.sql`).
 
 ## The two graphics
 
@@ -44,10 +43,10 @@ minter, and admin could not send them a setup link at all.
 `public/onboarding/` because they are content, not code — replacing one is
 dropping in a new file, with no build change:
 
-| Guide | File |
-| --- | --- |
-| Dress code | `public/onboarding/dress-code.png` |
-| Job day, start to finish | `public/onboarding/job-day-journey.png` |
+| Guide | File | What they have to do |
+| --- | --- | --- |
+| Dress code | `public/onboarding/dress-code.png` | Tick agree, then confirm |
+| Job day, start to finish | `public/onboarding/job-day-journey.png` | Confirm they have read it |
 
 Each guide also carries its content as text in `points`. That is not
 decoration:
@@ -64,16 +63,10 @@ in the repo, because the step still asks and answers the same question without
 it. The warning is there so a missing file is visible rather than quietly
 degrading forever.
 
-One acknowledgment (`cleaners.ob_job_day_guides_ack`) covers both graphics.
-Splitting the record would let a contractor sit half-acknowledged forever with
-nothing able to describe that state usefully.
-
-### Adding this step was retroactive on purpose
-
-Every contractor who onboarded before this is now one step short, because none
-of them have seen the dress code. That is the point — the graphic is new
-policy material, and the setup link is how they get asked. Nothing about their
-pay, jobs or Stripe standing changes.
+Dress code and job-day are separate records (`ob_dress_code_ack` and
+`ob_job_day_guides_ack`). A contractor who acknowledged the old combined
+"guides" step is treated as having agreed to the dress code, so they are not
+asked to tick a new box for the same picture.
 
 ## The supply checkoff counts on submission, not on readiness
 
@@ -83,12 +76,28 @@ them buying a vacuum.
 
 Readiness is a separate, non-blocking signal: `SUPPLY_READY_PERCENT` (70%) of
 the `neededForJob` items, surfaced to dispatch and shown on the meter as they
-tick. A contractor below the threshold still finishes onboarding, still gets
-offers, and still gets paid.
+tick.
 
 `ob_supplies_checklist_viewed` — the flag the older checklist page set — still
 counts as a submission, so contractors who did this before
 `supply_checklist_submitted_at` existed are not asked a second time.
+
+## Training videos must be watched
+
+The last portal card routes to `/cleaner/training`. Required content is the
+seven catalog walkthroughs (`TOURS` in `src/lib/tours/catalog.ts`):
+
+- Watch the recorded clip through to the end, **or**
+- Run the live "Guide me" walkthrough and finish it.
+
+Skipping a walkthrough does not count. `POST /api/cleaner/tours` stamps
+`cleaners.ob_training_complete` when every catalog tour is `completed`.
+Visiting the hub only sets `ob_training_accessed`.
+
+The playbooks on that page are optional reference. They do not unlock a job.
+
+Completion is still not an input to the Novara Score, pay, or ranking. It is
+a yes/no eligibility fact for a first job.
 
 ## What happens when admin sends the link
 
@@ -98,7 +107,7 @@ counts as a submission, so contractors who did this before
 mint_cleaner_setup_token
   → https://contractor.novaracleaning.com/cleaner/setup/<token>   (email + SMS)
   → /cleaner/auth?setup=<token>                                    (sign in / create login)
-  → /cleaner/ob-portal                                             (the four steps)
+  → /cleaner/ob-portal                                             (the six steps)
 ```
 
 The email and the SMS both list what is outstanding in portal order, so the
@@ -120,28 +129,23 @@ npm run onboarding:verify
 
 `scripts/verify-onboarding-sequence.ts` checks the shared definition by
 calling it, then opens the real pages in a browser and reads what a
-contractor would see: four steps in order, payouts locked until the first
-three are done, both graphics rendering, the text fallback appearing when an
-image is blocked, the acknowledgment and the checklist saving, and each step
-flipping to complete. Every Supabase call is answered from an invented fixture
-in the script, so no real contractor is touched. Screenshots land in
+contractor would see: six steps in order, agreement first, dress-code agree
+required, training last, payouts not in the portal, and the training hub
+requiring the seven videos. Every Supabase call is answered from an invented
+fixture in the script, so no real contractor is touched. Screenshots land in
 `docs/contractor-onboarding/` (gitignored — evidence of a run, not a source of
 truth).
 
 ## Deliberately not built
 
-- **No hard gate.** Nothing in the portal blocks a contractor from viewing
-  jobs or working while setup is outstanding. The dashboard links to the
-  portal; it does not trap them in it.
-- **No quiz or attestation on the guides.** One "I've read both" button. The
-  dress code is also part of the contractor standards acknowledgment, which is
-  where a signature belongs; repeating it here would be theatre.
+- **No quiz on the job-day graphic.** Dress code requires an agree tick.
+  Job-day is a read acknowledgment.
 - **No supply approval step.** Nobody reviews or signs off what a contractor
   ticked. It is self-certified, and dispatch treats it as advisory — see
   `equipmentMatch()`, which shows the gap for commercial sites rather than
   filtering people out.
-- **No separate pages inside the portal.** The guides and the checkoff are
-  rendered inline by components the other surfaces share
-  (`src/components/cleaner/JobDayGuides.tsx`,
-  `src/components/cleaner/SupplyChecklistForm.tsx`), so there is one of each
-  and one save path, not two that drift.
+- **No separate pages inside the portal.** The agreement, guides and the
+  checkoff are rendered inline. Training is the one step that routes out, to
+  the hub where the videos actually play.
+- **Admin exact-assign still works.** Automatic dispatch and broadcast do not
+  offer unfinished contractors; a human who picks a name can still assign.

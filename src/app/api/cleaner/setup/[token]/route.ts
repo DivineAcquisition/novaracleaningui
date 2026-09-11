@@ -6,9 +6,12 @@ import { NextResponse } from "next/server";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import {
   cleanerSetupSteps,
+  isAgreementSigned,
   isCleanerSetupComplete,
-  isJobDayGuidesAcknowledged,
+  isDressCodeAgreed,
+  isJobDayAcknowledged,
   isPayoutSetupStarted,
+  isRequiredTrainingComplete,
   isSupplyChecklistSubmitted,
 } from "@/lib/cleaner-supplies";
 
@@ -27,7 +30,7 @@ export async function GET(_req: Request, ctx: Ctx): Promise<NextResponse> {
   const supabase = getAdminSupabase();
   const { data: cleaner, error } = await (supabase.from as any)("cleaners")
     .select(
-      "id, first_name, last_name, email, phone, status, phone_verified, payouts_enabled, ob_payouts_setup, stripe_account_id, onboarding_complete, setup_token_expires_at, ob_agreement_signed, supply_checklist_submitted_at, ob_supplies_checklist_viewed, ob_job_day_guides_ack",
+      "id, first_name, last_name, email, phone, status, phone_verified, payouts_enabled, ob_payouts_setup, stripe_account_id, onboarding_complete, setup_token_expires_at, ob_agreement_signed, supply_checklist_submitted_at, ob_supplies_checklist_viewed, ob_job_day_guides_ack, ob_dress_code_ack, ob_training_complete, completed_bookings",
     )
     .eq("setup_token", token)
     .maybeSingle();
@@ -81,10 +84,12 @@ export async function GET(_req: Request, ctx: Ctx): Promise<NextResponse> {
     })),
     steps: {
       phoneVerified: Boolean(cleaner.phone_verified),
-      guidesAcknowledged: isJobDayGuidesAcknowledged(cleaner),
+      agreementSigned: isAgreementSigned(cleaner),
       suppliesSubmitted: isSupplyChecklistSubmitted(cleaner),
+      dressCodeAgreed: isDressCodeAgreed(cleaner),
+      jobDayAcknowledged: isJobDayAcknowledged(cleaner),
+      trainingComplete: isRequiredTrainingComplete(cleaner),
       stripeReady: isPayoutSetupStarted(cleaner),
-      agreementSigned: Boolean(cleaner.ob_agreement_signed),
       onboardingComplete: Boolean(cleaner.onboarding_complete),
     },
     expiresAt: cleaner.setup_token_expires_at || null,

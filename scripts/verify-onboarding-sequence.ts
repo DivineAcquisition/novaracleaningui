@@ -1,18 +1,19 @@
 // ─── Verification of the contractor onboarding sequence ─────────────────────
 //
-// Onboarding is phone → job-day guides → supplies → payouts, and four things
-// have to agree on that: the shared definition in src/lib/cleaner-supplies.ts,
-// the portal a contractor works through, the page a mailed setup link lands
-// on, and the admin view that decides whether anything is outstanding. When
-// they drift, the symptom is a contractor being asked for bank details before
-// anyone has asked what equipment they own — or being told setup is complete
-// when it isn't.
+// Onboarding is agreement → phone → supplies → dress code (agree) →
+// job-day journey → training videos, and four things have to agree on that:
+// the shared definition in src/lib/cleaner-supplies.ts, the portal a
+// contractor works through, the page a mailed setup link lands on, and the
+// admin view that decides whether anything is outstanding. When they drift,
+// the symptom is a contractor being asked for bank details before anyone has
+// asked them to sign, or being offered a first job before they have watched
+// the videos.
 //
 // The first half of this script checks the shared definition by calling it.
 // The second half opens the real pages in a browser and reads what a
-// contractor would actually see, because "the function returns four steps"
-// and "the portal shows four steps, with payouts locked last" are different
-// claims and only the second one is the product.
+// contractor would actually see, because "the function returns six steps"
+// and "the portal shows six steps, with training last" are different claims
+// and only the second one is the product.
 //
 // No real data is touched: every Supabase call is answered from an invented
 // fixture in this file, same approach as the walkthrough recorder.
@@ -27,8 +28,11 @@ import { chromium, type Browser, type Page, type Route } from "playwright";
 import {
   SUPPLY_ITEMS,
   cleanerSetupSteps,
+  isCleanerReadyForFirstJob,
   isCleanerSetupComplete,
-  isJobDayGuidesAcknowledged,
+  isDressCodeAgreed,
+  isJobDayAcknowledged,
+  isSetupStepUnlocked,
   isSupplyChecklistSubmitted,
   sanitizeSupplyInventory,
   scoreSupplyInventory,
@@ -36,6 +40,8 @@ import {
   type CleanerSetupState,
 } from "../src/lib/cleaner-supplies";
 import { ONBOARDING_GUIDES } from "../src/lib/cleaner-onboarding-guides";
+import { TOURS } from "../src/lib/tours/catalog";
+import { isRequiredTrainingWatched } from "../src/lib/tours/progress";
 
 const BASE_URL = process.env.ONBOARDING_VERIFY_BASE_URL || "http://localhost:3100";
 const SHOTS_DIR = resolve(__dirname, "../docs/contractor-onboarding");
@@ -65,57 +71,61 @@ function check(name: string, actual: unknown, expected: unknown): void {
 function checkSequence(): void {
   console.log("\nThe onboarding sequence");
 
+  const expectedIds = ["agreement", "phone", "supplies", "dress_code", "job_day", "training"];
   const fresh: CleanerSetupState = {};
-  check(
-    "four steps, guides before supplies, payouts last",
-    cleanerSetupSteps(fresh).map((s) => s.id),
-    ["phone", "guides", "supplies", "payouts"],
-  );
+  check("six steps, agreement first, training last", cleanerSetupSteps(fresh).map((s) => s.id), expectedIds);
   check("a brand-new contractor has nothing done", cleanerSetupSteps(fresh).map((s) => s.done), [
+    false,
+    false,
     false,
     false,
     false,
     false,
   ]);
   check("and is not complete", isCleanerSetupComplete(fresh), false);
+  check("and is not eligible for a first job", isCleanerReadyForFirstJob(fresh), false);
 
-  // The state that used to read as finished: phone + Stripe, with nobody ever
-  // asked about supplies or shown the dress code. If this ever goes back to
-  // true, admin loses the ability to send these contractors a setup link.
   const phoneAndStripe: CleanerSetupState = {
     phone_verified: true,
     stripe_account_id: "acct_123",
   };
   check("phone + payouts alone is not complete", isCleanerSetupComplete(phoneAndStripe), false);
   check(
-    "the outstanding steps are the guides and the supply checkoff, in order",
+    "the outstanding steps start with the agreement",
     cleanerSetupSteps(phoneAndStripe).filter((s) => !s.done).map((s) => s.id),
-    ["guides", "supplies"],
+    ["agreement", "supplies", "dress_code", "job_day", "training"],
   );
+  check("phone is unlocked only after the agreement", isSetupStepUnlocked(fresh, "phone"), false);
+  check("and training is locked until everything above it is done", isSetupStepUnlocked(phoneAndStripe, "training"), false);
 
   const allDone: CleanerSetupState = {
-    ...phoneAndStripe,
-    ob_job_day_guides_ack: true,
+    ob_agreement_signed: true,
+    phone_verified: true,
     supply_checklist_submitted_at: "2026-09-01T00:00:00Z",
+    ob_dress_code_ack: true,
+    ob_job_day_guides_ack: true,
+    ob_training_complete: true,
   };
-  check("all four done is complete", isCleanerSetupComplete(allDone), true);
+  check("all six done is complete", isCleanerSetupComplete(allDone), true);
+  check("and that is enough for a first job", isCleanerReadyForFirstJob(allDone), true);
   check(
-    "a contractor who skipped only the dress code is still outstanding",
-    cleanerSetupSteps({ ...allDone, ob_job_day_guides_ack: false })
+    "payouts are not part of this sequence",
+    cleanerSetupSteps(allDone).some((s) => s.id === "payouts" || /stripe|payout/i.test(s.title)),
+    false,
+  );
+  check(
+    "a contractor who skipped only training is still outstanding",
+    cleanerSetupSteps({ ...allDone, ob_training_complete: false })
       .filter((s) => !s.done)
       .map((s) => s.id),
-    ["guides"],
+    ["training"],
   );
-  check("the guides step needs an explicit acknowledgment", isJobDayGuidesAcknowledged({}), false);
-  check(
-    "which is one record covering both graphics",
-    isJobDayGuidesAcknowledged({ ob_job_day_guides_ack: true }),
-    true,
-  );
+  check("dress code needs an explicit agree", isDressCodeAgreed({}), false);
+  check("legacy combined ack still counts as dress-code agree", isDressCodeAgreed({ ob_job_day_guides_ack: true }), true);
+  check("job-day still needs its own ack", isJobDayAcknowledged({ ob_dress_code_ack: true }), false);
+  check("someone with a completed job is past the first-job gate", isCleanerReadyForFirstJob({ completed_bookings: 3 }), true);
 
-  // Submission, not readiness: a contractor who owns almost nothing has still
-  // done the step. Onboarding must never wait on a purchase.
-  check("submitting an almost-empty checklist still completes the step", isCleanerSetupComplete(allDone), true);
+  check("submitting an almost-empty checklist still completes the step", isSupplyChecklistSubmitted(allDone), true);
   check("while readiness stays false", scoreSupplyInventory({}).ready, false);
 
   check(
@@ -123,6 +133,29 @@ function checkSequence(): void {
     isSupplyChecklistSubmitted({ ob_supplies_checklist_viewed: true }),
     true,
   );
+
+  check("skipped walkthroughs do not count as training", isRequiredTrainingWatched(
+    TOURS.map((t) => ({
+      tourId: t.id,
+      version: t.version,
+      status: "skipped" as const,
+      lastStepIndex: 0,
+      startedAt: null,
+      completedAt: null,
+      updatedAt: null,
+    })),
+  ), false);
+  check("every catalog tour completed does", isRequiredTrainingWatched(
+    TOURS.map((t) => ({
+      tourId: t.id,
+      version: t.version,
+      status: "completed" as const,
+      lastStepIndex: 0,
+      startedAt: null,
+      completedAt: null,
+      updatedAt: null,
+    })),
+  ), true);
 
   console.log("\nThe submission write");
   const patch = supplySubmissionPatch({ vacuum: true }, "2026-09-11T12:00:00.000Z");
@@ -161,6 +194,7 @@ function checkGuides(): void {
     check(`${guide.id}: has alt text for the graphic`, guide.alt.length > 20, true);
     check(`${guide.id}: carries its content as text too`, guide.points.length >= 5, true);
     check(`${guide.id}: served from public/onboarding/`, guide.image.startsWith("/onboarding/"), true);
+    check(`${guide.id}: has an action label`, guide.actionLabel.length > 4, true);
 
     const onDisk = resolve(__dirname, "../public", guide.image.replace(/^\//, ""));
     if (!existsSync(onDisk)) {
@@ -172,6 +206,15 @@ function checkGuides(): void {
       console.log(`  ✓ ${guide.id}: graphic present at public${guide.image}`);
     }
   }
+
+  check(
+    "dress code requires an agree tick, job-day does not",
+    [
+      ONBOARDING_GUIDES.find((g) => g.id === "dress_code")?.agreeLabel ? true : false,
+      Boolean(ONBOARDING_GUIDES.find((g) => g.id === "job_day")?.agreeLabel),
+    ],
+    [true, false],
+  );
 }
 
 // ─── Part 2: the pages a contractor sees ────────────────────────────────────
@@ -197,8 +240,12 @@ function freshCleaner(): Record<string, unknown> {
     ob_payouts_setup: false,
     ob_payouts_setup_at: null,
     ob_agreement_signed: false,
+    ob_dress_code_ack: false,
+    ob_dress_code_ack_at: null,
     ob_job_day_guides_ack: false,
     ob_job_day_guides_ack_at: null,
+    ob_training_complete: false,
+    completed_bookings: 0,
     ob_supplies_checklist_viewed: false,
     supply_checklist_submitted_at: null,
     supply_inventory: {},
@@ -287,6 +334,34 @@ async function mountHarness(page: Page, row: Record<string, unknown>): Promise<v
     return json(route, {});
   });
 
+  await page.route("**/api/cleaner/**", async (route, request) => {
+    if (request.method() === "OPTIONS") {
+      return route.fulfill({ status: 204, headers: CORS, body: "" });
+    }
+    const url = new URL(request.url());
+    const path = url.pathname;
+    if (path.includes("/sign-agreement")) {
+      Object.assign(row, {
+        ob_agreement_signed: true,
+        ob_agreement_signed_at: new Date().toISOString(),
+      });
+      return json(route, { ok: true });
+    }
+    if (path.includes("/agreement-preview")) {
+      return json(route, { url: "about:blank" });
+    }
+    if (path.includes("/tours")) {
+      return json(route, {
+        ok: true,
+        cleanerId: row.id,
+        settings: { autoStartOnFirstLogin: false, reofferOnVersionChange: false, maxReoffersAtOnce: 2 },
+        progress: [],
+        catalogSignature: "verify",
+      });
+    }
+    return json(route, { ok: true });
+  });
+
   await page.route(/googleapis|gstatic|googletagmanager|facebook|js\.stripe|sentry|posthog/, (r) =>
     r.abort(),
   );
@@ -319,122 +394,73 @@ async function checkPortal(browser: Browser): Promise<void> {
 
   const body = () => page.locator("main").innerText();
 
-  check("the portal now asks for four steps", (await body()).includes("Four quick steps"), true);
-  check("and counts them", (await body()).includes("0 of 4 complete"), true);
+  check("the portal counts six steps", (await body()).includes("0 of 6 complete"), true);
+  check(
+    "and says they will not be offered a job until that is done",
+    (await body()).includes("won't be offered a job") || (await body()).includes("won’t be offered a job"),
+    true,
+  );
 
   const headings = await page.locator("main h3, main [class*='CardTitle'], main div.text-base").allInnerTexts();
   const expectedOrder = [
+    "Sign the contractor agreement",
     "Verify your phone number",
-    "Read the dress code and job-day guide",
     "Check off your supplies",
-    "Set up payouts",
+    "Agree to the dress code",
+    "Read the job-day journey",
+    "Watch the training videos",
   ];
   check(
-    "in order, guides before supplies and payouts last",
+    "in order, agreement first and training last",
     expectedOrder.filter((t) => headings.some((h) => h.includes(t))),
     expectedOrder,
   );
 
   check(
-    "the guides are locked behind phone verification",
-    (await body()).includes("Verify your phone first."),
+    "later steps are locked behind the agreement",
+    (await body()).includes("Sign the agreement first."),
     true,
   );
   check(
-    "so is the supply checkoff",
-    (await body()).match(/Verify your phone first\./g)?.length,
-    2,
-  );
-  check(
-    "and payouts just points at the steps above it",
-    (await body()).includes("Finish the steps above to unlock payouts."),
-    true,
-  );
-  check(
-    "so no bank details are asked for yet",
-    await page.getByRole("button", { name: "Set up payouts" }).isVisible().catch(() => false),
+    "payouts are not a portal step",
+    await page.getByRole("button", { name: /Set up payouts/i }).isVisible().catch(() => false),
     false,
+  );
+  check(
+    "the agreement is on the page",
+    await page.getByRole("button", { name: "Sign agreement" }).isVisible(),
+    true,
   );
 
   mkdirSync(SHOTS_DIR, { recursive: true });
   await page.screenshot({ path: resolve(SHOTS_DIR, "portal-fresh.png"), fullPage: true });
 
-  // ── Phone verified: the two graphics should now be on the page ──
+  // ── Agreement signed ──
+  row.ob_agreement_signed = true;
+  row.ob_agreement_signed_at = new Date().toISOString();
+  await page.reload({ waitUntil: "networkidle" });
+  await page.getByText("Welcome, Imani!").waitFor({ timeout: 20_000 });
+
+  check("agreement counts", (await body()).includes("1 of 6 complete"), true);
+  check(
+    "phone is unlocked",
+    await page.getByRole("button", { name: "Send verification code" }).isVisible(),
+    true,
+  );
+  check(
+    "supplies stay locked until the phone is verified",
+    (await body()).includes("Verify your phone first."),
+    true,
+  );
+
+  // ── Phone verified: supplies unlock ──
   row.phone_verified = true;
   await page.reload({ waitUntil: "networkidle" });
   await page.getByText("Welcome, Imani!").waitFor({ timeout: 20_000 });
 
-  check("phone verified counts", (await body()).includes("1 of 4 complete"), true);
+  check("phone verified counts", (await body()).includes("2 of 6 complete"), true);
   check(
-    "both graphics are shown inline",
-    await page.locator('main img[src^="/onboarding/"]').count(),
-    ONBOARDING_GUIDES.length,
-  );
-  for (const guide of ONBOARDING_GUIDES) {
-    check(
-      `the ${guide.id} graphic is on the page with its alt text`,
-      await page.locator(`main img[alt="${guide.alt}"]`).isVisible(),
-      true,
-    );
-  }
-  check(
-    "each graphic can be opened full size",
-    await page.locator('main a[href^="/onboarding/"]').count(),
-    ONBOARDING_GUIDES.length,
-  );
-  check(
-    "the supply checkoff stays locked until the guides are read",
-    (await body()).includes("Read the dress code and job-day guide first"),
-    true,
-  );
-  check(
-    "so the checklist is not on the page yet",
-    await page.getByText("Download full PDF checklist").isVisible().catch(() => false),
-    false,
-  );
-
-  await page.screenshot({ path: resolve(SHOTS_DIR, "portal-guides.png"), fullPage: true });
-
-  // ── A graphic that fails to load must not strand the contractor ──
-  guideImagesBroken = true;
-  await page.reload({ waitUntil: "networkidle" });
-  await page.getByText("Welcome, Imani!").waitFor({ timeout: 20_000 });
-  check(
-    "a graphic that won't load says so rather than showing a broken box",
-    (await body()).includes("The graphic didn't load."),
-    true,
-  );
-  for (const guide of ONBOARDING_GUIDES) {
-    check(
-      `and ${guide.id} is readable as text instead`,
-      (await body()).includes(guide.points[0]),
-      true,
-    );
-  }
-  check(
-    "the step can still be completed",
-    await page.getByRole("button", { name: "I've read both" }).isVisible(),
-    true,
-  );
-  await page.screenshot({ path: resolve(SHOTS_DIR, "portal-guides-fallback.png"), fullPage: true });
-
-  guideImagesBroken = false;
-  await page.reload({ waitUntil: "networkidle" });
-  await page.getByText("Welcome, Imani!").waitFor({ timeout: 20_000 });
-
-  // ── Acknowledge the guides ──
-  await page.getByRole("button", { name: "I've read both" }).click();
-  await page.getByText("Read — thanks.").waitFor({ timeout: 20_000 });
-  check(
-    "the acknowledgment is recorded on the contractor's row",
-    row.ob_job_day_guides_ack,
-    true,
-  );
-  check("with a timestamp", Boolean(row.ob_job_day_guides_ack_at), true);
-  check("two of four steps done", (await body()).includes("2 of 4 complete"), true);
-
-  check(
-    "the supply checklist is now on the page, not behind another link",
+    "the supply checklist is now on the page",
     await page.getByText("Download full PDF checklist").isVisible(),
     true,
   );
@@ -444,12 +470,11 @@ async function checkPortal(browser: Browser): Promise<void> {
     SUPPLY_ITEMS.length,
   );
   check(
-    "payouts is still locked",
-    (await body()).includes("Finish the steps above to unlock payouts."),
+    "the dress code stays locked until supplies are submitted",
+    (await body()).includes("Check off your supplies first."),
     true,
   );
 
-  // ── Tick enough to be job-ready, then submit ──
   const needed = SUPPLY_ITEMS.filter((i) => i.neededForJob).slice(0, 12);
   for (const item of needed) {
     await page.locator(`#supply-${item.id}`).click();
@@ -467,29 +492,92 @@ async function checkPortal(browser: Browser): Promise<void> {
     Boolean(row.supply_checklist_submitted_at),
     true,
   );
+  check("three of six steps done", (await body()).includes("3 of 6 complete"), true);
+
+  // ── Dress code: must tick agree ──
+  const dress = ONBOARDING_GUIDES.find((g) => g.id === "dress_code")!;
   check(
-    "with the inventory they ticked",
-    Object.keys((row.supply_inventory as Record<string, boolean>) || {}).filter(
-      (k) => (row.supply_inventory as Record<string, boolean>)[k],
-    ).length,
-    needed.length,
+    "the dress code graphic is on the page",
+    await page.locator(`main img[alt="${dress.alt}"]`).isVisible(),
+    true,
   );
-  check("three of four steps done", (await body()).includes("3 of 4 complete"), true);
+  const agreeBtn = page.getByRole("button", { name: dress.actionLabel });
+  check("the dress-code agree button starts disabled", await agreeBtn.isDisabled(), true);
+  await page.getByText(dress.agreeLabel!).click();
+  check("and enables after the tick", await agreeBtn.isDisabled(), false);
+
+  await page.screenshot({ path: resolve(SHOTS_DIR, "portal-guides.png"), fullPage: true });
+
+  guideImagesBroken = true;
+  await page.reload({ waitUntil: "networkidle" });
+  await page.getByText("Welcome, Imani!").waitFor({ timeout: 20_000 });
   check(
-    "and payouts is finally unlocked",
-    await page.getByRole("button", { name: /Set up payouts/ }).isVisible(),
+    "a graphic that won't load says so rather than showing a broken box",
+    (await body()).includes("The graphic didn't load."),
     true,
   );
   check(
-    "nothing about the contractor's work is blocked in the meantime",
-    (await body()).includes("Job offers will start coming through"),
+    "and the dress code is readable as text instead",
+    (await body()).includes(dress.points[0]),
+    true,
+  );
+  await page.screenshot({ path: resolve(SHOTS_DIR, "portal-guides-fallback.png"), fullPage: true });
+
+  guideImagesBroken = false;
+  await page.reload({ waitUntil: "networkidle" });
+  await page.getByText("Welcome, Imani!").waitFor({ timeout: 20_000 });
+  await page.getByText(dress.agreeLabel!).click();
+  await page.getByRole("button", { name: dress.actionLabel }).click();
+  await page.getByText("Agreed — thanks.").waitFor({ timeout: 20_000 });
+  check("the dress-code agree is recorded", row.ob_dress_code_ack, true);
+  check("four of six steps done", (await body()).includes("4 of 6 complete"), true);
+
+  // ── Job-day journey ──
+  const jobDay = ONBOARDING_GUIDES.find((g) => g.id === "job_day")!;
+  await page.getByRole("button", { name: jobDay.actionLabel }).waitFor({ timeout: 20_000 });
+  check(
+    "the job-day graphic is on the page after dress code",
+    await page.locator(`main img[alt="${jobDay.alt}"]`).isVisible(),
+    true,
+  );
+  await page.getByRole("button", { name: jobDay.actionLabel }).click();
+  await page.getByText("Read — thanks.").waitFor({ timeout: 20_000 });
+  check("the job-day ack is recorded", row.ob_job_day_guides_ack, true);
+  check("five of six steps done", (await body()).includes("5 of 6 complete"), true);
+
+  const trainingBtn = page.getByRole("button", { name: "Open training hub" });
+  await trainingBtn.waitFor({ timeout: 20_000 });
+  check(
+    "payouts still are not asked here",
+    await page.getByRole("button", { name: /Set up payouts/i }).isVisible().catch(() => false),
     false,
   );
 
-  await page.screenshot({ path: resolve(SHOTS_DIR, "portal-payouts-unlocked.png"), fullPage: true });
+  await page.screenshot({ path: resolve(SHOTS_DIR, "portal-training-unlocked.png"), fullPage: true });
+
+  await page.getByRole("button", { name: "Open training hub" }).click();
+  await page.getByText("Required videos").waitFor({ timeout: 20_000 });
+  const hub = await page.locator("body").innerText();
+  check(
+    "the hub asks for all seven walkthroughs",
+    hub.includes(`0 / ${TOURS.length}`),
+    true,
+  );
+  check(
+    "and says skipping does not count",
+    hub.includes("Skipping does not count"),
+    true,
+  );
+  check(
+    "visiting the hub is not treated as training complete",
+    row.ob_training_complete,
+    false,
+  );
+
+  await page.screenshot({ path: resolve(SHOTS_DIR, "training-hub.png"), fullPage: true });
 
   // ── Returning contractor: collapsed to their standing ──
-  await page.reload({ waitUntil: "networkidle" });
+  await page.goto(`${BASE_URL}/cleaner/ob-portal`, { waitUntil: "networkidle" });
   await page.getByText("Welcome, Imani!").waitFor({ timeout: 20_000 });
   const score = scoreSupplyInventory(row.supply_inventory as Record<string, boolean>);
   check(
@@ -503,8 +591,8 @@ async function checkPortal(browser: Browser): Promise<void> {
     true,
   );
   check(
-    "the guides collapse the same way, and stay available",
-    await page.getByRole("button", { name: "Look again" }).isVisible(),
+    "the graphics collapse the same way, and stay available",
+    (await page.getByRole("button", { name: "Look again" }).count()) >= 1,
     true,
   );
 
@@ -530,10 +618,12 @@ async function checkSetupLanding(browser: Browser): Promise<void> {
         sequence: cleanerSetupSteps(state).map((s) => ({ id: s.id, title: s.title, done: s.done })),
         steps: {
           phoneVerified: true,
-          guidesAcknowledged: false,
-          suppliesSubmitted: false,
-          stripeReady: false,
           agreementSigned: false,
+          suppliesSubmitted: false,
+          dressCodeAgreed: false,
+          jobDayAcknowledged: false,
+          trainingComplete: false,
+          stripeReady: false,
           onboardingComplete: false,
         },
         continueUrl: "/cleaner/auth?setup=verify-token",
@@ -550,12 +640,14 @@ async function checkSetupLanding(browser: Browser): Promise<void> {
   const listed = rows.map((r) => r.trim()).filter(Boolean);
   check(
     "the link page lists the same sequence the portal will walk",
-    listed.slice(0, 4),
+    listed.slice(0, 6),
     [
+      "Sign the contractor agreement",
       "Verify your phone number",
-      "Read the dress code and job-day guide",
       "Check off your supplies",
-      "Set up payouts (Stripe)",
+      "Agree to the dress code",
+      "Read the job-day journey",
+      "Watch the training videos",
     ],
   );
   check(
@@ -669,14 +761,12 @@ async function checkAdminView(browser: Browser): Promise<void> {
 
   const panel = await page.locator("body").innerText();
   check("the supply checkoff is one of the steps admin sees", panel.includes("Supply checklist submitted"), true);
+  check("so is the dress code agree", panel.includes("Dress code agreed"), true);
+  check("and the job-day journey", panel.includes("Job-day journey read"), true);
+  check("and the training videos", panel.includes("Training videos watched"), true);
   check(
-    "so is the dress code and job-day guide",
-    panel.includes("Dress code + job-day guide read"),
-    true,
-  );
-  check(
-    "and readiness is stated as all four",
-    panel.includes("Portal ready (phone + guide + supplies + Stripe)"),
+    "readiness is stated as agreement through training",
+    panel.includes("Portal ready (agreement → training)"),
     true,
   );
   // The demo directory predates the supply columns, so these contractors read

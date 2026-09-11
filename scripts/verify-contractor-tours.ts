@@ -27,6 +27,7 @@ import { ALL_TOUR_ANCHORS, TOUR, TOUR_ATTRIBUTE } from "../src/lib/tours/anchors
 import { TOURS, TOUR_SCREENS, type Tour } from "../src/lib/tours/catalog";
 import {
   DEFAULT_TOUR_SETTINGS,
+  isRequiredTrainingWatched,
   isTourOwed,
   normalizeTourSettings,
   resumeStepIndex,
@@ -213,9 +214,31 @@ console.log("\nWhat gets offered:");
 check("never seen → owed", isTourOwed(tour, null), true);
 check("stopped partway → owed", isTourOwed(tour, record({ status: "in_progress" })), true);
 check("finished → not owed", isTourOwed(tour, record()), false);
-// A skip is an answer. Re-asking after "no" is the nagging this feature is
-// meant to avoid.
 check("skipped → not owed", isTourOwed(tour, record({ status: "skipped" })), false);
+// A skip is an answer. Re-asking after "no" is the nagging this feature is
+// meant to avoid. First-job eligibility is the opposite: skip does not count.
+check("skipped does not count as watched", isRequiredTrainingWatched(
+  TOURS.map((t) => ({
+    tourId: t.id,
+    version: t.version,
+    status: "skipped" as const,
+    lastStepIndex: 0,
+    startedAt: null,
+    completedAt: null,
+    updatedAt: null,
+  })),
+), false);
+check("every catalog walkthrough completed does", isRequiredTrainingWatched(
+  TOURS.map((t) => ({
+    tourId: t.id,
+    version: t.version,
+    status: "completed" as const,
+    lastStepIndex: 0,
+    startedAt: null,
+    completedAt: null,
+    updatedAt: null,
+  })),
+), true);
 check(
   "outdated → owed when re-offering is on",
   isTourOwed(tour, record({ version: tour.version - 1 }), DEFAULT_TOUR_SETTINGS),
