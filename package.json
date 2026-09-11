@@ -22,6 +22,8 @@
     "pricing:verify": "tsx scripts/verify-dynamic-pricing.ts",
     "pricing:verify:server": "deno run --allow-read scripts/verify-dynamic-quote.deno.ts",
     "checklists:verify": "tsx scripts/verify-checklist-catalog.ts",
+    "dispute-packet:verify": "tsx scripts/verify-dispute-packet.ts",
+    "dispute-packet:nvc-0104": "tsx scripts/build-nvc-0104-dispute-packet.ts",
     "checklists:pdf": "tsx scripts/build-checklist-pdf.ts",
     "reclean:verify": "deno run --allow-read scripts/verify-reclean.deno.ts",
     "reclean:verify:node": "tsx scripts/verify-reclean.deno.ts",

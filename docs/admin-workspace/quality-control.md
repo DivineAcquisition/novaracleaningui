@@ -5,7 +5,7 @@ category: How the Tool Works
 summary: Logging complaints, running a Spotless Guarantee re-clean, and building the file that defends a disputed job.
 whoCanSee: Admins and VAs
 where: /admin/qc
-lastVerified: 2026-08-29
+lastVerified: 2026-09-11
 order: 8
 ---
 
@@ -136,22 +136,29 @@ contractors, not in this screen.
 
 ## The dispute packet
 
-**Full case file** assembles everything about a job into one view, and the dispute packet PDF
+**Full case file** assembles everything about a job into one view. The dispute packet PDF
 contains:
 
 1. Job completion and documentation summary — booking, client, service, address, who cleaned
    it, when it completed, photo count.
 2. The payment record, live from Stripe.
 3. Notes.
-4. **The policies the client agreed to, with section citations** — 14 policy references and
-   their URLs.
-5. The complaint and quality-control record for the job.
-6. Checkout and agreement acceptance evidence.
-7. Every before and after photo.
-8. The executed service agreement.
+4. **Merchant representment** — the item-by-item finding (completed / missed / out of scope)
+   and the remedy offered. Edit this on the case file, then remirror so it lands in the PDF.
+5. Proof the customer was sent the service checklist (confirmation email + `booking_emails_sent`).
+6. The SMS / call log from GHL.
+7. **The policies the client agreed to, with section citations** — the bank-safe set (checklist
+   standard, re-clean as primary remedy, 24-hour written report). Chargeback-fee, fraud, and
+   arbitration clauses are not included; issuers ignore them and they weaken the file.
+8. The complaint and quality-control record for the job.
+9. Checkout and agreement acceptance evidence.
+10. Every before and after photo.
+11. The executed service agreement.
 
 That is what gets sent to a payment processor in a chargeback. It is also why the discipline
 about photos and checklists matters — the packet is only as strong as what the crew uploaded.
+
+Answer the customer's written list item by item. "Labor was executed" is not a representment.
 
 ## Re-cleans and Scope Adjustments tabs
 
