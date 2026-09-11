@@ -260,6 +260,13 @@ function freshCleaner(): Record<string, unknown> {
 const PNG_1PX =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
 
+// Tiny valid PDF so PdfViewer has something to fetch when the portal opens
+// the agreement step. The real document is streamed from DocuSeal in prod.
+const MINIMAL_PDF = Buffer.from(
+  "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]>>endobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000052 00000 n \n0000000101 00000 n \ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n178\n%%EOF\n",
+  "utf8",
+);
+
 const CORS = {
   "access-control-allow-origin": "*",
   "access-control-allow-headers": "*",
@@ -348,7 +355,12 @@ async function mountHarness(page: Page, row: Record<string, unknown>): Promise<v
       return json(route, { ok: true });
     }
     if (path.includes("/agreement-preview")) {
-      return json(route, { url: "about:blank" });
+      return route.fulfill({
+        status: 200,
+        contentType: "application/pdf",
+        headers: CORS,
+        body: MINIMAL_PDF,
+      });
     }
     if (path.includes("/tours")) {
       return json(route, {

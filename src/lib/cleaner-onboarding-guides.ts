@@ -33,6 +33,8 @@ export interface OnboardingGuide {
   agreeLabel?: string;
 }
 
+export const OPERATOR_HANDBOOK_PDF = "/onboarding/operator-handbook.pdf";
+
 export const ONBOARDING_GUIDES: OnboardingGuide[] = [
   {
     id: "dress_code",
@@ -41,14 +43,16 @@ export const ONBOARDING_GUIDES: OnboardingGuide[] = [
       "You are entering a client's home as a representative of NovaraCleaning. " +
       "Appearance is part of the service.",
     image: "/onboarding/dress-code.png",
-    alt: "NovaraCleaning contractor dress code: required and not-permitted clothing for a job",
+    alt: "NovaraCleaning contractor dress code: approved black or white shirt with jeans or work pants, closed-toe shoes, and items that are not permitted",
     points: [
-      "Clean, unstained, work-appropriate clothing",
+      "Solid black or white shirt with jeans or work pants",
       "Closed-toe, non-slip shoes",
-      "Clothing that stays modest and secure through bending, reaching, kneeling and lifting",
-      "No low-cut tops, short skirts or dresses, or crop tops",
-      "No torn, dirty or visibly worn clothing",
-      "No loose jewelry that could catch on surfaces or furniture",
+      "Clean, unstained clothing with no visible wear",
+      "Clothing that stays modest through bending, reaching and kneeling",
+      "No low-cut tops, crop tops, shorts, short skirts or dresses",
+      "No open-toe shoes or sandals",
+      "No torn, stained or worn clothing",
+      "No loose jewelry that could catch on surfaces",
     ],
     footnote:
       "The working test: if you would not be comfortable bending down to pick something up in " +
@@ -60,17 +64,16 @@ export const ONBOARDING_GUIDES: OnboardingGuide[] = [
   {
     id: "job_day",
     title: "Your job day, start to finish",
-    lede: "Every job follows the same shape, so there are no surprises on day one.",
+    lede: "Follow this on every job. It protects your pay, your score, and you.",
     image: "/onboarding/job-day-journey.png",
-    alt: "The NovaraCleaning job day journey from accepting an offer through to getting paid",
+    alt: "The NovaraCleaning job day: before you go, when you arrive, while you work, and before you leave",
     points: [
-      "An offer reaches you by text and on your dashboard — accept or decline it",
-      "Read the job before you drive: address, arrival window, scope and client notes",
-      "Open the checklist before you arrive — it is the agreed scope of the job",
-      "Work the checklist live, one area at a time, ticking as you go",
-      "Photograph the work as you finish each area",
-      "Message dispatch from the field the moment something does not match the job",
-      "Complete the job; pay lands 1–2 business days later",
+      "Before you go: open the job, read the full checklist and access notes, phone ready, supplies loaded",
+      "When you arrive: inside the window, greet the client, ask about pets, take before photos of every area",
+      "While you work: checklist in order, tick as you finish, one area at a time, ask before moving furniture, answer the office within 5 minutes",
+      "Before you leave: walk every area, after photos, nothing left for the client, report any issue, mark complete",
+      "Never mark a checklist item you did not do, never leave rooms unfinished, never leave without reporting damage",
+      "Photos are not optional — before and after, every area, every job",
     ],
     footnote:
       "The walkthroughs on your Training page cover each of these steps in the real app.",

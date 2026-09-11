@@ -12,6 +12,7 @@ import {
 import { useState } from "react";
 
 import { SignaturePad } from "@/components/booking/SignaturePad";
+import { AgreementPdfPreview } from "@/components/cleaner/AgreementPdfPreview";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -39,9 +40,6 @@ export function PortalAgreementForm({
   const [legalName, setLegalName] = useState(defaultName);
   const [signature, setSignature] = useState<string | null>(null);
   const [agreed, setAgreed] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [showPreview, setShowPreview] = useState(false);
-  const [loadingPreview, setLoadingPreview] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [signed, setSigned] = useState<string | null>(signedAt);
@@ -53,32 +51,6 @@ export function PortalAgreementForm({
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     };
-  };
-
-  const togglePreview = async () => {
-    if (showPreview) {
-      setShowPreview(false);
-      return;
-    }
-    if (previewUrl) {
-      setShowPreview(true);
-      return;
-    }
-    setLoadingPreview(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/cleaner/agreement-preview", { headers: await authHeaders() });
-      const json = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
-      if (!res.ok || !json.url) {
-        throw new Error(json.error || "Could not load the agreement preview.");
-      }
-      setPreviewUrl(json.url);
-      setShowPreview(true);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setLoadingPreview(false);
-    }
   };
 
   const submit = async () => {
@@ -128,27 +100,9 @@ export function PortalAgreementForm({
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
         This is the Independent Contractor Agreement between you and Novara Cleaning.
-        Preview it, sign below, and a completed copy is emailed to you.
+        Read it, sign below, and a completed copy is emailed to you.
       </p>
-      <Button type="button" variant="outline" size="sm" onClick={() => void togglePreview()} disabled={loadingPreview}>
-        {loadingPreview ? (
-          <>
-            <RiLoader4Line className="mr-2 h-4 w-4 animate-spin" />
-            Loading…
-          </>
-        ) : showPreview ? (
-          "Hide agreement"
-        ) : (
-          "Preview agreement"
-        )}
-      </Button>
-      {showPreview && previewUrl ? (
-        <iframe
-          src={previewUrl}
-          title="Independent Contractor Agreement"
-          className="h-80 w-full rounded-lg border bg-white"
-        />
-      ) : null}
+      <AgreementPdfPreview />
       <div>
         <Label className="text-xs">Legal name</Label>
         <Input

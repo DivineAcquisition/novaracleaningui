@@ -20,7 +20,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
-import type { OnboardingGuide } from "@/lib/cleaner-onboarding-guides";
+import { OPERATOR_HANDBOOK_PDF, type OnboardingGuide } from "@/lib/cleaner-onboarding-guides";
 
 export interface JobDayGuidesProps {
   guide: OnboardingGuide;
@@ -119,6 +119,16 @@ export function JobDayGuides({
         {guide.footnote ? (
           <p className="text-xs leading-relaxed text-muted-foreground">{guide.footnote}</p>
         ) : null}
+
+        <a
+          href={OPERATOR_HANDBOOK_PDF}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 text-xs font-medium text-violet-700 underline underline-offset-2"
+        >
+          <RiExternalLinkLine className="h-3 w-3" />
+          Operator Handbook (PDF)
+        </a>
       </section>
 
       <div className={cn(variant === "plain" && "border-t border-border/60 pt-4")}>

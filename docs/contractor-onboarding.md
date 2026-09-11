@@ -47,6 +47,12 @@ dropping in a new file, with no build change:
 | --- | --- | --- |
 | Dress code | `public/onboarding/dress-code.png` | Tick agree, then confirm |
 | Job day, start to finish | `public/onboarding/job-day-journey.png` | Confirm they have read it |
+| Operator Handbook | `public/onboarding/operator-handbook.pdf` | Download from either guide step |
+
+The Independent Contractor Agreement is streamed from DocuSeal through
+`/api/cleaner/agreement-preview` and rendered with pdf.js (`PdfViewer`). Putting
+the DocuSeal file URL in an iframe is a blank box on phones, which is why VA,
+commercial and host already used this proxy.
 
 Each guide also carries its content as text in `points`. That is not
 decoration:
