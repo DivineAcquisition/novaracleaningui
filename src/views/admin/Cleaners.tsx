@@ -65,6 +65,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { cn } from "@/lib/utils";
 import { describeEdgeError } from "@/lib/edge-invoke";
 import TerminateCleanerDialog from "@/components/admin/TerminateCleanerDialog";
+import { CleanerTourStatus } from "@/components/admin/CleanerTourStatus";
+import { TourRecordingFreshness } from "@/components/admin/TourRecordingFreshness";
 import UrgentHireLog from "@/components/admin/UrgentHireLog";
 import AdminCrews from "@/views/admin/Crews";
 import ApplicantsPipeline from "@/components/admin/ApplicantsPipeline";
@@ -516,6 +518,10 @@ export default function AdminCleaners() {
           tokenized signing link. Hides itself once the backlog is clear. */}
       <UnsignedAgreements onSelectCleaner={(id) => setSelectedId(id)} />
 
+      {/* Whether the recorded walkthroughs still show the screens they claim
+          to. Quiet when they do. */}
+      <TourRecordingFreshness />
+
       {/* Accountability review queue: suspended / active strikes / repeat offenders. */}
       <AccountabilityWatchlist onSelectCleaner={(id) => setSelectedId(id)} />
 
@@ -776,7 +782,7 @@ function CleanerSheet({
                 <TabsContent value="jobs" className="pt-3">
                   <CleanerJobsBlock cleaner={cleaner} onChanged={onRefresh} />
                 </TabsContent>
-                <TabsContent value="onboarding" className="pt-3">
+                <TabsContent value="onboarding" className="pt-3 space-y-4">
                   <OnboardingChecklist
                     cleaner={cleaner}
                     onSendAgreement={() => onAction("send_agreement")}
@@ -784,6 +790,8 @@ function CleanerSheet({
                     onSendSupplies={() => onAction("send_supplies")}
                     actioning={actioning}
                   />
+                  <Separator />
+                  <CleanerTourStatus cleanerId={cleaner.id} />
                 </TabsContent>
                 <TabsContent value="performance" className="pt-3 space-y-4">
                   <PerformanceBlock cleaner={cleaner} onRefresh={onRefresh} />
