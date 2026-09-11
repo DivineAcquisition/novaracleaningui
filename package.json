@@ -47,6 +47,7 @@
     "commercial-onboarding:verify": "tsx scripts/verify-commercial-onboarding-session.ts",
     "zones:verify": "tsx scripts/verify-site-zones.ts",
     "pulse:verify": "tsx scripts/verify-pulse-check.ts",
+    "mailbox-ack:verify": "tsx scripts/verify-mailbox-ack.deno.ts",
     "termination-sms:verify": "tsx scripts/verify-termination-sms.ts",
     "recurring-pause:verify": "tsx scripts/verify-recurring-pause.ts",
     "eas:supabase:connect": "npm --prefix contractor-app run eas:supabase:connect"
