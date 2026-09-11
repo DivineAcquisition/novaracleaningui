@@ -914,13 +914,14 @@ serve(async (req) => {
       }
 
       // ─── SEND ACCOUNT SETUP LINK ─────────────────────────────────────
-      // Phone verify → supply checkoff → Stripe Connect, the same sequence
-      // cleanerSetupSteps() defines for the portal (payouts last, because it
-      // is the step people abandon). Tokenized link lands on a short setup
-      // page, then auth → onboarding portal — same pattern as the agreement
-      // send for contractors who never finished account setup.
+      // Phone verify → job-day guides → supply checkoff → Stripe Connect, the
+      // same sequence cleanerSetupSteps() defines for the portal (payouts
+      // last, because it is the step people abandon). Tokenized link lands on
+      // a short setup page, then auth → onboarding portal — same pattern as
+      // the agreement send for contractors who never finished account setup.
       case "send_setup": {
         const phoneOk = cleaner.phone_verified === true;
+        const guidesOk = cleaner.ob_job_day_guides_ack === true;
         const suppliesOk =
           Boolean(cleaner.supply_checklist_submitted_at) ||
           cleaner.ob_supplies_checklist_viewed === true;
@@ -928,9 +929,9 @@ serve(async (req) => {
           cleaner.payouts_enabled === true ||
           cleaner.ob_payouts_setup === true ||
           Boolean(String(cleaner.stripe_account_id || "").trim());
-        if (phoneOk && suppliesOk && stripeOk) {
+        if (phoneOk && guidesOk && suppliesOk && stripeOk) {
           return json({
-            error: "Account setup is already complete (phone + supplies + payouts).",
+            error: "Account setup is already complete (phone + guide + supplies + payouts).",
             code: "ALREADY_COMPLETE",
           }, 409);
         }
@@ -955,7 +956,7 @@ serve(async (req) => {
         }
         if (!mintedToken) {
           return json({
-            error: "Account setup is already complete (phone + supplies + payouts).",
+            error: "Account setup is already complete (phone + guide + supplies + payouts).",
             code: "ALREADY_COMPLETE",
           }, 409);
         }
@@ -983,6 +984,7 @@ serve(async (req) => {
                     setupUrl: SETUP_URL,
                     loginUrl: SETUP_URL,
                     needsPhone: !phoneOk,
+                    needsGuides: !guidesOk,
                     needsSupplies: !suppliesOk,
                     needsStripe: !stripeOk,
                   },
@@ -1007,6 +1009,7 @@ serve(async (req) => {
           // Listed in the order the portal will ask for them.
           const outstanding = [
             !phoneOk ? "verify your phone" : null,
+            !guidesOk ? "read the dress code" : null,
             !suppliesOk ? "check off your supplies" : null,
             !stripeOk ? "set up payouts" : null,
           ].filter(Boolean) as string[];

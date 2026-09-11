@@ -1,17 +1,17 @@
 // ─── Verification of the contractor onboarding sequence ─────────────────────
 //
-// Onboarding is phone → supplies → payouts, and four things have to agree on
-// that: the shared definition in src/lib/cleaner-supplies.ts, the portal a
-// contractor works through, the page a mailed setup link lands on, and the
-// admin view that decides whether anything is outstanding. When they drift,
-// the symptom is a contractor being asked for bank details before anyone has
-// asked what equipment they own — or being told setup is complete when it
-// isn't.
+// Onboarding is phone → job-day guides → supplies → payouts, and four things
+// have to agree on that: the shared definition in src/lib/cleaner-supplies.ts,
+// the portal a contractor works through, the page a mailed setup link lands
+// on, and the admin view that decides whether anything is outstanding. When
+// they drift, the symptom is a contractor being asked for bank details before
+// anyone has asked what equipment they own — or being told setup is complete
+// when it isn't.
 //
 // The first half of this script checks the shared definition by calling it.
 // The second half opens the real pages in a browser and reads what a
-// contractor would actually see, because "the function returns three steps"
-// and "the portal shows three steps, with payouts locked last" are different
+// contractor would actually see, because "the function returns four steps"
+// and "the portal shows four steps, with payouts locked last" are different
 // claims and only the second one is the product.
 //
 // No real data is touched: every Supabase call is answered from an invented
@@ -20,7 +20,7 @@
 //   Run:  npm run dev -- --port 3100     (in another shell)
 //         npm run onboarding:verify
 
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { chromium, type Browser, type Page, type Route } from "playwright";
 
@@ -28,18 +28,27 @@ import {
   SUPPLY_ITEMS,
   cleanerSetupSteps,
   isCleanerSetupComplete,
+  isJobDayGuidesAcknowledged,
   isSupplyChecklistSubmitted,
   sanitizeSupplyInventory,
   scoreSupplyInventory,
   supplySubmissionPatch,
   type CleanerSetupState,
 } from "../src/lib/cleaner-supplies";
+import { ONBOARDING_GUIDES } from "../src/lib/cleaner-onboarding-guides";
 
 const BASE_URL = process.env.ONBOARDING_VERIFY_BASE_URL || "http://localhost:3100";
 const SHOTS_DIR = resolve(__dirname, "../docs/contractor-onboarding");
 const AUTH_STORAGE_KEY = "sb-sxdraeptzuamsgjcvfeg-auth-token";
 
 let failures = 0;
+const warnings: string[] = [];
+
+function warn(message: string): void {
+  warnings.push(message);
+  console.warn(`  ! ${message}`);
+}
+
 function check(name: string, actual: unknown, expected: unknown): void {
   const a = JSON.stringify(actual);
   const e = JSON.stringify(expected);
@@ -58,41 +67,55 @@ function checkSequence(): void {
 
   const fresh: CleanerSetupState = {};
   check(
-    "three steps, payouts last",
+    "four steps, guides before supplies, payouts last",
     cleanerSetupSteps(fresh).map((s) => s.id),
-    ["phone", "supplies", "payouts"],
+    ["phone", "guides", "supplies", "payouts"],
   );
   check("a brand-new contractor has nothing done", cleanerSetupSteps(fresh).map((s) => s.done), [
+    false,
     false,
     false,
     false,
   ]);
   check("and is not complete", isCleanerSetupComplete(fresh), false);
 
-  // The state that used to read as finished: phone + Stripe, supplies never
-  // asked. If this ever goes back to true, admin loses the ability to send
-  // these contractors a setup link at all.
+  // The state that used to read as finished: phone + Stripe, with nobody ever
+  // asked about supplies or shown the dress code. If this ever goes back to
+  // true, admin loses the ability to send these contractors a setup link.
   const phoneAndStripe: CleanerSetupState = {
     phone_verified: true,
     stripe_account_id: "acct_123",
   };
-  check("phone + payouts alone is no longer complete", isCleanerSetupComplete(phoneAndStripe), false);
+  check("phone + payouts alone is not complete", isCleanerSetupComplete(phoneAndStripe), false);
   check(
-    "the outstanding step is the supply checkoff",
+    "the outstanding steps are the guides and the supply checkoff, in order",
     cleanerSetupSteps(phoneAndStripe).filter((s) => !s.done).map((s) => s.id),
-    ["supplies"],
+    ["guides", "supplies"],
   );
 
+  const allDone: CleanerSetupState = {
+    ...phoneAndStripe,
+    ob_job_day_guides_ack: true,
+    supply_checklist_submitted_at: "2026-09-01T00:00:00Z",
+  };
+  check("all four done is complete", isCleanerSetupComplete(allDone), true);
   check(
-    "all three done is complete",
-    isCleanerSetupComplete({ ...phoneAndStripe, supply_checklist_submitted_at: "2026-09-01T00:00:00Z" }),
+    "a contractor who skipped only the dress code is still outstanding",
+    cleanerSetupSteps({ ...allDone, ob_job_day_guides_ack: false })
+      .filter((s) => !s.done)
+      .map((s) => s.id),
+    ["guides"],
+  );
+  check("the guides step needs an explicit acknowledgment", isJobDayGuidesAcknowledged({}), false);
+  check(
+    "which is one record covering both graphics",
+    isJobDayGuidesAcknowledged({ ob_job_day_guides_ack: true }),
     true,
   );
 
   // Submission, not readiness: a contractor who owns almost nothing has still
   // done the step. Onboarding must never wait on a purchase.
-  const emptyButSubmitted = { ...phoneAndStripe, supply_checklist_submitted_at: "2026-09-01T00:00:00Z" };
-  check("submitting an almost-empty checklist still completes the step", isCleanerSetupComplete(emptyButSubmitted), true);
+  check("submitting an almost-empty checklist still completes the step", isCleanerSetupComplete(allDone), true);
   check("while readiness stays false", scoreSupplyInventory({}).ready, false);
 
   check(
@@ -115,6 +138,40 @@ function checkSequence(): void {
     sanitizeSupplyInventory({ vacuum: true, not_a_real_item: true }),
     { vacuum: true },
   );
+}
+
+/**
+ * The two graphics and the text each one carries.
+ *
+ * A missing image file is a warning, not a failure: the step is built to fall
+ * back to `points`, which is the whole content of the graphic in words, so
+ * onboarding still asks and answers the same thing. The warning exists so a
+ * missing file is visible rather than quietly degrading forever.
+ */
+function checkGuides(): void {
+  console.log("\nThe dress code and job-day graphics");
+
+  check(
+    "both guides, dress code first",
+    ONBOARDING_GUIDES.map((g) => g.id),
+    ["dress_code", "job_day"],
+  );
+
+  for (const guide of ONBOARDING_GUIDES) {
+    check(`${guide.id}: has alt text for the graphic`, guide.alt.length > 20, true);
+    check(`${guide.id}: carries its content as text too`, guide.points.length >= 5, true);
+    check(`${guide.id}: served from public/onboarding/`, guide.image.startsWith("/onboarding/"), true);
+
+    const onDisk = resolve(__dirname, "../public", guide.image.replace(/^\//, ""));
+    if (!existsSync(onDisk)) {
+      warn(
+        `${guide.id}: public${guide.image} is not in the repo yet — the step will render the ` +
+          `text version until the graphic is added.`,
+      );
+    } else {
+      console.log(`  ✓ ${guide.id}: graphic present at public${guide.image}`);
+    }
+  }
 }
 
 // ─── Part 2: the pages a contractor sees ────────────────────────────────────
@@ -140,6 +197,8 @@ function freshCleaner(): Record<string, unknown> {
     ob_payouts_setup: false,
     ob_payouts_setup_at: null,
     ob_agreement_signed: false,
+    ob_job_day_guides_ack: false,
+    ob_job_day_guides_ack_at: null,
     ob_supplies_checklist_viewed: false,
     supply_checklist_submitted_at: null,
     supply_inventory: {},
@@ -147,6 +206,12 @@ function freshCleaner(): Record<string, unknown> {
     pay_percentage: 35,
   };
 }
+
+// A valid 1×1 PNG. The guide graphics are served from this so the portal
+// checks behave the same whether or not the real artwork has landed yet; the
+// artwork's presence is reported separately by checkGuides().
+const PNG_1PX =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
 
 const CORS = {
   "access-control-allow-origin": "*",
@@ -238,32 +303,51 @@ async function checkPortal(browser: Browser): Promise<void> {
   const page = await browser.newPage({ viewport: { width: 1100, height: 1400 } });
   await mountHarness(page, row);
 
+  let guideImagesBroken = false;
+  await page.route("**/onboarding/*", (route) =>
+    guideImagesBroken
+      ? route.abort()
+      : route.fulfill({
+          status: 200,
+          contentType: "image/png",
+          body: Buffer.from(PNG_1PX, "base64"),
+        }),
+  );
+
   await page.goto(`${BASE_URL}/cleaner/ob-portal`, { waitUntil: "networkidle" });
   await page.getByText("Welcome, Imani!").waitFor({ timeout: 20_000 });
 
   const body = () => page.locator("main").innerText();
 
-  check("the portal now asks for three steps", (await body()).includes("Three quick steps"), true);
-  check("and counts them", (await body()).includes("0 of 3 complete"), true);
+  check("the portal now asks for four steps", (await body()).includes("Four quick steps"), true);
+  check("and counts them", (await body()).includes("0 of 4 complete"), true);
 
   const headings = await page.locator("main h3, main [class*='CardTitle'], main div.text-base").allInnerTexts();
-  const order = ["Verify your phone number", "Check off your supplies", "Set up payouts"].filter((t) =>
-    headings.some((h) => h.includes(t)),
-  );
+  const expectedOrder = [
+    "Verify your phone number",
+    "Read the dress code and job-day guide",
+    "Check off your supplies",
+    "Set up payouts",
+  ];
   check(
-    "in order, with payouts last",
-    order,
-    ["Verify your phone number", "Check off your supplies", "Set up payouts"],
+    "in order, guides before supplies and payouts last",
+    expectedOrder.filter((t) => headings.some((h) => h.includes(t))),
+    expectedOrder,
   );
 
   check(
-    "supplies is locked behind phone verification",
+    "the guides are locked behind phone verification",
     (await body()).includes("Verify your phone first."),
     true,
   );
   check(
-    "and payouts names both of the steps ahead of it",
-    (await body()).includes("Verify your phone and check off your supplies to unlock payouts."),
+    "so is the supply checkoff",
+    (await body()).match(/Verify your phone first\./g)?.length,
+    2,
+  );
+  check(
+    "and payouts just points at the steps above it",
+    (await body()).includes("Finish the steps above to unlock payouts."),
     true,
   );
   check(
@@ -275,14 +359,82 @@ async function checkPortal(browser: Browser): Promise<void> {
   mkdirSync(SHOTS_DIR, { recursive: true });
   await page.screenshot({ path: resolve(SHOTS_DIR, "portal-fresh.png"), fullPage: true });
 
-  // ── Phone verified: the checklist itself should now be on the page ──
+  // ── Phone verified: the two graphics should now be on the page ──
   row.phone_verified = true;
   await page.reload({ waitUntil: "networkidle" });
   await page.getByText("Welcome, Imani!").waitFor({ timeout: 20_000 });
 
-  check("phone verified counts", (await body()).includes("1 of 3 complete"), true);
+  check("phone verified counts", (await body()).includes("1 of 4 complete"), true);
   check(
-    "the supply checklist is on the page, not behind another link",
+    "both graphics are shown inline",
+    await page.locator('main img[src^="/onboarding/"]').count(),
+    ONBOARDING_GUIDES.length,
+  );
+  for (const guide of ONBOARDING_GUIDES) {
+    check(
+      `the ${guide.id} graphic is on the page with its alt text`,
+      await page.locator(`main img[alt="${guide.alt}"]`).isVisible(),
+      true,
+    );
+  }
+  check(
+    "each graphic can be opened full size",
+    await page.locator('main a[href^="/onboarding/"]').count(),
+    ONBOARDING_GUIDES.length,
+  );
+  check(
+    "the supply checkoff stays locked until the guides are read",
+    (await body()).includes("Read the dress code and job-day guide first"),
+    true,
+  );
+  check(
+    "so the checklist is not on the page yet",
+    await page.getByText("Download full PDF checklist").isVisible().catch(() => false),
+    false,
+  );
+
+  await page.screenshot({ path: resolve(SHOTS_DIR, "portal-guides.png"), fullPage: true });
+
+  // ── A graphic that fails to load must not strand the contractor ──
+  guideImagesBroken = true;
+  await page.reload({ waitUntil: "networkidle" });
+  await page.getByText("Welcome, Imani!").waitFor({ timeout: 20_000 });
+  check(
+    "a graphic that won't load says so rather than showing a broken box",
+    (await body()).includes("The graphic didn't load."),
+    true,
+  );
+  for (const guide of ONBOARDING_GUIDES) {
+    check(
+      `and ${guide.id} is readable as text instead`,
+      (await body()).includes(guide.points[0]),
+      true,
+    );
+  }
+  check(
+    "the step can still be completed",
+    await page.getByRole("button", { name: "I've read both" }).isVisible(),
+    true,
+  );
+  await page.screenshot({ path: resolve(SHOTS_DIR, "portal-guides-fallback.png"), fullPage: true });
+
+  guideImagesBroken = false;
+  await page.reload({ waitUntil: "networkidle" });
+  await page.getByText("Welcome, Imani!").waitFor({ timeout: 20_000 });
+
+  // ── Acknowledge the guides ──
+  await page.getByRole("button", { name: "I've read both" }).click();
+  await page.getByText("Read — thanks.").waitFor({ timeout: 20_000 });
+  check(
+    "the acknowledgment is recorded on the contractor's row",
+    row.ob_job_day_guides_ack,
+    true,
+  );
+  check("with a timestamp", Boolean(row.ob_job_day_guides_ack_at), true);
+  check("two of four steps done", (await body()).includes("2 of 4 complete"), true);
+
+  check(
+    "the supply checklist is now on the page, not behind another link",
     await page.getByText("Download full PDF checklist").isVisible(),
     true,
   );
@@ -292,8 +444,8 @@ async function checkPortal(browser: Browser): Promise<void> {
     SUPPLY_ITEMS.length,
   );
   check(
-    "payouts is still locked, and says why",
-    (await body()).includes("Check off your supplies to unlock payouts."),
+    "payouts is still locked",
+    (await body()).includes("Finish the steps above to unlock payouts."),
     true,
   );
 
@@ -322,7 +474,7 @@ async function checkPortal(browser: Browser): Promise<void> {
     ).length,
     needed.length,
   );
-  check("two of three steps done", (await body()).includes("2 of 3 complete"), true);
+  check("three of four steps done", (await body()).includes("3 of 4 complete"), true);
   check(
     "and payouts is finally unlocked",
     await page.getByRole("button", { name: /Set up payouts/ }).isVisible(),
@@ -350,6 +502,11 @@ async function checkPortal(browser: Browser): Promise<void> {
     await page.getByRole("button", { name: "Review my supplies" }).isVisible(),
     true,
   );
+  check(
+    "the guides collapse the same way, and stay available",
+    await page.getByRole("button", { name: "Look again" }).isVisible(),
+    true,
+  );
 
   await page.close();
 }
@@ -373,6 +530,7 @@ async function checkSetupLanding(browser: Browser): Promise<void> {
         sequence: cleanerSetupSteps(state).map((s) => ({ id: s.id, title: s.title, done: s.done })),
         steps: {
           phoneVerified: true,
+          guidesAcknowledged: false,
           suppliesSubmitted: false,
           stripeReady: false,
           agreementSigned: false,
@@ -392,8 +550,13 @@ async function checkSetupLanding(browser: Browser): Promise<void> {
   const listed = rows.map((r) => r.trim()).filter(Boolean);
   check(
     "the link page lists the same sequence the portal will walk",
-    listed.slice(0, 3),
-    ["Verify your phone number", "Check off your supplies", "Set up payouts (Stripe)"],
+    listed.slice(0, 4),
+    [
+      "Verify your phone number",
+      "Read the dress code and job-day guide",
+      "Check off your supplies",
+      "Set up payouts (Stripe)",
+    ],
   );
   check(
     "and sends them into the portal to do it",
@@ -507,8 +670,13 @@ async function checkAdminView(browser: Browser): Promise<void> {
   const panel = await page.locator("body").innerText();
   check("the supply checkoff is one of the steps admin sees", panel.includes("Supply checklist submitted"), true);
   check(
-    "and readiness is stated as all three",
-    panel.includes("Portal ready (phone + supplies + Stripe)"),
+    "so is the dress code and job-day guide",
+    panel.includes("Dress code + job-day guide read"),
+    true,
+  );
+  check(
+    "and readiness is stated as all four",
+    panel.includes("Portal ready (phone + guide + supplies + Stripe)"),
     true,
   );
   // The demo directory predates the supply columns, so these contractors read
@@ -532,6 +700,7 @@ async function checkAdminView(browser: Browser): Promise<void> {
 
 async function main(): Promise<void> {
   checkSequence();
+  checkGuides();
 
   const res = await fetch(BASE_URL).catch(() => null);
   if (!res) {
@@ -556,6 +725,13 @@ async function main(): Promise<void> {
     process.exit(1);
   }
   console.log("\nAll onboarding sequence checks passed.");
+  if (warnings.length) {
+    console.log(
+      `\n${warnings.length} warning${warnings.length === 1 ? "" : "s"} — the flow works, ` +
+        `but something is missing:`,
+    );
+    for (const w of warnings) console.log(`  ! ${w}`);
+  }
 }
 
 void main();

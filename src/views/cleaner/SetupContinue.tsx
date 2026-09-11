@@ -21,6 +21,7 @@ type Payload = {
   sequence: { id: string; title: string; done: boolean }[];
   steps: {
     phoneVerified: boolean;
+    guidesAcknowledged: boolean;
     suppliesSubmitted: boolean;
     stripeReady: boolean;
     agreementSigned: boolean;
@@ -136,7 +137,8 @@ export default function SetupContinue() {
             <div>
               <p className="text-sm font-semibold text-slate-900">You&apos;re all set, {first}</p>
               <p className="mt-1 text-sm text-slate-600">
-                Phone, supplies and payouts are all done. Sign in anytime to see jobs.
+                Phone, the job-day guide, supplies and payouts are all done. Sign in anytime to
+                see jobs.
               </p>
               <Button asChild className="mt-4 bg-violet-700 hover:bg-violet-800">
                 <Link href="/cleaner/auth">Open contractor portal</Link>

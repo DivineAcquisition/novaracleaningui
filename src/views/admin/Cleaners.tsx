@@ -64,7 +64,10 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { describeEdgeError } from "@/lib/edge-invoke";
-import { isSupplyChecklistSubmitted } from "@/lib/cleaner-supplies";
+import {
+  isJobDayGuidesAcknowledged,
+  isSupplyChecklistSubmitted,
+} from "@/lib/cleaner-supplies";
 import TerminateCleanerDialog from "@/components/admin/TerminateCleanerDialog";
 import { CleanerTourStatus } from "@/components/admin/CleanerTourStatus";
 import { TourRecordingFreshness } from "@/components/admin/TourRecordingFreshness";
@@ -156,6 +159,8 @@ interface CleanerRow {
   ob_agreement_signed_at?: string | null;
   supply_checklist_submitted_at?: string | null;
   ob_supplies_checklist_viewed?: boolean | null;
+  ob_job_day_guides_ack?: boolean | null;
+  ob_job_day_guides_ack_at?: string | null;
   payouts_enabled: boolean | null;
   stripe_account_id: string | null;
   home_address: string | null;
@@ -196,10 +201,11 @@ const fullName = (c: CleanerRow) =>
 const stripeOnboardingDone = (c: CleanerRow): boolean =>
   Boolean(c.payouts_enabled || c.ob_payouts_setup || c.stripe_account_id);
 
-// Mirrors cleanerSetupSteps(): phone → supplies → payouts.
+// Mirrors cleanerSetupSteps(): phone → job-day guides → supplies → payouts.
 const onboardingProgress = (c: CleanerRow): number => {
   const flags = [
     c.phone_verified,
+    isJobDayGuidesAcknowledged(c),
     isSupplyChecklistSubmitted(c),
     stripeOnboardingDone(c),
   ];
@@ -263,7 +269,7 @@ export default function AdminCleaners() {
     const { data, error } = await supabase
       .from("cleaners")
       .select(
-        "id,user_id,first_name,last_name,email,phone,status,approved,available_for_bookings,walkthrough_eligible,home_zip,state,pay_tier,pay_percentage,completed_bookings,total_bookings,acceptance_rate,on_time_rate,average_rating,weighted_score,workload_score,novara_score,quality_score,overall_score,scores_computed_at,constraints,jobs_assigned_last_7d,onboarding_complete,phone_verified,ob_payouts_setup,ob_agreement_signed,ob_agreement_signed_at,supply_checklist_submitted_at,ob_supplies_checklist_viewed,payouts_enabled,stripe_account_id,home_address,home_city,home_zip,service_zip_codes,max_travel_miles,preferred_work_days,skillset,ghl_synced_at,ghl_sync_error,created_at,activated_at,rehire_status,termination_reason,terminated_at",
+        "id,user_id,first_name,last_name,email,phone,status,approved,available_for_bookings,walkthrough_eligible,home_zip,state,pay_tier,pay_percentage,completed_bookings,total_bookings,acceptance_rate,on_time_rate,average_rating,weighted_score,workload_score,novara_score,quality_score,overall_score,scores_computed_at,constraints,jobs_assigned_last_7d,onboarding_complete,phone_verified,ob_payouts_setup,ob_agreement_signed,ob_agreement_signed_at,supply_checklist_submitted_at,ob_supplies_checklist_viewed,ob_job_day_guides_ack,ob_job_day_guides_ack_at,payouts_enabled,stripe_account_id,home_address,home_city,home_zip,service_zip_codes,max_travel_miles,preferred_work_days,skillset,ghl_synced_at,ghl_sync_error,created_at,activated_at,rehire_status,termination_reason,terminated_at",
       )
       .order("created_at", { ascending: false })
       .limit(500);
@@ -1267,6 +1273,14 @@ function ContactSection({ cleaner }: { cleaner: CleanerRow }) {
 const OB_STEPS: Array<{ done: (c: CleanerRow) => boolean; label: string; detail?: (c: CleanerRow) => string | null }> = [
   { done: (c) => Boolean(c.phone_verified), label: "Phone verified" },
   {
+    done: isJobDayGuidesAcknowledged,
+    label: "Dress code + job-day guide read",
+    detail: (c) =>
+      c.ob_job_day_guides_ack_at
+        ? `Read ${new Date(c.ob_job_day_guides_ack_at).toLocaleDateString()}`
+        : null,
+  },
+  {
     done: isSupplyChecklistSubmitted,
     label: "Supply checklist submitted",
     detail: (c) =>
@@ -1300,6 +1314,7 @@ function OnboardingChecklist({
 }) {
   const introReady =
     Boolean(cleaner.phone_verified) &&
+    isJobDayGuidesAcknowledged(cleaner) &&
     isSupplyChecklistSubmitted(cleaner) &&
     stripeOnboardingDone(cleaner);
   const agreementSigned = Boolean(cleaner.ob_agreement_signed);
@@ -1334,7 +1349,7 @@ function OnboardingChecklist({
           );
         })}
         <li className="text-[11px] text-slate-500 px-1 pt-2">
-          Portal ready (phone + supplies + Stripe): {introReady ? "yes" : "no"}
+          Portal ready (phone + guide + supplies + Stripe): {introReady ? "yes" : "no"}
           {cleaner.onboarding_complete ? " · DB onboarding_complete: yes" : ""}
         </li>
       </ul>
@@ -1344,7 +1359,8 @@ function OnboardingChecklist({
           <p className="text-sm font-medium text-sky-950">Account setup incomplete</p>
           <p className="text-xs text-sky-800">
             Sends email + SMS with one link that walks them through whatever is
-            left — phone verification, the supply checkoff, then Stripe payouts.
+            left — phone verification, the dress code and job-day guide, the
+            supply checkoff, then Stripe payouts.
           </p>
           <Button
             type="button"
