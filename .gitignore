@@ -27,6 +27,11 @@ out
 tsconfig.tsbuildinfo
 supabase/.temp/
 
+# Generated walkthrough recordings — the generation script is the artifact,
+# not the media. Re-create with `npm run tours:record`.
+docs/contractor-tours/recordings/*.webm
+docs/contractor-tours/recordings/*.vtt
+
 # Screenshots taken while verifying the contractor onboarding sequence.
 # Evidence of a run, not a source of truth — re-create with
 # `npm run onboarding:verify`.
