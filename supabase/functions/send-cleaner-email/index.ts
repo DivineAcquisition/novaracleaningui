@@ -268,6 +268,43 @@ serve(async (req) => {
         break;
       }
 
+      // Contractor Standards & Conduct Addendum. `reacknowledgment` flips the
+      // copy for someone who already acknowledged an earlier version — telling
+      // a contractor who did this in March to "please acknowledge" reads as a
+      // system that lost their answer, and they stop replying to these.
+      case "standards_request": {
+        const first = data.firstName || "there";
+        const standardsUrl = data.standardsUrl || "https://contractor.novaracleaning.com/cleaner/role";
+        const again = data.reacknowledgment === true;
+        subject = again
+          ? "We've updated the Novara contractor standards"
+          : "Please read and acknowledge the Novara contractor standards";
+        html = `
+          <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#0f172a">
+            <h2 style="margin:0 0 8px;font-size:20px">${
+              again ? "The contractor standards have been updated" : "Contractor Standards &amp; Conduct Addendum"
+            }</h2>
+            <p style="margin:0 0 16px;color:#475569">Hi ${first},</p>
+            <p style="margin:0 0 16px;color:#475569">
+              ${
+                again
+                  ? "You've acknowledged an earlier version of our contractor standards. They've been revised, so please read the current version and acknowledge it again."
+                  : "Please read our contractor standards and acknowledge them. They clarify what your Independent Contractor Agreement already requires on every job — appearance, phone, checklist, client property, pets, punctuality and chemicals."
+              }
+            </p>
+            <p style="margin:0 0 16px;color:#475569">It takes a couple of minutes, and there's no login.</p>
+            <p style="margin:24px 0;text-align:center">
+              <a href="${standardsUrl}"
+                 style="display:inline-block;background:#7c3aed;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600">
+                Read and acknowledge
+              </a>
+            </p>
+            <p style="margin:0 0 8px;color:#64748b;font-size:14px">The link stays open, so you can re-read the standards any time.</p>
+            <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">Novara Cleaning</p>
+          </div>`;
+        break;
+      }
+
       case "pulse_check": {
         const first = data.firstName || "there";
         const pulseUrl = data.pulseUrl || "https://contractor.novaracleaning.com/cleaner/auth";

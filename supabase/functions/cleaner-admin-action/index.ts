@@ -913,6 +913,173 @@ serve(async (req) => {
         return json({ ok: true, emailed, smsSent, emailError, smsError, agreementUrl: AGREEMENT_URL });
       }
 
+      // ─── SEND STANDARDS ACKNOWLEDGMENT LINK ──────────────────────────
+      // The Contractor Standards & Conduct Addendum. Unlike the ICA, this is
+      // versioned and re-acknowledged: having acknowledged an EARLIER version
+      // is precisely a reason to send the link, not a reason to refuse. Only
+      // being current on the version in app_settings closes it out.
+      case "send_standards": {
+        const { data: settingsRow } = await adminClient
+          .from("app_settings").select("value").eq("key", "contractor_standards").maybeSingle();
+        const settings = (settingsRow?.value || {}) as {
+          version?: string;
+          link_ttl_days?: number;
+        };
+        const currentVersion = String(settings.version || "").trim();
+        if (!currentVersion) {
+          return json({
+            error: "No current contractor standards version is configured (app_settings.contractor_standards).",
+          }, 500);
+        }
+        const ttlDays = Number(settings.link_ttl_days) > 0 ? Number(settings.link_ttl_days) : 30;
+
+        const acknowledged = String(cleaner.conduct_standards_version || "").trim();
+        if (acknowledged === currentVersion) {
+          return json({
+            error: "This contractor has already acknowledged the current standards.",
+            code: "ALREADY_ACKNOWLEDGED",
+            acknowledgedAt: cleaner.conduct_standards_acknowledged_at || null,
+          }, 409);
+        }
+        const force = Boolean(body.force);
+        if (cleaner.status === "terminated" && !force) {
+          return json({ error: "Cannot send standards to a terminated cleaner." }, 409);
+        }
+
+        const firstName = String(cleaner.first_name || "").trim() || "there";
+        const email = String(cleaner.email || "").trim();
+        const phone = String(cleaner.phone || "").trim();
+        if (!email && !phone) {
+          return json({ error: "Cleaner has no email or phone on file." }, 400);
+        }
+
+        const { data: mintedToken, error: mintErr } = await adminClient.rpc(
+          "mint_cleaner_standards_token",
+          { p_cleaner_id: cleanerId, p_ttl_days: ttlDays },
+        );
+        if (mintErr) {
+          return json({ error: `Could not create an acknowledgment link: ${mintErr.message}` }, 500);
+        }
+        if (!mintedToken) {
+          return json({
+            error: "This contractor has already acknowledged the current standards.",
+            code: "ALREADY_ACKNOWLEDGED",
+          }, 409);
+        }
+
+        const STANDARDS_URL =
+          `https://contractor.novaracleaning.com/cleaner/standards/${mintedToken}`;
+        // Somebody on an older version is being asked again, not for the first
+        // time, and the copy has to say so on both transports.
+        const reacknowledgment = acknowledged.length > 0;
+
+        let emailed = false;
+        let smsSent = false;
+        let emailError: string | null = null;
+        let smsError: string | null = null;
+
+        if (email && !email.endsWith("@pending.novara")) {
+          try {
+            const { data: mailRes, error: mailErr } = await adminClient.functions.invoke(
+              "send-cleaner-email",
+              {
+                body: {
+                  type: "standards_request",
+                  email,
+                  data: { firstName, standardsUrl: STANDARDS_URL, reacknowledgment },
+                },
+              },
+            );
+            const failed = mailErr || (mailRes as { error?: string } | null)?.error;
+            emailed = !failed;
+            if (failed) {
+              emailError = await describeInvokeFailure(mailErr, mailRes);
+              console.warn("[cleaner-admin-action] standards email failed", emailError);
+            }
+          } catch (mailCatch) {
+            emailError = mailCatch instanceof Error ? mailCatch.message : String(mailCatch);
+            console.warn("[cleaner-admin-action] standards email failed", emailError);
+          }
+        } else {
+          emailError = email ? "Placeholder email address on file." : "No email on file.";
+        }
+
+        if (phone) {
+          const message = reacknowledgment
+            ? `Hi ${firstName}! Novara Cleaning — we've updated our contractor standards. ` +
+              `Please read and acknowledge the current version here: ${STANDARDS_URL} ` +
+              `It takes a couple of minutes and there's no login.`
+            : `Hi ${firstName}! Novara Cleaning — please read and acknowledge our contractor ` +
+              `standards here: ${STANDARDS_URL} It takes a couple of minutes and there's no login.`;
+          // GHL is the only sanctioned SMS transport here — see send_agreement.
+          try {
+            const { data: smsRes, error: smsErr } = await adminClient.functions.invoke("send-ghl-sms", {
+              body: {
+                phone,
+                email: email || undefined,
+                firstName,
+                message,
+                type: "standards_request",
+              },
+            });
+            const ghlFailed = smsErr || (smsRes as { error?: string } | null)?.error;
+            smsSent = !ghlFailed;
+            if (ghlFailed) {
+              smsError = await describeInvokeFailure(smsErr, smsRes);
+              console.warn("[cleaner-admin-action] standards SMS via GHL failed", smsError);
+            }
+          } catch (smsCatch) {
+            smsError = smsCatch instanceof Error ? smsCatch.message : String(smsCatch);
+            console.warn("[cleaner-admin-action] standards SMS via GHL failed", smsError);
+          }
+        } else {
+          smsError = "No phone on file.";
+        }
+
+        await adminClient.from("events").insert({
+          event_type: "cleaner.standards_link_sent",
+          cleaner_id: cleanerId,
+          source: "cleaner-admin-action",
+          summary:
+            `Contractor standards ${reacknowledgment ? "re-" : ""}acknowledgment link sent to ` +
+            `${`${cleaner.first_name || ""} ${cleaner.last_name || ""}`.trim()} ` +
+            `(email: ${emailed ? "sent" : `failed — ${emailError}`}, SMS: ${smsSent ? "sent" : `failed — ${smsError}`})`,
+          data: {
+            by: callerId,
+            emailed,
+            sms_sent: smsSent,
+            email_error: emailError,
+            sms_error: smsError,
+            version: currentVersion,
+            previous_version: acknowledged || null,
+            reacknowledgment,
+          },
+        }).then(() => undefined, () => undefined);
+
+        if (!emailed && !smsSent) {
+          // The link is minted and valid, so hand it back rather than leaving
+          // an admin stuck behind a transport outage.
+          return json({
+            error:
+              `Couldn't reach them. Email: ${emailError || "not attempted"}. SMS: ${smsError || "not attempted"}. ` +
+              `The link below is valid for ${ttlDays} days if you want to send it yourself.`,
+            emailError,
+            smsError,
+            standardsUrl: STANDARDS_URL,
+          }, 502);
+        }
+
+        return json({
+          ok: true,
+          emailed,
+          smsSent,
+          emailError,
+          smsError,
+          standardsUrl: STANDARDS_URL,
+          reacknowledgment,
+        });
+      }
+
       // ─── SEND ACCOUNT SETUP LINK ─────────────────────────────────────
       // Phone verify + Stripe Connect. Tokenized link lands on a short
       // setup page, then auth → onboarding portal — same pattern as the
