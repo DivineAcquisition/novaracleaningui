@@ -32,7 +32,7 @@ what "complete" meant — for itself:
 The database agrees too. `mint_cleaner_setup_token` returns `NULL` to mean
 "nothing left to send", and `cleaner_setup_status_v1.setup_complete` reports
 standing; both count all four steps
-(`supabase/migrations/20260912093000_onboarding_job_day_guides.sql`, which
+(`supabase/migrations/20260911210538_onboarding_job_day_guides.sql`, which
 supersedes `20260911200210_setup_sequence_includes_supplies.sql`). Without
 that, a contractor who had done phone and Stripe but had never been asked
 about the dress code or their supplies would look finished to the token
