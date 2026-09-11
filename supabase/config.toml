@@ -750,6 +750,13 @@ verify_jwt = false
 [functions.pulse-check-runner]
 verify_jwt = false
 
+# Inbound ack for disputes / inquiries / complaints. External webhook
+# (Resend email.received or a flattened JSON post). JWT is not used;
+# the handler only sends when the receiving address is support@ or
+# billing@novaracleaning.com.
+[functions.inbound-mailbox-ack]
+verify_jwt = false
+
 # Contractor statement form: reminder + overdue flag (never a penalty) and
 # Drive/PDF retry. JWT verified in-function (cron secret / service role / admin).
 [functions.qc-statement-runner]
