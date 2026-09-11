@@ -4,6 +4,7 @@ import {
   RiArrowRightLine,
   RiBankCardLine,
   RiCheckboxCircleFill,
+  RiListCheck2,
   RiLoader4Line,
   RiLockLine,
   RiLogoutBoxRLine,
@@ -33,18 +34,30 @@ import {
   BLOCKED_CLEANER_STATUSES,
 } from "@/lib/cleaner-auth";
 import { PhoneVerificationDialog } from "@/components/cleaner/PhoneVerificationDialog";
+import { SupplyChecklistForm } from "@/components/cleaner/SupplyChecklistForm";
+import {
+  SUPPLY_ITEMS,
+  cleanerSetupSteps,
+  isSupplyChecklistSubmitted,
+  sanitizeSupplyInventory,
+  scoreSupplyInventory,
+  supplySubmissionEvent,
+  supplySubmissionPatch,
+  type SupplyInventory,
+} from "@/lib/cleaner-supplies";
 
 const logo = "/novara-logo.png";
 
 // ─── Types ──────────────────────────────────────────────
 //
-// The onboarding portal now tracks a streamlined two-step checklist:
+// The portal walks the sequence defined by cleanerSetupSteps():
 //   1. Phone number verification (via send-phone-verification + verify-phone-code)
-//   2. Stripe Connect payouts setup
+//   2. Supply checkoff (same checklist as the emailed /cleaner/supplies link)
+//   3. Stripe Connect payouts setup
 //
-// Legacy fields (ob_agreement_signed, ob_google_chat_joined,
-// ob_supplies_checklist_viewed, ob_training_accessed) stay on the
-// cleaners row for back-compat but are no longer surfaced in the UI.
+// Payouts is deliberately last — see cleanerSetupSteps(). Legacy fields
+// (ob_agreement_signed, ob_google_chat_joined, ob_training_accessed) stay on
+// the cleaners row for back-compat but are not surfaced here.
 interface CleanerProfile {
   id: string;
   first_name: string;
@@ -60,6 +73,9 @@ interface CleanerProfile {
   pay_percentage?: number;
   ob_payouts_setup: boolean;
   ob_payouts_setup_at: string | null;
+  supply_inventory: SupplyInventory | null;
+  supply_checklist_submitted_at: string | null;
+  ob_supplies_checklist_viewed: boolean | null;
 }
 
 // ─── Blocked Status Screen ──────────────────────────────
@@ -104,6 +120,9 @@ export default function OnboardingPortal() {
   const [blockedStatus, setBlockedStatus] = useState("");
   const [phoneDialogOpen, setPhoneDialogOpen] = useState(false);
   const [stripeLoading, setStripeLoading] = useState(false);
+  // Thirty-odd checkboxes are collapsed once submitted, so a returning
+  // contractor sees their standing rather than the whole form again.
+  const [suppliesOpen, setSuppliesOpen] = useState(false);
 
   useEffect(() => {
     void checkAuthAndLoad();
@@ -178,6 +197,39 @@ export default function OnboardingPortal() {
     await refreshProfile();
   };
 
+  // Writes the same columns the tokenized checklist route writes, so a
+  // contractor who starts on the emailed link and finishes here (or the other
+  // way round) is never asked twice.
+  const handleSaveSupplies = async (owned: SupplyInventory): Promise<SupplyInventory> => {
+    if (!profile) throw new Error("Session expired — reload the page.");
+    const inventory = sanitizeSupplyInventory(owned);
+    // Cast as elsewhere in the app: supply_inventory and events postdate the
+    // generated Supabase types.
+    const { error } = await (supabase as any)
+      .from("cleaners")
+      .update(supplySubmissionPatch(inventory))
+      .eq("id", profile.id);
+    if (error) throw new Error(error.message || "Couldn't save your checklist.");
+
+    void (supabase as any)
+      .from("events")
+      .insert(
+        supplySubmissionEvent({
+          cleanerId: profile.id,
+          firstName: profile.first_name,
+          inventory,
+          source: "cleaner-ob-portal",
+        }),
+      )
+      .then(() => undefined, () => undefined);
+
+    // Stay expanded so the form's own "Saved" confirmation is still on screen
+    // when the step header flips to Complete.
+    setSuppliesOpen(true);
+    await refreshProfile();
+    return inventory;
+  };
+
   const handleSetupPayouts = async () => {
     if (!profile) return;
     setStripeLoading(true);
@@ -235,15 +287,24 @@ export default function OnboardingPortal() {
   if (!profile) return null;
 
   // ─── Step state derived from profile ─────────────────────
+  const steps = cleanerSetupSteps(profile);
   const phoneStepDone = !!profile.phone_verified;
+  const suppliesStepDone = isSupplyChecklistSubmitted(profile);
   // Stripe step is "done" once the cleaner has a Connect account AND
   // payouts are enabled. ob_payouts_setup just records that they
   // started the flow.
   const stripeStepDone = !!profile.stripe_account_id && !!profile.payouts_enabled;
   const stripeStepStarted = !!profile.stripe_account_id || !!profile.ob_payouts_setup;
 
-  const completed = [phoneStepDone, stripeStepDone].filter(Boolean).length;
-  const total = 2;
+  const supplyInventory = (profile.supply_inventory || {}) as SupplyInventory;
+  const supplyScore = scoreSupplyInventory(supplyInventory);
+
+  // Payouts unlocks after the two cheap steps; the portal's own view of
+  // "done" for Stripe is stricter than the shared sequence's, because here we
+  // can wait for payouts_enabled rather than just an account existing.
+  const payoutsUnlocked = phoneStepDone && suppliesStepDone;
+  const completed = [phoneStepDone, suppliesStepDone, stripeStepDone].filter(Boolean).length;
+  const total = steps.length;
   const allComplete = completed === total;
   const progressPercent = (completed / total) * 100;
 
@@ -285,7 +346,7 @@ export default function OnboardingPortal() {
                   Welcome, {profile.first_name}!
                 </CardTitle>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Two quick steps to start receiving job offers and getting
+                  Three quick steps to start receiving job offers and getting
                   paid. Cleaners are paid 1–2 business days after each
                   completed clean.
                 </p>
@@ -360,15 +421,71 @@ export default function OnboardingPortal() {
           )}
         </StepCard>
 
-        {/* Step 2 — Stripe Connect */}
+        {/* Step 2 — Supply checkoff */}
         <StepCard
           number={2}
-          title="Connect your bank for payouts"
+          title="Check off your supplies"
+          description="Tell us what kit you already own so dispatch knows which jobs you're equipped for."
+          icon={RiListCheck2}
+          done={suppliesStepDone}
+          started={false}
+          locked={!phoneStepDone}
+        >
+          {!phoneStepDone ? (
+            <p className="text-sm text-muted-foreground inline-flex items-center gap-1.5">
+              <RiLockLine className="w-3.5 h-3.5" />
+              Verify your phone first.
+            </p>
+          ) : suppliesStepDone && !suppliesOpen ? (
+            <>
+              <p className="text-sm text-muted-foreground">
+                Submitted ·{" "}
+                <span className="font-medium text-foreground">
+                  {supplyScore.ownedNeeded} of {supplyScore.totalNeeded} job-needed items
+                </span>{" "}
+                ({supplyScore.percent}%)
+                {supplyScore.ready
+                  ? " — you have enough to work a standard clean."
+                  : ` — ${supplyScore.threshold - supplyScore.ownedNeeded} more gets you to job-ready.`}
+              </p>
+              <Button variant="outline" onClick={() => setSuppliesOpen(true)}>
+                <RiListCheck2 className="w-4 h-4 mr-1.5" />
+                Review my supplies
+              </Button>
+            </>
+          ) : (
+            <>
+              <SupplyChecklistForm
+                items={SUPPLY_ITEMS}
+                inventory={supplyInventory}
+                submittedAt={profile.supply_checklist_submitted_at}
+                onSave={handleSaveSupplies}
+                variant="plain"
+                saveLabel="Save my supplies"
+              />
+              {suppliesStepDone && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full text-muted-foreground"
+                  onClick={() => setSuppliesOpen(false)}
+                >
+                  Hide checklist
+                </Button>
+              )}
+            </>
+          )}
+        </StepCard>
+
+        {/* Step 3 — Stripe Connect */}
+        <StepCard
+          number={3}
+          title="Set up payouts"
           description="Link your bank account through Stripe so we can deposit your earnings."
           icon={RiBankCardLine}
           done={stripeStepDone}
           started={stripeStepStarted && !stripeStepDone}
-          locked={!phoneStepDone}
+          locked={!payoutsUnlocked}
         >
           {stripeStepDone ? (
             <p className="text-sm text-muted-foreground">
@@ -380,10 +497,12 @@ export default function OnboardingPortal() {
                 Update bank info
               </button>
             </p>
-          ) : !phoneStepDone ? (
+          ) : !payoutsUnlocked ? (
             <p className="text-sm text-muted-foreground inline-flex items-center gap-1.5">
               <RiLockLine className="w-3.5 h-3.5" />
-              Verify your phone first to unlock payouts.
+              {!phoneStepDone
+                ? "Verify your phone and check off your supplies to unlock payouts."
+                : "Check off your supplies to unlock payouts."}
             </p>
           ) : (
             <>
