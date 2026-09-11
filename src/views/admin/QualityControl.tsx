@@ -51,6 +51,8 @@ import { cn } from "@/lib/utils";
 import AccountabilityActionDialog from "@/components/admin/AccountabilityActionDialog";
 import RecleanWorkflow from "@/components/admin/RecleanWorkflow";
 import { ChecklistItemPicker } from "@/components/checklists/ChecklistItemPicker";
+import QcStatementPanel, { statementStatusLabel } from "@/components/admin/QcStatementPanel";
+import { statementRequiredByDefault } from "@/lib/qc-statement";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -102,6 +104,14 @@ interface IssueRow {
   contractor_statement?: string | null;
   client_written_communication?: string | null;
   client_followup_documents?: Array<Record<string, unknown>> | null;
+  statement_required?: boolean | null;
+  statement_status?: string | null;
+  statement_due_at?: string | null;
+  statement_requested_at?: string | null;
+  statement_submitted_at?: string | null;
+  statement_not_provided_at?: string | null;
+  statement_drive_folder_url?: string | null;
+  statement_report_summary?: string | null;
 }
 
 interface IssueEvent {
@@ -197,6 +207,7 @@ const ISSUE_TYPES = [
   { id: "site_finding", label: "Site finding" },
   { id: "addon", label: "Add-on" },
   { id: "serious_allegation", label: "Serious allegation / incident" },
+  { id: "conduct", label: "Conduct complaint" },
   { id: "other", label: "Other" },
 ];
 const STATUSES = ["open", "investigating", "awaiting_customer", "resolved", "escalated"];
@@ -538,6 +549,20 @@ function IssuesTab({
                 {i.issue_type === "serious_allegation" && (
                   <Badge className="border-0 bg-slate-900 text-white">Admin only · permanent</Badge>
                 )}
+                {i.statement_required && (
+                  <Badge className={cn(
+                    "border-0",
+                    i.statement_status === "submitted" ? "bg-emerald-100 text-emerald-800"
+                      : i.statement_status === "not_provided" ? "bg-slate-200 text-slate-700"
+                      : "bg-amber-100 text-amber-800",
+                  )}>
+                    Statement: {statementStatusLabel(i.statement_status, {
+                      requested: i.statement_requested_at,
+                      submitted: i.statement_submitted_at,
+                      notProvided: i.statement_not_provided_at,
+                    })}
+                  </Badge>
+                )}
             {i.reclean_status && i.reclean_status !== "none" && (
               <Badge className="border-0 bg-violet-100 text-violet-800">Re-clean: {i.reclean_status.replace(/_/g, " ")}</Badge>
             )}
@@ -778,6 +803,14 @@ function IssueSheet({ issue, doc, onClose, reload }: {
             <p className="text-sm text-slate-700 whitespace-pre-wrap bg-slate-50 rounded-lg p-3">{issue.description}</p>
           )}
 
+          <QcStatementPanel
+            issue={issue}
+            reportedAccount={
+              [issue.client_written_communication, issue.description, issue.title].filter(Boolean).join("\n\n")
+            }
+            reload={reload}
+          />
+
           {issue.issue_type === "site_finding" && issue.details && (
             <SiteFindingEvidence details={issue.details} />
           )}
@@ -793,9 +826,9 @@ function IssueSheet({ issue, doc, onClose, reload }: {
               <Label className="text-xs text-slate-700">Manager&apos;s contemporaneous account of the client call and the contractor call</Label>
               <Textarea rows={5} value={managerAccount} onChange={(e) => setManagerAccount(e.target.value)}
                 placeholder="What was said, by whom, and when — recorded as soon as possible." />
-              <Label className="text-xs text-slate-700">Contractor&apos;s written statement (obtained separately, addressing the allegation)</Label>
+              <Label className="text-xs text-slate-700">Admin notes of a verbal contractor account (not the submitted form — that lives above and is immutable)</Label>
               <Textarea rows={5} value={contractorStatement} onChange={(e) => setContractorStatement(e.target.value)}
-                placeholder="Paste the contractor's written statement in full." />
+                placeholder="Paste a verbal account only if one was taken outside the form. Do not edit a submitted statement here." />
               <Label className="text-xs text-slate-700">Client&apos;s written communication (email in full, unedited)</Label>
               <Textarea rows={8} value={clientEmailText} onChange={(e) => setClientEmailText(e.target.value)}
                 placeholder="Paste the client's email in full. Do not edit." />
@@ -1133,6 +1166,12 @@ function CreateIssueDialog({ onClose, reload }: { onClose: () => void; reload: (
   const [requestReclean, setRequestReclean] = useState(true);
   const [zoneName, setZoneName] = useState("");
   const [saving, setSaving] = useState(false);
+  const [statementRequired, setStatementRequired] = useState(false);
+
+  useEffect(() => {
+    const sev = issueType === "serious_allegation" ? "critical" : severity;
+    setStatementRequired(statementRequiredByDefault(issueType, sev));
+  }, [issueType, severity]);
 
   const searchBookings = useCallback(async () => {
     const q = query.trim();
@@ -1172,6 +1211,7 @@ function CreateIssueDialog({ onClose, reload }: { onClose: () => void; reload: (
           description: description.trim() || undefined,
           requestReclean: ["complaint", "reclean", "quality_flag"].includes(issueType) ? requestReclean : false,
           zoneName: zoneName || undefined,
+          statementRequired,
         },
       });
       if (error) throw error;
@@ -1279,6 +1319,15 @@ function CreateIssueDialog({ onClose, reload }: { onClose: () => void; reload: (
                   Request a re-clean (verify original photos before dispatch)
                 </label>
               )}
+              <label className="flex items-start gap-2 text-sm text-slate-700">
+                <Checkbox checked={statementRequired} onCheckedChange={(v) => setStatementRequired(v === true)} />
+                <span>
+                  Statement required — send a tokenized form to the contractor by SMS and email.
+                  <span className="block text-xs text-slate-500 mt-0.5">
+                    Defaults on for incident/allegation, damage, conduct, and critical cases. Routine quality complaints stay off unless you mark this.
+                  </span>
+                </span>
+              </label>
               {(severity === "high" || severity === "critical") && (
                 <p className="text-xs text-orange-600 font-medium flex items-center gap-1">
                   <RiAlertLine className="w-3.5 h-3.5" /> {label(severity)} issues alert admin on Discord immediately.

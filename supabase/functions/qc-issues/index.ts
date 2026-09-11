@@ -34,6 +34,11 @@ import {
   recleanSourceForIntake,
 } from "../_shared/reclean.ts";
 import { matchNamedZones, siteZoneNames } from "../_shared/site-zones.ts";
+import {
+  factualReportSummary,
+  statementRequiredByDefault,
+} from "../_shared/qc-statement.ts";
+import { loadQcStatementSettings, requestQcStatement } from "../_shared/qc-statement-ops.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -51,7 +56,7 @@ const log = (s: string, d?: unknown) =>
 // deno-lint-ignore no-explicit-any
 type SB = any;
 
-const ISSUE_TYPES = ["complaint", "reclean", "damage", "no_show", "late", "quality_flag", "payment", "other", "site_finding", "addon", "serious_allegation"];
+const ISSUE_TYPES = ["complaint", "reclean", "damage", "no_show", "late", "quality_flag", "payment", "other", "site_finding", "addon", "serious_allegation", "conduct"];
 const SEVERITIES = ["low", "medium", "high", "critical"];
 const STATUSES = ["open", "investigating", "awaiting_customer", "resolved", "escalated"];
 const SUSPENSION_FLAGS = ["none", "pending_admin", "suspended", "cleared"];
@@ -175,6 +180,7 @@ async function createIssue(admin: SB, opts: {
   requestReclean?: boolean;
   zoneId?: string | null;
   zoneName?: string | null;
+  statementRequired?: boolean | null;
 }) {
   const ref = bookingRef(opts.booking);
   // ALL cleaners on the job get attached; the reporter (field reports) or
@@ -246,6 +252,13 @@ async function createIssue(admin: SB, opts: {
       admin_only: isIncident,
       score_exempt: isIncident,
       contractor_suspension_flag: isIncident ? "pending_admin" : "none",
+      statement_required: false,
+      statement_status: "none",
+      statement_report_summary: factualReportSummary({
+        description: opts.description,
+        title: opts.title,
+        clientName: `${opts.booking.first_name || ""} ${opts.booking.last_name || ""}`.trim() || null,
+      }),
       details: {
         ...(opts.details && typeof opts.details === "object" ? opts.details : {}),
         ...(zoneName ? { zone_name: zoneName, zone_id: zoneId } : {}),
@@ -318,6 +331,31 @@ async function createIssue(admin: SB, opts: {
         `\nReported by ${opts.reporterName} via ${opts.reportedVia}. Review in the QC console.`,
       data: { issue_id: issue.id, severity: opts.severity, issue_type: opts.issueType },
     }).then(() => undefined, () => undefined);
+  }
+
+  const settings = await loadQcStatementSettings(admin);
+  const wantsStatement = opts.statementRequired === true
+    ? true
+    : opts.statementRequired === false
+      ? false
+      : statementRequiredByDefault(opts.issueType, isIncident ? "critical" : opts.severity, settings);
+  if (wantsStatement) {
+    const sent = await requestQcStatement(admin, {
+      issue,
+      actorId: opts.reporterId,
+      actorName: opts.reporterName,
+      settings,
+    });
+    if (!sent.ok) {
+      await admin.from("qc_issues").update({
+        statement_required: true,
+        statement_status: "requested",
+        updated_at: new Date().toISOString(),
+      }).eq("id", issue.id);
+      log("statement request deferred", { issueId: issue.id, error: sent.error });
+    }
+    const { data: fresh } = await admin.from("qc_issues").select("*").eq("id", issue.id).maybeSingle();
+    return fresh || issue;
   }
 
   return issue;
@@ -446,6 +484,11 @@ serve(async (req) => {
               : undefined,
         zoneName: zoneName || null,
         zoneId: zoneId || null,
+        statementRequired: body?.statementRequired === true
+          ? true
+          : body?.statementRequired === false
+            ? false
+            : undefined,
       });
       return json({ ok: true, issue });
     }
@@ -466,6 +509,10 @@ serve(async (req) => {
       if (body?.managerAccount !== undefined) {
         patch.manager_account = String(body.managerAccount || "").slice(0, 20000) || null;
         notes.push("manager account");
+      }
+      if (body?.statementReportSummary !== undefined) {
+        patch.statement_report_summary = String(body.statementReportSummary || "").slice(0, 20000) || null;
+        notes.push("statement report summary");
       }
       if (body?.contractorStatement !== undefined) {
         patch.contractor_statement = String(body.contractorStatement || "").slice(0, 20000) || null;
@@ -522,6 +569,57 @@ serve(async (req) => {
       });
       const { data: fresh } = await admin.from("qc_issues").select("*").eq("id", issueId).maybeSingle();
       return json({ ok: true, issue: fresh });
+    }
+
+    if (action === "request_statement" || action === "request_statement_supplemental") {
+      if (!issue.cleaner_id) {
+        return json({ ok: false, error: "Attach a contractor before requesting a statement." }, 400);
+      }
+      if (body?.statementReportSummary !== undefined) {
+        await admin.from("qc_issues").update({
+          statement_report_summary: String(body.statementReportSummary || "").slice(0, 20000) || null,
+          updated_at: nowIso,
+        }).eq("id", issueId);
+        issue.statement_report_summary = String(body.statementReportSummary || "").slice(0, 20000) || null;
+      }
+      const sent = await requestQcStatement(admin, {
+        issue,
+        actorId: actor.id,
+        actorName: actor.name,
+        supplemental: action === "request_statement_supplemental",
+        resend: action === "request_statement",
+      });
+      if (!sent.ok) return json({ ok: false, error: sent.error || "Could not request statement." }, 400);
+      const { data: fresh } = await admin.from("qc_issues").select("*").eq("id", issueId).maybeSingle();
+      return json({ ok: true, issue: fresh, emailed: sent.emailed, smsSent: sent.smsSent, emailError: sent.emailError, smsError: sent.smsError, reused: sent.reused });
+    }
+
+    if (action === "set_statement_required") {
+      const required = body?.statementRequired === true;
+      if (!required) {
+        await admin.from("qc_issues").update({
+          statement_required: false,
+          updated_at: nowIso,
+        }).eq("id", issueId);
+        await admin.from("qc_issue_events").insert({
+          issue_id: issueId,
+          action: "updated",
+          note: "Statement required cleared. Existing submissions were not changed.",
+          actor_id: actor.id,
+          actor_name: actor.name,
+        });
+        const { data: fresh } = await admin.from("qc_issues").select("*").eq("id", issueId).maybeSingle();
+        return json({ ok: true, issue: fresh });
+      }
+      const sent = await requestQcStatement(admin, {
+        issue,
+        actorId: actor.id,
+        actorName: actor.name,
+        resend: true,
+      });
+      if (!sent.ok) return json({ ok: false, error: sent.error || "Could not request statement." }, 400);
+      const { data: fresh } = await admin.from("qc_issues").select("*").eq("id", issueId).maybeSingle();
+      return json({ ok: true, issue: fresh, emailed: sent.emailed, smsSent: sent.smsSent });
     }
 
     // Tag which checklist items this case relates to. Optional by design —
