@@ -225,6 +225,15 @@ export async function createProposalRequest(
   if (!type || type.active === false) {
     return { ok: false, error: "Pick a property type.", status: 400 };
   }
+  if (!typeRequiresWalkthrough(type)) {
+    return {
+      ok: false,
+      error: type.accountKind === "property_manager"
+        ? "Property-manager offers start on Send. Enter the units and standing rates there — no walkthrough request."
+        : "STR offers start on Send. Enter the host and turnover rate there — no walkthrough request.",
+      status: 400,
+    };
+  }
   const name = s(input.requesterName, 120);
   const email = s(input.requesterEmail, 200).toLowerCase();
   if (!name) return { ok: false, error: "Requester name is required.", status: 400 };

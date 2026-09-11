@@ -4,12 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   RiFileEditLine,
-  RiFileList3Line,
   RiFileTextLine,
   RiLoader4Line,
   RiMailSendLine,
   RiRulerLine,
-  RiSettings3Line,
   RiUserStarLine,
 } from "@remixicon/react";
 import { toast } from "sonner";
@@ -26,27 +24,37 @@ import ProposalSendHub from "@/views/admin/ProposalSendHub";
 import CommercialProposals from "@/views/admin/CommercialProposals";
 import { isProposalSendFlow, type ProposalSendFlow } from "@/lib/proposal-offer-send";
 
-const TABS = [
+const WORK_TABS = [
   { id: "new", label: "New request", icon: RiFileEditLine },
   { id: "queue", label: "Queue", icon: RiUserStarLine },
   { id: "price", label: "Firm price", icon: RiRulerLine },
   { id: "send", label: "Send", icon: RiMailSendLine },
   { id: "pipeline", label: "Pipeline", icon: RiFileTextLine },
-  { id: "checklists", label: "Site findings", icon: RiFileList3Line },
-  { id: "settings", label: "Settings", icon: RiSettings3Line },
 ] as const;
-type Tab = (typeof TABS)[number]["id"];
+
+const CONFIG_TABS = [
+  { id: "checklists", label: "Site findings" },
+  { id: "settings", label: "Settings" },
+] as const;
+
+const ALL_TABS = [...WORK_TABS, ...CONFIG_TABS] as const;
+type Tab = (typeof ALL_TABS)[number]["id"];
+
+function isTab(raw: string): raw is Tab {
+  return ALL_TABS.some((t) => t.id === raw);
+}
 
 export default function ProposalsHub() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const raw = searchParams?.get("tab") || "new";
-  const tab: Tab = TABS.some((t) => t.id === raw) ? (raw as Tab) : "new";
+  const tab: Tab = isTab(raw) ? raw : "new";
   const accountFromUrl = searchParams?.get("account") || "";
   const hostFromUrl = searchParams?.get("host") || "";
   const pmFromUrl = searchParams?.get("pm") || "";
   const flowFromUrl = searchParams?.get("flow") || "";
+  const onConfig = tab === "checklists" || tab === "settings";
 
   const [catalog, setCatalog] = useState<ProposalChecklists>(DEFAULT_CHECKLISTS);
   const [settings, setSettings] = useState<ProposalRequestSettings>(DEFAULT_PROPOSAL_SETTINGS);
@@ -95,22 +103,40 @@ export default function ProposalsHub() {
 
   return (
     <div className="max-w-[1240px] mx-auto px-1 sm:px-4 py-2 space-y-4">
-      <div>
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-[10px] font-bold tracking-[0.12em] uppercase text-violet-700/80 bg-violet-50 border border-violet-200/70 rounded-full px-2 py-0.5">
-            Proposals
-          </span>
-          <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-400">
-            STR · Office · Commercial · Property Manager
-          </span>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[10px] font-bold tracking-[0.12em] uppercase text-violet-700/80 bg-violet-50 border border-violet-200/70 rounded-full px-2 py-0.5">
+              Proposals
+            </span>
+            <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-400">
+              STR · Office · Commercial · Property Manager
+            </span>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Office and commercial: request creates a searchable prospect, then queue → firm price → send.
+            STR and property managers start on Send with the home details. A request never creates a job.
+          </p>
         </div>
-        <p className="text-sm text-muted-foreground">
-          Request → site findings (office / commercial) → firm price → send. STR and property managers skip the walkthrough. Send mails the agreement and payment setup for that line of business. A request never creates a job.
-        </p>
+        <div className="shrink-0 flex items-center gap-2 pt-1">
+          {CONFIG_TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTab(t.id)}
+              className={cn(
+                "text-[11px] font-medium",
+                tab === t.id ? "text-violet-700" : "text-slate-400 hover:text-slate-600",
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-1 rounded-xl border border-slate-200 bg-white p-1">
-        {TABS.map((t) => {
+        {WORK_TABS.map((t) => {
           const Icon = t.icon;
           const on = tab === t.id;
           return (
@@ -129,6 +155,15 @@ export default function ProposalsHub() {
           );
         })}
       </div>
+
+      {onConfig && (
+        <p className="text-xs text-slate-500 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+          Configuration — not part of the daily strip.{" "}
+          <button type="button" className="font-semibold text-violet-700 hover:underline" onClick={() => setTab("new")}>
+            Back to requests
+          </button>
+        </p>
+      )}
 
       {loading && catalogTabs && tab !== "new" ? (
         <p className="text-sm text-slate-500 flex items-center gap-2 py-8 justify-center">

@@ -49,7 +49,8 @@ export default function ProposalSendHub({
             Send an offer
           </h2>
           <p className="text-sm text-slate-500 mt-1">
-            Four unique mail paths. Each one sends the agreement and payment setup for that line of business — same motion as Internal Booking, different document.
+            Four unique mail paths. STR and property manager start here with the home details.
+            Office and commercial can search the prospect a request created, or type a walk-in.
           </p>
         </div>
         <div className="grid sm:grid-cols-2 gap-3">

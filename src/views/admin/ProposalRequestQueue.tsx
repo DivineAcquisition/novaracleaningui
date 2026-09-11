@@ -122,6 +122,10 @@ export default function ProposalRequestQueue({
 
   return (
     <div className="space-y-3">
+      <p className="text-sm text-slate-500">
+        Office and commercial walkthroughs. After firm price, Send can search the prospect this request created.
+        Leftover STR or property-manager rows can still be mailed from here; new ones start on Send.
+      </p>
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
         {[
           ["pending_assign", "Pending assign"],

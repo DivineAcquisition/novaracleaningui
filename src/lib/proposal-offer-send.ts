@@ -22,28 +22,28 @@ export const PROPOSAL_SEND_FLOW_DEFS: ProposalSendFlowDef[] = [
     label: "STR (Host)",
     shortLabel: "STR",
     mails: "Host onboarding — agreement + payment",
-    detail: "Price the property from beds, baths, and a turnover rate. The host reviews the partnership agreement and sets payment on a tokenized link.",
+    detail: "Start here. Type the host and home details, set the turnover rate, and send. No request or walkthrough.",
   },
   {
     id: "office",
     label: "Office",
     shortLabel: "Office",
     mails: "Proposal → agreement → billing",
-    detail: "Walk-in office proposal. Decision-maker accepts the quote, then signs and sets invoice or Stripe Pre-Auth.",
+    detail: "Search the prospect from a request, or type a walk-in. Decision-maker accepts, signs, and sets invoice or Stripe Pre-Auth.",
   },
   {
     id: "commercial",
     label: "Commercial",
     shortLabel: "Commercial",
     mails: "Proposal → agreement → billing",
-    detail: "Walk-in commercial proposal for retail, medical, gym, warehouse, and the rest. Same accept → sign → pay motion as office, different account type.",
+    detail: "Search the prospect from a request, or type a walk-in for retail, medical, gym, warehouse. Same accept → sign → pay motion as office.",
   },
   {
     id: "property_manager",
     label: "Property Manager",
     shortLabel: "PM",
     mails: "PM onboarding — agreement + payment",
-    detail: "Register units, set standing move-out / move-in / vacant rates, then mail the portfolio agreement and billing setup.",
+    detail: "Start here. Type the company and units, set standing rates, and send. No request or walkthrough.",
   },
 ];
 

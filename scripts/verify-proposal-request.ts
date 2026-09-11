@@ -24,6 +24,7 @@ import {
   propertyTypeByKey,
   proposalRequestStatusLabel,
   proposalSendFlowForType,
+  requestablePropertyTypes,
   RETIRED_FINDING_KEYS,
   slugTypeKey,
   typeRequiresWalkthrough,
@@ -74,6 +75,23 @@ check("STR does not require a walkthrough", typeRequiresWalkthrough(propertyType
 check("property manager does not require a walkthrough", typeRequiresWalkthrough(propertyTypeByKey(DEFAULT_CHECKLISTS, "property_manager")), false);
 check("office requires a walkthrough", typeRequiresWalkthrough(propertyTypeByKey(DEFAULT_CHECKLISTS, "office")), true);
 check("warehouse requires a walkthrough", typeRequiresWalkthrough(propertyTypeByKey(DEFAULT_CHECKLISTS, "warehouse")), true);
+check(
+  "New request excludes STR and property manager",
+  requestablePropertyTypes(DEFAULT_CHECKLISTS).map((t) => t.key).includes("str")
+    || requestablePropertyTypes(DEFAULT_CHECKLISTS).map((t) => t.key).includes("property_manager"),
+  false,
+);
+check(
+  "New request includes office and a commercial subtype",
+  requestablePropertyTypes(DEFAULT_CHECKLISTS).some((t) => t.key === "office")
+    && requestablePropertyTypes(DEFAULT_CHECKLISTS).some((t) => t.key === "warehouse"),
+  true,
+);
+check(
+  "every requestable type needs a walkthrough",
+  requestablePropertyTypes(DEFAULT_CHECKLISTS).every((t) => typeRequiresWalkthrough(t)),
+  true,
+);
 check(
   "pending STR status is price host properties",
   proposalRequestStatusLabel("pending_assign", propertyTypeByKey(DEFAULT_CHECKLISTS, "str")),

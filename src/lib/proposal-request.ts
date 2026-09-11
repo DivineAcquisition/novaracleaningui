@@ -970,6 +970,15 @@ export function typeRequiresWalkthrough(
   return type.accountKind !== "str" && type.accountKind !== "property_manager";
 }
 
+/**
+ * New request is office and commercial only. Those need a walkthrough and a
+ * searchable prospect account before Send. STR and property-manager offers
+ * start on Send with the home details.
+ */
+export function requestablePropertyTypes(catalog: ProposalChecklists): PropertyTypeDef[] {
+  return activePropertyTypes(catalog).filter((t) => typeRequiresWalkthrough(t));
+}
+
 export function proposalSendFlowForType(
   type: Pick<PropertyTypeDef, "accountKind" | "key"> | null | undefined,
 ): "str" | "office" | "commercial" | "property_manager" {

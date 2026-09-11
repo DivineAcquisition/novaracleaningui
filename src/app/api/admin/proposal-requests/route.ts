@@ -1,8 +1,8 @@
 // ─── /api/admin/proposal-requests ──────────────────────────────────────────
 //
-// Dedicated Proposals tab. A submit here is a Proposal Request — never a
-// job booking. Creates a prospective account (or STR host) and, for office
-// and commercial, a walkthrough in `requested`. STR skips the walkthrough.
+// Dedicated Proposals tab. A submit here is an office / commercial Proposal
+// Request — never a job booking. Creates a searchable prospect and a
+// walkthrough in `requested`. STR and property-manager offers start on Send.
 
 import { NextResponse } from "next/server";
 import { requireAdmin, AdminAuthError } from "@/lib/admin-auth";
