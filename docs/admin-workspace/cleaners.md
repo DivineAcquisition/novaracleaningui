@@ -22,9 +22,10 @@ The screen has four sections, switched at the top: **Contractors**, **Applicants
 Search matches name, email, phone or ZIP. The status filters are **All**, **Active**,
 **Pending**, **Suspended**, **Inactive** and **Terminated**.
 
-Two panels appear above the list when they have anything in them, and hide when they don't:
-contractors working without a signed agreement, and the accountability watchlist. If they're
-showing, they need attention.
+Three panels appear above the list when they have anything in them, and hide when they don't:
+contractors working without a signed agreement, contractors who haven't acknowledged the
+current [Contractor Standards](../contractor-standards.md), and the accountability watchlist.
+If they're showing, they need attention.
 
 @screenshot cleaners-row
 
@@ -74,12 +75,19 @@ Pending offers with **Accept for them** and **Decline**, then assigned jobs with
 
 ### Onboarding
 
-Three items: **Phone verified**, **Contractor agreement signed**, **Stripe payouts
-connected**. Underneath, whether their portal is ready.
+Four items: **Phone verified**, **Contractor agreement signed**, **Contractor standards
+acknowledged**, **Stripe payouts connected**. Underneath, whether their portal is ready.
 
 Action cards appear for whatever is missing — **Send setup link**, **Send agreement link**,
-**Send supply checklist**. These are disabled if the contractor has neither an email nor a
-phone number.
+**Send standards link**, **Send supply checklist**. These are disabled if the contractor has
+neither an email nor a phone number.
+
+:::note The standards step is versioned, not a tick
+The agreement is signed once. The [Contractor Standards](../contractor-standards.md) are
+re-acknowledged whenever the addendum is revised, so this step re-opens for the whole roster on
+a revision and the card tells you which version they're on. "Acknowledged" always means
+acknowledged the *current* version.
+:::
 
 ### Performance
 
