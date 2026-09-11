@@ -26,3 +26,8 @@ out
 *.sw?
 tsconfig.tsbuildinfo
 supabase/.temp/
+
+# Screenshots taken while verifying the contractor onboarding sequence.
+# Evidence of a run, not a source of truth — re-create with
+# `npm run onboarding:verify`.
+docs/contractor-onboarding/*.png

@@ -35,6 +35,7 @@
     "partner-portal:verify": "tsx scripts/verify-partner-portal.ts",
     "property-manager:verify": "tsx scripts/verify-property-manager.ts",
     "docs:pricing": "tsx scripts/docs/pricing-examples.ts",
+    "onboarding:verify": "tsx scripts/verify-onboarding-sequence.ts",
     "docs:capture": "tsx scripts/docs/capture-screenshots.ts",
     "docs:verify": "tsx scripts/docs/verify-docs.ts",
     "docs:export": "tsx scripts/docs/export-knowledge.ts",
