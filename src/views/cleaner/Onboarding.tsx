@@ -23,6 +23,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { SEO } from "@/components/SEO";
@@ -33,8 +34,14 @@ import { formatPhoneNumber } from "@/lib/input-formatters";
 import { AddressAutocomplete } from "@/components/booking/AddressAutocomplete";
 import { cn } from "@/lib/utils";
 import { PhoneVerificationDialog } from "@/components/cleaner/PhoneVerificationDialog";
+import ContractorStandardsDocument from "@/components/cleaner/ContractorStandardsDocument";
 import { SignaturePad } from "@/components/booking/SignaturePad";
 import { resolveCleanerAuth } from "@/lib/cleaner-auth";
+import {
+  CONTRACTOR_STANDARDS_ACKNOWLEDGMENT,
+  CONTRACTOR_STANDARDS_EDITION,
+  standardsRuleCount,
+} from "@/lib/contractor-standards";
 
 const US_STATES = [
   "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
@@ -102,6 +109,10 @@ export default function CleanerOnboarding() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [loadingPreview, setLoadingPreview] = useState(false);
+  // The Standards & Conduct Addendum is acknowledged here, at onboarding —
+  // existing contractors get the same document by texted link instead.
+  const [standardsAcknowledged, setStandardsAcknowledged] = useState(false);
+  const [showStandards, setShowStandards] = useState(false);
 
   useEffect(() => {
     checkAuth();
@@ -275,6 +286,10 @@ export default function CleanerOnboarding() {
       toast.error("Please sign the Independent Contractor Agreement to finish.");
       return;
     }
+    if (!standardsAcknowledged) {
+      toast.error("Please read and acknowledge the Contractor Standards to finish.");
+      return;
+    }
 
     setIsLoading(true);
 
@@ -393,6 +408,27 @@ export default function CleanerOnboarding() {
         });
       } catch (agreementErr) {
         console.warn("[Onboarding] agreement send failed (non-blocking):", agreementErr);
+      }
+
+      // Record the Contractor Standards acknowledgment. The same signature
+      // covers both documents — they're drawn once, in one sitting, and the
+      // addendum has its own explicit consent checkbox above.
+      //
+      // Best-effort, and it fails safe: without this row the contractor is
+      // simply still recorded as owing an acknowledgment, and the admin panel
+      // texts them the standards link. Blocking onboarding would be the worse
+      // trade, and stamping the version without the evidence row worse still.
+      try {
+        await fetch("/api/cleaner/acknowledge-standards", {
+          method: "POST",
+          headers: await authHeaders(),
+          body: JSON.stringify({
+            legalName: legalName || `${formData.firstName} ${formData.lastName}`.trim(),
+            signatureDataUrl,
+          }),
+        });
+      } catch (standardsErr) {
+        console.warn("[Onboarding] standards acknowledgment failed (non-blocking):", standardsErr);
       }
 
       // Initiate Stripe Connect
@@ -872,6 +908,47 @@ export default function CleanerOnboarding() {
                     </div>
                   </div>
 
+                  {/* Contractor Standards & Conduct Addendum. Shown in full
+                      rather than linked: this is the document that gets cited
+                      when a job goes wrong, and "I never saw it" has to stop
+                      being available. The same signature covers both. */}
+                  <div className="rounded-xl border p-4 space-y-3">
+                    <div>
+                      <h3 className="font-semibold text-sm">Contractor Standards &amp; Conduct Addendum</h3>
+                      <p className="text-xs text-muted-foreground">
+                        {standardsRuleCount()} standards covering appearance, phone, checklist,
+                        client property, pets, punctuality and chemicals. They clarify what your
+                        agreement already requires — read them before you acknowledge.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowStandards((v) => !v)}
+                    >
+                      {showStandards ? "Hide standards" : "Read the standards"}
+                    </Button>
+                    {showStandards && (
+                      <div className="max-h-96 overflow-y-auto rounded-lg border bg-white p-4">
+                        <ContractorStandardsDocument showHeader={false} />
+                      </div>
+                    )}
+                    <label className="flex cursor-pointer items-start gap-2.5">
+                      <Checkbox
+                        checked={standardsAcknowledged}
+                        onCheckedChange={(v) => setStandardsAcknowledged(v === true)}
+                        className="mt-0.5"
+                      />
+                      <span className="text-xs leading-relaxed text-muted-foreground">
+                        {CONTRACTOR_STANDARDS_ACKNOWLEDGMENT}
+                        <span className="block mt-1 text-[11px] uppercase tracking-wide opacity-70">
+                          {CONTRACTOR_STANDARDS_EDITION}
+                        </span>
+                      </span>
+                    </label>
+                  </div>
+
                   <div className="bg-blue-500/10 rounded-xl p-4 border border-blue-500/20">
                     <p className="text-sm text-blue-700 dark:text-blue-300">
                       <strong>Next step:</strong> After submitting, you'll be redirected to Stripe to set up your payment account for receiving payouts.
@@ -909,7 +986,7 @@ export default function CleanerOnboarding() {
                   <Button
                     type="submit"
                     className="flex-1 h-11"
-                    disabled={isLoading || !signatureDataUrl}
+                    disabled={isLoading || !signatureDataUrl || !standardsAcknowledged}
                   >
                     {isLoading ? (
                       <>
