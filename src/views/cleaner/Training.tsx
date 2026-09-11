@@ -50,6 +50,7 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { SEO } from "@/components/SEO";
+import { TourRecordings } from "@/components/tour/TourRecordings";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -534,6 +535,9 @@ export default function CleanerTrainingPage() {
             );
           })}
         </section>
+
+        {/* Dashboard walkthroughs — guided in-app, plus the recorded versions */}
+        <TourRecordings />
 
         {/* Optional embedded library */}
         {config?.configured && (config.embedUrl || config.url) && (

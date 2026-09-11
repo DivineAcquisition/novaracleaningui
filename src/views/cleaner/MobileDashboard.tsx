@@ -19,6 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { useCapacitor } from "@/hooks/use-capacitor";
 import { resolveCleanerAuth, isBlockedCleanerStatus } from "@/lib/cleaner-auth";
+import { TOUR, tourAnchor } from "@/lib/tours/anchors";
 import SuspensionBanner from "@/components/cleaner/SuspensionBanner";
 import {
   CoverageOfferBanner,
@@ -398,7 +399,7 @@ export default function MobileDashboard() {
           <DashboardStats stats={stats} />
 
           <Tabs defaultValue="upcoming" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className="grid w-full grid-cols-2" {...tourAnchor(TOUR.jobsTabs)}>
               <TabsTrigger value="upcoming" className="text-sm">
                 Upcoming Jobs
               </TabsTrigger>
