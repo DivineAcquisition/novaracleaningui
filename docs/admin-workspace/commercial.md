@@ -17,18 +17,12 @@ compliance, commercial job booking and the STR side.
 
 @screenshot commercial-hub
 
-Five workspaces:
+Commercial works like the Bookings tab: book the job, then keep the account next to it.
+The strip is **Book**, **Recurring**, **Accounts**, **Checklists**, **Compliance**, **STR**,
+and **Portfolio**.
 
-| Workspace | What it holds |
-|---|---|
-| **Home** | Pipeline snapshot and the account list. |
-| **Deals** | Walkthrough findings and firm price. |
-| **Jobs** | One-off commercial jobs, recurring schedules, published checklists. |
-| **Compliance** | Client insurance certificates and our own. |
-| **STR** | Turnovers, hosts and short-term-rental pricing. |
-
-Sending proposals and the deal pipeline redirect to [Proposals](/docs/proposals) — they used
-to live here, and old links still work.
+Sending proposals, firm price, and the deal pipeline live on [Proposals](/docs/proposals).
+Old `?tab=send`, `?tab=pipeline`, and `?tab=walkthroughs` links still redirect there.
 
 ## Accounts
 

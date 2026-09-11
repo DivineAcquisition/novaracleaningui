@@ -5,13 +5,15 @@
 // Dispatch-Eligible.
 //
 //   GET  ?view=pipeline      every commercial account by stage
+//        ?view=accounts      lightweight account picker (no pipeline view)
 //        ?accountId=…        one deal: readiness, every proposal version and
 //                            its sites, agreements, billing, COI deliveries
 //        ?proposalId=…       one proposal with its snapshot rows
 //
 //   POST { action: … }
 //     create_draft        build the next version from walkthrough-priced
-//                         sites (admin can type a rate when a site has none).
+//                         sites, or from typed business/site details when no
+//                         account exists yet (same as Internal Booking).
 //                         Pass send:true to mint the link and email in the
 //                         same click. A portal login is not required to send.
 //     invite_portal       optional — create / link a client portal login
@@ -66,6 +68,7 @@ import {
   startOnboardingSession,
 } from "@/lib/commercial-onboarding/admin";
 import { onboardingUrl } from "@/lib/commercial-onboarding/session";
+import { isMissingSchemaRelation, isValidProposalEmail, pipelineStageFromRows } from "@/lib/commercial-proposal-send";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -89,6 +92,301 @@ const int = (v: unknown): number | null => {
 };
 
 type Supa = ReturnType<typeof getAdminSupabase>;
+
+type IncomingSite = {
+  siteId?: string | null;
+  nickname?: string | null;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip?: string | null;
+  zip_code?: string | null;
+  facilityType?: string | null;
+  facility_type?: string | null;
+  sqft?: unknown;
+  perVisitPriceCents?: unknown;
+  frequency?: string | null;
+};
+
+async function loadPipelineFromTables(supabase: Supa): Promise<Array<Record<string, unknown>>> {
+  const { data: accounts, error } = await supabase
+    .from("business_accounts")
+    .select(
+      "id, business_name, account_type, status, email, contact_name, assigned_va_email, " +
+        "billing_method, billing_configured_at, company_coi_sent_at, requires_coi_on_file, agreement_signed_at",
+    )
+    .in("account_type", ["commercial", "office"])
+    .order("business_name")
+    .limit(500);
+  if (error) throw new Error(error.message);
+
+  const list = (accounts || []) as unknown as Array<Record<string, unknown>>;
+  const ids = list.map((a) => String(a.id));
+  if (!ids.length) return [];
+
+  const [{ data: proposals }, { data: agreements }, { data: sites }] = await Promise.all([
+    supabase
+      .from("commercial_proposals")
+      .select(
+        "id, business_account_id, version, status, sent_at, expires_at, accepted_at, " +
+          "changes_requested_at, change_request_note, total_per_visit_cents, recipient_email, recipient_name",
+      )
+      .in("business_account_id", ids)
+      .order("version", { ascending: false }),
+    supabase
+      .from("commercial_agreements")
+      .select("id, business_account_id, status, sent_at, signed_at, signer_email, created_at")
+      .in("business_account_id", ids)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("business_sites")
+      .select("business_account_id, active, excluded_at, firm_price_cents")
+      .in("business_account_id", ids),
+  ]);
+
+  const latestProposal = new Map<string, Record<string, unknown>>();
+  for (const raw of (proposals || []) as unknown as Array<Record<string, unknown>>) {
+    const id = String(raw.business_account_id || "");
+    if (id && !latestProposal.has(id)) latestProposal.set(id, raw);
+  }
+  const latestAgreement = new Map<string, Record<string, unknown>>();
+  for (const raw of (agreements || []) as unknown as Array<Record<string, unknown>>) {
+    const id = String(raw.business_account_id || "");
+    if (id && !latestAgreement.has(id)) latestAgreement.set(id, raw);
+  }
+  const siteRollup = new Map<string, { active: number; excluded: number; priced: number }>();
+  for (const raw of (sites || []) as unknown as Array<Record<string, unknown>>) {
+    const id = String(raw.business_account_id || "");
+    if (!id) continue;
+    const cur = siteRollup.get(id) || { active: 0, excluded: 0, priced: 0 };
+    if (raw.active) {
+      cur.active += 1;
+      if (raw.excluded_at) cur.excluded += 1;
+      else if (Number(raw.firm_price_cents) > 0) cur.priced += 1;
+    }
+    siteRollup.set(id, cur);
+  }
+
+  return list.map((a) => {
+    const accountId = String(a.id);
+    const p = latestProposal.get(accountId);
+    const g = latestAgreement.get(accountId);
+    const r = siteRollup.get(accountId) || { active: 0, excluded: 0, priced: 0 };
+    return {
+      account_id: accountId,
+      business_name: a.business_name,
+      account_type: a.account_type,
+      account_status: a.status,
+      email: a.email,
+      contact_name: a.contact_name,
+      assigned_va_email: a.assigned_va_email,
+      active_sites: r.active,
+      priced_sites: r.priced,
+      excluded_sites: r.excluded,
+      proposal_id: p?.id ?? null,
+      proposal_version: p?.version ?? null,
+      proposal_status: p?.status ?? null,
+      proposal_sent_at: p?.sent_at ?? null,
+      proposal_expires_at: p?.expires_at ?? null,
+      proposal_accepted_at: p?.accepted_at ?? null,
+      changes_requested_at: p?.changes_requested_at ?? null,
+      change_request_note: p?.change_request_note ?? null,
+      total_per_visit_cents: p?.total_per_visit_cents ?? null,
+      agreement_id: g?.id ?? null,
+      agreement_status: g?.status ?? null,
+      agreement_sent_at: g?.sent_at ?? null,
+      agreement_signed_at: g?.signed_at ?? a.agreement_signed_at ?? null,
+      billing_method: a.billing_method,
+      billing_configured_at: a.billing_configured_at,
+      company_coi_sent_at: a.company_coi_sent_at,
+      requires_coi_on_file: a.requires_coi_on_file,
+      billing_configured: Boolean(a.billing_configured_at),
+      coi_blocked: false,
+      stage: pipelineStageFromRows({
+        agreementSignedAt: (g?.signed_at as string | null) || (a.agreement_signed_at as string | null) || null,
+        billingConfiguredAt: (a.billing_configured_at as string | null) || null,
+        agreementStatus: (g?.status as string | null) || null,
+        proposalStatus: (p?.status as string | null) || null,
+        pricedSites: r.priced,
+        activeSites: r.active,
+        excludedSites: r.excluded,
+      }),
+    };
+  });
+}
+
+async function loadPipelineDeals(supabase: Supa): Promise<Array<Record<string, unknown>>> {
+  const { data, error } = await supabase
+    .from("commercial_deal_pipeline_v1")
+    .select("*")
+    .order("business_name")
+    .limit(500);
+  if (!error) return (data || []) as Array<Record<string, unknown>>;
+  if (!isMissingSchemaRelation(error.message)) throw new Error(error.message);
+  return loadPipelineFromTables(supabase);
+}
+
+async function loadAccountSitesFallback(
+  supabase: Supa,
+  accountId: string,
+): Promise<Array<Record<string, unknown>>> {
+  const { data: sites } = await supabase
+    .from("business_sites")
+    .select(
+      "id, nickname, address, city, state, zip_code, facility_type, facility_type_key, " +
+        "scope_level, sqft, recommended_crew_size, service_window_start, service_window_end, " +
+        "firm_price_cents, walkthrough_id, pricing_confirmed_at, excluded_at, active",
+    )
+    .eq("business_account_id", accountId)
+    .eq("active", true)
+    .order("nickname");
+  return ((sites || []) as unknown as Array<Record<string, unknown>>).map((site) => ({
+    site_id: site.id,
+    nickname: site.nickname,
+    address: [site.address, site.city, site.state, site.zip_code].filter(Boolean).join(", "),
+    facility_type: site.facility_type_key || site.facility_type,
+    scope_level: site.scope_level,
+    sqft: site.sqft,
+    crew_size: site.recommended_crew_size,
+    service_window_start: site.service_window_start,
+    service_window_end: site.service_window_end,
+    firm_price_cents: site.firm_price_cents,
+    walkthrough_id: site.walkthrough_id,
+    pricing_confirmed_at: site.pricing_confirmed_at,
+    stage: site.excluded_at ? "excluded" : null,
+    ready: !site.excluded_at,
+  }));
+}
+
+async function ensureProposalAccount(
+  supabase: Supa,
+  body: Record<string, unknown>,
+): Promise<
+  | { ok: true; accountId: string; account: Record<string, unknown> }
+  | { ok: false; error: string; status: number }
+> {
+  const existingId = s(body.accountId, 60);
+  if (existingId) {
+    const { data: account } = await supabase
+      .from("business_accounts")
+      .select("id, business_name, contact_name, email, phone, recurring_frequency, billing_terms, assigned_va_email")
+      .eq("id", existingId)
+      .maybeSingle();
+    if (!account) return { ok: false, error: "Account not found.", status: 404 };
+    return { ok: true, accountId: existingId, account: account as Record<string, unknown> };
+  }
+
+  const businessName = s(body.businessName, 200);
+  const recipientName = s(body.recipientName, 120);
+  const recipientEmail = s(body.recipientEmail, 200);
+  if (!businessName) return { ok: false, error: "Business name is required to send without an existing account.", status: 400 };
+  if (!recipientEmail || !isValidProposalEmail(recipientEmail)) {
+    return { ok: false, error: "A valid recipient email is required.", status: 400 };
+  }
+
+  const accountType = body.accountType === "office" ? "office" : "commercial";
+  const { data: created, error } = await supabase
+    .from("business_accounts")
+    .insert({
+      account_type: accountType,
+      business_name: businessName,
+      contact_name: recipientName,
+      email: recipientEmail.toLowerCase(),
+      phone: s(body.recipientPhone, 40),
+      address: s(body.address, 200),
+      city: s(body.city, 80),
+      state: s(body.state, 8),
+      zip_code: s(body.zip || body.zip_code, 12),
+      facility_type: s(body.facilityType, 80),
+      square_footage: int(body.sqft),
+      recurring_frequency: s(body.frequency, 80),
+      status: "prospect",
+      source: "proposal_send",
+    })
+    .select("id, business_name, contact_name, email, phone, recurring_frequency, billing_terms, assigned_va_email")
+    .maybeSingle();
+  if (error || !created) {
+    return { ok: false, error: error?.message || "Could not create the prospect account.", status: 400 };
+  }
+  return { ok: true, accountId: String((created as { id: string }).id), account: created as Record<string, unknown> };
+}
+
+async function ensureIncomingSites(
+  supabase: Supa,
+  accountId: string,
+  incoming: IncomingSite[],
+  defaultFrequency: string,
+): Promise<
+  | { ok: true; rows: Array<Record<string, unknown>> }
+  | { ok: false; error: string; status: number; missing?: string[] }
+> {
+  const siteRows: Array<Record<string, unknown>> = [];
+  const missingRates: string[] = [];
+  let order = 0;
+  for (const raw of incoming) {
+    const nickname = s(raw.nickname, 80) || s(raw.address, 80) || `Site ${order + 1}`;
+    const cents = int(raw.perVisitPriceCents);
+    if (cents == null || cents <= 0) {
+      missingRates.push(nickname || "Site");
+      continue;
+    }
+    let siteId = s(raw.siteId, 60);
+    if (!siteId) {
+      const { data: created, error } = await supabase
+        .from("business_sites")
+        .insert({
+          business_account_id: accountId,
+          nickname,
+          address: s(raw.address, 200),
+          city: s(raw.city, 80),
+          state: s(raw.state, 8),
+          zip_code: s(raw.zip || raw.zip_code, 12),
+          facility_type: s(raw.facilityType || raw.facility_type, 80),
+          sqft: int(raw.sqft),
+          active: true,
+          firm_price_cents: cents,
+        })
+        .select("id")
+        .maybeSingle();
+      if (error || !created) {
+        return { ok: false, error: error?.message || "Could not save a site.", status: 400 };
+      }
+      siteId = String((created as { id: string }).id);
+    }
+    const line = [s(raw.address, 200), s(raw.city, 80), s(raw.state, 8), s(raw.zip || raw.zip_code, 12)]
+      .filter(Boolean)
+      .join(", ");
+    siteRows.push({
+      business_site_id: siteId,
+      nickname,
+      address: line || s(raw.address, 200),
+      facility_type: s(raw.facilityType || raw.facility_type, 80),
+      scope_level: null,
+      sqft: int(raw.sqft),
+      crew_size: null,
+      service_window_start: null,
+      service_window_end: null,
+      frequency: s(raw.frequency, 80) || defaultFrequency,
+      per_visit_price_cents: cents,
+      price_source: "formula",
+      walkthrough_id: null,
+      pricing_confirmed_at: new Date().toISOString(),
+      sort_order: order++,
+    });
+  }
+  if (missingRates.length) {
+    return {
+      ok: false,
+      error: `Type a per-visit rate for ${missingRates.join(", ")}.`,
+      status: 409,
+      missing: missingRates,
+    };
+  }
+  if (!siteRows.length) {
+    return { ok: false, error: "Add at least one site with a per-visit rate.", status: 409 };
+  }
+  return { ok: true, rows: siteRows };
+}
 
 async function loadProposalSource(supabase: Supa, accountId: string): Promise<{
   request: Record<string, unknown> | null;
@@ -300,27 +598,49 @@ export async function GET(req: Request): Promise<NextResponse> {
   const proposalId = url.searchParams.get("proposalId");
   const view = url.searchParams.get("view") || (accountId ? "account" : "pipeline");
 
-  if (view === "pipeline") {
-    const [{ data, error }, { data: sessions }, attention] = await Promise.all([
-      supabase.from("commercial_deal_pipeline_v1").select("*").order("business_name").limit(500),
-      supabase
-        .from("commercial_onboarding_sessions_v1")
-        .select("*")
-        .eq("status", "active")
-        .order("idle_hours", { ascending: false })
-        .limit(500),
-      onboardingAttention(supabase),
-    ]);
+  if (view === "accounts") {
+    const q = s(url.searchParams.get("q"), 80)?.replace(/[%_,.()]/g, " ").trim();
+    let query = supabase
+      .from("business_accounts")
+      .select(
+        "id, business_name, account_type, status, email, contact_name, phone, address, city, state, zip_code, facility_type, square_footage, recurring_frequency",
+      )
+      .in("account_type", ["commercial", "office"])
+      .neq("status", "offboarded")
+      .order("business_name")
+      .limit(40);
+    if (q) {
+      query = query.or(`business_name.ilike.%${q}%,email.ilike.%${q}%,contact_name.ilike.%${q}%`);
+    }
+    const { data, error } = await query;
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({
-      ok: true,
-      deals: data || [],
-      // Onboarding sessions ride alongside the deal stages rather than
-      // replacing them: the stage still says where the DEAL is, the session
-      // says where the CLIENT is inside their setup.
-      onboarding: sessions || [],
-      onboardingAttention: attention,
-    });
+    return NextResponse.json({ ok: true, accounts: data || [] });
+  }
+
+  if (view === "pipeline") {
+    try {
+      const deals = await loadPipelineDeals(supabase);
+      const [{ data: sessions, error: sessionError }, attention] = await Promise.all([
+        supabase
+          .from("commercial_onboarding_sessions_v1")
+          .select("*")
+          .eq("status", "active")
+          .order("idle_hours", { ascending: false })
+          .limit(500),
+        onboardingAttention(supabase).catch(() => null),
+      ]);
+      return NextResponse.json({
+        ok: true,
+        deals,
+        onboarding: sessionError && isMissingSchemaRelation(sessionError.message) ? [] : sessions || [],
+        onboardingAttention: attention,
+      });
+    } catch (err) {
+      return NextResponse.json(
+        { error: err instanceof Error ? err.message : "Could not load the pipeline." },
+        { status: 500 },
+      );
+    }
   }
 
   if (proposalId) {
@@ -368,7 +688,12 @@ export async function GET(req: Request): Promise<NextResponse> {
         "billing_configured_at, stripe_customer_id, preferred_billing_method, " +
         "preferred_billing_method_set_at, preferred_billing_method_set_by, portal_user_id, portal_created_at")
       .eq("id", accountId).maybeSingle(),
-    supabase.rpc("commercial_proposal_readiness", { p_account_id: accountId }),
+    supabase.rpc("commercial_proposal_readiness", { p_account_id: accountId }).then((res) => {
+      if (res.error && isMissingSchemaRelation(res.error.message)) {
+        return { data: null, error: res.error };
+      }
+      return res;
+    }),
     supabase.from("commercial_proposals").select(PROPOSAL_COLS)
       .eq("business_account_id", accountId).order("version", { ascending: false }),
     supabase.from("commercial_agreements").select(AGREEMENT_COLS)
@@ -383,14 +708,20 @@ export async function GET(req: Request): Promise<NextResponse> {
   if (!account) return NextResponse.json({ error: "Account not found." }, { status: 404 });
 
   const source = await loadProposalSource(supabase, accountId);
-  const readinessSites = Array.isArray((readiness as { sites?: unknown[] } | null)?.sites)
+  let readinessSites = Array.isArray((readiness as { sites?: unknown[] } | null)?.sites)
     ? ((readiness as { sites: Array<Record<string, unknown>> }).sites || []).map((site) =>
       mergeSiteFromWalkthrough(site, source.walkthroughsBySite.get(String(site.site_id))),
     )
     : [];
-  const readinessOut = readiness
-    ? { ...(readiness as Record<string, unknown>), sites: readinessSites }
-    : null;
+  if (!readinessSites.length) {
+    readinessSites = (await loadAccountSitesFallback(supabase, accountId)).map((site) =>
+      mergeSiteFromWalkthrough(site, source.walkthroughsBySite.get(String(site.site_id))),
+    );
+  }
+  const readinessOut = {
+    ...((readiness as Record<string, unknown> | null) || {}),
+    sites: readinessSites,
+  };
   const prefill = proposalPrefillFromWalkthrough({
     account: account as {
       contact_name?: string | null;
@@ -499,14 +830,91 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   // ── Build the next version from the account's priced sites ─────────────
   if (action === "create_draft") {
-    const accountId = s(body.accountId, 60);
-    if (!accountId) return NextResponse.json({ error: "accountId is required." }, { status: 400 });
+    const resolved = await ensureProposalAccount(supabase, body);
+    if (resolved.ok === false) {
+      return NextResponse.json({ error: resolved.error }, { status: resolved.status });
+    }
+    const accountId = resolved.accountId;
+    const account = resolved.account;
 
-    const { data: account } = await supabase
-      .from("business_accounts")
-      .select("id, business_name, contact_name, email, phone, recurring_frequency, billing_terms, assigned_va_email")
-      .eq("id", accountId).maybeSingle();
-    if (!account) return NextResponse.json({ error: "Account not found." }, { status: 404 });
+    const incomingSites = Array.isArray(body.sites) ? (body.sites as IncomingSite[]) : [];
+    const defaultFrequencyEarly = s(body.frequency, 80) || "weekly";
+    if (incomingSites.length) {
+      const built = await ensureIncomingSites(supabase, accountId, incomingSites, defaultFrequencyEarly);
+      if (built.ok === false) {
+        return NextResponse.json(
+          { error: built.error, code: "rate_required", missing: built.missing || [] },
+          { status: built.status },
+        );
+      }
+      const perVisit = totalPerVisitCents(built.rows as unknown as ProposalSite[]);
+      const monthly = estimatedMonthlyCents(built.rows as unknown as ProposalSite[], defaultFrequencyEarly);
+      const supersedesId = s(body.supersedesId, 60);
+      await supabase.from("commercial_proposals")
+        .update({ status: "superseded", token: null, updated_at: new Date().toISOString() })
+        .eq("business_account_id", accountId).in("status", ["draft", "sent"]);
+      const { data: maxRow } = await supabase.from("commercial_proposals")
+        .select("version").eq("business_account_id", accountId)
+        .order("version", { ascending: false }).limit(1).maybeSingle();
+      const version = Number((maxRow as { version?: number } | null)?.version || 0) + 1;
+      const { data: created, error } = await supabase.from("commercial_proposals").insert({
+        business_account_id: accountId,
+        version,
+        supersedes_id: supersedesId,
+        status: "draft",
+        recipient_name: s(body.recipientName, 120) || account.contact_name,
+        recipient_email: s(body.recipientEmail, 200) || account.email,
+        recipient_phone: s(body.recipientPhone, 40) || account.phone,
+        proposed_frequency: defaultFrequencyEarly,
+        term: s(body.term, 40) || "month_to_month",
+        billing_method: body.billingMethod === "auto_pay" ? "auto_pay" : "invoiced",
+        billing_method_locked: body.billingMethodLocked === true,
+        invoice_cycle: s(body.invoiceCycle, 20) || "monthly",
+        net_terms: s(body.netTerms, 20) || mapBillingTerms(account.billing_terms as string | null),
+        cover_note: s(body.coverNote, 4000),
+        internal_note: s(body.internalNote, 4000),
+        total_per_visit_cents: perVisit,
+        estimated_monthly_cents: monthly,
+        visits_per_month: visitsPerMonth(defaultFrequencyEarly),
+        prepared_by: principal?.userId ?? null,
+        prepared_by_name: actorName,
+        assigned_to_email: account.assigned_va_email || principal?.email || null,
+      }).select("id, version").maybeSingle();
+      if (error || !created) {
+        return NextResponse.json({ error: error?.message || "Could not create the proposal." }, { status: 400 });
+      }
+      const { error: siteErr } = await supabase.from("commercial_proposal_sites").insert(
+        built.rows.map((r) => ({ ...r, proposal_id: (created as { id: string }).id })),
+      );
+      if (siteErr) {
+        await supabase.from("commercial_proposals").delete().eq("id", (created as { id: string }).id);
+        return NextResponse.json({ error: siteErr.message }, { status: 400 });
+      }
+      const proposalId = (created as { id: string }).id;
+      const payload: Record<string, unknown> = {
+        ok: true,
+        proposalId,
+        version,
+        accountId,
+        totalPerVisitCents: perVisit,
+        estimatedMonthlyCents: monthly,
+      };
+      if (body.send === true) {
+        const sent = await sendProposal(supabase, proposalId, s(body.recipientEmail, 200));
+        if (sent.ok === false) {
+          return NextResponse.json({ ...payload, sent: false, error: sent.error }, { status: sent.status });
+        }
+        return NextResponse.json({
+          ...payload,
+          sent: true,
+          link: sent.link,
+          emailed: sent.emailed,
+          emailError: sent.emailError,
+          expiresAt: sent.expiresAt,
+        });
+      }
+      return NextResponse.json(payload);
+    }
 
     const { data: readiness } = await supabase.rpc("commercial_proposal_readiness", {
       p_account_id: accountId,
@@ -656,7 +1064,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       billing_method: body.billingMethod === "auto_pay" ? "auto_pay" : "invoiced",
       billing_method_locked: body.billingMethodLocked === true,
       invoice_cycle: s(body.invoiceCycle, 20) || "monthly",
-      net_terms: s(body.netTerms, 20) || mapBillingTerms(account.billing_terms),
+        net_terms: s(body.netTerms, 20) || mapBillingTerms(account.billing_terms as string | null),
       cover_note: s(body.coverNote, 4000),
       internal_note: s(body.internalNote, 4000),
       total_per_visit_cents: perVisit,
