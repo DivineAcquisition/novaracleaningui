@@ -127,6 +127,7 @@ async function collectQcSignals(sb: any, since: string): Promise<SignalRow[]> {
 
   const rows: SignalRow[] = [];
   for (const issue of (data || []) as Record<string, any>[]) {
+    if (String(issue.issue_type || "") === "serious_allegation") continue;
     const occurred = String(issue.reclean_verified_at || issue.created_at);
 
     // Re-clean signal. Classification is carried verbatim — a scope-confusion

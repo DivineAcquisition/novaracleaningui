@@ -15,6 +15,7 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { countsTowardQualityScore } from "../_shared/reclean.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -201,11 +202,12 @@ serve(async (req) => {
       const since = new Date(Date.now() - 90 * 86400_000).toISOString();
       const { data: recentIssues } = await admin
         .from("qc_issues")
-        .select("cleaner_id, severity")
+        .select("cleaner_id, severity, issue_type, reclean_status, reclean_classification, score_exempt")
         .not("cleaner_id", "is", null)
         .gte("created_at", since);
       const issueCount = new Map<string, number>();
       for (const i of recentIssues || []) {
+        if (!countsTowardQualityScore(i)) continue;
         issueCount.set(i.cleaner_id, (issueCount.get(i.cleaner_id) || 0) + 1);
       }
 

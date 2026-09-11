@@ -679,7 +679,9 @@ serve(async (req) => {
     // pool share split.
     const { data: linkedBooking } = await supabase
       .from("bookings")
-      .select("id, total_estimate_cents, final_charge_cents, is_reclean, reclean_assessed_value_cents")
+      .select(
+        "id, total_estimate_cents, final_charge_cents, pay_basis_cents, is_reclean, reclean_assessed_value_cents",
+      )
       .eq("job_id", jobId)
       .order("created_at", { ascending: false })
       .limit(1)

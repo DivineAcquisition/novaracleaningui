@@ -24,6 +24,22 @@ export interface PartnerAccountLink {
   billingMethod: "auto_pay" | "invoiced" | null;
 }
 
+export interface PartnerPropertyManagerLink {
+  id: string;
+  companyName: string;
+  contactName: string | null;
+  email: string | null;
+  phone: string | null;
+  status: string;
+  billingMethod: "auto_pay" | "invoiced" | null;
+  invoiceCycle: string | null;
+  netTerms: string | null;
+  volumeDiscountPercent: number;
+  volumeDiscountLabel: string | null;
+}
+
+export type PartnerKind = "host" | "commercial" | "property_manager";
+
 export interface PartnerIdentity {
   id: string;
   email: string;
@@ -31,28 +47,60 @@ export interface PartnerIdentity {
   phone: string | null;
   hosts: PartnerHostLink[];
   accounts: PartnerAccountLink[];
-  kinds: Array<"host" | "commercial">;
+  propertyManagers: PartnerPropertyManagerLink[];
+  kinds: PartnerKind[];
 }
 
-export function kindsOf(identity: Pick<PartnerIdentity, "hosts" | "accounts">): Array<"host" | "commercial"> {
-  const kinds: Array<"host" | "commercial"> = [];
+export function kindsOf(
+  identity: Pick<PartnerIdentity, "hosts" | "accounts"> & {
+    propertyManagers?: PartnerPropertyManagerLink[];
+  },
+): PartnerKind[] {
+  const kinds: PartnerKind[] = [];
   if (identity.hosts.length) kinds.push("host");
   if (identity.accounts.length) kinds.push("commercial");
+  if (identity.propertyManagers?.length) kinds.push("property_manager");
   return kinds;
+}
+
+const PM_COLS =
+  "id, company_name, contact_name, email, phone, status, billing_method, invoice_cycle, net_terms, volume_discount_percent, volume_discount_label";
+
+function pmLink(row: Record<string, any>): PartnerPropertyManagerLink {
+  const method = row.billing_method || null;
+  return {
+    id: row.id,
+    companyName: row.company_name,
+    contactName: row.contact_name || null,
+    email: row.email || null,
+    phone: row.phone || null,
+    status: row.status,
+    billingMethod: method === "invoiced" ? "invoiced" : method === "auto_pay" ? "auto_pay" : null,
+    invoiceCycle: row.invoice_cycle || null,
+    netTerms: row.net_terms || null,
+    volumeDiscountPercent: Number(row.volume_discount_percent || 0),
+    volumeDiscountLabel: row.volume_discount_label || null,
+  };
 }
 
 async function loadLinked(
   supabase: Admin,
   identityId: string,
   email: string,
-): Promise<{ hosts: PartnerHostLink[]; accounts: PartnerAccountLink[] }> {
-  const [{ data: hostLinks }, { data: accountLinks }] = await Promise.all([
+): Promise<{
+  hosts: PartnerHostLink[];
+  accounts: PartnerAccountLink[];
+  propertyManagers: PartnerPropertyManagerLink[];
+}> {
+  const [{ data: hostLinks }, { data: accountLinks }, { data: pmLinks }] = await Promise.all([
     supabase.from("partner_identity_hosts").select("host_id").eq("identity_id", identityId),
     supabase.from("partner_identity_accounts").select("business_account_id").eq("identity_id", identityId),
+    supabase.from("partner_identity_property_managers").select("pm_account_id").eq("identity_id", identityId),
   ]);
 
   const hostIds = (hostLinks || []).map((r: { host_id: string }) => r.host_id);
   const accountIds = (accountLinks || []).map((r: { business_account_id: string }) => r.business_account_id);
+  const pmIds = (pmLinks || []).map((r: { pm_account_id: string }) => r.pm_account_id);
 
   const hosts: PartnerHostLink[] = [];
   if (hostIds.length) {
@@ -94,6 +142,16 @@ async function loadLinked(
         billingMethod: method === "invoiced" ? "invoiced" : method === "auto_pay" ? "auto_pay" : null,
       });
     }
+  }
+
+  const propertyManagers: PartnerPropertyManagerLink[] = [];
+  if (pmIds.length) {
+    const { data } = await supabase
+      .from("property_manager_accounts")
+      .select(PM_COLS)
+      .in("id", pmIds)
+      .neq("status", "offboarded");
+    for (const p of data || []) propertyManagers.push(pmLink(p));
   }
 
   // Email fallback for records that predate the identity link tables.
@@ -145,7 +203,22 @@ async function loadLinked(
     }
   }
 
-  return { hosts, accounts };
+  if (!propertyManagers.length) {
+    const { data } = await supabase
+      .from("property_manager_accounts")
+      .select(PM_COLS)
+      .ilike("email", email)
+      .neq("status", "offboarded")
+      .limit(5);
+    for (const p of data || []) {
+      propertyManagers.push(pmLink(p));
+      await supabase
+        .from("partner_identity_property_managers")
+        .upsert({ identity_id: identityId, pm_account_id: p.id }, { onConflict: "pm_account_id" });
+    }
+  }
+
+  return { hosts, accounts, propertyManagers };
 }
 
 export async function getIdentity(supabase: Admin, identityId: string): Promise<PartnerIdentity | null> {
@@ -159,6 +232,7 @@ export async function getIdentity(supabase: Admin, identityId: string): Promise<
     phone: data.phone || null,
     hosts: linked.hosts,
     accounts: linked.accounts,
+    propertyManagers: linked.propertyManagers,
     kinds: kindsOf(linked),
   };
 }
@@ -180,6 +254,7 @@ export async function ensureIdentity(
     phone?: string | null;
     hostId?: string | null;
     accountId?: string | null;
+    pmAccountId?: string | null;
   },
 ): Promise<PartnerIdentity | null> {
   const email = normalizeEmail(input.email);
@@ -222,19 +297,31 @@ export async function ensureIdentity(
       .from("partner_identity_accounts")
       .upsert({ identity_id: row.id, business_account_id: input.accountId }, { onConflict: "business_account_id" });
   }
+  if (input.pmAccountId) {
+    await supabase
+      .from("partner_identity_property_managers")
+      .upsert({ identity_id: row.id, pm_account_id: input.pmAccountId }, { onConflict: "pm_account_id" });
+  }
 
   return getIdentity(supabase, row.id);
 }
 
-/** True when this email already has a host or commercial relationship (or an identity). */
+/** True when this email already has any partner relationship (or an identity). */
 export async function emailHasPartnership(supabase: Admin, email: string): Promise<boolean> {
   const e = normalizeEmail(email);
   if (!looksLikeEmail(e)) return false;
   const identity = await findIdentityByEmail(supabase, e);
   if (identity && identity.kinds.length) return true;
-  const [{ data: host }, { data: account }] = await Promise.all([
+  const [{ data: host }, { data: account }, { data: pm }] = await Promise.all([
     supabase.from("hosts").select("id").ilike("email", e).limit(1).maybeSingle(),
     supabase.from("business_accounts").select("id").ilike("email", e).neq("status", "offboarded").limit(1).maybeSingle(),
+    supabase
+      .from("property_manager_accounts")
+      .select("id")
+      .ilike("email", e)
+      .neq("status", "offboarded")
+      .limit(1)
+      .maybeSingle(),
   ]);
-  return !!(host?.id || account?.id);
+  return !!(host?.id || account?.id || pm?.id);
 }

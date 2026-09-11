@@ -22,18 +22,12 @@ export async function consumeLoginToken(raw: string): Promise<{
     return { ok: false, message: "This sign-in link has expired. Request a new one." };
   }
 
-  const identity =
-    (data.identity_id &&
-      (await ensureIdentity(supabase, {
-        email: data.email,
-        hostId: data.host_id,
-        accountId: data.business_account_id,
-      }))) ||
-    (await ensureIdentity(supabase, {
-      email: data.email,
-      hostId: data.host_id,
-      accountId: data.business_account_id,
-    }));
+  const identity = await ensureIdentity(supabase, {
+    email: data.email,
+    hostId: data.host_id,
+    accountId: data.business_account_id,
+    pmAccountId: data.pm_account_id,
+  });
   if (!identity) return { ok: false, message: "We couldn't open your portal from this link." };
 
   await supabase
@@ -117,6 +111,56 @@ export async function provisionCommercialPortalAccess(input: {
     identityId: identity.id,
     accountId: input.accountId,
     kind: "commercial",
+  });
+  return { ok: true, handoffUrl: handoff.url };
+}
+
+/**
+ * Open the portal for a property manager at the end of their onboarding
+ * session. Page 3 configures billing and then provisions access in the same
+ * page, so this returns a handoff URL the confirmation can link straight into
+ * rather than mailing a separate invitation.
+ */
+export async function provisionPropertyManagerPortalAccess(input: {
+  email: string;
+  pmAccountId: string;
+  displayName?: string | null;
+  phone?: string | null;
+  sessionId?: string | null;
+}): Promise<{ ok: boolean; handoffUrl: string; error?: string }> {
+  const supabase = getAdminSupabase();
+  const email = normalizeEmail(input.email);
+  const identity = await ensureIdentity(supabase, {
+    email,
+    displayName: input.displayName,
+    phone: input.phone,
+    pmAccountId: input.pmAccountId,
+  });
+  if (!identity) return { ok: false, handoffUrl: "", error: "Could not open portal access." };
+
+  const now = new Date().toISOString();
+  await supabase
+    .from("property_manager_accounts")
+    .update({ portal_provisioned_at: now })
+    .eq("id", input.pmAccountId);
+
+  if (input.sessionId) {
+    await supabase
+      .from("property_manager_onboarding_sessions")
+      .update({
+        portal_provisioned_at: now,
+        last_completed_step: "billing",
+        last_activity_at: now,
+        updated_at: now,
+      })
+      .eq("id", input.sessionId);
+  }
+
+  const handoff = await mintHandoffToken({
+    email,
+    identityId: identity.id,
+    pmAccountId: input.pmAccountId,
+    kind: "property_manager",
   });
   return { ok: true, handoffUrl: handoff.url };
 }

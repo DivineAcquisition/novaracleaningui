@@ -203,8 +203,8 @@ serve(async (req) => {
               <div style="font-size:14px;color:#334155">${when || "Upcoming"}</div>
               <div style="font-size:14px;color:#334155">Area: ${zone}</div>
               ${mileageLine ? `<div style="font-size:14px;color:#6d28d9;margin-top:6px">${mileageLine}</div>` : ""}
-              <div style="font-size:22px;font-weight:800;color:#5C0FFE;margin-top:10px">$${pay} · ${pct}</div>
-              <div style="font-size:13px;color:#6d28d9;margin-top:6px">${firstJob}</div>
+              <div style="font-size:22px;font-weight:800;color:#5C0FFE;margin-top:10px">$${pay}</div>
+              <div style="font-size:13px;color:#6d28d9;margin-top:6px">${mileageLine ? `${pct} job share plus mileage. ${firstJob}` : firstJob}</div>
             </div>
             <p style="margin:0 0 16px;color:#475569;font-size:14px">${gate} The exact address is shared once you're assigned.</p>
             <p style="margin:24px 0;text-align:center">
@@ -308,6 +308,37 @@ serve(async (req) => {
               </a>
             </p>
             <p style="margin:0 0 8px;color:#64748b;font-size:14px">No login required — the link opens straight onto your form.</p>
+            <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">Novara Cleaning</p>
+          </div>`;
+        break;
+      }
+
+      case "qc_statement_request": {
+        const first = data.firstName || "there";
+        const statementUrl = data.statementUrl || "https://contractor.novaracleaning.com/cleaner/auth";
+        const loc = data.generalLocation || "the job site";
+        const when = data.serviceDate || "the service date";
+        const dueBy = data.dueBy || "the due date";
+        const reminder = data.reminder === true;
+        subject = reminder
+          ? "Reminder: we still need your written account"
+          : "Please share your account of the job in writing";
+        html = `
+          <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#0f172a">
+            <h2 style="margin:0 0 8px;font-size:20px">${reminder ? "Reminder: your written account" : "Your account of the job"}</h2>
+            <p style="margin:0 0 16px;color:#475569">Hi ${first},</p>
+            <p style="margin:0 0 16px;color:#475569">
+              We've received a report regarding the job at ${loc} on ${when}, and we need your
+              account of what happened before we review it. Please complete the form below by ${dueBy}.
+              This is your opportunity to give your side in writing and have it on the record.
+            </p>
+            <p style="margin:24px 0;text-align:center">
+              <a href="${statementUrl}"
+                 style="display:inline-block;background:#7c3aed;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600">
+                Open the statement form
+              </a>
+            </p>
+            <p style="margin:0 0 8px;color:#64748b;font-size:14px">No login required. No conclusion has been reached.</p>
             <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">Novara Cleaning</p>
           </div>`;
         break;

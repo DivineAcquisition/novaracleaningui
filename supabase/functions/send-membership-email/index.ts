@@ -7,6 +7,7 @@ import { MembershipRenewal } from '../_shared/email-templates/MembershipRenewal.
 import { CreditAllocated } from '../_shared/email-templates/CreditAllocated.tsx';
 import { SubscriptionCancelled } from '../_shared/email-templates/SubscriptionCancelled.tsx';
 import { CreditExpiryWarning } from '../_shared/email-templates/CreditExpiryWarning.tsx';
+import { RecurringPaused } from '../_shared/email-templates/RecurringPaused.tsx';
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
@@ -21,7 +22,7 @@ const logStep = (step: string, details?: any) => {
 };
 
 interface MembershipEmailRequest {
-  type: 'welcome' | 'renewal' | 'credit_allocated' | 'subscription_cancelled' | 'credit_expiry_warning' | 'checkout_link';
+  type: 'welcome' | 'renewal' | 'credit_allocated' | 'subscription_cancelled' | 'credit_expiry_warning' | 'checkout_link' | 'recurring_paused';
   email: string;
   data: {
     name?: string;
@@ -35,6 +36,10 @@ interface MembershipEmailRequest {
     monthlyAmount?: number; // cents
     depositAmount?: number; // cents
     firstServiceDate?: string;
+    // recurring_paused
+    reason?: string;
+    cadence?: string;
+    subject?: string;
   };
 }
 
@@ -112,6 +117,10 @@ serve(async (req: Request) => {
       case 'checkout_link':
         html = renderCheckoutLink(data);
         subject = `Complete your Novara ${data.plan || "membership"} signup`;
+        break;
+      case 'recurring_paused':
+        html = await renderAsync(React.createElement(RecurringPaused, data));
+        subject = data.subject || "Your Novara recurring cleaning is paused";
         break;
       default:
         throw new Error(`Unknown email type: ${type}`);

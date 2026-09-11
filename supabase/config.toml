@@ -402,6 +402,11 @@ verify_jwt = true
 [functions.admin-memberships]
 verify_jwt = true
 
+# Pause a recurring schedule and SMS + email the customer the reason.
+# Admin/VA JWT re-checked inside the function.
+[functions.admin-recurring-pause]
+verify_jwt = true
+
 # TOMBSTONE: retired "Job wrap-up time!" spam sender — deploy the no-op so
 # any stray cron/manual invocation can never text cleaners again.
 [functions.send-job-completion-sms]
@@ -743,4 +748,13 @@ verify_jwt = false
 # contractors tab. JWT verified in-function is not required; the function
 # uses the service role internally and never changes roster status.
 [functions.pulse-check-runner]
+verify_jwt = false
+
+# Contractor statement form: reminder + overdue flag (never a penalty) and
+# Drive/PDF retry. JWT verified in-function (cron secret / service role / admin).
+[functions.qc-statement-runner]
+verify_jwt = false
+
+# Per-case Drive folder for contractor statement uploads + branded PDF.
+[functions.qc-statement-drive]
 verify_jwt = false

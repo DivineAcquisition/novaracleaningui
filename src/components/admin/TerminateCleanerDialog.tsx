@@ -79,8 +79,9 @@ export default function TerminateCleanerDialog({
       `• Open future jobs are released for reassignment\n` +
       (blacklisted ? `• Added to the do-not-hire / blacklist (stated in the letter)\n` : "") +
       (sendLetter && validEmail
-        ? `• Termination letter emailed to ${cleanerEmail}, CC hr@novaracleaning.com + contact@novaracleaning.com`
-        : "• No letter will be sent");
+        ? `• Termination letter emailed to ${cleanerEmail}, CC hr@novaracleaning.com + contact@novaracleaning.com\n`
+        : "• No letter will be sent\n") +
+      `• Short termination SMS sent to their phone on file`;
     if (!confirm(confirmMsg)) return;
 
     setBusy(true);
@@ -90,10 +91,11 @@ export default function TerminateCleanerDialog({
       });
       if (error) throw error;
       if ((data as { error?: string })?.error) throw new Error((data as { error?: string }).error);
-      const d = data as { letterSent?: boolean; letterError?: string; reassignedJobs?: number };
+      const d = data as { letterSent?: boolean; letterError?: string; reassignedJobs?: number; smsSent?: boolean };
       toast.success(
         `${cleanerName} terminated.` +
         (d.letterSent ? " Letter sent (HR + contact cc'd)." : d.letterError ? ` Letter not sent: ${d.letterError}` : "") +
+        (d.smsSent ? " Termination SMS sent." : "") +
         (d.reassignedJobs ? ` ${d.reassignedJobs} job(s) released.` : ""),
       );
       reset();
@@ -114,7 +116,7 @@ export default function TerminateCleanerDialog({
             <RiCloseCircleLine className="w-5 h-5" /> Terminate {cleanerName}
           </DialogTitle>
           <DialogDescription>
-            This off-boards the contractor and records an internal rehire label. A termination letter is emailed to them with HR and contact@ cc&apos;d.
+            This off-boards the contractor and records an internal rehire label. A termination letter is emailed to them with HR and contact@ cc&apos;d, and a short SMS is sent to their phone.
           </DialogDescription>
         </DialogHeader>
 
@@ -165,9 +167,9 @@ export default function TerminateCleanerDialog({
             <RiMailSendLine className="w-3.5 h-3.5 flex-shrink-0" />
             {sendLetter
               ? validEmail
-                ? <span>Letter → <strong>{cleanerEmail}</strong>, CC <strong>hr@novaracleaning.com</strong></span>
-                : <span className="text-amber-700">No valid email on file — letter can&apos;t be sent.</span>
-              : <span>Letter sending is off.</span>}
+                ? <span>Letter → <strong>{cleanerEmail}</strong>, CC <strong>hr@novaracleaning.com</strong>. A short termination SMS is also sent.</span>
+                : <span className="text-amber-700">No valid email on file — letter can&apos;t be sent. A short termination SMS is still sent if a phone is on file.</span>
+              : <span>Letter sending is off. A short termination SMS is still sent if a phone is on file.</span>}
           </div>
         </div>
 

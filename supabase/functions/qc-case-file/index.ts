@@ -22,6 +22,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getContractorChecklist } from "../_shared/contractor-checklists.ts";
 import { labeledZonePhotos, parseZoneCompletions, siteZoneNames } from "../_shared/site-zones.ts";
+import { assembleIncidentEvidence } from "../_shared/qc-case-assemble.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -98,7 +99,7 @@ async function resolveDocusealDocUrl(admin: SB, sub: { id: string; submission_id
   }
 }
 
-async function ensureAdminOrVa(admin: SB, jwt: string): Promise<void> {
+async function ensureAdminOrVa(admin: SB, jwt: string): Promise<{ isAdmin: boolean }> {
   const userClient = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_ANON_KEY") ?? "",
@@ -107,8 +108,10 @@ async function ensureAdminOrVa(admin: SB, jwt: string): Promise<void> {
   const { data: u } = await userClient.auth.getUser();
   if (!u?.user?.id) throw new Error("Not signed in.");
   const { data: roles } = await admin.from("user_roles").select("role").eq("user_id", u.user.id);
-  const allowed = (roles || []).some((r: { role: string }) => ["admin", "va"].includes(r.role));
+  const roleList = (roles || []).map((r: { role: string }) => r.role);
+  const allowed = roleList.some((r: string) => ["admin", "va"].includes(r));
   if (!allowed) throw new Error("Admins or VAs only.");
+  return { isAdmin: roleList.includes("admin") };
 }
 
 // ─── Live Stripe lookups ─────────────────────────────────────────────────────
@@ -163,7 +166,7 @@ serve(async (req) => {
   try {
     const jwt = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
     if (!jwt) return json({ ok: false, error: "Not signed in." }, 401);
-    await ensureAdminOrVa(admin, jwt);
+    const actor = await ensureAdminOrVa(admin, jwt);
 
     const body = await req.json().catch(() => ({}));
     const bookingId = String(body?.bookingId || "");
@@ -173,12 +176,12 @@ serve(async (req) => {
     const { data: booking } = await admin
       .from("bookings")
       .select(
-        "id, booking_number, status, service_type, service_date, time_slot, arrival_window, created_at, confirmed_at, completed_at, cancelled_at, " +
-        "first_name, last_name, email, phone, address, city, state, zip_code, customer_id, job_id, cleaner_id, " +
+        "id, booking_number, status, service_type, service_date, time_slot, arrival_window, pre_delay_time_slot, delay_minutes, created_at, confirmed_at, completed_at, cancelled_at, cancel_reason, " +
+        "first_name, last_name, email, phone, address, city, state, zip_code, customer_id, job_id, cleaner_id, ghl_contact_id, " +
         "total_estimate_cents, final_charge_cents, deposit_cents, applied_credit_cents, tip_cents, cancel_fee_cents, reschedule_fee_cents, " +
         "payment_option, payment_method, payment_received_at, payment_intent_id, hosted_invoice_url, stripe_invoice_id, checkout_session_id, " +
         "completion_hold_pi_id, completion_hold_status, completion_hold_captured_amount, completion_hold_captured_at, " +
-        "add_ons, membership_plan, is_recurring, team_notes, issues_notes, access_notes, check_in_time, check_out_time, " +
+        "add_ons, membership_plan, is_recurring, team_notes, issues_notes, access_notes, check_in_time, check_out_time, pets, focused_areas, " +
         "before_photos, after_photos, photo_upload_submitted_at, num_cleaners_assigned, " +
         "is_reclean, reclean_of_booking_id, reclean_qc_issue_id, reclean_scope, reclean_assessed_value_cents, " +
         "photo_zones, reclean_zones, scope_level",
@@ -201,7 +204,7 @@ serve(async (req) => {
         : Promise.resolve({ data: null }),
       admin.from("job_documentation").select("*").eq("booking_id", bookingId).maybeSingle(),
       booking.job_id
-        ? admin.from("job_checklists").select("service_type, items, total_items, completed_items, progress_pct, started_at, completed_at, last_activity_by, section_meta, zone_completion").eq("job_id", booking.job_id).maybeSingle()
+        ? admin.from("job_checklists").select("service_type, items, total_items, completed_items, progress_pct, started_at, completed_at, last_activity_by, section_meta, zone_completion, sections_snapshot, item_id_map").eq("job_id", booking.job_id).maybeSingle()
         : Promise.resolve({ data: null }),
       admin.from("service_agreements").select("id, customer_email, customer_name, signed_by, source, pdf_path, created_at, agreed_terms, agreed_disclaimer, agreed_refund, agreed_service_agreement")
         .or(`booking_id.eq.${bookingId}${booking.email ? `,customer_email.ilike.${booking.email}` : ""}`)
@@ -211,7 +214,7 @@ serve(async (req) => {
         : Promise.resolve({ data: [] }),
       admin.from("booking_addon_charges").select("id, added_addons, removed_addons, amount_cents, status, stripe_payment_intent_id, hosted_invoice_url, note, created_at").eq("booking_id", bookingId).order("created_at", { ascending: true }),
       admin.from("qc_issues").select("*").eq("booking_id", bookingId).order("created_at", { ascending: false }),
-      admin.from("events").select("event_type, occurred_at, source, summary").eq("booking_id", bookingId).order("occurred_at", { ascending: false }).limit(60),
+      admin.from("events").select("event_type, occurred_at, source, summary, data").eq("booking_id", bookingId).order("occurred_at", { ascending: true }).limit(400),
       booking.job_id
         ? admin.from("job_assignments").select("status, cleaner_id, cleaners(first_name, last_name, phone)").eq("job_id", booking.job_id)
         : Promise.resolve({ data: [] }),
@@ -273,6 +276,12 @@ serve(async (req) => {
 
     // ── Issues + their audit trails ───────────────────────────────────────
     const issues = issuesRes.data || [];
+    const restricted = (issues as Array<{ admin_only?: boolean; issue_type?: string }>).some(
+      (i) => i.admin_only || i.issue_type === "serious_allegation",
+    );
+    if (restricted && !actor.isAdmin) {
+      return json({ ok: false, error: "This case file is restricted to admin/owner." }, 403);
+    }
     const issueIds = issues.map((i: { id: string }) => i.id);
     let issueEvents: Array<Record<string, unknown>> = [];
     if (issueIds.length > 0) {
@@ -354,6 +363,47 @@ serve(async (req) => {
         ]),
     ];
 
+    let customer = customerRes.data;
+    if (!customer && booking.email) {
+      const { data: byEmail } = await admin.from("customers")
+        .select("id, email, first_name, last_name, phone, address, city, state, zip, membership_status, membership_plan, stripe_customer_id, created_at")
+        .ilike("email", booking.email)
+        .maybeSingle();
+      customer = byEmail || null;
+    }
+
+    const ghlToken = (await resolveSecret(admin, "GHL_PIT_TOKEN")) || Deno.env.get("GHL_PIT_TOKEN") || "";
+    const ghlLocationId = (await resolveSecret(admin, "GHL_LOCATION_ID")) || Deno.env.get("GHL_LOCATION_ID") || "";
+    const incident = await assembleIncidentEvidence(admin, {
+      booking,
+      checklist: checklistRes.data || null,
+      events: eventsRes.data || [],
+      ghlToken: ghlToken || null,
+      ghlLocationId: ghlLocationId || null,
+    });
+
+    // Append-only snapshot onto the serious-allegation case itself — never
+    // overwrites a snapshot already stored, and never touches source records.
+    const incidentIssue = (issues as Array<{ id: string; issue_type?: string; details?: Record<string, unknown> }>)
+      .find((i) => i.issue_type === "serious_allegation");
+    if (incidentIssue && !(incidentIssue.details && incidentIssue.details.evidence_snapshot)) {
+      const snap = {
+        assembled_at: new Date().toISOString(),
+        ghl_client_messages: incident.ghl.client.messages,
+        ghl_contractor_messages: incident.ghl.contractor.messages,
+        ghl_client_notes: incident.ghl.client.notes,
+        ghl_contractor_notes: incident.ghl.contractor.notes,
+        comms: incident.comms,
+        incident_timeline: incident.incident_timeline,
+        photos: incident.photos,
+        checklist_items: incident.checklist_items,
+      };
+      await admin.from("qc_issues").update({
+        details: { ...(incidentIssue.details || {}), evidence_snapshot: snap },
+        updated_at: new Date().toISOString(),
+      }).eq("id", incidentIssue.id).then(() => undefined, () => undefined);
+    }
+
     return json({
       ok: true,
       case: {
@@ -372,6 +422,10 @@ serve(async (req) => {
           check_in_time: booking.check_in_time,
           check_out_time: booking.check_out_time,
           add_ons: booking.add_ons || [],
+          pets: booking.pets ?? null,
+          delay_minutes: booking.delay_minutes ?? 0,
+          pre_delay_time_slot: booking.pre_delay_time_slot || null,
+          cancel_reason: booking.cancel_reason || null,
           membership_plan: booking.membership_plan,
           is_recurring: booking.is_recurring,
           team_notes: booking.team_notes,
@@ -383,8 +437,8 @@ serve(async (req) => {
           photo_zones: siteZones,
           reclean_zones: siteZoneNames(booking.reclean_zones),
         },
-        customer: customerRes.data
-          ? { ...customerRes.data }
+        customer: customer
+          ? { ...customer }
           : { email: booking.email, first_name: booking.first_name, last_name: booking.last_name, phone: booking.phone },
         cleaners,
         agreements,
@@ -437,6 +491,7 @@ serve(async (req) => {
         issue_events: issueEvents,
         timeline: eventsRes.data || [],
         policy_highlights: POLICY_HIGHLIGHTS,
+        incident,
       },
     });
   } catch (e) {

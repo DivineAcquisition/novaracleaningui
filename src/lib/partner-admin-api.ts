@@ -183,3 +183,120 @@ export async function setHostPayAfter(hostId: string, enabled: boolean): Promise
   });
   return handle(res);
 }
+
+// ─── Property Manager portfolio ops ────────────────────────────────────────
+
+export interface PmVolumeDiscountTier {
+  min_units: number;
+  percent: number;
+  label?: string;
+}
+
+export interface PmVolumeDiscountConfig {
+  enabled: boolean;
+  tiers: PmVolumeDiscountTier[];
+}
+
+export interface PmAdminAccount {
+  id: string;
+  company_name: string;
+  contact_name: string | null;
+  email: string | null;
+  phone: string | null;
+  status: string;
+  billing_method: string;
+  invoice_cycle: string;
+  net_terms: string;
+  volume_discount_percent: number | null;
+  volume_discount_label: string | null;
+  portal_provisioned_at: string | null;
+  created_at: string;
+  unitCount: number;
+  activeUnits: number;
+  pendingReview: number;
+}
+
+export interface PmAdminUnitRate {
+  service: string;
+  label: string;
+  standingCents: number | null;
+  listCents: number | null;
+}
+
+export interface PmAdminUnit {
+  id: string;
+  label: string;
+  unitLabel: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  zipCode: string | null;
+  sqft: number | null;
+  bedrooms: number | null;
+  bathrooms: number | null;
+  zoneCode: string | null;
+  rates: PmAdminUnitRate[];
+  discountPercent: number;
+  status: string;
+  reviewReason: string | null;
+  reviewMessage: string | null;
+  bookable: boolean;
+  rateEditable: false;
+}
+
+export interface PmReviewQueueItem extends PmAdminUnit {
+  pmAccountId: string;
+  company: string | null;
+  flaggedNonStandard: boolean;
+  createdAt: string | null;
+}
+
+export interface PmOnboardingAttentionRow {
+  id: string;
+  pm_account_id?: string;
+  company_name?: string | null;
+  recipient_name?: string | null;
+  recipient_email?: string | null;
+  current_step?: string | null;
+  idle_hours?: number | null;
+  stalled?: boolean;
+  pending_items?: number | null;
+}
+
+export interface PmAdminSnapshot {
+  ok: true;
+  accounts: PmAdminAccount[];
+  attention: PmOnboardingAttentionRow[];
+  reviewQueue: PmReviewQueueItem[];
+  discounts: PmVolumeDiscountConfig;
+  defaultDiscounts: PmVolumeDiscountConfig;
+  units?: PmAdminUnit[];
+}
+
+async function handlePm<T extends { ok?: boolean; error?: string; message?: string }>(res: Response): Promise<T> {
+  const data = (await res.json().catch(() => ({}))) as T;
+  if (!res.ok || data.ok === false) {
+    throw new Error(data.error || data.message || `Request failed (${res.status})`);
+  }
+  return data;
+}
+
+export async function fetchPmAdmin(accountId?: string): Promise<PmAdminSnapshot> {
+  const qs = accountId ? `?accountId=${encodeURIComponent(accountId)}` : "";
+  const res = await fetch(`/api/partner-admin/property-manager${qs}`, {
+    headers: await authHeaders(),
+    cache: "no-store",
+  });
+  return handlePm<PmAdminSnapshot>(res);
+}
+
+export async function runPmAdmin<T extends { ok?: boolean; error?: string; message?: string } = Record<string, unknown> & { ok?: boolean }>(
+  body: Record<string, unknown>,
+): Promise<T> {
+  const res = await fetch("/api/partner-admin/property-manager", {
+    method: "POST",
+    headers: await authHeaders(),
+    body: JSON.stringify(body),
+  });
+  return handlePm<T>(res);
+}

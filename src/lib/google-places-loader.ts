@@ -376,16 +376,18 @@ export function parsePlaceNew(place: any): PlacesAddressComponents {
   }
 
   const loc = place?.location;
-  const lat = typeof loc?.lat === "function" ? loc.lat() : loc?.lat;
-  const lng = typeof loc?.lng === "function" ? loc.lng() : loc?.lng;
+  const latRaw = typeof loc?.lat === "function" ? loc.lat() : (loc?.lat ?? loc?.latitude);
+  const lngRaw = typeof loc?.lng === "function" ? loc.lng() : (loc?.lng ?? loc?.longitude);
+  const lat = typeof latRaw === "number" ? latRaw : Number(latRaw);
+  const lng = typeof lngRaw === "number" ? lngRaw : Number(lngRaw);
 
   return {
     street: `${streetNumber} ${route}`.trim(),
     city,
     state,
     zipCode,
-    lat: typeof lat === "number" ? lat : undefined,
-    lng: typeof lng === "number" ? lng : undefined,
+    lat: Number.isFinite(lat) ? lat : undefined,
+    lng: Number.isFinite(lng) ? lng : undefined,
     formattedAddress: place?.formattedAddress || undefined,
   };
 }

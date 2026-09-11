@@ -8,6 +8,7 @@
 //   * is logged permanently (who / when / what / why) — never hard-deleted
 //   * sends a formal email (admin-editable before send) that is archived
 //     verbatim on the action row
+//   * removal also sends the shared short termination SMS
 //   * NEVER touches pay for completed work. Suspension only blocks NEW
 //     assignments (cleaners.status='suspended' — every dispatch path already
 //     filters status='active'); removal reuses terminated offboarding and
@@ -34,6 +35,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { Resend } from "https://esm.sh/resend@2.0.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { notifyContractorTerminated } from "../_shared/termination-sms.ts";
 
 // Same resolution order as _shared/app-secrets.ts (inlined so this function
 // deploys as a single file): app_secrets DB row first, env var fallback.
@@ -744,6 +746,7 @@ serve(async (req) => {
 
       // ── Apply the action's side effects ────────────────────────────────────
       let reassignedJobs = 0;
+      let smsSent = false;
 
       if (actionType === "strike") {
         await syncStrikeCount(admin, cleanerId);
@@ -794,6 +797,7 @@ serve(async (req) => {
         reassignedJobs = await markFutureAssignmentsForReassignment(
           admin, cleanerId, actor.id, "cleaner_removed",
         );
+        smsSent = await notifyContractorTerminated(admin, cleaner);
         // Close any open suspension row — the removal supersedes it.
         await admin.from("cleaner_accountability_actions").update({
           status: "completed", completed_at: nowIso, updated_at: nowIso,
@@ -870,6 +874,7 @@ serve(async (req) => {
           strike_number: actionType === "strike" ? strikeNumber : undefined,
           severe_cause: severeCause,
           email_sent: emailResult.sent,
+          sms_sent: smsSent,
           reassigned_jobs: reassignedJobs,
           by: actor.id,
         },
@@ -887,6 +892,7 @@ serve(async (req) => {
         activeStrikes: actionType === "strike" ? strikeNumber : activeStrikes,
         emailSent: emailResult.sent,
         emailError: emailResult.error,
+        smsSent,
         reassignedJobs,
       });
     }

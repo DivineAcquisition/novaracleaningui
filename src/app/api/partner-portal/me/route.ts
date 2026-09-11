@@ -29,6 +29,12 @@ export async function GET(req: Request): Promise<NextResponse> {
       status: a.status,
       billingMethod: a.billingMethod,
     })),
+    propertyManagers: identity.propertyManagers.map((p) => ({
+      id: p.id,
+      companyName: p.companyName,
+      status: p.status,
+      billingMethod: p.billingMethod,
+    })),
     expiresAt: session.expiresAt,
   });
 }

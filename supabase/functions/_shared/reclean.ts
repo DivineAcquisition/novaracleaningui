@@ -103,9 +103,12 @@ export function intakeCreatesRecleanRequest(opts: {
   reportedVia: string;
   requestReclean?: boolean;
 }): boolean {
+  const t = String(opts.issueType || "");
+  // An allegation under investigation is not a quality finding and must never
+  // auto-open a re-clean — even if a caller passes requestReclean.
+  if (t === "serious_allegation") return false;
   if (opts.requestReclean === true) return true;
   if (opts.requestReclean === false) return false;
-  const t = String(opts.issueType || "");
   if (t === "reclean") return true;
   if (t === "complaint") return true;
   if (t === "quality_flag") return true;
@@ -175,6 +178,7 @@ export function recleanRequestColumns(opts: {
 export interface PayBasisBooking {
   is_reclean?: boolean | null;
   reclean_assessed_value_cents?: number | null;
+  pay_basis_cents?: number | null;
   final_charge_cents?: number | null;
   total_estimate_cents?: number | null;
 }
@@ -185,6 +189,11 @@ export interface PayBasisBooking {
  * For a re-clean this is ALWAYS the assessed scope value — never the $0
  * customer charge. Throws if a re-clean is missing a positive assessed
  * value: that path would produce unpaid corrective work, which is prohibited.
+ *
+ * An explicit pay_basis_cents wins next. It is set when the customer charge is
+ * deliberately below the value of the work — a property manager's portfolio
+ * volume discount is funded from Company margin, so the crew is paid off the
+ * full pre-discount value of the turnover.
  */
 export function jobValueForPay(booking: PayBasisBooking): number {
   if (booking.is_reclean) {
@@ -194,6 +203,8 @@ export function jobValueForPay(booking: PayBasisBooking): number {
     }
     return assessed;
   }
+  const explicit = Math.round(Number(booking.pay_basis_cents) || 0);
+  if (explicit > 0) return explicit;
   return Math.max(0, Math.round(
     Number(booking.final_charge_cents) || Number(booking.total_estimate_cents) || 0,
   ));
@@ -318,16 +329,20 @@ export function countsTowardReliability(assignment: {
 
 /**
  * Quality Score only moves on a verified quality miss. Add-on / site-finding
- * rows are documentation, not failures. A re-clean request that is still
- * pending, classified as scope confusion, or not supported never hits.
+ * rows are documentation, not failures. A serious allegation under
+ * investigation is not a finding and never hits Score. A re-clean request
+ * that is still pending, classified as scope confusion, or not supported
+ * never hits.
  */
 export function countsTowardQualityScore(issue: {
   issue_type?: string | null;
   reclean_status?: string | null;
   reclean_classification?: string | null;
+  score_exempt?: boolean | null;
 }): boolean {
   const t = String(issue.issue_type || "");
-  if (t === "addon" || t === "site_finding") return false;
+  if (issue.score_exempt === true) return false;
+  if (t === "addon" || t === "site_finding" || t === "serious_allegation") return false;
   const status = String(issue.reclean_status || "none");
   if (status && status !== "none") return qualityHitApplies(issue.reclean_classification);
   return true;

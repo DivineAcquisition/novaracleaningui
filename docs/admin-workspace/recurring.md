@@ -5,7 +5,7 @@ category: How the Tool Works
 summary: Glow memberships and repeating cleans — rates, credits, pausing, and the difference between cancel and delete.
 whoCanSee: Admins and VAs
 where: /admin/recurring
-lastVerified: 2026-08-29
+lastVerified: 2026-09-10
 order: 9
 ---
 
@@ -129,14 +129,19 @@ The icon buttons on each row are: text the customer their self-service manage li
 link, send the cleaning checklist, send the membership agreement, generate the next clean
 now, pause or resume, and edit.
 
+**Pause** asks for a reason first. That wording is texted and emailed to the customer, then
+auto-booking stops. Presets cover a cleaner leaving, finding coverage, a quality hold, or a
+customer request — or you can write the message. Resume is still one click and does not send
+another notice. Already-created visits and Glow billing are not changed by pausing the
+schedule.
+
 Two more in the expanded panel:
 
 - **Skip next visit** — pushes the next date forward one cycle. Disabled if there's no next
   date set.
 - **End plan** — stops the plan and clears the next date.
 
-The hint on screen sums it up: *"Pause = temporary hold (resume anytime) · End = stops the
-plan and clears the next date."*
+The hint on screen sums it up: *"Pause = temporary hold (picks a reason we text + email) · End = stops the plan and clears the next date."*
 
 :::note Copy link needs the link to exist first
 If nobody has ever texted the customer their manage link, there's no token yet and you'll get

@@ -2,9 +2,9 @@
 
 // ─── /admin/commercial — Commercial hub ────────────────────────────────────
 //
-// The console for commercial and office work. Nine destinations used to sit
-// in one wrapping tab strip; that is too many things competing for the same
-// row. They are grouped into five workspaces:
+// The console for commercial and office work. Destinations used to sit in one
+// wrapping tab strip; that is too many things competing for the same row.
+// They are grouped into six workspaces:
 //
 //   Home        — Overview, Accounts, Comms
 //   Deals       — Walkthroughs (findings → firm price). Send and pipeline
@@ -13,9 +13,10 @@
 //   Jobs        — Book job, Recurring, Checklists
 //   Compliance  — COI (client certs + Novara's own)
 //   STR         — turnovers / hosts
+//   Portfolio   — property-manager unit registry, standing rates, invoicing
 //
 // Deep links still use ?tab=overview|accounts|comms|walkthroughs|send|pipeline|
-// book|recurring|checklists|compliance|str. Old Partnerships Hub aliases keep working.
+// book|recurring|checklists|compliance|str|portfolio. Old Partnerships Hub aliases keep working.
 // ?tab=send and ?tab=pipeline redirect to /admin/proposals.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -26,6 +27,7 @@ import {
   RiBuilding2Line,
   RiCalendarCheckLine,
   RiDashboardLine,
+  RiHomeSmile2Line,
   RiFileTextLine,
   RiHotelLine,
   RiLoader4Line,
@@ -43,6 +45,7 @@ import { useOpsAssistantRecord } from "@/components/ops-assistant/OpsAssistantPr
 import { proposalsHubTab } from "@/lib/commercial-proposal";
 import PartnerAccounts from "@/views/admin/PartnerAccounts";
 import PartnerAdmin from "@/views/admin/PartnerAdmin";
+import PropertyManagerAdmin from "@/views/admin/PropertyManagerAdmin";
 import PartnershipsOverview from "@/views/admin/PartnershipsOverview";
 import PartnershipAccounts from "@/views/admin/PartnershipAccounts";
 import PartnershipBooking from "@/views/admin/PartnershipBooking";
@@ -65,16 +68,20 @@ const VALID_TABS = [
   "checklists",
   "compliance",
   "str",
+  "portfolio",
 ] as const;
 
 type Tab = (typeof VALID_TABS)[number];
-type WorkspaceId = "home" | "deals" | "jobs" | "compliance" | "str";
+type WorkspaceId = "home" | "deals" | "jobs" | "compliance" | "str" | "portfolio";
 
 // Old Partnerships Hub deep links keep working.
 const TAB_ALIASES: Record<string, Tab> = {
   commercial: "accounts",
   turnovers: "str",
   ops: "str",
+  pm: "portfolio",
+  "property-manager": "portfolio",
+  "property_manager": "portfolio",
   proposals: "pipeline",
   partner: "overview",
   communications: "comms",
@@ -99,6 +106,7 @@ const SCREENS: Record<
   checklists: { label: "Checklists", icon: RiFileTextLine },
   compliance: { label: "Compliance", icon: RiShieldCheckLine },
   str: { label: "STR", icon: RiBuilding2Line },
+  portfolio: { label: "Portfolio", icon: RiHomeSmile2Line },
 };
 
 const WORKSPACES: Array<{
@@ -143,6 +151,13 @@ const WORKSPACES: Array<{
     tabs: ["str"],
     fallback: "str",
   },
+  {
+    id: "portfolio",
+    label: "Portfolio",
+    description: "Property manager unit registry, standing rates, and consolidated invoices.",
+    tabs: ["portfolio"],
+    fallback: "portfolio",
+  },
 ];
 
 const TAB_WORKSPACE: Record<Tab, WorkspaceId> = {
@@ -157,6 +172,7 @@ const TAB_WORKSPACE: Record<Tab, WorkspaceId> = {
   checklists: "jobs",
   compliance: "compliance",
   str: "str",
+  portfolio: "portfolio",
 };
 
 export default function CommercialHub() {
@@ -278,7 +294,7 @@ export default function CommercialHub() {
       <div className="space-y-2">
         <nav
           aria-label="Commercial workspaces"
-          className="grid grid-cols-5 gap-1 rounded-xl bg-slate-100 p-1"
+          className="grid grid-cols-3 sm:grid-cols-6 gap-1 rounded-xl bg-slate-100 p-1"
         >
           {WORKSPACES.map((ws) => {
             const active = ws.id === workspace;
@@ -373,6 +389,7 @@ export default function CommercialHub() {
         {tab === "checklists" && <CommercialChecklists />}
         {tab === "compliance" && <CoiCompliance />}
         {tab === "str" && <PartnerAdmin />}
+        {tab === "portfolio" && <PropertyManagerAdmin />}
       </div>
     </div>
   );

@@ -3,7 +3,8 @@
 // Locks the rules the feature is built around:
 //   • pipeline eligibility (Screening-Passed+, not Active, never rejected)
 //   • screening bar still requires photo ID + own vehicle
-//   • radius is mileage copy, not an audience filter
+//   • radius is a 45–55 mile hard cap
+//   • payout is job share + 70¢/mi, company take floored at 40%
 //   • SMS always acknowledges they applied in the past
 //   • supply checklist must be complete AND fresh before accept
 //   • 45% is first-job-only copy + pay math
@@ -16,12 +17,13 @@ import {
   APPLIED_IN_PAST_ACK,
   buildUrgentHireSms,
   firstJobOnlySentence,
-  formatUrgentHireMileageLine,
+  formatUrgentHireMileagePayLine,
   isBlockedFromUrgentHire,
   isDeclineRecommendation,
   isDeclinedPipelineStage,
   isUrgentHirePipelineStage,
   isActiveRosterStatus,
+  isWithinUrgentHireRadius,
   parseUrgentHireSettings,
   payoutsReady,
   remainingUrgentHireSteps,
@@ -30,11 +32,16 @@ import {
   unfilledStillNeedsCoverage,
   urgentHireErrorMessage,
   urgentHirePayCents,
+  urgentHireTotalPayCents,
+  URGENT_HIRE_COMPANY_PROFIT_FLOOR_PERCENT,
   URGENT_HIRE_DEFAULTS,
   URGENT_HIRE_ELIGIBLE_STAGES,
   URGENT_HIRE_EXCLUDED_STAGES,
+  URGENT_HIRE_MILEAGE_RATE_CENTS,
+  URGENT_HIRE_RADIUS_MAX,
+  URGENT_HIRE_RADIUS_MIN,
 } from "../src/lib/urgent-hire";
-import { NEEDED_SUPPLY_IDS, SUPPLY_READY_PERCENT } from "../supabase/functions/_shared/urgent-hire.ts";
+import { NEEDED_SUPPLY_IDS, SUPPLY_READY_PERCENT, URGENT_HIRE_DEFAULTS as DENO_URGENT_HIRE_DEFAULTS } from "../supabase/functions/_shared/urgent-hire.ts";
 
 let failures = 0;
 function check(name: string, actual: unknown, expected: unknown): void {
@@ -203,13 +210,37 @@ check(
   true,
 );
 
-console.log("\nPremium rate + first-job-only:");
+console.log("\nPremium rate + mileage payout:");
 check("defaults", parseUrgentHireSettings({}), URGENT_HIRE_DEFAULTS);
+check("Deno defaults match src", DENO_URGENT_HIRE_DEFAULTS, URGENT_HIRE_DEFAULTS);
+check("saved 25mi radius clamps up to 45", parseUrgentHireSettings({ radius_miles: 25 }).radius_miles, URGENT_HIRE_RADIUS_MIN);
+check("saved 80mi radius clamps down to 55", parseUrgentHireSettings({ radius_miles: 80 }).radius_miles, URGENT_HIRE_RADIUS_MAX);
+check("45 miles is in range at max 45", isWithinUrgentHireRadius(45, 45), true);
+check("45.1 miles is out at max 45", isWithinUrgentHireRadius(45.1, 45), false);
+check("unknown miles are out", isWithinUrgentHireRadius(null, 45), false);
 check("45% of $200 is $90", urgentHirePayCents(20000, 45), 9000);
+check("mileage rate is 70¢", URGENT_HIRE_MILEAGE_RATE_CENTS, 70);
+check("company floor is 40%", URGENT_HIRE_COMPANY_PROFIT_FLOOR_PERCENT, 40);
+const payNear = urgentHireTotalPayCents({ jobValueCents: 20000, payPercent: 45, miles: 10 });
+check("10 miles adds $7", payNear, {
+  baseCents: 9000,
+  mileageCents: 700,
+  totalCents: 9700,
+  companyPercent: 51.5,
+  capped: false,
+});
+const payFar = urgentHireTotalPayCents({ jobValueCents: 20000, payPercent: 45, miles: 50 });
+check("50 miles on $200 caps at 40% company", payFar, {
+  baseCents: 9000,
+  mileageCents: 3000,
+  totalCents: 12000,
+  companyPercent: 40,
+  capped: true,
+});
 check(
   "first-job-only sentence",
   firstJobOnlySentence(true, 45),
-  "This 45% rate applies to your first job only; standard tier rates apply after.",
+  "This 45% job share applies to your first job only; standard tier rates apply after.",
 );
 const sms = buildUrgentHireSms({
   serviceType: "Standard clean",
@@ -228,32 +259,31 @@ check("SMS states first job only", sms.includes("first job only"), true);
 check("SMS uses zone not a street", sms.includes("Takoma Park 20912") && !sms.includes("Lee Ave"), true);
 check("SMS says finish remaining steps first", sms.includes("finishing remaining steps first"), true);
 check("SMS always includes applied-in-past ack", sms.includes(APPLIED_IN_PAST_ACK), true);
-check("in-radius SMS omits mileage", sms.includes("from the job."), false);
+check("no-mileage SMS has no includes-mileage line", sms.includes("Includes $"), false);
 
-console.log("\nOut-of-radius mileage:");
-check("in-radius mileage line is omitted", formatUrgentHireMileageLine(10, 25), null);
-check("at-radius mileage line is omitted", formatUrgentHireMileageLine(25, 25), null);
+console.log("\nMileage included in payout:");
 check(
-  "out-of-radius mileage line",
-  formatUrgentHireMileageLine(42, 25),
-  "About 42 miles from the job.",
+  "mileage pay line",
+  formatUrgentHireMileagePayLine(50, 3500),
+  "Includes $35.00 mileage (50 miles).",
 );
-check("unknown mileage is omitted", formatUrgentHireMileageLine(null, 25), null);
-const smsFar = buildUrgentHireSms({
+check("zero mileage pay line omitted", formatUrgentHireMileagePayLine(10, 0), null);
+const smsMiles = buildUrgentHireSms({
   serviceType: "Standard clean",
   dateLabel: "Tue, Sep 8",
   timeWindow: "8:00 AM – 12:00 PM",
   zone: "Takoma Park 20912",
   payPercent: 45,
-  payDollars: "90.00",
+  payDollars: "125.00",
   firstJobOnly: true,
   offerUrl: "https://contractor.novaracleaning.com/cleaner/urgent-hire/abc",
   needsChecklist: true,
-  miles: 42,
-  radiusMiles: 25,
+  miles: 50,
+  mileageCents: 3500,
 });
-check("out-of-radius SMS includes mileage", smsFar.includes("About 42 miles from the job."), true);
-check("out-of-radius SMS still includes ack", smsFar.includes(APPLIED_IN_PAST_ACK), true);
+check("payout SMS shows total", smsMiles.includes("Your pay: $125.00"), true);
+check("payout SMS includes mileage dollars", smsMiles.includes("Includes $35.00 mileage (50 miles)."), true);
+check("payout SMS still includes ack", smsMiles.includes(APPLIED_IN_PAST_ACK), true);
 
 if (failures) {
   console.error(`\n${failures} check(s) failed.`);

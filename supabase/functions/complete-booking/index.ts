@@ -154,7 +154,10 @@ serve(async (req) => {
           // unstamped and use compute_crew_pay as usual.
           if (String(a.pay_source || "") === "urgent_hire") {
             const pct = Number(a.pay_percentage_snapshot) || 45;
-            const payCents = Math.round((revenue * pct) / 100);
+            const fromPct = Math.round((revenue * pct) / 100);
+            const stamped = Number(a.estimated_pay_cents) || 0;
+            // Keep mileage that was baked into the stamped payout; never drop below the % share.
+            const payCents = Math.max(fromPct, stamped);
             await supabase
               .from("job_assignments")
               .update({
@@ -191,10 +194,12 @@ serve(async (req) => {
           (a: { cleaner_id: string; pay_source?: string | null }) =>
             String(a.pay_source || "") === "urgent_hire" &&
             (!booking.cleaner_id || a.cleaner_id === booking.cleaner_id),
-        ) as { pay_percentage_snapshot?: number | null } | undefined;
+        ) as { pay_percentage_snapshot?: number | null; estimated_pay_cents?: number | null } | undefined;
         if (urgentLead) {
           const pct = Number(urgentLead.pay_percentage_snapshot) || 45;
-          recomputedPayoutCents = Math.round((revenue * pct) / 100);
+          const fromPct = Math.round((revenue * pct) / 100);
+          const stamped = Number(urgentLead.estimated_pay_cents) || 0;
+          recomputedPayoutCents = Math.max(fromPct, stamped);
           recomputedPayPct = pct;
         } else {
           const leadShare = shareFor(shares, booking.cleaner_id)

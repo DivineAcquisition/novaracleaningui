@@ -9,13 +9,15 @@
 //   4. emails a termination letter to the contractor, CC'ing HR and
 //      contact@novaracleaning.com (reply-to HR). If they were blacklisted,
 //      the letter says so.
-//   5. writes a cleaner_terminations audit row + an events row
+//   5. texts a short termination SMS
+//   6. writes a cleaner_terminations audit row + an events row
 //
 // Admin/VA gated.
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { Resend } from "https://esm.sh/resend@2.0.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { notifyContractorTerminated } from "../_shared/termination-sms.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -280,6 +282,8 @@ serve(async (req) => {
     const name = `${cleaner.first_name || ""} ${cleaner.last_name || ""}`.trim() || "Contractor";
     const blacklisted = rehireStatus === "blacklist";
 
+    const alreadyTerminated = String(cleaner.status || "").toLowerCase() === "terminated";
+
     // 1. Flip the cleaner to terminated + stamp the rehire label.
     const { data: updated, error: upErr } = await admin
       .from("cleaners")
@@ -324,6 +328,11 @@ serve(async (req) => {
         .then(() => undefined, () => undefined);
     }
 
+    let smsSent = false;
+    if (!alreadyTerminated) {
+      smsSent = await notifyContractorTerminated(admin, cleaner);
+    }
+
     // 4. Audit row + event.
     await admin.from("cleaner_terminations").insert({
       cleaner_id: cleanerId, reason, reason_label: reasonLabel, rehire_status: rehireStatus,
@@ -338,6 +347,7 @@ serve(async (req) => {
       data: {
         reason, reasonLabel, rehireStatus, blacklisted, by: callerId,
         reassigned_jobs: reassigned, letter_sent: letterSent, letter_cc: LETTER_CC,
+        sms_sent: smsSent,
       },
     }).then(() => undefined, () => undefined);
 
@@ -351,6 +361,7 @@ serve(async (req) => {
       reassignedJobs: reassigned,
       letterSent,
       letterError,
+      smsSent,
       rehireStatus,
       blacklisted,
     });

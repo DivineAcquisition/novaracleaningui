@@ -1,17 +1,25 @@
 import { computeCancelFee } from "./cancel-fee";
 
-export const PREVIEW_TOKENS = ["preview-host", "preview-commercial", "preview-mixed"] as const;
-export type PreviewKind = "host" | "commercial" | "mixed";
+export const PREVIEW_TOKENS = [
+  "preview-host",
+  "preview-commercial",
+  "preview-property-manager",
+  "preview-mixed",
+] as const;
+export type PreviewKind = "host" | "commercial" | "property_manager" | "mixed";
 
 export function previewKindFromToken(token: string): PreviewKind | null {
   if (token === "preview-host") return "host";
   if (token === "preview-commercial") return "commercial";
+  if (token === "preview-property-manager") return "property_manager";
   if (token === "preview-mixed") return "mixed";
   return null;
 }
 
 export function isPreviewQuery(value: string | null | undefined): PreviewKind | null {
-  if (value === "host" || value === "commercial" || value === "mixed") return value;
+  if (value === "host" || value === "commercial" || value === "property_manager" || value === "mixed") {
+    return value;
+  }
   return previewKindFromToken(String(value || ""));
 }
 
@@ -41,14 +49,36 @@ export function previewMe(kind: PreviewKind) {
     accountType: "commercial",
     billingMethod: "auto_pay" as const,
   };
+  const propertyManager = {
+    id: "preview-pm-1",
+    companyName: "Keystone Residential Management",
+    contactName: "Jordan Hale",
+    email: "jordan@example.com",
+    phone: null,
+    status: "active",
+    billingMethod: "invoiced" as const,
+    invoiceCycle: "monthly",
+    netTerms: "net_15",
+    volumeDiscountPercent: 8,
+    volumeDiscountLabel: "Portfolio 10+",
+  };
+  const kinds: string[] =
+    kind === "mixed"
+      ? ["host", "commercial", "property_manager"]
+      : kind === "host"
+        ? ["host"]
+        : kind === "property_manager"
+          ? ["property_manager"]
+          : ["commercial"];
   return {
     ok: true,
     preview: true,
     email: "jordan@example.com",
     displayName: "Jordan Hale",
-    kinds: kind === "mixed" ? (["host", "commercial"] as const) : kind === "host" ? (["host"] as const) : (["commercial"] as const),
-    hosts: kind === "commercial" ? [] : [host],
-    accounts: kind === "host" ? [] : [account],
+    kinds,
+    hosts: kind === "host" || kind === "mixed" ? [host] : [],
+    accounts: kind === "commercial" || kind === "mixed" ? [account] : [],
+    propertyManagers: kind === "property_manager" || kind === "mixed" ? [propertyManager] : [],
     sessionDays: 30,
   };
 }
@@ -108,6 +138,194 @@ export function previewHostOverview() {
       { label: "Host Partnership Agreement — signed 2026-08-01", url: "/host-partnership-agreement", date: "2026-08-01", kind: "agreement" },
       { label: "Property & Rate Schedule (current, Company-set)", url: "/api/partner-portal/host?preview=host&download=rate_schedule", date: "2026-08-01", kind: "rate_schedule" },
     ],
+  };
+}
+
+export function previewPropertyManagerOverview() {
+  const unit = (
+    id: string,
+    label: string,
+    address: string,
+    sqft: number,
+    beds: number,
+    baths: number,
+    moveOut: number,
+    standard: number,
+    extra: Record<string, unknown> = {},
+  ) => ({
+    id,
+    label,
+    unitLabel: label,
+    address,
+    city: "Baltimore",
+    state: "MD",
+    zipCode: "21231",
+    sqft,
+    bedrooms: beds,
+    bathrooms: baths,
+    zoneCode: "core",
+    rates: [
+      { service: "move_out", label: "Move-Out", standingCents: moveOut, listCents: Math.round(moveOut / 0.92) },
+      { service: "move_in", label: "Move-In", standingCents: moveOut, listCents: Math.round(moveOut / 0.92) },
+      {
+        service: "standard",
+        label: "Standard (vacant refresh)",
+        standingCents: standard,
+        listCents: Math.round(standard / 0.92),
+      },
+    ],
+    discountPercent: 8,
+    ratesComputedAt: "2026-08-01T12:00:00Z",
+    status: "active",
+    reviewReason: null,
+    reviewMessage: null,
+    bookable: true,
+    accessOnFile: true,
+    accessMethod: "Lockbox",
+    accessNotes: null,
+    parkingNotes: null,
+    notes: null,
+    rateEditable: false as const,
+    turnoverCount: 3,
+    upcomingCount: 1,
+    lastServicedOn: "2026-08-14",
+    nextNeededBy: tomorrow(),
+    ...extra,
+  });
+
+  return {
+    ok: true,
+    preview: true,
+    account: {
+      id: "preview-pm-1",
+      companyName: "Keystone Residential Management",
+      contactName: "Jordan Hale",
+      status: "active",
+      unitCount: 12,
+      pendingReviewCount: 1,
+      upcomingTurnovers: 2,
+      agreementSigned: true,
+    },
+    discount: {
+      percent: 8,
+      label: "Portfolio 10+",
+      unitsToNextTier: 8,
+      nextPercent: 12,
+      note: "Your 8% portfolio discount is already reflected in every standing rate below.",
+    },
+    billing: {
+      method: "invoiced" as const,
+      invoiceCycle: "monthly",
+      netTerms: "net_15",
+      netTermsLabel: "Net 15",
+      cardOnFile: false,
+      paymentBrand: null,
+      paymentLast4: null,
+      canUpdatePayment: false,
+      invoices: [
+        {
+          id: "pmi_1",
+          periodLabel: "August 2026",
+          periodStart: "2026-08-01",
+          periodEnd: "2026-08-31",
+          amountCents: 141_00,
+          unitCount: 3,
+          turnoverCount: 5,
+          status: "outstanding" as const,
+          statusLabel: "Due",
+          dueDate: "2026-09-15",
+          url: "https://invoice.stripe.com/preview",
+          units: [
+            {
+              unitId: "u1",
+              unitLabel: "Adams St 2B",
+              address: "118 Adams St",
+              subtotalCents: 64_40,
+              turnovers: [
+                {
+                  turnoverId: "t1",
+                  serviceType: "move_out",
+                  serviceLabel: "Move-Out",
+                  servicedOn: "2026-08-14",
+                  amountCents: 322_00,
+                  scopeAdjustmentCents: 0,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    services: [
+      { key: "move_out", label: "Move-Out", summary: "Full turnover clean after a tenant vacates." },
+      {
+        key: "move_in",
+        label: "Move-In",
+        summary: "Move-in ready clean before a new tenant takes possession.",
+      },
+      {
+        key: "standard",
+        label: "Standard (vacant refresh)",
+        summary: "Refresh on a vacant unit between showings.",
+      },
+    ],
+    units: [
+      unit("u1", "Adams St 2B", "118 Adams St", 980, 2, 1, 322_00, 184_00),
+      unit("u2", "Adams St 3A", "118 Adams St", 1240, 3, 2, 391_00, 223_00),
+      unit("u3", "Canton Row 4", "2400 Boston St", 1450, 3, 2, 428_00, 244_00, {
+        status: "pending_review",
+        bookable: false,
+        reviewReason: "flagged_non_standard",
+        reviewMessage:
+          "You flagged this unit as non-standard, so it's with our team rather than auto-priced.",
+        rates: [
+          { service: "move_out", label: "Move-Out", standingCents: null, listCents: null },
+          { service: "move_in", label: "Move-In", standingCents: null, listCents: null },
+          { service: "standard", label: "Standard (vacant refresh)", standingCents: null, listCents: null },
+        ],
+      }),
+    ],
+    selectedUnitId: null,
+    turnovers: [
+      {
+        id: "t1",
+        unitId: "u1",
+        unitLabel: "Adams St 2B",
+        serviceType: "move_out",
+        serviceLabel: "Move-Out",
+        neededByDate: tomorrow(),
+        neededByTime: null,
+        deadlineLabel: `${tomorrow()} (end of day)`,
+        scheduledDate: tomorrow(),
+        status: "assigned",
+        statusLabel: "Scheduled",
+        priceCents: 322_00,
+        finalPriceCents: null,
+        scopeAdjustmentCents: 0,
+        chargedCents: 322_00,
+        notes: "Tenant left the 1st. New lease starts the 5th.",
+        completedAt: null,
+        invoiceId: null,
+        createdAt: new Date().toISOString(),
+        beforePhotos: [],
+        afterPhotos: [],
+      },
+    ],
+    documents: [
+      {
+        label: "Property Management Services Agreement — signed 2026-08-01",
+        url: null,
+        date: "2026-08-01",
+        kind: "agreement",
+      },
+      {
+        label: "Unit Registry & Standing Rates (current, Company-set)",
+        url: "/api/partner-portal/property-manager?preview=property_manager&download=unit_registry",
+        date: "2026-08-01",
+        kind: "unit_registry",
+      },
+    ],
+    rateEditable: false as const,
   };
 }
 

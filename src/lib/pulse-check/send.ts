@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { edgeResult } from "@/lib/edge-invoke";
+import { buildTerminationSms } from "@/lib/termination-sms";
 import {
   pulseCheckLink,
   pulseSendBlockedReason,
@@ -18,8 +19,7 @@ export function pulseSmsMessage(
   const name = firstName.trim() || "there";
   const days = opts?.terminateDays && opts.terminateDays > 0 ? opts.terminateDays : 3;
   if (kind === "closed") {
-    const until = opts?.reapplyDate ? ` You can apply again after ${opts.reapplyDate}.` : " You can apply again in 3 months.";
-    return `Hi ${name} — we didn't hear back on your Novara pulse check, so your contractor account is closed.${until} Reply STOP to opt out.`;
+    return buildTerminationSms();
   }
   if (kind === "followup") {
     return (
@@ -86,7 +86,7 @@ export async function sendPulseChannels(
 
   if (!phone) {
     out.smsError = "No phone on the contractor record.";
-  } else if (cleaner.sms_notifications_enabled === false) {
+  } else if (kind !== "closed" && cleaner.sms_notifications_enabled === false) {
     out.smsError = "SMS notifications are off for this contractor.";
   } else {
     const { data, error } = await supabase.functions.invoke("send-ghl-sms", {
