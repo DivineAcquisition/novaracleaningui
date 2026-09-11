@@ -113,6 +113,11 @@ export function TourLauncher({
             return (
               <div
                 key={tour.id}
+                // The recorder starts each walkthrough by clicking the real
+                // button in this list. Matching the row on its heading text
+                // meant matching whichever nested div happened to contain the
+                // words, which is not the one holding the button.
+                data-tour-row={tour.id}
                 className="rounded-xl border p-3 flex items-start justify-between gap-3"
               >
                 <div className="min-w-0 space-y-1">

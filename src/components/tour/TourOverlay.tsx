@@ -102,7 +102,15 @@ export function TourOverlay({
       if (cancelled) return;
       const el = findAnchor(step.anchor!);
       if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+        // Centring an element taller than the window puts both of its edges
+        // off-screen, so the spotlight reads as a pair of vertical lines with
+        // no top or bottom. Align tall targets to their start instead.
+        const tall = el.getBoundingClientRect().height > window.innerHeight * 0.8;
+        el.scrollIntoView({
+          behavior: "smooth",
+          block: tall ? "start" : "center",
+          inline: "nearest",
+        });
         // Let the smooth scroll settle before measuring, or the hole lands
         // where the element used to be.
         window.setTimeout(() => {
@@ -211,6 +219,11 @@ export function TourOverlay({
       role="dialog"
       aria-modal="true"
       aria-label={`${tour.title} — step ${stepIndex + 1} of ${tour.steps.length}`}
+      // Whether the step has settled on its target yet. The recorder waits for
+      // this to leave "looking" before it captions a step, so a step that ends
+      // up showing its fallback gets a caption matching what's on screen
+      // rather than what the catalog hoped for.
+      data-tour-step-state={looking ? "looking" : rect ? "found" : "missing"}
     >
       {/* Dim. Four panels around the hole rather than one box-shadowed
           element, so the highlighted area stays crisp at any zoom level. */}
