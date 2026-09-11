@@ -191,7 +191,10 @@ async function record(browser: Browser, tour: Tour): Promise<Recorded | null> {
 
     const dialog = page.getByRole("dialog");
     await dialog.waitFor({ state: "visible", timeout: 10_000 });
-    await page.waitForTimeout(1200);
+    // Hold on the open menu. Playwright draws no cursor, so without a beat
+    // here the clip appears to start with a dialog that opened itself, and
+    // the point of the lead-in is showing where these live.
+    await page.waitForTimeout(2400);
 
     cues.push({
       startMs: leadInStart,

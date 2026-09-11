@@ -295,6 +295,24 @@ check(
   false,
 );
 
+// Every standing has to appear, or the counts don't add up to the total and
+// an admin goes looking for the walkthrough the summary forgot.
+const mixedRows = standingRows([
+  record({ status: "completed" }),
+  { ...record(), tourId: "reading-a-job", status: "skipped" },
+  { ...record(), tourId: "working-the-checklist", status: "in_progress" },
+  { ...record(), tourId: "photo-documentation", status: "completed", version: 0 },
+]);
+check(
+  "every standing is accounted for",
+  standingSummary(mixedRows),
+  "1 of 7 completed · 1 on an older version · 1 started · 1 skipped · 3 not started",
+);
+const counted = standingSummary(mixedRows)
+  .match(/(\d+) (?:of \d+ completed|on an older version|started|skipped|not started)/g)
+  ?.reduce((sum, part) => sum + Number(part.split(" ")[0]), 0);
+check("the counts add up to every walkthrough", counted, TOURS.length);
+
 // ── Recording freshness ────────────────────────────────────────────────────
 //
 // Staleness is a warning, not a failure. Failing the build on it would mean

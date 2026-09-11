@@ -51,7 +51,21 @@ interface Rect {
 
 function measure(el: HTMLElement): Rect {
   const r = el.getBoundingClientRect();
-  return { top: r.top, left: r.left, width: r.width, height: r.height };
+
+  // Pull the rect inside the window by enough room for the ring and its
+  // offset. Elements docked to an edge — the checklist's finish bar, the
+  // offer accept/decline row — sit flush against it and can't be scrolled
+  // away from it, so without this their highlight is drawn with one side
+  // off-screen and reads as an open-ended box.
+  const inset = SPOTLIGHT_PADDING + 4;
+  const top = Math.max(r.top, inset);
+  const left = Math.max(r.left, inset);
+  return {
+    top,
+    left,
+    width: Math.max(Math.min(r.right, window.innerWidth - inset) - left, 0),
+    height: Math.max(Math.min(r.bottom, window.innerHeight - inset) - top, 0),
+  };
 }
 
 export function TourOverlay({

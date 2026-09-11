@@ -201,12 +201,17 @@ export const STANDING_LABEL: Record<TourStanding, string> = {
  */
 export function standingSummary(rows: TourStandingRow[]): string {
   const completed = rows.filter((r) => r.standing === "completed").length;
+  const started = rows.filter((r) => r.standing === "in_progress").length;
   const skipped = rows.filter((r) => r.standing === "skipped").length;
   const outdated = rows.filter((r) => r.standing === "outdated").length;
   const untouched = rows.filter((r) => r.standing === "never").length;
 
+  // Every walkthrough is accounted for. Leaving a standing out makes the
+  // counts fail to add up to the total, which reads as a bug and invites
+  // somebody to go looking for the missing one.
   const parts: string[] = [`${completed} of ${rows.length} completed`];
   if (outdated > 0) parts.push(`${outdated} on an older version`);
+  if (started > 0) parts.push(`${started} started`);
   if (skipped > 0) parts.push(`${skipped} skipped`);
   if (untouched > 0) parts.push(`${untouched} not started`);
   return parts.join(" · ");
