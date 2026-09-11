@@ -8,7 +8,7 @@
 // in the customer portal, plus the admin-only refund-and-cancel and
 // hard cancel-without-refund.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   RiCalendarCheckLine,
@@ -83,6 +83,7 @@ import {
 } from "@/lib/booking-balance";
 import { cn } from "@/lib/utils";
 import { edgeResult } from "@/lib/edge-invoke";
+import { isCommercialBookingRow } from "@/lib/commercial-booking";
 
 /** Live contractor checklist progress, as attached by admin-list-bookings. */
 interface ChecklistSummary {
@@ -162,6 +163,9 @@ interface BookingRow {
   reclean_qc_issue_id?: string | null;
   booking_channel?: string | null;
   team_notes?: string | null;
+  booking_type?: string | null;
+  business_name?: string | null;
+  business_account_id?: string | null;
 }
 
 interface ScopeAdjustmentRow {
@@ -275,9 +279,18 @@ function propertySummary(booking: BookingRow): string | null {
   return parts.length ? parts.join(" · ") : null;
 }
 
-export default function AdminBookings() {
+export default function AdminBookings({
+  scope = "all",
+  title = "Bookings",
+  newJob,
+}: {
+  scope?: "all" | "commercial";
+  title?: string;
+  newJob?: { label: string; render: () => ReactNode };
+} = {}) {
   const searchParams = useSearchParams();
   const highlightId = searchParams.get("highlight");
+  const [creating, setCreating] = useState(false);
 
   const [bookings, setBookings] = useState<BookingRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -320,6 +333,7 @@ export default function AdminBookings() {
           search: searchDebounced,
           status: statusFilter,
           dateRange,
+          scope,
           limit: 2000,
         },
       });
@@ -348,19 +362,24 @@ export default function AdminBookings() {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, dateRange, searchDebounced]);
+  }, [statusFilter, dateRange, searchDebounced, scope]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
+  const visibleBookings = useMemo(
+    () => (scope === "commercial" ? bookings.filter(isCommercialBookingRow) : bookings),
+    [bookings, scope],
+  );
+
   // Auto-open the highlighted booking when arriving from internal-booking
   // success screen via `?highlight=…`.
   useEffect(() => {
-    if (!highlightId || !bookings.length) return;
-    const match = bookings.find((b) => b.id === highlightId);
+    if (!highlightId || !visibleBookings.length) return;
+    const match = visibleBookings.find((b) => b.id === highlightId);
     if (match) setSelected(match);
-  }, [highlightId, bookings]);
+  }, [highlightId, visibleBookings]);
 
   // Keep the open sheet's booking row fresh after mutations (customer info
   // edits, service adjusts, etc.) so the summary reflects the saved values.
@@ -379,24 +398,46 @@ export default function AdminBookings() {
     setDateRange("all");
   };
 
+  if (creating && newJob) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <Button type="button" variant="outline" size="sm" onClick={() => setCreating(false)}>
+            Back to {title.toLowerCase()}
+          </Button>
+        </div>
+        {newJob.render()}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
           <h1 className="font-jakarta text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
             <RiCalendarCheckLine className="w-6 h-6 text-violet-700" />
-            Bookings
+            {title}
           </h1>
           <p className="text-sm text-slate-500 mt-0.5">
             {totalCount != null
-              ? `${totalCount} booking${totalCount === 1 ? "" : "s"} match current filters`
-              : "Cancel, reschedule, refund, or mark complete — admin control over every booking."}
+              ? `${totalCount} ${scope === "commercial" ? "commercial " : ""}booking${totalCount === 1 ? "" : "s"} match current filters`
+              : scope === "commercial"
+                ? "Cancel, reschedule, refund, or mark complete — the same control center as Bookings, for commercial and office jobs."
+                : "Cancel, reschedule, refund, or mark complete — admin control over every booking."}
           </p>
         </div>
-        <Button variant="outline" onClick={load} disabled={loading} className="border-slate-200">
-          <RiRefreshLine className={cn("w-4 h-4 mr-1.5", loading && "animate-spin")} />
-          Refresh
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {newJob && (
+            <Button onClick={() => setCreating(true)} className="bg-violet-600 hover:bg-violet-700 text-white">
+              {newJob.label}
+            </Button>
+          )}
+          <Button variant="outline" onClick={load} disabled={loading} className="border-slate-200">
+            <RiRefreshLine className={cn("w-4 h-4 mr-1.5", loading && "animate-spin")} />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -461,13 +502,13 @@ export default function AdminBookings() {
             <div className="p-6 space-y-3">
               {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
             </div>
-          ) : bookings.length === 0 ? (
+          ) : visibleBookings.length === 0 ? (
             <p className="p-12 text-center text-sm text-slate-500">
-              No bookings matched. Try <strong>All bookings</strong> or search by customer name or email.
+              No bookings matched. Try <strong>All bookings</strong> or search by name or email.
             </p>
           ) : (
             <div className="divide-y divide-slate-100">
-              {bookings.map((b) => {
+              {visibleBookings.map((b) => {
                 const statusKey = (b.status || "").toLowerCase();
                 return (
                   <button
@@ -480,8 +521,7 @@ export default function AdminBookings() {
                   >
                     <div className="col-span-12 md:col-span-3 min-w-0">
                       <p className="font-semibold text-slate-900 text-sm truncate">
-                        {b.first_name || ""} {b.last_name || ""}
-                        {!b.first_name && !b.last_name && (
+                        {b.business_name || `${b.first_name || ""} ${b.last_name || ""}`.trim() || (
                           <span className="text-slate-400">(no name)</span>
                         )}
                       </p>

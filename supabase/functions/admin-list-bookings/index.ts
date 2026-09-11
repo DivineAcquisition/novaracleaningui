@@ -124,6 +124,9 @@ const OPTIONAL_COLS = [
   "reclean_qc_issue_id",
   "booking_channel",
   "team_notes",
+  "booking_type",
+  "business_name",
+  "business_account_id",
   "payment_received_at",
   "stripe_invoice_id",
   "auto_cancelled_reason",
@@ -145,6 +148,8 @@ function matchesSearch(row: Record<string, unknown>, term: string): boolean {
     row.service_date,
     row.service_type,
     row.booking_number,
+    row.business_name,
+    row.booking_type,
   ]
     .filter(Boolean)
     .map((v) => String(v).toLowerCase());
@@ -171,6 +176,7 @@ serve(async (req) => {
     const search = String(body?.search || "").trim();
     const status = String(body?.status || "all").toLowerCase();
     const dateRange = String(body?.dateRange || "all").toLowerCase();
+    const scope = String(body?.scope || "all").toLowerCase();
     const limit = Math.min(Math.max(Number(body?.limit) || 1000, 1), 2000);
 
     const buildQuery = (cols: string) => {
@@ -220,6 +226,18 @@ serve(async (req) => {
     }
 
     let rows = (data || []) as Record<string, unknown>[];
+    if (scope === "commercial") {
+      rows = rows.filter((row) => {
+        const type = String(row.booking_type || "").toLowerCase();
+        if (type === "str_turnover") return false;
+        if (["commercial", "office", "partnership"].includes(type)) return true;
+        if (String(row.service_type || "").toLowerCase() === "commercial") return true;
+        if (String(row.booking_channel || "") === "admin_commercial") return true;
+        if (row.business_account_id) return true;
+        if (String(row.business_name || "").trim()) return true;
+        return false;
+      });
+    }
     if (search.length >= 1) {
       rows = rows.filter((row) => matchesSearch(row, search));
     }
@@ -247,9 +265,9 @@ serve(async (req) => {
     return json({
       success: true,
       bookings: rows,
-      total: search.length >= 1 ? rows.length : (count ?? rows.length),
+      total: scope === "commercial" || search.length >= 1 ? rows.length : (count ?? rows.length),
       limit,
-      filters: { search, status, dateRange },
+      filters: { search, status, dateRange, scope },
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

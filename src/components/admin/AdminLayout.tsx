@@ -134,7 +134,7 @@ const NAV_ITEMS: NavItem[] = [
     title: "Commercial",
     url: "/admin/commercial",
     icon: RiHotelLine,
-    description: "Book jobs · accounts · STR · property managers",
+    description: "Commercial jobs · cancel · reschedule",
     adminOnly: true,
   },
   {

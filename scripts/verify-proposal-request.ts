@@ -38,6 +38,7 @@ import {
   pipelineStageFromRows,
   proposalSendRequirements,
 } from "../src/lib/commercial-proposal-send";
+import { isCommercialBookingRow } from "../src/lib/commercial-booking";
 import {
   walkthroughPreviewPayload,
   walkthroughPreviewTypeKey,
@@ -242,6 +243,13 @@ check("sent proposal without signed agreement is proposal_sent", pipelineStageFr
   activeSites: 1,
   excludedSites: 0,
 }), "proposal_sent");
+
+console.log("\nCommercial tab scope:");
+check("commercial booking_type is in scope", isCommercialBookingRow({ booking_type: "commercial" }), true);
+check("office booking_type is in scope", isCommercialBookingRow({ booking_type: "office" }), true);
+check("STR turnover is not a commercial-tab job", isCommercialBookingRow({ booking_type: "str_turnover" }), false);
+check("residential standard job is not in scope", isCommercialBookingRow({ service_type: "standard" }), false);
+check("admin_commercial channel is in scope", isCommercialBookingRow({ booking_channel: "admin_commercial" }), true);
 
 console.log("\nBooking invariant:");
 check(
