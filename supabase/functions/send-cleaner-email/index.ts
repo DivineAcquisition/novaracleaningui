@@ -224,6 +224,7 @@ serve(async (req) => {
         // Listed in the order the portal asks for them — payouts last.
         const needs: string[] = [];
         if (data.needsPhone !== false) needs.push("Verify your phone number");
+        if (data.needsGuides !== false) needs.push("Read the dress code and job-day guide");
         if (data.needsSupplies !== false) needs.push("Check off the supplies you already own");
         if (data.needsStripe !== false) needs.push("Set up payouts (Stripe)");
         const stepsList = needs.length
@@ -242,8 +243,9 @@ serve(async (req) => {
             </p>
             ${stepsList}
             <p style="margin:0 0 16px;color:#64748b;font-size:14px">
-              The supply checklist is just "what do you already have?" — you don't need every item on day one,
-              and nothing is held up while you shop.
+              The dress code and job-day guide are two pictures — a couple of minutes to read. The supply
+              checklist is just "what do you already have?" — you don't need every item on day one, and
+              nothing is held up while you shop.
             </p>
             <p style="margin:24px 0;text-align:center">
               <a href="${setupUrl}"

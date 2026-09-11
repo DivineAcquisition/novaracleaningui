@@ -215,6 +215,7 @@ export function supplySubmissionEvent(args: {
 
 export interface CleanerSetupState {
   phone_verified?: boolean | null;
+  ob_job_day_guides_ack?: boolean | null;
   supply_checklist_submitted_at?: string | null;
   ob_supplies_checklist_viewed?: boolean | null;
   payouts_enabled?: boolean | null;
@@ -222,7 +223,7 @@ export interface CleanerSetupState {
   stripe_account_id?: string | null;
 }
 
-export type CleanerSetupStepId = "phone" | "supplies" | "payouts";
+export type CleanerSetupStepId = "phone" | "guides" | "supplies" | "payouts";
 
 export interface CleanerSetupStep {
   id: CleanerSetupStepId;
@@ -248,6 +249,17 @@ export function isSupplyChecklistSubmitted(c: CleanerSetupState): boolean {
   );
 }
 
+/**
+ * The dress code and job-day graphics have been read.
+ *
+ * One acknowledgment covers both: they are shown together as a single step,
+ * and splitting the record would let a contractor sit half-acknowledged
+ * forever with nothing able to describe that state usefully.
+ */
+export function isJobDayGuidesAcknowledged(c: CleanerSetupState): boolean {
+  return Boolean(c.ob_job_day_guides_ack);
+}
+
 /** Stripe Connect reached, whether or not payouts have finished enabling. */
 export function isPayoutSetupStarted(c: CleanerSetupState): boolean {
   return (
@@ -260,6 +272,10 @@ export function isPayoutSetupStarted(c: CleanerSetupState): boolean {
 /**
  * Onboarding in the order everything presents it.
  *
+ * The job-day graphics come before the supply checkoff because they are what
+ * makes the checkoff make sense: you cannot usefully answer "what kit do you
+ * own" until you have seen what a job actually asks of you.
+ *
  * Payouts sit last deliberately: bank details and tax identity are the most
  * friction in the flow and the step a contractor is most likely to abandon,
  * so it is asked only once the cheap steps are behind them.
@@ -270,6 +286,11 @@ export function cleanerSetupSteps(c: CleanerSetupState): CleanerSetupStep[] {
       id: "phone",
       title: "Verify your phone number",
       done: Boolean(c.phone_verified),
+    },
+    {
+      id: "guides",
+      title: "Read the dress code and job-day guide",
+      done: isJobDayGuidesAcknowledged(c),
     },
     {
       id: "supplies",

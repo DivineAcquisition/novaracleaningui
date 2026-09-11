@@ -10,6 +10,7 @@ import {
   RiLogoutBoxRLine,
   RiPhoneLine,
   RiSparklingLine,
+  RiTShirtLine,
   RiTimeLine,
 } from "@remixicon/react";
 import { useEffect, useState } from "react";
@@ -35,9 +36,12 @@ import {
 } from "@/lib/cleaner-auth";
 import { PhoneVerificationDialog } from "@/components/cleaner/PhoneVerificationDialog";
 import { SupplyChecklistForm } from "@/components/cleaner/SupplyChecklistForm";
+import { JobDayGuides } from "@/components/cleaner/JobDayGuides";
+import { ONBOARDING_GUIDES } from "@/lib/cleaner-onboarding-guides";
 import {
   SUPPLY_ITEMS,
   cleanerSetupSteps,
+  isJobDayGuidesAcknowledged,
   isSupplyChecklistSubmitted,
   sanitizeSupplyInventory,
   scoreSupplyInventory,
@@ -52,8 +56,9 @@ const logo = "/novara-logo.png";
 //
 // The portal walks the sequence defined by cleanerSetupSteps():
 //   1. Phone number verification (via send-phone-verification + verify-phone-code)
-//   2. Supply checkoff (same checklist as the emailed /cleaner/supplies link)
-//   3. Stripe Connect payouts setup
+//   2. Dress code + job-day graphics, acknowledged
+//   3. Supply checkoff (same checklist as the emailed /cleaner/supplies link)
+//   4. Stripe Connect payouts setup
 //
 // Payouts is deliberately last — see cleanerSetupSteps(). Legacy fields
 // (ob_agreement_signed, ob_google_chat_joined, ob_training_accessed) stay on
@@ -73,6 +78,8 @@ interface CleanerProfile {
   pay_percentage?: number;
   ob_payouts_setup: boolean;
   ob_payouts_setup_at: string | null;
+  ob_job_day_guides_ack: boolean | null;
+  ob_job_day_guides_ack_at: string | null;
   supply_inventory: SupplyInventory | null;
   supply_checklist_submitted_at: string | null;
   ob_supplies_checklist_viewed: boolean | null;
@@ -121,8 +128,10 @@ export default function OnboardingPortal() {
   const [phoneDialogOpen, setPhoneDialogOpen] = useState(false);
   const [stripeLoading, setStripeLoading] = useState(false);
   // Thirty-odd checkboxes are collapsed once submitted, so a returning
-  // contractor sees their standing rather than the whole form again.
+  // contractor sees their standing rather than the whole form again. Two
+  // full-width graphics get the same treatment.
   const [suppliesOpen, setSuppliesOpen] = useState(false);
+  const [guidesOpen, setGuidesOpen] = useState(false);
 
   useEffect(() => {
     void checkAuthAndLoad();
@@ -194,6 +203,34 @@ export default function OnboardingPortal() {
     supabase.functions.invoke("sync-cleaner-to-ghl", {
       body: { cleanerId: profile!.id },
     }).catch(() => {/* non-blocking */});
+    await refreshProfile();
+  };
+
+  const handleAcknowledgeGuides = async () => {
+    if (!profile) throw new Error("Session expired — reload the page.");
+    const now = new Date().toISOString();
+    // Cast as elsewhere: these columns and events postdate the generated types.
+    const { error } = await (supabase as any)
+      .from("cleaners")
+      .update({
+        ob_job_day_guides_ack: true,
+        ob_job_day_guides_ack_at: now,
+        updated_at: now,
+      })
+      .eq("id", profile.id);
+    if (error) throw new Error(error.message || "Couldn't save that. Try again.");
+
+    void (supabase as any)
+      .from("events")
+      .insert({
+        event_type: "cleaner.job_day_guides_acknowledged",
+        cleaner_id: profile.id,
+        source: "cleaner-ob-portal",
+        summary: `${profile.first_name || "Cleaner"} read the dress code and job-day guide`,
+      })
+      .then(() => undefined, () => undefined);
+
+    setGuidesOpen(true);
     await refreshProfile();
   };
 
@@ -289,6 +326,7 @@ export default function OnboardingPortal() {
   // ─── Step state derived from profile ─────────────────────
   const steps = cleanerSetupSteps(profile);
   const phoneStepDone = !!profile.phone_verified;
+  const guidesStepDone = isJobDayGuidesAcknowledged(profile);
   const suppliesStepDone = isSupplyChecklistSubmitted(profile);
   // Stripe step is "done" once the cleaner has a Connect account AND
   // payouts are enabled. ob_payouts_setup just records that they
@@ -299,11 +337,16 @@ export default function OnboardingPortal() {
   const supplyInventory = (profile.supply_inventory || {}) as SupplyInventory;
   const supplyScore = scoreSupplyInventory(supplyInventory);
 
-  // Payouts unlocks after the two cheap steps; the portal's own view of
-  // "done" for Stripe is stricter than the shared sequence's, because here we
-  // can wait for payouts_enabled rather than just an account existing.
-  const payoutsUnlocked = phoneStepDone && suppliesStepDone;
-  const completed = [phoneStepDone, suppliesStepDone, stripeStepDone].filter(Boolean).length;
+  // Payouts unlocks after the cheap steps; the portal's own view of "done"
+  // for Stripe is stricter than the shared sequence's, because here we can
+  // wait for payouts_enabled rather than just an account existing.
+  const payoutsUnlocked = phoneStepDone && guidesStepDone && suppliesStepDone;
+  const completed = [
+    phoneStepDone,
+    guidesStepDone,
+    suppliesStepDone,
+    stripeStepDone,
+  ].filter(Boolean).length;
   const total = steps.length;
   const allComplete = completed === total;
   const progressPercent = (completed / total) * 100;
@@ -346,7 +389,7 @@ export default function OnboardingPortal() {
                   Welcome, {profile.first_name}!
                 </CardTitle>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Three quick steps to start receiving job offers and getting
+                  Four quick steps to start receiving job offers and getting
                   paid. Cleaners are paid 1–2 business days after each
                   completed clean.
                 </p>
@@ -421,13 +464,13 @@ export default function OnboardingPortal() {
           )}
         </StepCard>
 
-        {/* Step 2 — Supply checkoff */}
+        {/* Step 2 — Dress code + job-day graphics */}
         <StepCard
           number={2}
-          title="Check off your supplies"
-          description="Tell us what kit you already own so dispatch knows which jobs you're equipped for."
-          icon={RiListCheck2}
-          done={suppliesStepDone}
+          title="Read the dress code and job-day guide"
+          description="Two pictures: what to wear on a job, and what a job day looks like from offer to payout."
+          icon={RiTShirtLine}
+          done={guidesStepDone}
           started={false}
           locked={!phoneStepDone}
         >
@@ -435,6 +478,62 @@ export default function OnboardingPortal() {
             <p className="text-sm text-muted-foreground inline-flex items-center gap-1.5">
               <RiLockLine className="w-3.5 h-3.5" />
               Verify your phone first.
+            </p>
+          ) : guidesStepDone && !guidesOpen ? (
+            <>
+              <p className="text-sm text-muted-foreground">
+                Read ·{" "}
+                <span className="font-medium text-foreground">
+                  dress code and job-day guide
+                </span>
+              </p>
+              <Button variant="outline" onClick={() => setGuidesOpen(true)}>
+                <RiTShirtLine className="w-4 h-4 mr-1.5" />
+                Look again
+              </Button>
+            </>
+          ) : (
+            <>
+              <JobDayGuides
+                guides={ONBOARDING_GUIDES}
+                acknowledgedAt={profile.ob_job_day_guides_ack_at}
+                onAcknowledge={handleAcknowledgeGuides}
+                variant="plain"
+              />
+              {guidesStepDone && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full text-muted-foreground"
+                  onClick={() => setGuidesOpen(false)}
+                >
+                  Hide these
+                </Button>
+              )}
+            </>
+          )}
+        </StepCard>
+
+        {/* Step 3 — Supply checkoff */}
+        <StepCard
+          number={3}
+          title="Check off your supplies"
+          description="Tell us what kit you already own so dispatch knows which jobs you're equipped for."
+          icon={RiListCheck2}
+          done={suppliesStepDone}
+          started={false}
+          locked={!phoneStepDone || !guidesStepDone}
+        >
+          {!phoneStepDone ? (
+            <p className="text-sm text-muted-foreground inline-flex items-center gap-1.5">
+              <RiLockLine className="w-3.5 h-3.5" />
+              Verify your phone first.
+            </p>
+          ) : !guidesStepDone ? (
+            <p className="text-sm text-muted-foreground inline-flex items-center gap-1.5">
+              <RiLockLine className="w-3.5 h-3.5" />
+              Read the dress code and job-day guide first — it covers what the
+              kit below is for.
             </p>
           ) : suppliesStepDone && !suppliesOpen ? (
             <>
@@ -477,9 +576,9 @@ export default function OnboardingPortal() {
           )}
         </StepCard>
 
-        {/* Step 3 — Stripe Connect */}
+        {/* Step 4 — Stripe Connect */}
         <StepCard
-          number={3}
+          number={4}
           title="Set up payouts"
           description="Link your bank account through Stripe so we can deposit your earnings."
           icon={RiBankCardLine}
@@ -500,9 +599,7 @@ export default function OnboardingPortal() {
           ) : !payoutsUnlocked ? (
             <p className="text-sm text-muted-foreground inline-flex items-center gap-1.5">
               <RiLockLine className="w-3.5 h-3.5" />
-              {!phoneStepDone
-                ? "Verify your phone and check off your supplies to unlock payouts."
-                : "Check off your supplies to unlock payouts."}
+              Finish the steps above to unlock payouts.
             </p>
           ) : (
             <>
