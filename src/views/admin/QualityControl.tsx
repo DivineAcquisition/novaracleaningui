@@ -46,6 +46,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import AccountabilityActionDialog from "@/components/admin/AccountabilityActionDialog";
 import RecleanWorkflow from "@/components/admin/RecleanWorkflow";
@@ -91,6 +92,16 @@ interface IssueRow {
   reclean_inside_window?: boolean | null;
   zone_id?: string | null;
   zone_name?: string | null;
+  retain_permanently?: boolean | null;
+  admin_only?: boolean | null;
+  score_exempt?: boolean | null;
+  contractor_suspension_flag?: string | null;
+  insurance_notified_at?: string | null;
+  insurance_notified_by_name?: string | null;
+  manager_account?: string | null;
+  contractor_statement?: string | null;
+  client_written_communication?: string | null;
+  client_followup_documents?: Array<Record<string, unknown>> | null;
 }
 
 interface IssueEvent {
@@ -185,6 +196,7 @@ const ISSUE_TYPES = [
   { id: "payment", label: "Payment" },
   { id: "site_finding", label: "Site finding" },
   { id: "addon", label: "Add-on" },
+  { id: "serious_allegation", label: "Serious allegation / incident" },
   { id: "other", label: "Other" },
 ];
 const STATUSES = ["open", "investigating", "awaiting_customer", "resolved", "escalated"];
@@ -193,6 +205,10 @@ const SEVERITIES = ["low", "medium", "high", "critical"];
 const label = (s: string) => s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 const fmtDT = (iso?: string | null) => (iso ? format(new Date(iso), "MMM d, yyyy h:mm a") : "—");
 const fmtD = (iso?: string | null) => (iso ? format(new Date(`${iso}`.slice(0, 10) + "T12:00:00"), "MMM d, yyyy") : "—");
+const issueStatusLabel = (i: { issue_type?: string; status: string }) =>
+  i.issue_type === "serious_allegation" && (i.status === "investigating" || i.status === "open")
+    ? "Open — Under Investigation"
+    : label(i.status);
 
 // ─── Page ───────────────────────────────────────────────────────────────
 
@@ -445,6 +461,12 @@ function IssuesTab({
     }
   }, [deepLinkIssueId, issues]);
 
+  useEffect(() => {
+    if (!selected) return;
+    const fresh = issues.find((i) => i.id === selected.id);
+    if (fresh && fresh !== selected) setSelected(fresh);
+  }, [issues, selected]);
+
   const filtered = useMemo(() => issues.filter((i) => {
     if (statusFilter === "active" && i.status === "resolved") return false;
     if (statusFilter !== "all" && statusFilter !== "active" && i.status !== statusFilter) return false;
@@ -511,8 +533,11 @@ function IssuesTab({
                   {CLIENT_TYPES.find((t) => t.id === (i.client_type || "residential"))?.label}
                 </Badge>
                 <Badge className={cn("border-0", SEVERITY_STYLE[i.severity])}>{label(i.severity)}</Badge>
-                <Badge className={cn("border-0", STATUS_STYLE[i.status])}>{label(i.status)}</Badge>
+                <Badge className={cn("border-0", STATUS_STYLE[i.status])}>{issueStatusLabel(i)}</Badge>
                 <Badge variant="outline">{ISSUE_TYPES.find((t) => t.id === i.issue_type)?.label || i.issue_type}</Badge>
+                {i.issue_type === "serious_allegation" && (
+                  <Badge className="border-0 bg-slate-900 text-white">Admin only · permanent</Badge>
+                )}
             {i.reclean_status && i.reclean_status !== "none" && (
               <Badge className="border-0 bg-violet-100 text-violet-800">Re-clean: {i.reclean_status.replace(/_/g, " ")}</Badge>
             )}
@@ -574,6 +599,23 @@ function IssueSheet({ issue, doc, onClose, reload }: {
   const [attachPick, setAttachPick] = useState("");
   const [attachBusy, setAttachBusy] = useState(false);
   const [actionCleanerId, setActionCleanerId] = useState("");
+  const [managerAccount, setManagerAccount] = useState(issue.manager_account || "");
+  const [contractorStatement, setContractorStatement] = useState(issue.contractor_statement || "");
+  const [clientEmailText, setClientEmailText] = useState(issue.client_written_communication || "");
+  const [followupKind, setFollowupKind] = useState("veterinary_record");
+  const [followupDesc, setFollowupDesc] = useState("");
+  const [followupUrl, setFollowupUrl] = useState("");
+  const [suspensionFlag, setSuspensionFlag] = useState(issue.contractor_suspension_flag || "pending_admin");
+  const [insuranceDate, setInsuranceDate] = useState(issue.insurance_notified_at ? String(issue.insurance_notified_at).slice(0, 10) : "");
+  const [incidentBusy, setIncidentBusy] = useState(false);
+
+  useEffect(() => {
+    setManagerAccount(issue.manager_account || "");
+    setContractorStatement(issue.contractor_statement || "");
+    setClientEmailText(issue.client_written_communication || "");
+    setSuspensionFlag(issue.contractor_suspension_flag || "pending_admin");
+    setInsuranceDate(issue.insurance_notified_at ? String(issue.insurance_notified_at).slice(0, 10) : "");
+  }, [issue.id, issue.updated_at, issue.manager_account, issue.contractor_statement, issue.client_written_communication, issue.contractor_suspension_flag, issue.insurance_notified_at]);
 
   useEffect(() => {
     void (async () => {
@@ -676,6 +718,25 @@ function IssueSheet({ issue, doc, onClose, reload }: {
     }
   };
 
+  const saveIncident = async (body: Record<string, unknown>) => {
+    setIncidentBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("qc-issues", {
+        body: { action: "update_incident", issueId: issue.id, ...body },
+      });
+      if (error) throw error;
+      if ((data as { ok?: boolean; error?: string })?.ok === false) {
+        throw new Error((data as { error?: string }).error || "Failed");
+      }
+      toast.success("Incident record saved. Source records were not modified.");
+      await reload();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not save incident fields");
+    } finally {
+      setIncidentBusy(false);
+    }
+  };
+
   const beforePhotos = (doc?.before_photos || []).filter((u) => u.startsWith("http"));
   const afterPhotos = (doc?.after_photos || []).filter((u) => u.startsWith("http"));
 
@@ -695,8 +756,11 @@ function IssueSheet({ issue, doc, onClose, reload }: {
         <div className="mt-4 space-y-5">
           <div className="flex flex-wrap gap-2">
             <Badge className={cn("border-0", SEVERITY_STYLE[issue.severity])}>{label(issue.severity)}</Badge>
-            <Badge className={cn("border-0", STATUS_STYLE[issue.status])}>{label(issue.status)}</Badge>
+            <Badge className={cn("border-0", STATUS_STYLE[issue.status])}>{issueStatusLabel(issue)}</Badge>
             <Badge variant="outline">{ISSUE_TYPES.find((t) => t.id === issue.issue_type)?.label || issue.issue_type}</Badge>
+            {issue.issue_type === "serious_allegation" && (
+              <Badge className="border-0 bg-slate-900 text-white">Admin/owner only · retained permanently</Badge>
+            )}
             {issue.reclean_status && issue.reclean_status !== "none" && (
               <Badge className="border-0 bg-violet-100 text-violet-800">Re-clean: {issue.reclean_status.replace(/_/g, " ")}</Badge>
             )}
@@ -717,13 +781,96 @@ function IssueSheet({ issue, doc, onClose, reload }: {
           {issue.issue_type === "site_finding" && issue.details && (
             <SiteFindingEvidence details={issue.details} />
           )}
-          {issue.issue_type === "addon" && issue.details && (
-            <AddonEvidence details={issue.details} />
+          {issue.issue_type === "serious_allegation" && (
+            <div className="rounded-xl border border-rose-300 bg-rose-50/60 p-4 space-y-3">
+              <p className="text-sm font-bold text-rose-900">Serious allegation — under investigation, not a finding</p>
+              <p className="text-xs text-rose-900/80">
+                Opening this case did not apply a Novara Score penalty and did not take an accountability action.
+                Score impact and ladder steps follow a human determination. Original job, photo, GHL, and contractor
+                records were retrieved only — nothing in those systems was edited.
+              </p>
+              <p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">Admin entry (not inferred)</p>
+              <Label className="text-xs text-slate-700">Manager&apos;s contemporaneous account of the client call and the contractor call</Label>
+              <Textarea rows={5} value={managerAccount} onChange={(e) => setManagerAccount(e.target.value)}
+                placeholder="What was said, by whom, and when — recorded as soon as possible." />
+              <Label className="text-xs text-slate-700">Contractor&apos;s written statement (obtained separately, addressing the allegation)</Label>
+              <Textarea rows={5} value={contractorStatement} onChange={(e) => setContractorStatement(e.target.value)}
+                placeholder="Paste the contractor's written statement in full." />
+              <Label className="text-xs text-slate-700">Client&apos;s written communication (email in full, unedited)</Label>
+              <Textarea rows={8} value={clientEmailText} onChange={(e) => setClientEmailText(e.target.value)}
+                placeholder="Paste the client's email in full. Do not edit." />
+              <Button size="sm" disabled={incidentBusy} onClick={() => void saveIncident({
+                managerAccount, contractorStatement, clientWrittenCommunication: clientEmailText,
+              })}>
+                {incidentBusy ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
+                Save statements
+              </Button>
+
+              <Separator />
+              <p className="text-xs font-semibold text-slate-800">Client documents received later (veterinary records, invoices)</p>
+              <div className="space-y-1">
+                {(issue.client_followup_documents || []).map((d, idx) => (
+                  <p key={idx} className="text-xs text-slate-600">
+                    {String(d.received_at || "").slice(0, 10)} · {String(d.kind || "document")} · {String(d.description || "")}
+                    {d.url ? <> · <a className="text-violet-700 underline" href={String(d.url)} target="_blank" rel="noreferrer">open</a></> : null}
+                  </p>
+                ))}
+                {(issue.client_followup_documents || []).length === 0 && (
+                  <p className="text-xs text-slate-500">None attached yet. Attach as received — do not edit the source.</p>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Input placeholder="Kind (e.g. veterinary_record)" value={followupKind} onChange={(e) => setFollowupKind(e.target.value)} />
+                <Input placeholder="https://… or leave blank" value={followupUrl} onChange={(e) => setFollowupUrl(e.target.value)} />
+              </div>
+              <Input placeholder="Description as received" value={followupDesc} onChange={(e) => setFollowupDesc(e.target.value)} />
+              <Button size="sm" variant="outline" disabled={incidentBusy || !followupDesc.trim()} onClick={() => void saveIncident({
+                clientFollowupDocuments: [
+                  ...(issue.client_followup_documents || []),
+                  { received_at: new Date().toISOString(), kind: followupKind, description: followupDesc.trim(), url: followupUrl.trim() || null },
+                ],
+              }).then(() => { setFollowupDesc(""); setFollowupUrl(""); })}>
+                Attach document record
+              </Button>
+
+              <Separator />
+              <p className="text-xs font-semibold text-slate-800">Admin decision prompts (not automations)</p>
+              <Label className="text-xs text-slate-700">Contractor status — flag for a human. This does not suspend the contractor.</Label>
+              <Select value={suspensionFlag} onValueChange={setSuspensionFlag}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending_admin">Pending admin decision on suspension from new assignments</SelectItem>
+                  <SelectItem value="suspended">Human recorded: suspended from new assignments</SelectItem>
+                  <SelectItem value="cleared">Human recorded: cleared to take assignments</SelectItem>
+                  <SelectItem value="none">No flag</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-amber-800">
+                Saving this flag does not change the contractor&apos;s roster status. Use Take action below only after a determination.
+              </p>
+              <Label className="text-xs text-slate-700">Insurance carrier notified (date). A human notifies the carrier; this only records it.</Label>
+              <Input type="date" value={insuranceDate} onChange={(e) => setInsuranceDate(e.target.value)} />
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" disabled={incidentBusy} onClick={() => void saveIncident({ contractorSuspensionFlag: suspensionFlag })}>
+                  Save suspension flag
+                </Button>
+                <Button size="sm" variant="outline" disabled={incidentBusy || !insuranceDate} onClick={() => void saveIncident({
+                  insuranceNotified: true, insuranceNotifiedAt: insuranceDate,
+                })}>
+                  Record carrier notified
+                </Button>
+              </div>
+              {issue.insurance_notified_at && (
+                <p className="text-xs text-slate-600">
+                  Recorded notified {fmtDT(issue.insurance_notified_at)} by {issue.insurance_notified_by_name || "admin"}.
+                </p>
+              )}
+            </div>
           )}
 
           <ChecklistTagging issue={issue} onSaved={reload} />
 
-          {((issue.reclean_status && issue.reclean_status !== "none") || ["reclean", "complaint", "quality_flag"].includes(issue.issue_type)) && (
+          {((issue.reclean_status && issue.reclean_status !== "none") || ["reclean", "complaint", "quality_flag"].includes(issue.issue_type)) && issue.issue_type !== "serious_allegation" && (
             <RecleanWorkflow issueId={issue.id} onChanged={reload} />
           )}
 
@@ -844,9 +991,9 @@ function IssueSheet({ issue, doc, onClose, reload }: {
             {attached.length > 0 && (
               <div className="pt-1 border-t border-amber-200/70 space-y-2">
                 <p className="text-xs text-amber-900/80">
-                  Take a formal action pre-linked to this case — coaching note, strike, suspension,
-                  or removal. Documented, emailed (office + QC CC&apos;d), and logged on their profile.
-                  Never touches pay for completed work.
+                  {issue.issue_type === "serious_allegation"
+                    ? "An allegation under investigation is not a finding. Do not take a strike, suspension, or removal until a human determination. This button never fires on its own."
+                    : "Take a formal action pre-linked to this case — coaching note, strike, suspension, or removal. Documented, emailed (office + QC CC'd), and logged on their profile. Never touches pay for completed work."}
                 </p>
                 <div className="flex flex-wrap items-center gap-2">
                   {attached.length > 1 && (
@@ -1020,7 +1167,7 @@ function CreateIssueDialog({ onClose, reload }: { onClose: () => void; reload: (
           action: "create",
           bookingId: booking.id,
           issueType,
-          severity,
+          severity: issueType === "serious_allegation" ? "critical" : severity,
           title: title.trim(),
           description: description.trim() || undefined,
           requestReclean: ["complaint", "reclean", "quality_flag"].includes(issueType) ? requestReclean : false,
@@ -1029,7 +1176,13 @@ function CreateIssueDialog({ onClose, reload }: { onClose: () => void; reload: (
       });
       if (error) throw error;
       if ((data as { ok?: boolean; error?: string })?.ok === false) throw new Error((data as { error?: string }).error || "Failed");
-      toast.success(severity === "high" || severity === "critical" ? "Issue created — admin alerted immediately" : "Issue created");
+      toast.success(
+        issueType === "serious_allegation"
+          ? "Incident case opened under investigation. No Score penalty. No automatic accountability action."
+          : severity === "high" || severity === "critical"
+            ? "Issue created — admin alerted immediately"
+            : "Issue created",
+      );
       await reload();
       onClose();
     } catch (e) {
@@ -1082,11 +1235,14 @@ function CreateIssueDialog({ onClose, reload }: { onClose: () => void; reload: (
                 <button className="text-xs text-violet-600 font-semibold" onClick={() => { setBooking(null); setZoneName(""); }}>Change</button>
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <Select value={issueType} onValueChange={setIssueType}>
+                <Select value={issueType} onValueChange={(v) => {
+                  setIssueType(v);
+                  if (v === "serious_allegation") setSeverity("critical");
+                }}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>{ISSUE_TYPES.map((t) => <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>)}</SelectContent>
                 </Select>
-                <Select value={severity} onValueChange={setSeverity}>
+                <Select value={severity} onValueChange={setSeverity} disabled={issueType === "serious_allegation"}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>{SEVERITIES.map((s) => <SelectItem key={s} value={s}>{label(s)}</SelectItem>)}</SelectContent>
                 </Select>
@@ -1110,6 +1266,13 @@ function CreateIssueDialog({ onClose, reload }: { onClose: () => void; reload: (
                 );
               })()}
               <Textarea placeholder="Details — what the customer said, what was found…" value={description} onChange={(e) => setDescription(e.target.value)} rows={4} />
+              {issueType === "serious_allegation" && (
+                <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-900 space-y-1">
+                  <p className="font-semibold">Highest severity. Status will be Open — Under Investigation.</p>
+                  <p>Admin/owner only. Permanently retained. No Novara Score penalty and no accountability action will fire from opening this case. An allegation is not a finding.</p>
+                  <p>The contractor is flagged for an admin decision on suspension from new assignments. The system will not suspend them.</p>
+                </div>
+              )}
               {["complaint", "reclean", "quality_flag"].includes(issueType) && (
                 <label className="flex items-center gap-2 text-sm text-slate-700">
                   <Checkbox checked={requestReclean} onCheckedChange={(v) => setRequestReclean(v === true)} />
@@ -1289,6 +1452,18 @@ interface CaseFile {
   issue_events: Array<Record<string, any>>;
   timeline: Array<{ event_type: string; occurred_at: string; source: string; summary: string }>;
   policy_highlights?: string[];
+  incident?: {
+    job_record?: Record<string, any>;
+    client_history?: Array<Record<string, any>>;
+    checklist_items?: Array<{ key: string; label: string; state: string; skip_reason: string | null; at: string | null; by: string | null }>;
+    photos?: { before: Array<{ url: string; created_at: string | null; original_timestamp_source: string }>; after: Array<{ url: string; created_at: string | null; original_timestamp_source: string }> };
+    ghl?: { client: Record<string, any>; contractor: Record<string, any> };
+    comms?: { sms_logs: Array<Record<string, any>>; partnership_messages: Array<Record<string, any>>; gaps: string[] };
+    contractor_dossier?: Record<string, any>;
+    incident_timeline?: Array<{ at: string | null; source: string; label: string; kind: string; gap_from?: string | null; gap_to?: string | null }>;
+    evidence_gaps?: string[];
+    field_reports?: Record<string, any>;
+  };
 }
 
 const cents = (c: number | null | undefined) => (c != null ? `$${(Number(c) / 100).toFixed(2)}` : "—");
@@ -1318,7 +1493,7 @@ export function CaseFileSheet({ bookingId, caseRef, onClose }: { bookingId: stri
             <RiFolderCheckLine className="w-5 h-5 text-violet-600" /> Case file — {cf?.ref || caseRef || "…"}
           </SheetTitle>
           <SheetDescription>
-            Assembled live: agreement, payments, photos, checklist, issues, and full timeline for this job.
+            Assembled live: agreement, payments, photos, checklist, GHL conversation history, communication log, contractor dossier, and a gap-aware incident-day timeline. Raw records are listed in full — never replaced by a summary.
           </SheetDescription>
         </SheetHeader>
 
@@ -1497,7 +1672,144 @@ export function CaseFileSheet({ bookingId, caseRef, onClose }: { bookingId: stri
                   {cf.checklist.completed_at ? ` — completed ${fmtDT(cf.checklist.completed_at)}` : " — not finished"}
                   {cf.checklist.last_activity_by ? ` · by ${cf.checklist.last_activity_by}` : ""}
                 </p>
+                {cf.incident?.checklist_items && cf.incident.checklist_items.length > 0 && (
+                  <div className="mt-2 max-h-56 overflow-y-auto space-y-1">
+                    {cf.incident.checklist_items.map((item) => (
+                      <p key={item.key} className="text-[11px] text-slate-600">
+                        <span className="font-mono text-slate-400">{item.key}</span>{" "}
+                        <Badge className={cn("border-0 text-[10px]", item.state === "completed" ? "bg-emerald-100 text-emerald-800" : item.state === "skipped" ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600")}>
+                          {item.state.replace("_", " ")}
+                        </Badge>{" "}
+                        {item.label}
+                        {item.skip_reason ? ` — skip: ${item.skip_reason}` : ""}
+                        {item.at ? ` · ${fmtDT(item.at)}` : ""}
+                      </p>
+                    ))}
+                  </div>
+                )}
               </section>
+            )}
+
+            {cf.incident && (
+              <>
+                <section className="rounded-xl border border-rose-200 bg-rose-50/40 p-4 space-y-2">
+                  <p className="text-sm font-bold text-rose-900">Incident-day timeline (gaps shown, nothing inferred)</p>
+                  <div className="space-y-1.5 max-h-96 overflow-y-auto">
+                    {(cf.incident.incident_timeline || []).map((e, i) => (
+                      <div key={i} className={cn("text-[11px] rounded px-2 py-1", e.kind === "gap" || e.kind === "absent_record" ? "bg-amber-50 border border-amber-200" : "bg-white border border-slate-100")}>
+                        <span className="text-slate-400 whitespace-nowrap">
+                          {e.at ? fmtDT(e.at) : e.kind === "gap" ? `${e.gap_from ? fmtDT(e.gap_from) : "?"} → ${e.gap_to ? fmtDT(e.gap_to) : "?"}` : "no timestamp"}
+                        </span>
+                        <span className="block text-slate-700">
+                          <span className="font-mono text-violet-700">{e.source}</span>{" "}
+                          {e.kind !== "event" ? <Badge className="border-0 bg-amber-200 text-amber-900 text-[9px] mr-1">{e.kind.replace("_", " ")}</Badge> : null}
+                          {e.label}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  {(cf.incident.evidence_gaps || []).length > 0 && (
+                    <div className="pt-2 space-y-1">
+                      <p className="text-[11px] font-semibold text-amber-900">Recorded gaps</p>
+                      {cf.incident.evidence_gaps!.map((g, i) => (
+                        <p key={i} className="text-[11px] text-amber-800">· {g}</p>
+                      ))}
+                    </div>
+                  )}
+                </section>
+
+                <section className="rounded-xl border border-slate-200 p-4 space-y-2">
+                  <p className="text-sm font-bold text-slate-800">GHL conversation history (raw, full range)</p>
+                  {(["client", "contractor"] as const).map((party) => {
+                    const hist = cf.incident?.ghl?.[party] as Record<string, any> | undefined;
+                    const messages = (hist?.messages || []) as Array<Record<string, any>>;
+                    const notes = (hist?.notes || []) as Array<Record<string, any>>;
+                    return (
+                      <div key={party} className="rounded-lg bg-slate-50 p-3">
+                        <p className="text-xs font-bold text-slate-800 capitalize">{party} · contact {hist?.contactId || "not found"}</p>
+                        <div className="max-h-64 overflow-y-auto mt-1 space-y-1">
+                          {messages.map((m, i) => (
+                            <p key={i} className="text-[11px] text-slate-700 whitespace-pre-wrap">
+                              {m.at ? fmtDT(String(m.at)) : "no timestamp"} · {m.direction} · {m.messageType}
+                              {m.callDurationSeconds != null ? ` · call ${m.callDurationSeconds}s` : ""}
+                              {m.body ? `\n${String(m.body)}` : "\n[no body on this row]"}
+                            </p>
+                          ))}
+                          {messages.length === 0 && <p className="text-[11px] text-amber-800">No GHL messages pulled for this party.</p>}
+                          {notes.map((n, i) => (
+                            <p key={`n-${i}`} className="text-[11px] text-slate-600 whitespace-pre-wrap">
+                              Note {n.at ? fmtDT(String(n.at)) : ""}: {String(n.body || "")}
+                            </p>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </section>
+
+                <section className="rounded-xl border border-slate-200 p-4 space-y-2">
+                  <p className="text-sm font-bold text-slate-800">Communication delivery log</p>
+                  {(cf.incident.comms?.sms_logs || []).map((r, i) => (
+                    <p key={`s-${i}`} className="text-[11px] text-slate-700">
+                      {fmtDT(String(r.created_at))} · SMS {String(r.status)} → {String(r.to_phone)} · {String(r.type || "")}
+                    </p>
+                  ))}
+                  {(cf.incident.comms?.partnership_messages || []).map((r, i) => (
+                    <p key={`p-${i}`} className="text-[11px] text-slate-700">
+                      {fmtDT(String(r.sent_at || r.created_at))} · {String(r.channel)} {String(r.status)} → {String(r.to_phone || r.to_email)} · {String(r.template_key || "")}
+                    </p>
+                  ))}
+                  {(cf.incident.comms?.sms_logs || []).length + (cf.incident.comms?.partnership_messages || []).length === 0 && (
+                    <p className="text-xs text-amber-800">No delivery-log rows matched this client or contractor.</p>
+                  )}
+                </section>
+
+                <section className="rounded-xl border border-slate-200 p-4 space-y-2">
+                  <p className="text-sm font-bold text-slate-800">Contractor dossier (retrieved, not edited)</p>
+                  {cf.incident.contractor_dossier?.profile ? (
+                    <>
+                      <p className="text-xs text-slate-700">
+                        {cf.incident.contractor_dossier.profile.first_name} {cf.incident.contractor_dossier.profile.last_name}
+                        {" · "}status {String(cf.incident.contractor_dossier.profile.status)}
+                        {" · "}tenure {cf.incident.contractor_dossier.tenure_days ?? "unknown"} days
+                        {" · "}completed jobs {cf.incident.contractor_dossier.completed_job_count ?? "unknown"}
+                      </p>
+                      <p className="text-xs text-slate-600">
+                        Score snapshot: Novara {String(cf.incident.contractor_dossier.score_snapshot?.novara ?? "—")}
+                        {" · "}quality {String(cf.incident.contractor_dossier.score_snapshot?.quality ?? "—")}
+                        {" · "}overall {String(cf.incident.contractor_dossier.score_snapshot?.overall ?? "—")}
+                      </p>
+                      <p className="text-[11px] text-amber-800">{String(cf.incident.contractor_dossier.score_snapshot?.history_gap || "")}</p>
+                      <p className="text-xs text-slate-600">
+                        GL insurance: carrier {String(cf.incident.contractor_dossier.onboarding?.insurance?.carrier || "not on file")}
+                        {" · "}policy {String(cf.incident.contractor_dossier.onboarding?.insurance?.policy_number || "not on file")}
+                        {" · "}verified {String(cf.incident.contractor_dossier.onboarding?.insurance?.verified ?? "—")}
+                      </p>
+                      <p className="text-xs text-slate-600">
+                        Agreement signed: {String(cf.incident.contractor_dossier.onboarding?.agreement_signed)}
+                        {" · "}supply checklist {cf.incident.contractor_dossier.onboarding?.supply_checklist_submitted_at ? fmtDT(String(cf.incident.contractor_dossier.onboarding.supply_checklist_submitted_at)) : "not submitted"}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        Prior QC cases: {(cf.incident.contractor_dossier.prior_qc_cases || []).length}
+                        {" · "}prior accountability actions: {(cf.incident.contractor_dossier.prior_accountability_actions || []).length}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-xs text-amber-800">No contractor profile on this booking.</p>
+                  )}
+                </section>
+
+                <section className="rounded-xl border border-slate-200 p-4 space-y-1">
+                  <p className="text-sm font-bold text-slate-800">This client&apos;s booking history</p>
+                  {(cf.incident.client_history || []).map((h, i) => (
+                    <p key={i} className="text-[11px] text-slate-600">
+                      {h.booking_number ? `NVC-${String(h.booking_number).padStart(4, "0")}` : String(h.id).slice(0, 8)}
+                      {" · "}{fmtD(h.service_date)} · {h.service_type} · {h.status}
+                      {h.cancel_reason ? ` (${h.cancel_reason})` : ""}
+                    </p>
+                  ))}
+                </section>
+              </>
             )}
 
             {/* Issues on this job */}

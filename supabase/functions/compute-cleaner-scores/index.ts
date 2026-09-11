@@ -157,7 +157,7 @@ serve(async (req) => {
     const since = new Date(Date.now() - 90 * 86400_000).toISOString();
     const { data: issues } = await supabase
       .from("qc_issues")
-      .select("cleaner_id, severity, issue_type, reclean_status, reclean_classification")
+      .select("cleaner_id, severity, issue_type, reclean_status, reclean_classification, score_exempt")
       .not("cleaner_id", "is", null)
       .gte("created_at", since)
       .limit(5000);

@@ -79,9 +79,26 @@ serve(async (req) => {
       return json({ ok: true, purged: 0 });
     }
 
+    const bookingIds = docs.map((d: { booking_id?: string | null }) => d.booking_id).filter(Boolean) as string[];
+    const retain = new Set<string>();
+    if (bookingIds.length) {
+      const { data: kept } = await supabase
+        .from("qc_issues")
+        .select("booking_id")
+        .eq("retain_permanently", true)
+        .in("booking_id", bookingIds);
+      for (const row of kept || []) {
+        if (row.booking_id) retain.add(String(row.booking_id));
+      }
+    }
+
     let purged = 0, filesRemoved = 0;
     for (const doc of docs) {
       try {
+        if (doc.booking_id && retain.has(String(doc.booking_id))) {
+          log("skip permanent retention", { ref: doc.booking_ref, bookingId: doc.booking_id });
+          continue;
+        }
         // Turnover-sourced docs (booking_id null): their photos live in the
         // turnover-photos bucket, already purged at 7 days by
         // purge-old-turnover-photos. Just stamp the doc — Drive is the archive.

@@ -103,9 +103,12 @@ export function intakeCreatesRecleanRequest(opts: {
   reportedVia: string;
   requestReclean?: boolean;
 }): boolean {
+  const t = String(opts.issueType || "");
+  // An allegation under investigation is not a quality finding and must never
+  // auto-open a re-clean — even if a caller passes requestReclean.
+  if (t === "serious_allegation") return false;
   if (opts.requestReclean === true) return true;
   if (opts.requestReclean === false) return false;
-  const t = String(opts.issueType || "");
   if (t === "reclean") return true;
   if (t === "complaint") return true;
   if (t === "quality_flag") return true;
@@ -326,16 +329,20 @@ export function countsTowardReliability(assignment: {
 
 /**
  * Quality Score only moves on a verified quality miss. Add-on / site-finding
- * rows are documentation, not failures. A re-clean request that is still
- * pending, classified as scope confusion, or not supported never hits.
+ * rows are documentation, not failures. A serious allegation under
+ * investigation is not a finding and never hits Score. A re-clean request
+ * that is still pending, classified as scope confusion, or not supported
+ * never hits.
  */
 export function countsTowardQualityScore(issue: {
   issue_type?: string | null;
   reclean_status?: string | null;
   reclean_classification?: string | null;
+  score_exempt?: boolean | null;
 }): boolean {
   const t = String(issue.issue_type || "");
-  if (t === "addon" || t === "site_finding") return false;
+  if (issue.score_exempt === true) return false;
+  if (t === "addon" || t === "site_finding" || t === "serious_allegation") return false;
   const status = String(issue.reclean_status || "none");
   if (status && status !== "none") return qualityHitApplies(issue.reclean_classification);
   return true;
