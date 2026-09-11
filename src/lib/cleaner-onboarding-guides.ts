@@ -22,6 +22,10 @@ export interface OnboardingGuide {
   lede: string;
   /** Path under public/. */
   image: string;
+  /** One-page PDF of the same graphic, for the public landing page. */
+  pdf: string;
+  /** Public page that renders `pdf` with pdf.js — lives under /cleaner/guides/. */
+  landingPath: string;
   alt: string;
   /** The graphic's content as text — alt-text fallback, not decoration. */
   points: string[];
@@ -43,6 +47,8 @@ export const ONBOARDING_GUIDES: OnboardingGuide[] = [
       "You are entering a client's home as a representative of NovaraCleaning. " +
       "Appearance is part of the service.",
     image: "/onboarding/dress-code.png",
+    pdf: "/cleaner/guide-pdfs/dress-code.pdf",
+    landingPath: "/cleaner/guides/dress-code",
     alt: "NovaraCleaning contractor dress code: approved black or white shirt with jeans or work pants, closed-toe shoes, and items that are not permitted",
     points: [
       "Solid black or white shirt with jeans or work pants",
@@ -63,10 +69,12 @@ export const ONBOARDING_GUIDES: OnboardingGuide[] = [
   },
   {
     id: "job_day",
-    title: "Your job day, start to finish",
+    title: "Day To Day Job Operations",
     lede: "Follow this on every job. It protects your pay, your score, and you.",
     image: "/onboarding/job-day-journey.png",
-    alt: "The NovaraCleaning job day: before you go, when you arrive, while you work, and before you leave",
+    pdf: "/cleaner/guide-pdfs/day-to-day-job-operations.pdf",
+    landingPath: "/cleaner/guides/day-to-day-job-operations",
+    alt: "Day To Day Job Operations: before you go, when you arrive, while you work, and before you leave",
     points: [
       "Before you go: open the job, read the full checklist and access notes, phone ready, supplies loaded",
       "When you arrive: inside the window, greet the client, ask about pets, take before photos of every area",
@@ -77,7 +85,7 @@ export const ONBOARDING_GUIDES: OnboardingGuide[] = [
     ],
     footnote:
       "The walkthroughs on your Training page cover each of these steps in the real app.",
-    actionLabel: "I've read the job-day journey",
+    actionLabel: "I've read Day To Day Job Operations",
   },
 ];
 
@@ -85,4 +93,12 @@ export function onboardingGuide(id: OnboardingGuideId): OnboardingGuide {
   const found = ONBOARDING_GUIDES.find((g) => g.id === id);
   if (!found) throw new Error(`Unknown onboarding guide: ${id}`);
   return found;
+}
+
+export function onboardingGuideLandingSlugs(): string[] {
+  return ONBOARDING_GUIDES.map((g) => g.landingPath.replace("/cleaner/guides/", ""));
+}
+
+export function guideByLandingSlug(slug: string): OnboardingGuide | undefined {
+  return ONBOARDING_GUIDES.find((g) => g.landingPath === `/cleaner/guides/${slug}`);
 }

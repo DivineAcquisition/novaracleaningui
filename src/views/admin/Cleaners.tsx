@@ -1306,7 +1306,7 @@ const OB_STEPS: Array<{ done: (c: CleanerRow) => boolean; label: string; detail?
   },
   {
     done: isJobDayAcknowledged,
-    label: "Job-day journey read",
+    label: "Day To Day Job Operations read",
     detail: (c) =>
       c.ob_job_day_guides_ack_at
         ? `Read ${new Date(c.ob_job_day_guides_ack_at).toLocaleDateString()}`
@@ -1378,7 +1378,7 @@ function OnboardingChecklist({
           <p className="text-sm font-medium text-sky-950">Account setup incomplete</p>
           <p className="text-xs text-sky-800">
             Sends email + SMS with one link that walks them through whatever is
-            left — agreement, phone, supplies, dress code, job-day journey, then
+            left — agreement, phone, supplies, dress code, Day To Day Job Operations, then
             the training videos. They cannot be offered a first job until that
             sequence is done.
           </p>

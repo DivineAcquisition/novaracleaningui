@@ -1,7 +1,8 @@
 // ─── Verification of the contractor onboarding sequence ─────────────────────
 //
 // Onboarding is agreement → phone → supplies → dress code (agree) →
-// job-day journey → training videos, and four things have to agree on that:
+// Day To Day Job Operations → training videos, and four things have to agree
+// on that:
 // the shared definition in src/lib/cleaner-supplies.ts, the portal a
 // contractor works through, the page a mailed setup link lands on, and the
 // admin view that decides whether anything is outstanding. When they drift,
@@ -182,7 +183,7 @@ function checkSequence(): void {
  * missing file is visible rather than quietly degrading forever.
  */
 function checkGuides(): void {
-  console.log("\nThe dress code and job-day graphics");
+  console.log("\nThe dress code and Day To Day Job Operations graphics");
 
   check(
     "both guides, dress code first",
@@ -194,6 +195,12 @@ function checkGuides(): void {
     check(`${guide.id}: has alt text for the graphic`, guide.alt.length > 20, true);
     check(`${guide.id}: carries its content as text too`, guide.points.length >= 5, true);
     check(`${guide.id}: served from public/onboarding/`, guide.image.startsWith("/onboarding/"), true);
+    check(`${guide.id}: has a PDF of the same graphic`, guide.pdf.startsWith("/cleaner/guide-pdfs/") && guide.pdf.endsWith(".pdf"), true);
+    check(
+      `${guide.id}: public landing page is under /cleaner/guides/`,
+      guide.landingPath.startsWith("/cleaner/guides/"),
+      true,
+    );
     check(`${guide.id}: has an action label`, guide.actionLabel.length > 4, true);
 
     const onDisk = resolve(__dirname, "../public", guide.image.replace(/^\//, ""));
@@ -205,15 +212,27 @@ function checkGuides(): void {
     } else {
       console.log(`  ✓ ${guide.id}: graphic present at public${guide.image}`);
     }
+
+    const pdfOnDisk = resolve(__dirname, "../public", guide.pdf.replace(/^\//, ""));
+    if (!existsSync(pdfOnDisk)) {
+      warn(`${guide.id}: public${guide.pdf} is missing — the landing page has nothing to render.`);
+    } else {
+      console.log(`  ✓ ${guide.id}: PDF present at public${guide.pdf}`);
+    }
   }
 
   check(
-    "dress code requires an agree tick, job-day does not",
+    "dress code requires an agree tick, Day To Day Job Operations does not",
     [
       ONBOARDING_GUIDES.find((g) => g.id === "dress_code")?.agreeLabel ? true : false,
       Boolean(ONBOARDING_GUIDES.find((g) => g.id === "job_day")?.agreeLabel),
     ],
     [true, false],
+  );
+  check(
+    "job-day guide is titled Day To Day Job Operations",
+    ONBOARDING_GUIDES.find((g) => g.id === "job_day")?.title,
+    "Day To Day Job Operations",
   );
 }
 
@@ -439,7 +458,7 @@ async function checkPortal(browser: Browser): Promise<void> {
     "Verify your phone number",
     "Check off your supplies",
     "Agree to the dress code",
-    "Read the job-day journey",
+    "Read Day To Day Job Operations",
     "Watch the training videos",
   ];
   check(
@@ -566,17 +585,17 @@ async function checkPortal(browser: Browser): Promise<void> {
   check("the dress-code agree is recorded", row.ob_dress_code_ack, true);
   check("four of six steps done", (await body()).includes("4 of 6 complete"), true);
 
-  // ── Job-day journey ──
+  // ── Day To Day Job Operations ──
   const jobDay = ONBOARDING_GUIDES.find((g) => g.id === "job_day")!;
   await page.getByRole("button", { name: jobDay.actionLabel }).waitFor({ timeout: 20_000 });
   check(
-    "the job-day graphic is on the page after dress code",
+    "the Day To Day Job Operations graphic is on the page after dress code",
     await page.locator(`main img[alt="${jobDay.alt}"]`).isVisible(),
     true,
   );
   await page.getByRole("button", { name: jobDay.actionLabel }).click();
   await page.getByText("Read — thanks.").waitFor({ timeout: 20_000 });
-  check("the job-day ack is recorded", row.ob_job_day_guides_ack, true);
+  check("the Day To Day Job Operations ack is recorded", row.ob_job_day_guides_ack, true);
   check("five of six steps done", (await body()).includes("5 of 6 complete"), true);
 
   const trainingBtn = page.getByRole("button", { name: "Open training hub" });
@@ -680,7 +699,7 @@ async function checkSetupLanding(browser: Browser): Promise<void> {
       "Verify your phone number",
       "Check off your supplies",
       "Agree to the dress code",
-      "Read the job-day journey",
+      "Read Day To Day Job Operations",
       "Watch the training videos",
     ],
   );
@@ -796,7 +815,7 @@ async function checkAdminView(browser: Browser): Promise<void> {
   const panel = await page.locator("body").innerText();
   check("the supply checkoff is one of the steps admin sees", panel.includes("Supply checklist submitted"), true);
   check("so is the dress code agree", panel.includes("Dress code agreed"), true);
-  check("and the job-day journey", panel.includes("Job-day journey read"), true);
+  check("and Day To Day Job Operations", panel.includes("Day To Day Job Operations read"), true);
   check("and the training videos", panel.includes("Training videos watched"), true);
   check(
     "readiness is stated as agreement through training",
@@ -822,6 +841,40 @@ async function checkAdminView(browser: Browser): Promise<void> {
   await context.close();
 }
 
+async function checkGuideLandings(browser: Browser): Promise<void> {
+  console.log("\nThe public PDF landing pages at /cleaner/guides/…");
+  const page = await browser.newPage({ viewport: { width: 1100, height: 1600 } });
+
+  for (const guide of ONBOARDING_GUIDES) {
+    const pdfRes = await fetch(`${BASE_URL}${guide.pdf}`);
+    check(
+      `${guide.id}: PDF is served`,
+      pdfRes.ok && (pdfRes.headers.get("content-type") || "").includes("pdf"),
+      true,
+    );
+
+    await page.goto(`${BASE_URL}${guide.landingPath}`, { waitUntil: "networkidle" });
+    await page.getByRole("heading", { name: guide.title, exact: true }).waitFor({ timeout: 20_000 });
+    await page.locator("canvas").first().waitFor({ timeout: 20_000 });
+    const box = await page.locator("canvas").first().boundingBox();
+    check(`${guide.id}: landing page renders the PDF with pdf.js`, (box?.height || 0) > 400, true);
+    check(
+      `${guide.id}: download link points at the PDF`,
+      await page.getByRole("link", { name: "Download" }).getAttribute("href"),
+      guide.pdf,
+    );
+
+    const slug = guide.landingPath.split("/").pop();
+    mkdirSync(SHOTS_DIR, { recursive: true });
+    await page.screenshot({
+      path: resolve(SHOTS_DIR, `guide-landing-${slug}.png`),
+      fullPage: true,
+    });
+  }
+
+  await page.close();
+}
+
 async function main(): Promise<void> {
   checkSequence();
   checkGuides();
@@ -836,6 +889,7 @@ async function main(): Promise<void> {
 
   const browser = await chromium.launch();
   try {
+    await checkGuideLandings(browser);
     await checkSetupLanding(browser);
     await checkSupplyTokenPage(browser);
     await checkPortal(browser);
