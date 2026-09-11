@@ -182,6 +182,9 @@ export function commercialTab(tab: string, extra?: Record<string, string>): stri
   if (tab === "send" || tab === "pipeline") {
     return proposalsHubTab(tab, extra);
   }
+  if (tab === "walkthroughs") {
+    return proposalsHubTab("price", extra);
+  }
   const params = new URLSearchParams({ tab, ...(extra || {}) });
   return `${COMMERCIAL_HUB_PATH}?${params.toString()}`;
 }

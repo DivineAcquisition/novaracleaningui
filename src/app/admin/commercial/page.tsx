@@ -6,7 +6,7 @@ import CommercialHub from "@/views/admin/CommercialHub";
 import { proposalsHubTab } from "@/lib/commercial-proposal";
 
 // Canonical Commercial hub. Old /admin/partner bookmarks redirect here.
-// Send and pipeline live on the dedicated Proposals tab (VA + admin).
+// Send, pipeline, and walkthroughs live on the dedicated Proposals tab.
 export default function Page({
   searchParams,
 }: {
@@ -19,6 +19,9 @@ export default function Page({
   }
   if (tab === "pipeline") {
     redirect(proposalsHubTab("pipeline"));
+  }
+  if (tab === "walkthroughs") {
+    redirect(proposalsHubTab("price"));
   }
 
   return (

@@ -414,15 +414,13 @@ export const SHOTS: Shot[] = [
   {
     id: "commercial-hub",
     doc: "commercial",
-    caption: "The commercial hub and its five workspaces.",
+    caption: "The commercial hub as a bookings-style tab strip.",
     url: "/admin/commercial",
-    waitForText: "Overview",
-    // Text matching is unreliable here: the sidebar descriptions contain the
-    // same words as the workspace tabs. Target the tab row positionally.
+    waitForText: "Book",
     callouts: [
-      { text: "Home", exact: true, nth: 0, label: "Home — pipeline snapshot" },
-      { text: "Deals", exact: true, nth: 0, label: "Deals — walkthroughs and firm price" },
-      { text: "Jobs", exact: true, nth: 0, label: "Jobs — one-off and recurring work" },
+      { text: "Book", exact: true, nth: 0, label: "Book a commercial job" },
+      { text: "Recurring", exact: true, nth: 0, label: "Recurring schedules" },
+      { text: "Accounts", exact: true, nth: 0, label: "Business accounts" },
       { text: "Compliance", exact: true, nth: 0, label: "Compliance — insurance certificates" },
       { text: "STR", exact: true, nth: 0, label: "STR — turnovers and hosts" },
     ],

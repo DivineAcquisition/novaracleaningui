@@ -206,11 +206,12 @@ serve(async (req) => {
 
     // ── 3. Signed but not billable ───────────────────────────────────────
     // The client thinks they're a customer. Nothing can be dispatched.
-    const { data: stalled } = await admin
+    const stalledRes = await admin
       .from("commercial_deal_pipeline_v1")
       .select("account_id, business_name, agreement_signed_at, assigned_va_email, billing_method")
       .eq("stage", "billing_pending")
       .limit(200);
+    const stalled = stalledRes.error ? [] : stalledRes.data;
 
     for (const raw of stalled || []) {
       const d = raw as unknown as Record<string, unknown>;
