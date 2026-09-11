@@ -71,9 +71,15 @@ import ApplicantsPipeline from "@/components/admin/ApplicantsPipeline";
 import CleanerAccountability from "@/components/admin/CleanerAccountability";
 import AccountabilityWatchlist from "@/components/admin/AccountabilityWatchlist";
 import UnsignedAgreements from "@/components/admin/UnsignedAgreements";
+import UnacknowledgedStandards from "@/components/admin/UnacknowledgedStandards";
 import PulseCheckQueue from "@/components/admin/PulseCheckQueue";
 import PulseCheckHistory from "@/components/admin/PulseCheckHistory";
 import { useAdminRole } from "@/hooks/use-admin-role";
+import {
+  CONTRACTOR_STANDARDS_VERSION,
+  needsStandardsAcknowledgment,
+  standardsStanding,
+} from "@/lib/contractor-standards";
 
 const REHIRE_BADGE: Record<string, { label: string; cls: string }> = {
   rehireable: { label: "Rehireable", cls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
@@ -151,6 +157,8 @@ interface CleanerRow {
   ob_payouts_setup: boolean | null;
   ob_agreement_signed?: boolean | null;
   ob_agreement_signed_at?: string | null;
+  conduct_standards_version?: string | null;
+  conduct_standards_acknowledged_at?: string | null;
   payouts_enabled: boolean | null;
   stripe_account_id: string | null;
   home_address: string | null;
@@ -253,7 +261,7 @@ export default function AdminCleaners() {
     const { data, error } = await supabase
       .from("cleaners")
       .select(
-        "id,user_id,first_name,last_name,email,phone,status,approved,available_for_bookings,walkthrough_eligible,home_zip,state,pay_tier,pay_percentage,completed_bookings,total_bookings,acceptance_rate,on_time_rate,average_rating,weighted_score,workload_score,novara_score,quality_score,overall_score,scores_computed_at,constraints,jobs_assigned_last_7d,onboarding_complete,phone_verified,ob_payouts_setup,ob_agreement_signed,ob_agreement_signed_at,payouts_enabled,stripe_account_id,home_address,home_city,home_zip,service_zip_codes,max_travel_miles,preferred_work_days,skillset,ghl_synced_at,ghl_sync_error,created_at,activated_at,rehire_status,termination_reason,terminated_at",
+        "id,user_id,first_name,last_name,email,phone,status,approved,available_for_bookings,walkthrough_eligible,home_zip,state,pay_tier,pay_percentage,completed_bookings,total_bookings,acceptance_rate,on_time_rate,average_rating,weighted_score,workload_score,novara_score,quality_score,overall_score,scores_computed_at,constraints,jobs_assigned_last_7d,onboarding_complete,phone_verified,ob_payouts_setup,ob_agreement_signed,ob_agreement_signed_at,conduct_standards_version,conduct_standards_acknowledged_at,payouts_enabled,stripe_account_id,home_address,home_city,home_zip,service_zip_codes,max_travel_miles,preferred_work_days,skillset,ghl_synced_at,ghl_sync_error,created_at,activated_at,rehire_status,termination_reason,terminated_at",
       )
       .order("created_at", { ascending: false })
       .limit(500);
@@ -340,7 +348,8 @@ export default function AdminCleaners() {
       | "advance_pay_tier"
       | "send_agreement"
       | "send_setup"
-      | "send_supplies",
+      | "send_supplies"
+      | "send_standards",
     extra: Record<string, unknown> = {},
   ) => {
     if (!selected) return;
@@ -367,7 +376,12 @@ export default function AdminCleaners() {
           `Promoted to ${tier} · ${d.toPercentage ?? "—"}%` +
             (d.emailSent ? " — email sent" : " — email not sent (no address)"),
         );
-      } else if (action === "send_agreement" || action === "send_setup" || action === "send_supplies") {
+      } else if (
+        action === "send_agreement" ||
+        action === "send_setup" ||
+        action === "send_supplies" ||
+        action === "send_standards"
+      ) {
         const d = data as {
           emailed?: boolean;
           smsSent?: boolean;
@@ -376,15 +390,21 @@ export default function AdminCleaners() {
           agreementUrl?: string;
           setupUrl?: string;
           supplyUrl?: string;
+          standardsUrl?: string;
+          reacknowledgment?: boolean;
         };
         const parts = [d.emailed ? "email" : null, d.smsSent ? "SMS" : null].filter(Boolean);
-        const url = d.agreementUrl || d.setupUrl || d.supplyUrl;
+        const url = d.agreementUrl || d.setupUrl || d.supplyUrl || d.standardsUrl;
         const label =
           action === "send_agreement"
             ? "Signing link"
             : action === "send_setup"
               ? "Setup link"
-              : "Supply checklist link";
+              : action === "send_standards"
+                ? d.reacknowledgment
+                  ? "Standards re-acknowledgment link"
+                  : "Standards acknowledgment link"
+                : "Supply checklist link";
         toast.success(
           parts.length
             ? `${label} sent via ${parts.join(" + ")}`
@@ -515,6 +535,10 @@ export default function AdminCleaners() {
       {/* Contractors taking work with no signed ICA — one tap sends them a
           tokenized signing link. Hides itself once the backlog is clear. */}
       <UnsignedAgreements onSelectCleaner={(id) => setSelectedId(id)} />
+
+      {/* Contractors who haven't acknowledged the CURRENT Standards & Conduct
+          Addendum — never, or on a version we've since revised. */}
+      <UnacknowledgedStandards onSelectCleaner={(id) => setSelectedId(id)} />
 
       {/* Accountability review queue: suspended / active strikes / repeat offenders. */}
       <AccountabilityWatchlist onSelectCleaner={(id) => setSelectedId(id)} />
@@ -723,7 +747,8 @@ function CleanerSheet({
       | "advance_pay_tier"
       | "send_agreement"
       | "send_setup"
-      | "send_supplies",
+      | "send_supplies"
+      | "send_standards",
     extra?: Record<string, unknown>,
   ) => void;
   onDelete: () => void;
@@ -782,6 +807,7 @@ function CleanerSheet({
                     onSendAgreement={() => onAction("send_agreement")}
                     onSendSetup={() => onAction("send_setup")}
                     onSendSupplies={() => onAction("send_supplies")}
+                    onSendStandards={() => onAction("send_standards")}
                     actioning={actioning}
                   />
                 </TabsContent>
@@ -1258,6 +1284,22 @@ const OB_STEPS: Array<{ done: (c: CleanerRow) => boolean; label: string; detail?
         ? `Signed ${new Date(c.ob_agreement_signed_at).toLocaleDateString()}`
         : null,
   },
+  {
+    // Versioned, not a flag: acknowledging the March text does not satisfy the
+    // September one, so this step re-opens for the whole roster on a revision.
+    done: (c) => !needsStandardsAcknowledgment(c),
+    label: "Contractor standards acknowledged",
+    detail: (c) => {
+      const standing = standardsStanding(c);
+      if (standing === "never") return null;
+      const when = c.conduct_standards_acknowledged_at
+        ? new Date(c.conduct_standards_acknowledged_at).toLocaleDateString()
+        : "";
+      return standing === "current"
+        ? `Acknowledged ${when} · ${c.conduct_standards_version}`
+        : `On version ${c.conduct_standards_version} (${when}) — re-acknowledgment owed`;
+    },
+  },
   { done: stripeOnboardingDone, label: "Stripe payouts connected" },
 ];
 
@@ -1266,18 +1308,21 @@ function OnboardingChecklist({
   onSendAgreement,
   onSendSetup,
   onSendSupplies,
+  onSendStandards,
   actioning,
 }: {
   cleaner: CleanerRow;
   onSendAgreement: () => void;
   onSendSetup: () => void;
   onSendSupplies: () => void;
+  onSendStandards: () => void;
   actioning: boolean;
 }) {
   const introReady =
     Boolean(cleaner.phone_verified) && stripeOnboardingDone(cleaner);
   const agreementSigned = Boolean(cleaner.ob_agreement_signed);
   const setupComplete = introReady;
+  const standardsStanding_ = standardsStanding(cleaner);
 
   return (
     <div className="space-y-4">
@@ -1373,6 +1418,45 @@ function OnboardingChecklist({
               <RiSendPlaneLine className="w-4 h-4 mr-1.5" />
             )}
             Send agreement link
+          </Button>
+        </div>
+      ) : null}
+
+      {standardsStanding_ !== "current" && cleaner.status !== "terminated" ? (
+        <div className="rounded-lg border border-indigo-200 bg-indigo-50/80 p-3 space-y-2">
+          <p className="text-sm font-medium text-indigo-950">
+            {standardsStanding_ === "outdated"
+              ? "Standards re-acknowledgment owed"
+              : "Standards not acknowledged yet"}
+          </p>
+          <p className="text-xs text-indigo-800">
+            {standardsStanding_ === "outdated"
+              ? `They acknowledged version ${cleaner.conduct_standards_version}; the current version is ${CONTRACTOR_STANDARDS_VERSION}.`
+              : "They have never acknowledged the Contractor Standards & Conduct Addendum."}{" "}
+            Sends email + SMS with a no-login link to read and acknowledge.
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            disabled={actioning || (!cleaner.email && !cleaner.phone)}
+            onClick={() => {
+              if (
+                !confirm(
+                  `Send the contractor standards link to ${cleaner.first_name || "this cleaner"} via email/SMS?`,
+                )
+              ) {
+                return;
+              }
+              onSendStandards();
+            }}
+            className="bg-indigo-700 hover:bg-indigo-800 text-white"
+          >
+            {actioning ? (
+              <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" />
+            ) : (
+              <RiSendPlaneLine className="w-4 h-4 mr-1.5" />
+            )}
+            Send standards link
           </Button>
         </div>
       ) : null}
@@ -1714,7 +1798,8 @@ function ActionsBlock({
       | "advance_pay_tier"
       | "send_agreement"
       | "send_setup"
-      | "send_supplies",
+      | "send_supplies"
+      | "send_standards",
     extra?: Record<string, unknown>,
   ) => void;
   onDelete: () => void;
