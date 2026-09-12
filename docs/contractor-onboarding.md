@@ -46,7 +46,7 @@ dropping in a new file, with no build change:
 | Guide | File | What they have to do |
 | --- | --- | --- |
 | Dress code | `public/onboarding/dress-code.png` + `public/cleaner/guide-pdfs/dress-code.pdf` | Tick agree, then confirm. Public PDF: `/cleaner/guides/dress-code` |
-| Day To Day Job Operations | `public/onboarding/job-day-journey.png` + `public/cleaner/guide-pdfs/day-to-day-job-operations.pdf` | Confirm they have read it. Public PDF: `/cleaner/guides/day-to-day-job-operations` |
+| Day To Day Job Operations | `public/onboarding/job-day-journey.png` + `public/cleaner/guide-pdfs/day-to-day-job-operations.pdf` | Confirm they have read it. Public PDF: `/cleaner/guides/day-to-day-job-operations`. The PDF embeds a 3× copy of the graphic so pdf.js stays sharp on retina; a 1× PNG in the PDF looks soft. |
 | Operator Handbook | `public/onboarding/operator-handbook.pdf` | Download from either guide step |
 
 The Independent Contractor Agreement is streamed from DocuSeal through
