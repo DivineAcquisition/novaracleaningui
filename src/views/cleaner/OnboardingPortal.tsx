@@ -66,7 +66,7 @@ const logo = "/novara-logo.png";
 //   2. Phone number verification
 //   3. Supply checkoff
 //   4. Dress code graphic — must agree, not merely view
-//   5. Job-day journey graphic
+//   5. Day To Day Job Operations graphic
 //   6. Training hub (videos they must watch) — last card routes there
 //
 // A contractor with zero completed jobs cannot be offered work until every
@@ -284,7 +284,7 @@ export default function OnboardingPortal() {
         event_type: "cleaner.job_day_journey_acknowledged",
         cleaner_id: profile.id,
         source: "cleaner-ob-portal",
-        summary: `${profile.first_name || "Cleaner"} read the job-day journey`,
+        summary: `${profile.first_name || "Cleaner"} read Day To Day Job Operations`,
       })
       .then(() => undefined, () => undefined);
     setJobDayOpen(true);
@@ -378,7 +378,7 @@ export default function OnboardingPortal() {
     phone: "Verify your phone first.",
     supplies: "Check off your supplies first.",
     dress_code: "Agree to the dress code first.",
-    job_day: "Read the job-day journey first.",
+    job_day: "Read Day To Day Job Operations first.",
     training: "Watch the training videos first.",
   };
   const lockFor = (id: CleanerSetupStepId) => {
@@ -431,7 +431,7 @@ export default function OnboardingPortal() {
                 </CardTitle>
                 <p className="text-sm text-muted-foreground mt-1">
                   Sign the agreement, verify your phone, check off supplies,
-                  agree to the dress code, read the job-day journey, then watch
+                  agree to the dress code, read Day To Day Job Operations, then watch
                   the training videos. You won&apos;t be offered a job until
                   that&apos;s done.
                 </p>
@@ -634,10 +634,10 @@ export default function OnboardingPortal() {
           )}
         </StepCard>
 
-        {/* Step 5 — Job-day journey */}
+        {/* Step 5 — Day To Day Job Operations */}
         <StepCard
           number={5}
-          title="Read the job-day journey"
+          title="Read Day To Day Job Operations"
           description="What a job looks like from the offer through to getting paid."
           icon={RiRoadMapLine}
           done={jobDayDone}
@@ -649,7 +649,7 @@ export default function OnboardingPortal() {
           ) : jobDayDone && !jobDayOpen ? (
             <>
               <p className="text-sm text-muted-foreground">
-                Read · <span className="font-medium text-foreground">job-day journey</span>
+                Read · <span className="font-medium text-foreground">Day To Day Job Operations</span>
               </p>
               <Button variant="outline" onClick={() => setJobDayOpen(true)}>
                 <RiRoadMapLine className="w-4 h-4 mr-1.5" />

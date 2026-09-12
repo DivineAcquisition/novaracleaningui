@@ -1,13 +1,14 @@
 "use client";
 
-// One onboarding graphic: the dress code or the job-day journey.
+// One onboarding graphic: the dress code or Day To Day Job Operations.
 //
 // The graphic carries its own text version in a disclosure. It is open by
 // default only when the image failed to load, so a contractor is never stuck
 // looking at a broken box — and it is always available for anyone who would
 // rather read than squint at a diagram on a phone.
 //
-// Dress code requires an explicit agree tick. Job-day is a read acknowledgment.
+// Dress code requires an explicit agree tick. Day To Day Job Operations is a
+// read acknowledgment. "Open full size" goes to the public PDF landing page.
 
 import {
   RiAlertLine,
@@ -20,7 +21,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
-import type { OnboardingGuide } from "@/lib/cleaner-onboarding-guides";
+import { OPERATOR_HANDBOOK_PDF, type OnboardingGuide } from "@/lib/cleaner-onboarding-guides";
 
 export interface JobDayGuidesProps {
   guide: OnboardingGuide;
@@ -83,7 +84,7 @@ export function JobDayGuides({
           </p>
         ) : (
           <a
-            href={guide.image}
+            href={guide.landingPath}
             target="_blank"
             rel="noreferrer"
             className="group block overflow-hidden rounded-xl border border-border bg-muted/40"
@@ -91,13 +92,13 @@ export function JobDayGuides({
             <img
               src={guide.image}
               alt={guide.alt}
-              loading="lazy"
+              loading="eager"
               onError={() => setImageBroken(true)}
               className="w-full"
             />
             <span className="flex items-center justify-end gap-1 px-3 py-1.5 text-[11px] text-muted-foreground group-hover:text-primary">
               <RiExternalLinkLine className="h-3 w-3" />
-              Open full size
+              Open full PDF
             </span>
           </a>
         )}
@@ -119,6 +120,16 @@ export function JobDayGuides({
         {guide.footnote ? (
           <p className="text-xs leading-relaxed text-muted-foreground">{guide.footnote}</p>
         ) : null}
+
+        <a
+          href={OPERATOR_HANDBOOK_PDF}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 text-xs font-medium text-violet-700 underline underline-offset-2"
+        >
+          <RiExternalLinkLine className="h-3 w-3" />
+          Operator Handbook (PDF)
+        </a>
       </section>
 
       <div className={cn(variant === "plain" && "border-t border-border/60 pt-4")}>

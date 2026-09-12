@@ -139,7 +139,7 @@ export default function SetupContinue() {
             <div>
               <p className="text-sm font-semibold text-slate-900">You&apos;re all set, {first}</p>
               <p className="mt-1 text-sm text-slate-600">
-                The agreement, phone, supplies, dress code, job-day guide and
+                The agreement, phone, supplies, dress code, Day To Day Job Operations and
                 training videos are all done. Sign in anytime to see jobs.
               </p>
               <Button asChild className="mt-4 bg-violet-700 hover:bg-violet-800">

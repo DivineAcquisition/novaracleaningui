@@ -274,7 +274,7 @@ export function isDressCodeAgreed(c: CleanerSetupState): boolean {
   return Boolean(c.ob_dress_code_ack) || Boolean(c.ob_job_day_guides_ack);
 }
 
-/** The job-day journey graphic has been read. */
+/** Day To Day Job Operations has been read. */
 export function isJobDayAcknowledged(c: CleanerSetupState): boolean {
   return Boolean(c.ob_job_day_guides_ack);
 }
@@ -330,7 +330,7 @@ export function cleanerSetupSteps(c: CleanerSetupState): CleanerSetupStep[] {
     },
     {
       id: "job_day",
-      title: "Read the job-day journey",
+      title: "Read Day To Day Job Operations",
       done: isJobDayAcknowledged(c),
     },
     {

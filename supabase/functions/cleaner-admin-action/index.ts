@@ -1013,7 +1013,7 @@ serve(async (req) => {
             !phoneOk ? "verify your phone" : null,
             !suppliesOk ? "check off your supplies" : null,
             !dressOk ? "agree to the dress code" : null,
-            !jobDayOk ? "read the job-day journey" : null,
+            !jobDayOk ? "read Day To Day Job Operations" : null,
             !trainingOk ? "watch the training videos" : null,
           ].filter(Boolean) as string[];
           const missing = outstanding.length > 1

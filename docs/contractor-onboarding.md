@@ -6,7 +6,7 @@ Six steps, in this order:
 2. **Verify your phone number** — dispatch has to be able to reach them.
 3. **Check off your supplies** — what kit do they already own?
 4. **Agree to the dress code** — the graphic, with an explicit agree tick. Viewing is not enough.
-5. **Read the job-day journey** — what a job looks like from offer to payout.
+5. **Read Day To Day Job Operations** — what a job looks like from offer to payout.
 6. **Watch the training videos** — all seven walkthroughs on the training hub. Skipping does not count.
 
 A contractor with zero completed jobs **cannot be offered a first job** until every step is done, including the videos. People who have already completed a job are past this gate — we do not yank offers from the roster.
@@ -45,8 +45,22 @@ dropping in a new file, with no build change:
 
 | Guide | File | What they have to do |
 | --- | --- | --- |
-| Dress code | `public/onboarding/dress-code.png` | Tick agree, then confirm |
-| Job day, start to finish | `public/onboarding/job-day-journey.png` | Confirm they have read it |
+| Dress code | `public/onboarding/dress-code.png` + `public/cleaner/guide-pdfs/dress-code.pdf` | Tick agree, then confirm. Public PDF: `/cleaner/guides/dress-code` |
+| Day To Day Job Operations | `public/onboarding/job-day-journey.png` + `public/cleaner/guide-pdfs/day-to-day-job-operations.pdf` | Confirm they have read it. Public PDF: `/cleaner/guides/day-to-day-job-operations` |
+| Operator Handbook | `public/onboarding/operator-handbook.pdf` | Download from either guide step |
+
+The Independent Contractor Agreement is streamed from DocuSeal through
+`/api/cleaner/agreement-preview` and rendered with pdf.js (`PdfViewer`). Putting
+the DocuSeal file URL in an iframe is a blank box on phones, which is why VA,
+commercial and host already used this proxy.
+
+Each guide also has a one-page PDF and a public landing page that renders it
+with pdf.js (`PdfViewer`), the same way the contractor agreement is shown.
+Those pages live under `/cleaner/guides/…` on the contractor host so they are
+not remapped onto commercial.* (which owns `/onboarding`). The PDFs sit at
+`/cleaner/guide-pdfs/*.pdf` for the same reason — a PDF under `/onboarding`
+would 308 away and pdf.js would go blank. They do not require
+a login; that is how the emailed links open.
 
 Each guide also carries its content as text in `points`. That is not
 decoration:
@@ -130,16 +144,17 @@ npm run onboarding:verify
 `scripts/verify-onboarding-sequence.ts` checks the shared definition by
 calling it, then opens the real pages in a browser and reads what a
 contractor would see: six steps in order, agreement first, dress-code agree
-required, training last, payouts not in the portal, and the training hub
-requiring the seven videos. Every Supabase call is answered from an invented
-fixture in the script, so no real contractor is touched. Screenshots land in
+required, training last, payouts not in the portal, the two public PDF landing
+pages, and the training hub requiring the seven videos. Every Supabase call is
+answered from an invented fixture in the script, so no real contractor is
+touched. Screenshots land in
 `docs/contractor-onboarding/` (gitignored — evidence of a run, not a source of
 truth).
 
 ## Deliberately not built
 
-- **No quiz on the job-day graphic.** Dress code requires an agree tick.
-  Job-day is a read acknowledgment.
+- **No quiz on Day To Day Job Operations.** Dress code requires an agree tick.
+  Day To Day Job Operations is a read acknowledgment.
 - **No supply approval step.** Nobody reviews or signs off what a contractor
   ticked. It is self-certified, and dispatch treats it as advisory — see
   `equipmentMatch()`, which shows the gap for commercial sites rather than
