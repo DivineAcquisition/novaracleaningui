@@ -37,6 +37,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { payExplanation, normalizePayTier, PAY_BASIS_NOTE } from "@/lib/crew-pay";
+import { TOUR, tourAnchor } from "@/lib/tours/anchors";
 import {
   RecleanBadge,
   RecleanContractorNote,
@@ -416,7 +417,7 @@ export default function CleanerJobOfferPage() {
         </Card>
 
         {!outcome && !isExpired && (
-          <div className="grid grid-cols-2 gap-3 sticky bottom-3">
+          <div className="grid grid-cols-2 gap-3 sticky bottom-3" {...tourAnchor(TOUR.offerDecision)}>
             <Button
               size="lg"
               variant="outline"

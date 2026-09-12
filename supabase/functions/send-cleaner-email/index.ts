@@ -221,17 +221,33 @@ serve(async (req) => {
       case "setup_request": {
         const first = data.firstName || "there";
         const setupUrl = data.setupUrl || "https://contractor.novaracleaning.com/cleaner/auth";
+        // Listed in the order the portal asks for them — training last.
         const needs: string[] = [];
-        if (data.needsPhone !== false) needs.push("verify your phone");
-        if (data.needsStripe !== false) needs.push("connect payouts (Stripe)");
-        const needsLine = needs.length ? needs.join(" and ") : "finish a couple of quick steps";
+        if (data.needsAgreement !== false) needs.push("Sign the contractor agreement");
+        if (data.needsPhone !== false) needs.push("Verify your phone number");
+        if (data.needsSupplies !== false) needs.push("Check off the supplies you already own");
+        if (data.needsDressCode !== false) needs.push("Agree to the dress code");
+        if (data.needsJobDay !== false) needs.push("Read Day To Day Job Operations");
+        if (data.needsTraining !== false) needs.push("Watch the training videos");
+        const stepsList = needs.length
+          ? `<ol style="margin:0 0 16px;padding-left:20px;color:#475569">${
+              needs.map((n) => `<li style="margin:0 0 6px">${n}</li>`).join("")
+            }</ol>`
+          : "";
         subject = "Finish your Novara Cleaning account setup";
         html = `
           <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#0f172a">
             <h2 style="margin:0 0 8px;font-size:20px">Finish your account setup</h2>
             <p style="margin:0 0 16px;color:#475569">Hi ${first},</p>
-            <p style="margin:0 0 16px;color:#475569">
-              You're almost ready for jobs — please ${needsLine} so we can keep sending you work and pay you on time.
+            <p style="margin:0 0 12px;color:#475569">
+              You're almost ready for jobs. ${needs.length === 1 ? "One step left" : `${needs.length} quick steps left`},
+              in this order, so we can keep sending you work and pay you on time:
+            </p>
+            ${stepsList}
+            <p style="margin:0 0 16px;color:#64748b;font-size:14px">
+              You will not be offered a job until this is finished, including the
+              training videos. The supply checklist is just "what do you already have?"
+              — you don't need every item on day one.
             </p>
             <p style="margin:24px 0;text-align:center">
               <a href="${setupUrl}"

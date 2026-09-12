@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { sendSms, formatServiceDate, formatTimeSlot } from "../_shared/sms.ts";
 import { smsActionTail } from "../_shared/booking-policy.ts";
+import { isCleanerReadyForFirstJob } from "../_shared/first-job-ready.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -66,6 +67,23 @@ serve(async (req) => {
     }
 
     // Update assignment status
+    if (action === "accept" && !isCleanerReadyForFirstJob(assignment.cleaners || {})) {
+      return new Response(
+        `
+        <!DOCTYPE html>
+        <html>
+          <head><title>Job Offer Response</title></head>
+          <body style="font-family: sans-serif; padding: 20px; text-align: center;">
+            <h1>Finish training first</h1>
+            <p>You need to complete onboarding and watch the training videos before you can take a job.</p>
+            <p><a href="https://contractor.novaracleaning.com/cleaner/ob-portal">Open onboarding</a></p>
+          </body>
+        </html>
+        `,
+        { headers: { ...corsHeaders, "Content-Type": "text/html" } },
+      );
+    }
+
     const newStatus = action === "accept" ? "Confirmed" : "Declined";
     const { error: updateError } = await supabase
       .from("job_assignments")

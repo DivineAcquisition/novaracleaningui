@@ -17,10 +17,16 @@ type Payload = {
   ok: true;
   complete: boolean;
   cleaner: { firstName: string; name: string; email: string };
+  /** Onboarding in portal order, straight from cleanerSetupSteps(). */
+  sequence: { id: string; title: string; done: boolean }[];
   steps: {
     phoneVerified: boolean;
-    stripeReady: boolean;
     agreementSigned: boolean;
+    suppliesSubmitted: boolean;
+    dressCodeAgreed: boolean;
+    jobDayAcknowledged: boolean;
+    trainingComplete: boolean;
+    stripeReady: boolean;
     onboardingComplete: boolean;
   };
   continueUrl: string;
@@ -133,7 +139,8 @@ export default function SetupContinue() {
             <div>
               <p className="text-sm font-semibold text-slate-900">You&apos;re all set, {first}</p>
               <p className="mt-1 text-sm text-slate-600">
-                Phone and payouts are already connected. Sign in anytime to see jobs.
+                The agreement, phone, supplies, dress code, Day To Day Job Operations and
+                training videos are all done. Sign in anytime to see jobs.
               </p>
               <Button asChild className="mt-4 bg-violet-700 hover:bg-violet-800">
                 <Link href="/cleaner/auth">Open contractor portal</Link>
@@ -153,9 +160,9 @@ export default function SetupContinue() {
           Hi {first} — complete the steps below so we can keep sending you jobs and pay you on time.
         </p>
         <ul className="mt-4 space-y-2">
-          <StepRow done={data.steps.phoneVerified} label="Verify your phone number" />
-          <StepRow done={data.steps.stripeReady} label="Connect payouts (Stripe)" />
-          <StepRow done={data.steps.agreementSigned} label="Sign contractor agreement" />
+          {(data.sequence || []).map((step) => (
+            <StepRow key={step.id} done={step.done} label={step.title} />
+          ))}
         </ul>
         <Button asChild className="mt-6 w-full bg-violet-700 hover:bg-violet-800">
           <Link href={data.continueUrl}>Continue account setup</Link>

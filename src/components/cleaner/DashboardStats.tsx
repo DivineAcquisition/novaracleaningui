@@ -7,6 +7,7 @@ import {
   RiStarLine
 } from "@remixicon/react";
 import { Card } from "@/components/ui/card";
+import { TOUR, tourAnchor, type TourAnchor } from "@/lib/tours/anchors";
 
 interface DashboardStatsProps {
   stats: {
@@ -26,13 +27,25 @@ export function DashboardStats({ stats }: DashboardStatsProps) {
     }).format(cents / 100);
   };
 
-  const cards = [
+  // `anchor` ties a tile to a walkthrough step. Set per tile rather than by
+  // position, so reordering the tiles can't leave a step pointing at the
+  // wrong number.
+  const cards: Array<{
+    title: string;
+    value: string;
+    subtitle?: string;
+    icon: typeof RiStarLine;
+    color: string;
+    bgColor: string;
+    anchor?: TourAnchor;
+  }> = [
     {
       title: "Total Earnings",
       value: formatCurrency(stats.totalEarnings),
       icon: RiMoneyDollarCircleLine,
       color: "text-green-500",
       bgColor: "bg-green-500/10",
+      anchor: TOUR.statEarnings,
     },
     {
       title: "Jobs Completed",
@@ -41,6 +54,7 @@ export function DashboardStats({ stats }: DashboardStatsProps) {
       icon: RiBriefcaseLine,
       color: "text-blue-500",
       bgColor: "bg-blue-500/10",
+      anchor: TOUR.statJobsCompleted,
     },
     {
       title: "Average Rating",
@@ -49,6 +63,7 @@ export function DashboardStats({ stats }: DashboardStatsProps) {
       icon: RiStarLine,
       color: "text-yellow-500",
       bgColor: "bg-yellow-500/10",
+      anchor: TOUR.statRating,
     },
     {
       title: "Acceptance Rate",
@@ -60,11 +75,18 @@ export function DashboardStats({ stats }: DashboardStatsProps) {
   ];
 
   return (
-    <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4 mb-4">
+    <div
+      className="grid gap-3 md:grid-cols-2 lg:grid-cols-4 mb-4"
+      {...tourAnchor(TOUR.dashboardStats)}
+    >
       {cards.map((card) => {
         const Icon = card.icon;
         return (
-          <Card key={card.title} className="p-4">
+          <Card
+            key={card.title}
+            className="p-4"
+            {...(card.anchor ? tourAnchor(card.anchor) : {})}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-medium text-muted-foreground">

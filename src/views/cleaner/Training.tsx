@@ -3,19 +3,15 @@
 // ─── Cleaner Training Portal ───────────────────────────────────────────
 //
 // The landing page contractors reach from:
-//   1. The "Open Training Portal" CTA on /cleaner/ob-portal (step 5)
-//   2. The training link inside the post-onboarding welcome SMS / email
+//   1. The "Open training hub" CTA on /cleaner/ob-portal (step 6)
+//   2. The training link in the contractor nav
 //
-// Auth-gated for cleaners. Visiting this page also stamps
-// `cleaners.ob_training_accessed = true` + timestamp so the onboarding
-// checklist auto-marks step 5 complete (no separate button required).
-//
-// Content is intentionally self-contained (no external service round-trip
-// required to render). The Google Drive training library URL can be
-// configured via the optional `get-contractor-training` edge function —
-// when present, the page offers a "Open full library" button + embed.
-// When absent or the function 404s, the page still ships a useful first
-// pass of training modules + SOPs + safety guidance.
+// Auth-gated for cleaners. Visiting this page stamps
+// `cleaners.ob_training_accessed` so we know they opened it — visiting is
+// not completion. First-job eligibility requires every catalog walkthrough
+// to be finished (watched or guided to the end). Skipping does not count.
+// That stamp lives on `cleaners.ob_training_complete`, written by
+// POST /api/cleaner/tours when the last required video is done.
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -50,10 +46,13 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { SEO } from "@/components/SEO";
+import { TourRecordings } from "@/components/tour/TourRecordings";
+import { useToursOptional } from "@/components/tour/TourProvider";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { resolveCleanerAuth, isBlockedCleanerStatus } from "@/lib/cleaner-auth";
+import { TOURS } from "@/lib/tours/catalog";
 
 interface TrainingConfig {
   url: string | null;
@@ -65,6 +64,7 @@ interface CleanerLite {
   id: string;
   first_name: string | null;
   ob_training_accessed: boolean | null;
+  ob_training_complete: boolean | null;
   ob_payouts_setup: boolean | null;
   ob_agreement_signed: boolean | null;
   ob_google_chat_joined: boolean | null;
@@ -218,6 +218,7 @@ const TONE_BG: Record<TrainingModule["tone"], string> = {
 
 export default function CleanerTrainingPage() {
   const router = useRouter();
+  const tours = useToursOptional();
   const [loading, setLoading] = useState(true);
   const [cleaner, setCleaner] = useState<CleanerLite | null>(null);
   const [config, setConfig] = useState<TrainingConfig | null>(null);
@@ -263,7 +264,7 @@ export default function CleanerTrainingPage() {
       const { data: cleanerRow, error } = await supabase
         .from("cleaners")
         .select(
-          "id, first_name, ob_training_accessed, ob_payouts_setup, ob_agreement_signed, ob_google_chat_joined, ob_supplies_checklist_viewed",
+          "id, first_name, ob_training_accessed, ob_training_complete, ob_payouts_setup, ob_agreement_signed, ob_google_chat_joined, ob_supplies_checklist_viewed",
         )
         .eq("id", resolved.id)
         .maybeSingle();
@@ -356,7 +357,11 @@ export default function CleanerTrainingPage() {
 
   if (!cleaner) return null;
 
-  const allComplete = completedCount === MODULES.length;
+  const watchedCount = TOURS.filter(
+    (tour) => tours?.standings[tour.id] === "completed",
+  ).length;
+  const videosDone = watchedCount === TOURS.length;
+  const videoPercent = Math.round((watchedCount / TOURS.length) * 100);
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -372,33 +377,31 @@ export default function CleanerTrainingPage() {
             Welcome, {cleaner.first_name?.trim() || "team"}.
           </h1>
           <p className="text-muted-foreground text-sm max-w-md mx-auto">
-            Six short modules cover everything you need to deliver a
-            Novara-grade clean. Knock them out before your first job —
-            most cleaners finish in under 45 minutes.
+            Watch all {TOURS.length} walkthroughs before your first job.
+            Skipping does not count. The playbooks below are extra reference.
           </p>
 
           <div className="max-w-md mx-auto space-y-1.5 pt-2">
             <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>Module progress</span>
+              <span>Required videos</span>
               <span className="font-semibold text-foreground">
-                {completedCount} / {MODULES.length}
+                {watchedCount} / {TOURS.length}
               </span>
             </div>
-            <Progress value={progressPercent} className="h-2" />
+            <Progress value={videoPercent} className="h-2" />
           </div>
         </section>
 
-        {/* All complete celebration */}
-        {allComplete && (
+        {videosDone && (
           <Card className="border-emerald-500/30 bg-gradient-to-br from-emerald-500/5 to-primary/5">
             <CardContent className="p-5 text-center space-y-3">
               <RiCheckboxCircleLine className="w-10 h-10 text-emerald-500 mx-auto" />
               <h3 className="font-bold text-base">
-                Training complete — you're cleared to clean.
+                Training complete — you&apos;re cleared for your first job.
               </h3>
               <p className="text-xs text-muted-foreground">
-                Head back to the onboarding checklist to wrap up the final
-                step, or jump straight to your dashboard.
+                Dispatch can offer you work now. Rewatch anytime from this page
+                or Help &amp; training.
               </p>
               <div className="flex flex-col sm:flex-row gap-2 justify-center pt-1">
                 <Button
@@ -416,11 +419,26 @@ export default function CleanerTrainingPage() {
           </Card>
         )}
 
-        {/* Module cards */}
+        <TourRecordings />
+
+        {/* Playbooks — optional reference, not the first-job gate */}
         <section className="space-y-3">
           <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground px-1">
-            Training Modules
+            Playbooks
           </h2>
+          <p className="text-xs text-muted-foreground px-1">
+            Optional reading. The videos above are what unlock your first job.
+          </p>
+
+          <div className="max-w-md space-y-1.5 px-1">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Module progress</span>
+              <span className="font-semibold text-foreground">
+                {completedCount} / {MODULES.length}
+              </span>
+            </div>
+            <Progress value={progressPercent} className="h-2" />
+          </div>
 
           {MODULES.map((mod, idx) => {
             const isCompleted = completedModules.has(mod.id);

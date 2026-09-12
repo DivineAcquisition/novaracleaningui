@@ -37,6 +37,7 @@ import { cn } from "@/lib/utils";
 import { isZoneStatus, type ZoneCompletion, type ZoneStatus } from "@/lib/site-zones";
 import { QcIssueMediaPicker } from "@/components/qc/QcIssueMedia";
 import type { QcIssueMediaFile } from "@/lib/qc-issue-media";
+import { TOUR, tourAnchor } from "@/lib/tours/anchors";
 
 // ─── Types (mirror cleaner-job-checklist edge fn payload) ────────────────
 interface ChecklistSection {
@@ -622,7 +623,7 @@ export default function CleanerJobChecklistPage() {
             </p>
           )}
         </div>
-        <div className="px-5 py-4 space-y-2 text-sm text-slate-700">
+        <div className="px-5 py-4 space-y-2 text-sm text-slate-700" {...tourAnchor(TOUR.checklistNotes)}>
           {(fmtDate(booking?.service_date) || job.start_datetime) && (
             <p className="flex items-center gap-2">
               <RiTimeLine className="w-4 h-4 text-violet-600 shrink-0" />
@@ -664,7 +665,7 @@ export default function CleanerJobChecklistPage() {
         </div>
 
         {/* Progress bar */}
-        <div className="px-5 pb-4">
+        <div className="px-5 pb-4" {...tourAnchor(TOUR.checklistProgress)}>
           <div className="flex items-center justify-between text-xs font-semibold mb-1.5">
             <span className={cn(progress === 100 ? "text-emerald-600" : "text-violet-700")}>
               {checklist.completed_items}/{checklist.total_items} tasks · {progress}%
@@ -848,7 +849,11 @@ export default function CleanerJobChecklistPage() {
         const beforeCount = meta.before?.length || 0;
         const afterCount = meta.after?.length || 0;
         return (
-          <div key={`${section.title}-${sIdx}`} className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div
+            key={`${section.title}-${sIdx}`}
+            className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden"
+            {...tourAnchor(TOUR.checklistSection)}
+          >
             <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
               <h2 className="font-bold text-slate-900">{section.title}</h2>
               {sectionDone && (
@@ -864,7 +869,11 @@ export default function CleanerJobChecklistPage() {
                 const skipped = Boolean(entry?.skipped && entry?.skipReason);
                 const done = Boolean(entry?.done) || skipped;
                 return (
-                  <li key={key} className={cn(done ? "bg-emerald-50/50" : "")}>
+                  <li
+                    key={key}
+                    className={cn(done ? "bg-emerald-50/50" : "")}
+                    {...tourAnchor(TOUR.checklistItem)}
+                  >
                     <div className="flex items-start gap-3 px-5 py-3">
                       <button
                         type="button"
@@ -930,7 +939,10 @@ export default function CleanerJobChecklistPage() {
             </ul>
 
             {section.photoRequired && (
-              <div className="px-5 py-4 border-t border-slate-100 space-y-3 bg-slate-50/60">
+              <div
+                className="px-5 py-4 border-t border-slate-100 space-y-3 bg-slate-50/60"
+                {...tourAnchor(TOUR.checklistSectionPhotos)}
+              >
                 <p className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
                   <RiCameraLine className="w-4 h-4 text-violet-600" />
                   Before &amp; after photos required for {section.zoneName || "this area"}
@@ -1310,7 +1322,12 @@ export default function CleanerJobChecklistPage() {
               moment you hit it. Dispatch is alerted immediately.
             </p>
             {!issueOpen ? (
-              <Button variant="outline" className="w-full mt-3 border-rose-300 text-rose-600 hover:bg-rose-50" onClick={() => setIssueOpen(true)}>
+              <Button
+                variant="outline"
+                className="w-full mt-3 border-rose-300 text-rose-600 hover:bg-rose-50"
+                onClick={() => setIssueOpen(true)}
+                {...tourAnchor(TOUR.checklistReportIssue)}
+              >
                 <RiAlertLine className="w-4 h-4 mr-1.5" /> Report an issue to dispatch
               </Button>
             ) : (
@@ -1367,6 +1384,7 @@ export default function CleanerJobChecklistPage() {
           className="w-full h-12 text-base"
           disabled={!allDone || finishing}
           onClick={() => void finish()}
+          {...tourAnchor(TOUR.checklistFinish)}
         >
           {finishing
             ? <RiLoader4Line className="w-5 h-5 animate-spin mr-2" />

@@ -36,6 +36,7 @@ import {
 } from "@/components/cleaner/portal-enrichment";
 import { parseServiceDate } from "@/lib/service-date";
 import { payExplanation, normalizePayTier } from "@/lib/crew-pay";
+import { TOUR, tourAnchor } from "@/lib/tours/anchors";
 import {
   RecleanBadge,
   RecleanContractorNote,
@@ -762,8 +763,8 @@ export default function CleanerDashboard() {
         <RecleanOfferBanner offers={portal?.offers || []} />
 
         {/* Stats Row */}
-        <div className="grid grid-cols-2 gap-3">
-          <Card className="border-0 shadow-md">
+        <div className="grid grid-cols-2 gap-3" {...tourAnchor(TOUR.dashboardStats)}>
+          <Card className="border-0 shadow-md" {...tourAnchor(TOUR.statEarnings)}>
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -780,7 +781,7 @@ export default function CleanerDashboard() {
               </div>
             </CardContent>
           </Card>
-          <Card className="border-0 shadow-md">
+          <Card className="border-0 shadow-md" {...tourAnchor(TOUR.statJobsCompleted)}>
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -795,7 +796,7 @@ export default function CleanerDashboard() {
               </div>
             </CardContent>
           </Card>
-          <Card className="border-0 shadow-md">
+          <Card className="border-0 shadow-md" {...tourAnchor(TOUR.statRating)}>
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -815,7 +816,7 @@ export default function CleanerDashboard() {
               </div>
             </CardContent>
           </Card>
-          <Card className="border-0 shadow-md">
+          <Card className="border-0 shadow-md" {...tourAnchor(TOUR.statUpcoming)}>
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -833,7 +834,7 @@ export default function CleanerDashboard() {
         </div>
 
         {/* Upcoming Jobs */}
-        <Card className="border-0 shadow-lg">
+        <Card className="border-0 shadow-lg" {...tourAnchor(TOUR.upcomingJobs)}>
           <CardHeader className="pb-2">
             <CardTitle className="text-lg flex items-center gap-2">
               <RiTimeLine className="w-5 h-5 text-primary" />
@@ -893,6 +894,7 @@ export default function CleanerDashboard() {
                     <div
                       key={job.id}
                       className="rounded-lg border bg-card p-4 space-y-3"
+                      {...tourAnchor(TOUR.jobCard)}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div>
@@ -917,18 +919,23 @@ export default function CleanerDashboard() {
                           <p className="text-xs text-muted-foreground capitalize">
                             {String(job.service_type || "cleaning").replaceAll("_", " ")}
                           </p>
-                          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                          <p
+                            className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5"
+                            {...tourAnchor(TOUR.jobCardWhen)}
+                          >
                             <RiTimeLine className="w-3.5 h-3.5" />
                             {dateTime}
                           </p>
                         </div>
-                        {enriched ? (
-                          <PayChip pay={enriched.pay} />
-                        ) : pay != null ? (
-                          <p className="font-semibold text-primary whitespace-nowrap">
-                            {formatCurrency(pay)}
-                          </p>
-                        ) : null}
+                        <span {...tourAnchor(TOUR.jobCardPay)}>
+                          {enriched ? (
+                            <PayChip pay={enriched.pay} />
+                          ) : pay != null ? (
+                            <p className="font-semibold text-primary whitespace-nowrap">
+                              {formatCurrency(pay)}
+                            </p>
+                          ) : null}
+                        </span>
                       </div>
                       {(job.crew_size_snapshot != null && job.pay_percentage_snapshot != null && pay != null) && (
                         <p className="text-[11px] text-muted-foreground">
@@ -941,19 +948,27 @@ export default function CleanerDashboard() {
                           })}
                         </p>
                       )}
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <div
+                        className="flex items-center gap-2 text-sm text-muted-foreground"
+                        {...tourAnchor(TOUR.jobCardAddress)}
+                      >
                         <RiMapPinLine className="w-4 h-4 flex-shrink-0" />
                         <span>
                           {job.address}, {job.city}, {job.state} {zip}
                         </span>
                       </div>
-                      {enriched && <JobDetails job={enriched} />}
+                      {enriched && (
+                        <div {...tourAnchor(TOUR.jobCardDetails)}>
+                          <JobDetails job={enriched} />
+                        </div>
+                      )}
                       <div className="flex flex-wrap gap-2">
                         {job.checklistToken && (
                           <Button
                             size="sm"
                             variant="default"
                             onClick={() => router.push(`/cleaner/job-checklist/${job.checklistToken}`)}
+                            {...tourAnchor(TOUR.jobCardChecklist)}
                           >
                             <RiCheckboxCircleLine className="w-3.5 h-3.5 mr-1.5" />
                             Job Checklist
@@ -980,6 +995,7 @@ export default function CleanerDashboard() {
                             size="sm"
                             onClick={() => handleCheckIn(job)}
                             disabled={isCheckedIn || actionLoading === `checkin-${job.id}`}
+                            {...tourAnchor(TOUR.jobCardCheckIn)}
                           >
                             {actionLoading === `checkin-${job.id}` ? (
                               <RiLoader4Line className="w-3.5 h-3.5 animate-spin mr-1.5" />
@@ -1016,7 +1032,7 @@ export default function CleanerDashboard() {
         </Card>
 
         {/* Completed Jobs */}
-        <Card className="border-0 shadow-lg">
+        <Card className="border-0 shadow-lg" {...tourAnchor(TOUR.completedJobs)}>
           <CardHeader className="pb-2">
             <CardTitle className="text-lg flex items-center gap-2">
               <RiCheckboxCircleLine className="w-5 h-5 text-primary" />
@@ -1101,7 +1117,7 @@ export default function CleanerDashboard() {
         </Card>
 
         {/* Stripe / Payments */}
-        <Card className="border-0 shadow-lg">
+        <Card className="border-0 shadow-lg" {...tourAnchor(TOUR.payments)}>
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <CardTitle className="text-lg flex items-center gap-2">

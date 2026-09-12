@@ -33,6 +33,13 @@ import {
 import { checklistPathForServiceType } from "../src/lib/checklists";
 import { proposalPrefillFromWalkthrough, siteRateCentsFromWalkthrough } from "../src/lib/commercial-proposal";
 import {
+  isMissingSchemaRelation,
+  isValidProposalEmail,
+  pipelineStageFromRows,
+  proposalSendRequirements,
+} from "../src/lib/commercial-proposal-send";
+import { isCommercialBookingRow } from "../src/lib/commercial-booking";
+import {
   walkthroughPreviewPayload,
   walkthroughPreviewTypeKey,
 } from "../src/lib/walkthrough-preview";
@@ -211,6 +218,38 @@ check("office preview has no crew scope cards", walkthroughPreviewPayload("previ
 check("warehouse preview has no crew scope cards", walkthroughPreviewPayload("preview-commercial")?.checklist.scope, []);
 check("warehouse preview uses the shared extras list", walkthroughPreviewPayload("preview-commercial")?.checklist.typeSpecific.some((i) => i.key === "desk_count"), true);
 check("warehouse preview does not require racking as a separate catalog", walkthroughPreviewPayload("preview-commercial")?.checklist.typeSpecific.some((i) => i.key === "racking_dense_sqft"), false);
+
+console.log("\nWalk-in proposal send:");
+check("schema-cache miss is recognized", isMissingSchemaRelation("Could not find the table 'public.commercial_deal_pipeline_v1' in the schema cache"), true);
+check("unrelated errors are not treated as missing", isMissingSchemaRelation("permission denied"), false);
+check("send does not require an existing account id", proposalSendRequirements({
+  businessName: "Acme Dental",
+  recipientName: "Jordan Lee",
+  recipientEmail: "jordan@acme.com",
+  frequency: "weekly",
+  sites: [{ nickname: "Main", rateCents: 45000 }],
+}), []);
+check("send still needs a rate and an email", proposalSendRequirements({
+  businessName: "Acme Dental",
+  recipientName: "Jordan Lee",
+  recipientEmail: "not-an-email",
+  frequency: "weekly",
+  sites: [{ nickname: "Main", rateCents: null }],
+}), ["Decision-maker's email", "Main still needs a per-visit rate"]);
+check("valid proposal email", isValidProposalEmail("jordan@acme.com"), true);
+check("sent proposal without signed agreement is proposal_sent", pipelineStageFromRows({
+  proposalStatus: "sent",
+  pricedSites: 1,
+  activeSites: 1,
+  excludedSites: 0,
+}), "proposal_sent");
+
+console.log("\nCommercial tab scope:");
+check("commercial booking_type is in scope", isCommercialBookingRow({ booking_type: "commercial" }), true);
+check("office booking_type is in scope", isCommercialBookingRow({ booking_type: "office" }), true);
+check("STR turnover is not a commercial-tab job", isCommercialBookingRow({ booking_type: "str_turnover" }), false);
+check("residential standard job is not in scope", isCommercialBookingRow({ service_type: "standard" }), false);
+check("admin_commercial channel is in scope", isCommercialBookingRow({ booking_channel: "admin_commercial" }), true);
 
 console.log("\nBooking invariant:");
 check(

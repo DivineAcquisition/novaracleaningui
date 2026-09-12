@@ -136,7 +136,7 @@ export interface AccountCompliance {
 export const COI_CONSOLE_PATH = "/admin/commercial?tab=compliance";
 
 /** Where an admin goes to fix a proposal / agreement / billing gap. */
-export const DEAL_CONSOLE_PATH = "/admin/commercial?tab=pipeline";
+export const DEAL_CONSOLE_PATH = "/admin/proposals?tab=pipeline";
 
 // ─── Where the block is enforced ───────────────────────────────────────────
 //

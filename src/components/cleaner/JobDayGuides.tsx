@@ -1,0 +1,169 @@
+"use client";
+
+// One onboarding graphic: the dress code or Day To Day Job Operations.
+//
+// The graphic carries its own text version in a disclosure. It is open by
+// default only when the image failed to load, so a contractor is never stuck
+// looking at a broken box — and it is always available for anyone who would
+// rather read than squint at a diagram on a phone.
+//
+// Dress code requires an explicit agree tick. Day To Day Job Operations is a
+// read acknowledgment. "Open full size" goes to the public PDF landing page.
+
+import {
+  RiAlertLine,
+  RiCheckboxCircleFill,
+  RiExternalLinkLine,
+  RiLoader4Line,
+} from "@remixicon/react";
+import { useState } from "react";
+
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { cn } from "@/lib/utils";
+import { OPERATOR_HANDBOOK_PDF, type OnboardingGuide } from "@/lib/cleaner-onboarding-guides";
+
+export interface JobDayGuidesProps {
+  guide: OnboardingGuide;
+  /** Non-null once the contractor has acknowledged / agreed. */
+  acknowledgedAt: string | null;
+  /** Throw with a message to surface an error inline. */
+  onAcknowledge: () => Promise<void>;
+  /** "plain" drops card chrome so this can nest inside an onboarding step. */
+  variant?: "card" | "plain";
+}
+
+export function JobDayGuides({
+  guide,
+  acknowledgedAt,
+  onAcknowledge,
+  variant = "card",
+}: JobDayGuidesProps) {
+  const [imageBroken, setImageBroken] = useState(false);
+  const [agreed, setAgreed] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [acked, setAcked] = useState<string | null>(acknowledgedAt);
+
+  const needsTick = Boolean(guide.agreeLabel);
+  const canSubmit = !saving && (!needsTick || agreed);
+
+  const acknowledge = async () => {
+    if (!canSubmit) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await onAcknowledge();
+      setAcked(new Date().toISOString());
+    } catch (e) {
+      setError((e as Error).message || "Couldn't save that. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <section
+        className={cn(
+          "space-y-3",
+          variant === "card"
+            ? "rounded-2xl border border-border bg-card p-5 shadow-sm"
+            : "",
+        )}
+      >
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">{guide.title}</h3>
+          <p className="mt-1 text-sm text-muted-foreground">{guide.lede}</p>
+        </div>
+
+        {imageBroken ? (
+          <p className="inline-flex items-start gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+            <RiAlertLine className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            The graphic didn&apos;t load. Everything it says is written out below.
+          </p>
+        ) : (
+          <a
+            href={guide.landingPath}
+            target="_blank"
+            rel="noreferrer"
+            className="group block overflow-hidden rounded-xl border border-border bg-muted/40"
+          >
+            <img
+              src={guide.image}
+              alt={guide.alt}
+              loading="eager"
+              onError={() => setImageBroken(true)}
+              className="w-full"
+            />
+            <span className="flex items-center justify-end gap-1 px-3 py-1.5 text-[11px] text-muted-foreground group-hover:text-primary">
+              <RiExternalLinkLine className="h-3 w-3" />
+              Open full PDF
+            </span>
+          </a>
+        )}
+
+        <details open={imageBroken} className="rounded-xl border border-border bg-muted/30 px-3 py-2">
+          <summary className="cursor-pointer text-xs font-medium text-foreground">
+            {guide.title} as text
+          </summary>
+          <ul className="mt-2 space-y-1.5">
+            {guide.points.map((point) => (
+              <li key={point} className="flex items-start gap-2 text-sm leading-snug text-foreground">
+                <span aria-hidden className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                <span>{point}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+
+        {guide.footnote ? (
+          <p className="text-xs leading-relaxed text-muted-foreground">{guide.footnote}</p>
+        ) : null}
+
+        <a
+          href={OPERATOR_HANDBOOK_PDF}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 text-xs font-medium text-violet-700 underline underline-offset-2"
+        >
+          <RiExternalLinkLine className="h-3 w-3" />
+          Operator Handbook (PDF)
+        </a>
+      </section>
+
+      <div className={cn(variant === "plain" && "border-t border-border/60 pt-4")}>
+        {acked ? (
+          <p className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-700 dark:text-emerald-400">
+            <RiCheckboxCircleFill className="h-4 w-4" />
+            {needsTick ? "Agreed — thanks. This stays here if you want it again." : "Read — thanks. This stays here if you want it again."}
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {needsTick ? (
+              <label className="flex items-start gap-2.5 text-sm text-foreground cursor-pointer">
+                <Checkbox
+                  checked={agreed}
+                  onCheckedChange={(v) => setAgreed(v === true)}
+                  className="mt-0.5"
+                />
+                <span>{guide.agreeLabel}</span>
+              </label>
+            ) : null}
+            {error ? <p className="text-sm text-rose-600">{error}</p> : null}
+            <Button className="w-full" disabled={!canSubmit} onClick={() => void acknowledge()}>
+              {saving ? (
+                <>
+                  <RiLoader4Line className="mr-2 h-4 w-4 animate-spin" />
+                  Saving…
+                </>
+              ) : (
+                guide.actionLabel
+              )}
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

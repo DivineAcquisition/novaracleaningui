@@ -34,6 +34,7 @@ import { AddressAutocomplete } from "@/components/booking/AddressAutocomplete";
 import { cn } from "@/lib/utils";
 import { PhoneVerificationDialog } from "@/components/cleaner/PhoneVerificationDialog";
 import { SignaturePad } from "@/components/booking/SignaturePad";
+import { AgreementPdfPreview } from "@/components/cleaner/AgreementPdfPreview";
 import { resolveCleanerAuth } from "@/lib/cleaner-auth";
 
 const US_STATES = [
@@ -99,9 +100,6 @@ export default function CleanerOnboarding() {
   const [avatarPreview, setAvatarPreview] = useState<string>("");
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null);
   const [legalName, setLegalName] = useState("");
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [showPreview, setShowPreview] = useState(false);
-  const [loadingPreview, setLoadingPreview] = useState(false);
 
   useEffect(() => {
     checkAuth();
@@ -249,23 +247,6 @@ export default function CleanerOnboarding() {
     const { data } = await supabase.auth.getSession();
     const token = data.session?.access_token;
     return { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) };
-  };
-
-  // Toggle the in-app preview of the contractor agreement PDF.
-  const togglePreview = async () => {
-    if (showPreview) { setShowPreview(false); return; }
-    if (previewUrl) { setShowPreview(true); return; }
-    setLoadingPreview(true);
-    try {
-      const res = await fetch("/api/cleaner/agreement-preview", { headers: await authHeaders() });
-      const d = await res.json();
-      if (res.ok && d.url) { setPreviewUrl(d.url); setShowPreview(true); }
-      else toast.error(d.error || "Could not load the agreement preview.");
-    } catch {
-      toast.error("Could not load the agreement preview.");
-    } finally {
-      setLoadingPreview(false);
-    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -843,18 +824,7 @@ export default function CleanerOnboarding() {
                         Preview the agreement, then sign below. We&apos;ll email you a completed copy.
                       </p>
                     </div>
-                    <Button type="button" variant="outline" size="sm" onClick={togglePreview} disabled={loadingPreview}>
-                      {loadingPreview ? (
-                        <><RiLoader4Line className="w-4 h-4 mr-2 animate-spin" /> Loading…</>
-                      ) : showPreview ? "Hide agreement" : "Preview agreement"}
-                    </Button>
-                    {showPreview && previewUrl && (
-                      <iframe
-                        src={previewUrl}
-                        title="Independent Contractor Agreement"
-                        className="w-full h-80 rounded-lg border bg-white"
-                      />
-                    )}
+                    <AgreementPdfPreview />
                     <div>
                       <Label className="text-xs">Legal name</Label>
                       <Input

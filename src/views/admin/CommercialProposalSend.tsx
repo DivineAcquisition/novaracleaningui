@@ -1,24 +1,18 @@
 "use client";
 
-// ─── Commercial hub → Send Proposal ────────────────────────────────────────
+// ─── Proposals → Send ──────────────────────────────────────────────────────
 //
-// The commercial analogue of Internal Booking. Same shape: numbered sections
-// on the left, a sticky live-quote rail on the right, one Send click that
-// emails a tokenized link.
-//
-// Differences that are the point of this path, not bugs:
-//   • The number comes from a walkthrough (or the rate engine under the
-//     threshold) — there is no "estimate range" to send.
-//   • The link is /proposal/[token], which cannot accept a signature or a
-//     payment identifier. Accept / Request Changes only.
-//   • Every active site on the account goes on the proposal. Omitting one
-//     silently is how a client accepts a schedule that is missing a building.
+// Same motion as Internal Booking: type the details needed to send, or
+// optionally prefill from an existing account. A saved commercial account
+// is not required.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  RiAddLine,
   RiArrowRightLine,
   RiBuilding2Line,
   RiCheckboxCircleLine,
+  RiCloseLine,
   RiFileCopyLine,
   RiFileTextLine,
   RiInformationLine,
@@ -50,17 +44,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { commercialProposalApi } from "@/lib/commercial-proposal-api";
+import { proposalSendRequirements } from "@/lib/commercial-proposal-send";
 import {
   BILLING_METHOD_LABELS,
   BILLING_METHOD_OPTIONS,
   FREQUENCY_OPTIONS,
   INVOICE_CYCLE_LABELS,
   NET_TERMS_LABELS,
-  STAGE_LABELS,
   TERM_OPTIONS,
   commercialTab,
   estimatedMonthlyCents,
@@ -72,24 +65,29 @@ import {
   type BillingMethod,
   type InvoiceCycle,
   type NetTerms,
-  type PipelineStage,
 } from "@/lib/commercial-proposal";
 
-interface Deal {
-  account_id: string;
+const FACILITY_TYPES = [
+  "Office", "Retail", "Medical / Dental", "Restaurant / Food", "Gym / Fitness",
+  "Salon / Spa", "School / Daycare", "Warehouse / Industrial", "Church / Worship",
+  "Other",
+];
+
+interface AccountHit {
+  id: string;
   business_name: string;
   account_type: string;
-  account_status: string;
+  status: string;
   email: string | null;
   contact_name: string | null;
-  active_sites: number;
-  priced_sites: number;
-  excluded_sites: number;
-  proposal_id: string | null;
-  proposal_version: number | null;
-  proposal_status: string | null;
-  total_per_visit_cents: number | null;
-  stage: PipelineStage;
+  phone: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  zip_code: string | null;
+  facility_type: string | null;
+  square_footage: number | null;
+  recurring_frequency: string | null;
 }
 
 interface ReadySite {
@@ -97,16 +95,24 @@ interface ReadySite {
   nickname: string;
   address?: string | null;
   facility_type?: string | null;
-  scope_level?: string | null;
   sqft?: number | null;
-  crew_size?: number | null;
   firm_price_cents?: number | null;
   formula_price_cents?: number | null;
-  price_source?: string | null;
-  ready: boolean;
-  reason?: string | null;
   stage?: string | null;
-  walkthrough_status?: string | null;
+  reason?: string | null;
+}
+
+interface FormSite {
+  key: string;
+  siteId: string;
+  nickname: string;
+  address: string;
+  city: string;
+  state: string;
+  zip: string;
+  facilityType: string;
+  sqft: string;
+  rate: string;
 }
 
 interface SendResult {
@@ -131,6 +137,21 @@ function dollarsToCents(raw: string): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+function emptySite(partial?: Partial<FormSite>): FormSite {
+  return {
+    key: partial?.key || `new-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    siteId: partial?.siteId || "",
+    nickname: partial?.nickname || "",
+    address: partial?.address || "",
+    city: partial?.city || "",
+    state: partial?.state || "",
+    zip: partial?.zip || "",
+    facilityType: partial?.facilityType || "",
+    sqft: partial?.sqft || "",
+    rate: partial?.rate || "",
+  };
+}
+
 export default function CommercialProposalSend({
   initialAccountId = "",
   inProposalsHub = false,
@@ -140,16 +161,23 @@ export default function CommercialProposalSend({
   inProposalsHub?: boolean;
   walkthroughsHref?: string;
 }) {
-  const [deals, setDeals] = useState<Deal[]>([]);
-  const [loadingList, setLoadingList] = useState(true);
+  const [accountMode, setAccountMode] = useState<"new" | "existing">(initialAccountId ? "existing" : "new");
+  const [accountType, setAccountType] = useState<"commercial" | "office">("commercial");
   const [search, setSearch] = useState("");
+  const [hits, setHits] = useState<AccountHit[]>([]);
+  const [searching, setSearching] = useState(false);
   const [accountId, setAccountId] = useState(initialAccountId);
-  const [detail, setDetail] = useState<Record<string, any> | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [liveProposal, setLiveProposal] = useState<{ id: string; status: string; version: number } | null>(null);
 
+  const [businessName, setBusinessName] = useState("");
   const [recipientName, setRecipientName] = useState("");
   const [recipientEmail, setRecipientEmail] = useState("");
   const [recipientPhone, setRecipientPhone] = useState("");
+  const [address, setAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [stateVal, setStateVal] = useState("");
+  const [zipCode, setZipCode] = useState("");
   const [frequency, setFrequency] = useState("weekly");
   const [customFrequency, setCustomFrequency] = useState("");
   const [term, setTerm] = useState<"month_to_month" | "annual">("month_to_month");
@@ -157,134 +185,145 @@ export default function CommercialProposalSend({
   const [invoiceCycle, setInvoiceCycle] = useState<InvoiceCycle>("monthly");
   const [netTerms, setNetTerms] = useState<NetTerms>("net_15");
   const [coverNote, setCoverNote] = useState("");
-  const [sitePrices, setSitePrices] = useState<Record<string, string>>({});
-  const [priceTouched, setPriceTouched] = useState<Record<string, boolean>>({});
+  const [sites, setSites] = useState<FormSite[]>([emptySite()]);
 
   const [busy, setBusy] = useState<"send" | "draft" | null>(null);
   const [result, setResult] = useState<SendResult | null>(null);
 
-  const loadDeals = useCallback(async () => {
-    setLoadingList(true);
+  const loadAccounts = useCallback(async (q: string) => {
+    setSearching(true);
     try {
-      const out = await commercialProposalApi("GET", undefined, "?view=pipeline");
-      setDeals((out.deals || []) as Deal[]);
+      const qs = q.trim() ? `?view=accounts&q=${encodeURIComponent(q.trim())}` : "?view=accounts";
+      const out = await commercialProposalApi("GET", undefined, qs);
+      setHits((out.accounts || []) as AccountHit[]);
     } catch (err) {
       toast.error((err as Error).message);
+      setHits([]);
     } finally {
-      setLoadingList(false);
+      setSearching(false);
     }
   }, []);
 
   useEffect(() => {
-    void loadDeals();
-  }, [loadDeals]);
+    if (accountMode !== "existing") return;
+    const t = setTimeout(() => { void loadAccounts(search); }, 250);
+    return () => clearTimeout(t);
+  }, [accountMode, search, loadAccounts]);
+
+  const applyAccount = (a: AccountHit) => {
+    setAccountId(a.id);
+    setBusinessName(a.business_name || "");
+    setRecipientName(a.contact_name || "");
+    setRecipientEmail(a.email || "");
+    setRecipientPhone(a.phone || "");
+    setAddress(a.address || "");
+    setCity(a.city || "");
+    setStateVal(a.state || "");
+    setZipCode(a.zip_code || "");
+    if (a.account_type === "office" || a.account_type === "commercial") {
+      setAccountType(a.account_type);
+    }
+    if (a.recurring_frequency) {
+      const known = FREQUENCY_OPTIONS.some((o) => o.id === a.recurring_frequency);
+      setFrequency(known ? a.recurring_frequency : "custom");
+      if (!known) setCustomFrequency(a.recurring_frequency);
+    }
+  };
 
   const loadAccount = useCallback(async (id: string) => {
-    if (!id) {
-      setDetail(null);
-      return;
-    }
+    if (!id) return;
     setLoadingDetail(true);
     try {
       const out = await commercialProposalApi("GET", undefined, `?accountId=${id}`);
-      setDetail(out);
+      const account = out.account as AccountHit | undefined;
+      if (account) {
+        applyAccount({ ...account, id });
+      }
       const prefill = out.walkthroughSource?.prefill || proposalPrefillFromWalkthrough({
         account: out.account,
         request: out.walkthroughSource?.request,
       });
-      setRecipientName(prefill.name);
-      setRecipientEmail(prefill.email);
-      setRecipientPhone(prefill.phone);
+      if (prefill.name) setRecipientName(prefill.name);
+      if (prefill.email) setRecipientEmail(prefill.email);
+      if (prefill.phone) setRecipientPhone(prefill.phone);
       const freq = String(prefill.frequency || "weekly");
       const known = FREQUENCY_OPTIONS.some((o) => o.id === freq);
       setFrequency(known ? freq : "custom");
       if (!known) setCustomFrequency(freq);
-      const prices: Record<string, string> = {};
-      for (const site of (out.readiness?.sites || []) as ReadySite[]) {
-        if (String(site.stage || "") === "excluded") continue;
-        const cents = siteRateCentsFromWalkthrough(site);
-        if (cents) prices[site.site_id] = centsToDollars(cents);
+
+      const readySites = ((out.readiness?.sites || []) as ReadySite[]).filter((s) => String(s.stage || "") !== "excluded");
+      if (readySites.length) {
+        setSites(readySites.map((s) => emptySite({
+          key: s.site_id,
+          siteId: s.site_id,
+          nickname: s.nickname || "",
+          address: s.address || "",
+          facilityType: s.facility_type ? titleCase(String(s.facility_type)) : "",
+          sqft: s.sqft ? String(s.sqft) : "",
+          rate: centsToDollars(siteRateCentsFromWalkthrough(s)),
+        })));
       }
-      setSitePrices(prices);
-      setPriceTouched({});
+      const live = (out.proposals || []).find((p: { status: string }) => ["draft", "sent"].includes(p.status));
+      setLiveProposal(live ? { id: live.id, status: live.status, version: live.version } : null);
     } catch (err) {
       toast.error((err as Error).message);
-      setDetail(null);
     } finally {
       setLoadingDetail(false);
     }
   }, []);
 
   useEffect(() => {
-    if (initialAccountId) setAccountId(initialAccountId);
+    if (initialAccountId) {
+      setAccountMode("existing");
+      setAccountId(initialAccountId);
+    }
   }, [initialAccountId]);
 
   useEffect(() => {
     if (accountId) void loadAccount(accountId);
   }, [accountId, loadAccount]);
 
-  const deal = useMemo(() => deals.find((d) => d.account_id === accountId) || null, [deals, accountId]);
-  const filteredDeals = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return deals
-      .filter((d) => d.account_status !== "offboarded")
-      .filter((d) => !q || `${d.business_name} ${d.email || ""} ${d.contact_name || ""}`.toLowerCase().includes(q))
-      .sort((a, b) => {
-        const rank = (s: PipelineStage) =>
-          s === "firm_price_ready" || s === "changes_requested" || s === "proposal_expired" ? 0 : 1;
-        return rank(a.stage) - rank(b.stage) || a.business_name.localeCompare(b.business_name);
-      });
-  }, [deals, search]);
-
-  const sites = (detail?.readiness?.sites || []) as ReadySite[];
-  const excludedSites = sites.filter((s) => String(s.stage || "") === "excluded");
-  const proposalSites = sites.filter((s) => String(s.stage || "") !== "excluded");
   const resolvedFrequency = frequency === "custom" ? customFrequency.trim() : frequency;
-
-  const pricedSites = proposalSites.map((s) => ({
+  const pricedSites = sites.map((s) => ({
     ...s,
-    per_visit_price_cents:
-      dollarsToCents(sitePrices[s.site_id] || "")
-      || siteRateCentsFromWalkthrough(s)
-      || 0,
+    per_visit_price_cents: dollarsToCents(s.rate) || 0,
     frequency: resolvedFrequency,
   }));
   const perVisit = totalPerVisitCents(pricedSites);
   const monthly = estimatedMonthlyCents(pricedSites, resolvedFrequency);
-  const liveProposal = (detail?.proposals || []).find((p: { status: string }) =>
-    ["draft", "sent"].includes(p.status),
+
+  const requirements = useMemo(
+    () => proposalSendRequirements({
+      businessName,
+      recipientName,
+      recipientEmail,
+      frequency: resolvedFrequency,
+      sites: sites.map((s) => ({
+        nickname: s.nickname || s.address || "Site",
+        rateCents: dollarsToCents(s.rate),
+      })),
+    }),
+    [businessName, recipientName, recipientEmail, resolvedFrequency, sites],
   );
-
-  const requirements = useMemo(() => {
-    const out: string[] = [];
-    if (!accountId) out.push("Pick the account this proposal is for");
-    if (!recipientName.trim()) out.push("Decision-maker's name (from the walkthrough, or type it)");
-    if (!recipientEmail.trim() || !recipientEmail.includes("@")) {
-      out.push("Decision-maker's email (from the walkthrough, or type it)");
-    }
-    if (!resolvedFrequency) out.push("Service frequency");
-    if (accountId && proposalSites.length === 0) {
-      out.push("At least one site that is not excluded");
-    }
-    for (const s of proposalSites) {
-      if (!dollarsToCents(sitePrices[s.site_id] || "") && !siteRateCentsFromWalkthrough(s)) {
-        out.push(`${s.nickname} still needs a per-visit rate — walkthrough did not set one`);
-      }
-    }
-    return out;
-  }, [accountId, recipientName, recipientEmail, resolvedFrequency, proposalSites, sitePrices]);
-
   const canSubmit = requirements.length === 0;
 
   const submit = async (send: boolean) => {
-    if (!canSubmit && send) return;
-    if (!accountId) return;
+    if (send && !canSubmit) return;
     setBusy(send ? "send" : "draft");
     try {
+      const first = sites[0];
       const out = await commercialProposalApi("POST", {
         action: "create_draft",
         send,
-        accountId,
+        accountId: accountId || undefined,
+        accountType,
+        businessName: businessName.trim(),
+        address: address.trim() || first?.address.trim() || undefined,
+        city: city.trim() || first?.city.trim() || undefined,
+        state: stateVal.trim() || first?.state.trim() || undefined,
+        zip: zipCode.trim() || first?.zip.trim() || undefined,
+        facilityType: first?.facilityType || undefined,
+        sqft: first?.sqft ? Number(first.sqft) : undefined,
         supersedesId: liveProposal?.id,
         recipientName: recipientName.trim(),
         recipientEmail: recipientEmail.trim(),
@@ -295,9 +334,16 @@ export default function CommercialProposalSend({
         invoiceCycle,
         netTerms,
         coverNote: coverNote.trim() || undefined,
-        siteOverrides: pricedSites.map((s) => ({
-          siteId: s.site_id,
-          perVisitPriceCents: s.per_visit_price_cents,
+        sites: sites.map((s) => ({
+          siteId: s.siteId || undefined,
+          nickname: s.nickname.trim() || s.address.trim() || "Site",
+          address: s.address.trim() || address.trim() || undefined,
+          city: s.city.trim() || city.trim() || undefined,
+          state: s.state.trim() || stateVal.trim() || undefined,
+          zip: s.zip.trim() || zipCode.trim() || undefined,
+          facilityType: s.facilityType || undefined,
+          sqft: s.sqft ? Number(s.sqft) : undefined,
+          perVisitPriceCents: dollarsToCents(s.rate),
           frequency: resolvedFrequency,
         })),
       });
@@ -320,8 +366,7 @@ export default function CommercialProposalSend({
         }
       } else {
         toast.success(`Draft v${out.version} saved.`);
-        await loadAccount(accountId);
-        await loadDeals();
+        if (out.accountId) setAccountId(String(out.accountId));
       }
     } catch (err) {
       toast.error((err as Error).message);
@@ -332,11 +377,17 @@ export default function CommercialProposalSend({
 
   const reset = () => {
     setResult(null);
+    setAccountMode("new");
     setAccountId("");
-    setDetail(null);
+    setLiveProposal(null);
+    setBusinessName("");
     setRecipientName("");
     setRecipientEmail("");
     setRecipientPhone("");
+    setAddress("");
+    setCity("");
+    setStateVal("");
+    setZipCode("");
     setFrequency("weekly");
     setCustomFrequency("");
     setTerm("month_to_month");
@@ -344,9 +395,7 @@ export default function CommercialProposalSend({
     setInvoiceCycle("monthly");
     setNetTerms("net_15");
     setCoverNote("");
-    setSitePrices({});
-    setPriceTouched({});
-    void loadDeals();
+    setSites([emptySite()]);
   };
 
   if (result) {
@@ -362,7 +411,7 @@ export default function CommercialProposalSend({
               Proposal v{result.version} sent
             </Badge>
             <CardTitle className="font-jakarta text-2xl mt-3 text-slate-900 tracking-tight">
-              {deal?.business_name || detail?.account?.business_name || "Proposal"} pending review
+              {businessName || "Proposal"} pending review
             </CardTitle>
             <CardDescription className="mt-1">
               {result.emailed
@@ -375,7 +424,7 @@ export default function CommercialProposalSend({
               <SummaryRow label="To" value={`${recipientName} · ${recipientEmail}`} />
               <SummaryRow label="Frequency" value={titleCase(resolvedFrequency)} />
               <SummaryRow label="Billing" value={BILLING_METHOD_LABELS[billingMethod]} />
-              <SummaryRow label="Sites" value={String(pricedSites.length)} />
+              <SummaryRow label="Sites" value={String(sites.length)} />
               <div className="flex items-center justify-between text-sm pt-1">
                 <span className="text-slate-500">Per visit</span>
                 <span className="font-semibold text-slate-900 tabular-nums">{money(result.totalPerVisitCents)}</span>
@@ -445,10 +494,8 @@ export default function CommercialProposalSend({
           Send a commercial proposal
         </h2>
         <p className="text-sm text-slate-500 mt-1 max-w-2xl">
-          Same motion as Internal Booking: pick the account, confirm rates from the walkthrough
-          (or type them), set terms, send a tokenized link. No client portal login is required
-          to send. The client can accept or request changes — nothing to sign and no payment
-          details on that page.
+          Same motion as Internal Booking: type the business, site, rate, and recipient — then send.
+          An existing account is optional prefill. No client portal login is required.
         </p>
       </header>
 
@@ -456,280 +503,337 @@ export default function CommercialProposalSend({
         <div className="xl:col-span-8 space-y-5">
           <FormSection
             number={1}
-            title="Account"
-            description="Who is this proposal for? Rates pull from the walkthrough; you can type any field the visit did not fill."
+            title="Who this is for"
+            description="A saved account is optional. Type the details, or pull them from an existing commercial record."
             icon={<RiSearchLine className="w-4 h-4" />}
           >
-            <div className="relative">
-              <RiSearchLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <Input
-                placeholder="Search business, contact, or email…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9 bg-slate-50 border-slate-200 focus-visible:bg-white"
-              />
+            <div className="flex gap-1 text-xs">
+              <button
+                type="button"
+                onClick={() => { setAccountMode("new"); setAccountId(""); setLiveProposal(null); }}
+                className={cn("px-2.5 py-1 rounded-md", accountMode === "new" ? "bg-violet-600 text-white" : "bg-slate-100 text-slate-600")}
+              >
+                New
+              </button>
+              <button
+                type="button"
+                onClick={() => setAccountMode("existing")}
+                className={cn("px-2.5 py-1 rounded-md", accountMode === "existing" ? "bg-violet-600 text-white" : "bg-slate-100 text-slate-600")}
+              >
+                Existing
+              </button>
             </div>
-            <div className="rounded-lg border border-slate-200 divide-y divide-slate-100 max-h-72 overflow-y-auto">
-              {loadingList && <Skeleton className="h-10 w-full m-2" />}
-              {!loadingList && filteredDeals.length === 0 && (
-                <p className="text-xs text-slate-500 p-3">No matching accounts.</p>
-              )}
-              {filteredDeals.map((d) => {
-                const selected = accountId === d.account_id;
-                const ready = d.stage === "firm_price_ready" || d.stage === "changes_requested" || d.stage === "proposal_expired";
-                return (
-                  <button
-                    key={d.account_id}
-                    type="button"
-                    onClick={() => {
-                      setAccountId(d.account_id);
-                      setRecipientName(d.contact_name || "");
-                      setRecipientEmail(d.email || "");
-                    }}
-                    className={cn(
-                      "w-full text-left p-3 hover:bg-slate-50 flex items-center justify-between gap-3 transition-colors",
-                      selected && "bg-violet-50/60",
-                    )}
-                  >
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-slate-900 truncate">{d.business_name}</p>
-                      <p className="text-xs text-slate-500 truncate">
-                        {d.contact_name || "No contact"} · {d.email || "no email"}
-                        {d.priced_sites != null ? ` · ${d.priced_sites}/${Math.max(0, d.active_sites - d.excluded_sites)} sites priced` : ""}
-                      </p>
-                    </div>
-                    <Badge
+
+            <div className="grid grid-cols-2 gap-2">
+              {(["commercial", "office"] as const).map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setAccountType(id)}
+                  className={cn(
+                    "text-left rounded-xl border-2 bg-white p-3 transition-all",
+                    accountType === id ? "border-violet-500 shadow-sm" : "border-slate-200 hover:border-violet-300",
+                  )}
+                >
+                  <p className="text-sm font-semibold text-slate-900">{id === "office" ? "Office" : "Commercial"}</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    {id === "office" ? "Corporate and coworking" : "Retail, medical, gym, warehouse…"}
+                  </p>
+                </button>
+              ))}
+            </div>
+
+            {accountMode === "existing" && (
+              <div className="space-y-2">
+                <div className="relative">
+                  <RiSearchLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input
+                    placeholder="Search business, contact, or email…"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="pl-9 bg-slate-50 border-slate-200 focus-visible:bg-white"
+                  />
+                </div>
+                <div className="rounded-lg border border-slate-200 divide-y divide-slate-100 max-h-56 overflow-y-auto">
+                  {searching && <p className="text-xs text-slate-500 p-3">Searching…</p>}
+                  {!searching && hits.length === 0 && (
+                    <p className="text-xs text-slate-500 p-3">No matching accounts. Switch to New and type the details.</p>
+                  )}
+                  {hits.map((a) => (
+                    <button
+                      key={a.id}
+                      type="button"
+                      onClick={() => applyAccount(a)}
                       className={cn(
-                        "shrink-0 border-0 text-[10px]",
-                        ready ? "bg-sky-100 text-sky-700" : "bg-slate-100 text-slate-600",
+                        "w-full text-left p-3 hover:bg-slate-50 transition-colors",
+                        accountId === a.id && "bg-violet-50/60",
                       )}
                     >
-                      {STAGE_LABELS[d.stage]}
-                    </Badge>
-                  </button>
-                );
-              })}
+                      <p className="text-sm font-medium text-slate-900 truncate">{a.business_name}</p>
+                      <p className="text-xs text-slate-500 truncate">
+                        {a.contact_name || "No contact"} · {a.email || "no email"}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="grid sm:grid-cols-2 gap-4">
+              <Field label="Business name" required>
+                <Input value={businessName} onChange={(e) => setBusinessName(e.target.value)} placeholder="Acme Dental Group" />
+              </Field>
+              <Field label="Primary contact" required>
+                <Input value={recipientName} onChange={(e) => setRecipientName(e.target.value)} placeholder="Jordan Lee" />
+              </Field>
+              <Field label="Email" required>
+                <Input type="email" value={recipientEmail} onChange={(e) => setRecipientEmail(e.target.value)} placeholder="jordan@company.com" />
+              </Field>
+              <Field label="Phone">
+                <Input type="tel" value={recipientPhone} onChange={(e) => setRecipientPhone(e.target.value)} placeholder="+1 301-555-0199" />
+              </Field>
+            </div>
+            <Field label="Headquarters / billing address">
+              <Input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="123 Commerce Blvd, Suite 200" />
+            </Field>
+            <div className="grid sm:grid-cols-3 gap-4">
+              <Field label="City"><Input value={city} onChange={(e) => setCity(e.target.value)} /></Field>
+              <Field label="State"><Input value={stateVal} onChange={(e) => setStateVal(e.target.value.toUpperCase())} maxLength={2} placeholder="MD" /></Field>
+              <Field label="ZIP"><Input value={zipCode} onChange={(e) => setZipCode(e.target.value)} maxLength={10} placeholder="21044" /></Field>
             </div>
           </FormSection>
 
-          {accountId && (
-            <>
-              <FormSection
-                number={2}
-                title="Sites & rates"
-                description="Every active site goes on the proposal. The walkthrough fills the rate when it has one; type a number to send without waiting on a firm-price step."
-                icon={<RiBuilding2Line className="w-4 h-4" />}
-              >
-                {loadingDetail ? (
-                  <Skeleton className="h-24 w-full" />
-                ) : (
-                  <div className="space-y-3">
-                    {excludedSites.length > 0 && (
-                      <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-900">
-                        <p className="font-semibold mb-1">Excluded — not on this proposal</p>
-                        <ul className="space-y-1">
-                          {excludedSites.map((s) => (
-                            <li key={s.site_id}>
-                              {s.nickname} — {s.reason || "outside what we service"}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
+          <FormSection
+            number={2}
+            title="Sites & rates"
+            description="Type each location and the per-visit rate. Walkthrough numbers fill in when an existing account has them."
+            icon={<RiBuilding2Line className="w-4 h-4" />}
+          >
+            {loadingDetail && <p className="text-xs text-slate-500">Loading saved sites…</p>}
+            {sites.some((s) => !dollarsToCents(s.rate)) && walkthroughsHref && (
+              <p className="text-[11px] text-slate-500">
+                Need a firm walkthrough price?{" "}
+                <a href={walkthroughsHref} className="font-semibold underline">Open firm price</a>.
+              </p>
+            )}
+            <div className="space-y-3">
+              {sites.map((site, idx) => (
+                <div key={site.key} className="rounded-xl border border-slate-200 p-3 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      Location {idx + 1}
+                    </p>
+                    {sites.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => setSites((prev) => prev.filter((s) => s.key !== site.key))}
+                        className="text-slate-400 hover:text-rose-600"
+                        aria-label="Remove site"
+                      >
+                        <RiCloseLine className="w-4 h-4" />
+                      </button>
                     )}
-                    {proposalSites.length === 0 && excludedSites.length === 0 && (
-                      <p className="text-xs text-slate-500">This account has no active sites.</p>
-                    )}
-                    {proposalSites.some((s) => !siteRateCentsFromWalkthrough(s)) && (
-                      <p className="text-[11px] text-slate-500">
-                        A site has no walkthrough rate yet — type one, or{" "}
-                        <a
-                          href={walkthroughsHref || commercialTab("walkthroughs")}
-                          className="font-semibold underline"
-                        >
-                          open walkthroughs
-                        </a>
-                        .
-                      </p>
-                    )}
-                    {proposalSites.map((s) => {
-                      const fromWalkthrough = Boolean(siteRateCentsFromWalkthrough(s));
-                      return (
-                        <div key={s.site_id} className="rounded-xl border border-slate-200 p-3 grid sm:grid-cols-12 gap-3 items-end">
-                          <div className="sm:col-span-7 min-w-0">
-                            <p className="text-sm font-semibold text-slate-900 truncate">{s.nickname}</p>
-                            <p className="text-[11px] text-slate-500 truncate">
-                              {[
-                                s.address,
-                                s.facility_type && titleCase(String(s.facility_type)),
-                                s.sqft && `${Number(s.sqft).toLocaleString()} sq ft`,
-                                fromWalkthrough ? "walkthrough" : (s.reason || "type a rate"),
-                              ]
-                                .filter(Boolean)
-                                .join(" · ")}
-                            </p>
-                          </div>
-                          <div className="sm:col-span-5">
-                            <Field label="Per-visit rate" required>
-                              <div className="relative">
-                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">$</span>
-                                <Input
-                                  inputMode="decimal"
-                                  value={sitePrices[s.site_id] || ""}
-                                  onChange={(e) => {
-                                    setSitePrices((prev) => ({ ...prev, [s.site_id]: e.target.value }));
-                                    setPriceTouched((prev) => ({ ...prev, [s.site_id]: true }));
-                                  }}
-                                  placeholder={fromWalkthrough ? undefined : "Type the rate"}
-                                  className="pl-7 tabular-nums"
-                                />
-                              </div>
-                            </Field>
-                            {priceTouched[s.site_id] && (
-                              <p className="text-[10px] text-violet-700 mt-1">
-                                {fromWalkthrough
-                                  ? "Override — the walkthrough number stays on the account."
-                                  : "Admin rate — no firm walkthrough price on file."}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
                   </div>
-                )}
-              </FormSection>
-
-              <FormSection
-                number={3}
-                title="Terms"
-                description="Cadence, term, and how they will be billed after they sign. The proposal itself never collects a card."
-                icon={<RiFileTextLine className="w-4 h-4" />}
-              >
-                <p className="text-xs font-semibold text-slate-700">Frequency</p>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {FREQUENCY_OPTIONS.map((opt) => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => setFrequency(opt.id)}
-                      className={cn(
-                        "text-left rounded-xl border-2 bg-white p-3 transition-all",
-                        frequency === opt.id ? "border-violet-500 shadow-sm" : "border-slate-200 hover:border-violet-300",
-                      )}
-                    >
-                      <p className="text-sm font-semibold text-slate-900">{opt.label}</p>
-                      <p className="text-[11px] text-slate-500 mt-0.5">{opt.sub}</p>
-                    </button>
-                  ))}
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <Field label="Nickname">
+                      <Input
+                        value={site.nickname}
+                        onChange={(e) => setSites((prev) => prev.map((s) => s.key === site.key ? { ...s, nickname: e.target.value } : s))}
+                        placeholder="Main office"
+                      />
+                    </Field>
+                    <Field label="Facility type">
+                      <Select
+                        value={site.facilityType}
+                        onValueChange={(v) => setSites((prev) => prev.map((s) => s.key === site.key ? { ...s, facilityType: v } : s))}
+                      >
+                        <SelectTrigger><SelectValue placeholder="Select…" /></SelectTrigger>
+                        <SelectContent>{FACILITY_TYPES.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </Field>
+                  </div>
+                  <Field label="Site address">
+                    <Input
+                      value={site.address}
+                      onChange={(e) => setSites((prev) => prev.map((s) => s.key === site.key ? { ...s, address: e.target.value } : s))}
+                      placeholder={address || "456 Industrial Way"}
+                    />
+                  </Field>
+                  <div className="grid sm:grid-cols-4 gap-3">
+                    <Field label="City">
+                      <Input
+                        value={site.city}
+                        onChange={(e) => setSites((prev) => prev.map((s) => s.key === site.key ? { ...s, city: e.target.value } : s))}
+                      />
+                    </Field>
+                    <Field label="State">
+                      <Input
+                        value={site.state}
+                        onChange={(e) => setSites((prev) => prev.map((s) => s.key === site.key ? { ...s, state: e.target.value.toUpperCase() } : s))}
+                        maxLength={2}
+                      />
+                    </Field>
+                    <Field label="ZIP">
+                      <Input
+                        value={site.zip}
+                        onChange={(e) => setSites((prev) => prev.map((s) => s.key === site.key ? { ...s, zip: e.target.value } : s))}
+                      />
+                    </Field>
+                    <Field label="Sq ft">
+                      <Input
+                        inputMode="numeric"
+                        value={site.sqft}
+                        onChange={(e) => setSites((prev) => prev.map((s) => s.key === site.key ? { ...s, sqft: e.target.value } : s))}
+                      />
+                    </Field>
+                  </div>
+                  <Field label="Per-visit rate" required>
+                    <div className="relative max-w-xs">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">$</span>
+                      <Input
+                        inputMode="decimal"
+                        value={site.rate}
+                        onChange={(e) => setSites((prev) => prev.map((s) => s.key === site.key ? { ...s, rate: e.target.value } : s))}
+                        placeholder="450.00"
+                        className="pl-7 tabular-nums"
+                      />
+                    </div>
+                  </Field>
                 </div>
+              ))}
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setSites((prev) => [...prev, emptySite({
+                address,
+                city,
+                state: stateVal,
+                zip: zipCode,
+              })])}
+            >
+              <RiAddLine className="w-4 h-4 mr-1.5" />
+              Add another location
+            </Button>
+          </FormSection>
+
+          <FormSection
+            number={3}
+            title="Terms"
+            description="Cadence, term, and how they will be billed after they sign. The proposal itself never collects a card."
+            icon={<RiFileTextLine className="w-4 h-4" />}
+          >
+            <p className="text-xs font-semibold text-slate-700">Frequency</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {FREQUENCY_OPTIONS.map((opt) => (
                 <button
+                  key={opt.id}
                   type="button"
-                  onClick={() => setFrequency("custom")}
+                  onClick={() => setFrequency(opt.id)}
                   className={cn(
-                    "text-left rounded-xl border-2 bg-white p-3 transition-all w-full",
-                    frequency === "custom" ? "border-violet-500 shadow-sm" : "border-slate-200 hover:border-violet-300",
+                    "text-left rounded-xl border-2 bg-white p-3 transition-all",
+                    frequency === opt.id ? "border-violet-500 shadow-sm" : "border-slate-200 hover:border-violet-300",
                   )}
                 >
-                  <p className="text-sm font-semibold text-slate-900">Custom cadence</p>
-                  <p className="text-[11px] text-slate-500 mt-0.5">e.g. weekdays, every other Tuesday</p>
+                  <p className="text-sm font-semibold text-slate-900">{opt.label}</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">{opt.sub}</p>
                 </button>
-                {frequency === "custom" && (
-                  <Input
-                    value={customFrequency}
-                    onChange={(e) => setCustomFrequency(e.target.value)}
-                    placeholder="Describe the cadence…"
-                  />
-                )}
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setFrequency("custom")}
+              className={cn(
+                "text-left rounded-xl border-2 bg-white p-3 transition-all w-full",
+                frequency === "custom" ? "border-violet-500 shadow-sm" : "border-slate-200 hover:border-violet-300",
+              )}
+            >
+              <p className="text-sm font-semibold text-slate-900">Custom cadence</p>
+              <p className="text-[11px] text-slate-500 mt-0.5">e.g. weekdays, every other Tuesday</p>
+            </button>
+            {frequency === "custom" && (
+              <Input
+                value={customFrequency}
+                onChange={(e) => setCustomFrequency(e.target.value)}
+                placeholder="Describe the cadence…"
+              />
+            )}
 
-                <p className="text-xs font-semibold text-slate-700 pt-2">Term</p>
-                <div className="grid sm:grid-cols-2 gap-2">
-                  {TERM_OPTIONS.map((opt) => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => setTerm(opt.id)}
-                      className={cn(
-                        "text-left rounded-xl border-2 bg-white p-3 transition-all",
-                        term === opt.id ? "border-violet-500 shadow-sm" : "border-slate-200 hover:border-violet-300",
-                      )}
-                    >
-                      <p className="text-sm font-semibold text-slate-900">{opt.label}</p>
-                      <p className="text-[11px] text-slate-500 mt-0.5">{opt.sub}</p>
-                    </button>
-                  ))}
-                </div>
+            <p className="text-xs font-semibold text-slate-700 pt-2">Term</p>
+            <div className="grid sm:grid-cols-2 gap-2">
+              {TERM_OPTIONS.map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setTerm(opt.id)}
+                  className={cn(
+                    "text-left rounded-xl border-2 bg-white p-3 transition-all",
+                    term === opt.id ? "border-violet-500 shadow-sm" : "border-slate-200 hover:border-violet-300",
+                  )}
+                >
+                  <p className="text-sm font-semibold text-slate-900">{opt.label}</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">{opt.sub}</p>
+                </button>
+              ))}
+            </div>
 
-                <p className="text-xs font-semibold text-slate-700 pt-2">Billing after they sign</p>
-                <div className="grid sm:grid-cols-2 gap-2">
-                  {BILLING_METHOD_OPTIONS.map((opt) => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => setBillingMethod(opt.id)}
-                      className={cn(
-                        "text-left rounded-xl border-2 bg-white p-3 transition-all",
-                        billingMethod === opt.id ? "border-violet-500 shadow-sm" : "border-slate-200 hover:border-violet-300",
-                      )}
-                    >
-                      <p className="text-sm font-semibold text-slate-900">{opt.label}</p>
-                      <p className="text-[11px] text-slate-500 mt-0.5">{opt.sub}</p>
-                    </button>
-                  ))}
-                </div>
-                {billingMethod === "invoiced" && (
-                  <div className="grid sm:grid-cols-2 gap-3">
-                    <Field label="Invoice cycle">
-                      <Select value={invoiceCycle} onValueChange={(v) => setInvoiceCycle(v as InvoiceCycle)}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {(Object.keys(INVOICE_CYCLE_LABELS) as InvoiceCycle[]).map((k) => (
-                            <SelectItem key={k} value={k}>{INVOICE_CYCLE_LABELS[k]}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </Field>
-                    <Field label="Payment terms">
-                      <Select value={netTerms} onValueChange={(v) => setNetTerms(v as NetTerms)}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {(Object.keys(NET_TERMS_LABELS) as NetTerms[]).map((k) => (
-                            <SelectItem key={k} value={k}>{NET_TERMS_LABELS[k]}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </Field>
-                  </div>
-                )}
-              </FormSection>
-
-              <FormSection
-                number={4}
-                title="Recipient"
-                description="Pulled from the walkthrough request when the account contact is empty. Type over any field."
-                icon={<RiUserLine className="w-4 h-4" />}
-              >
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <Field label="Name" required>
-                    <Input value={recipientName} onChange={(e) => setRecipientName(e.target.value)} placeholder="Jordan Lee" />
-                  </Field>
-                  <Field label="Email" required>
-                    <Input type="email" value={recipientEmail} onChange={(e) => setRecipientEmail(e.target.value)} placeholder="jordan@company.com" />
-                  </Field>
-                </div>
-                <Field label="Phone" hint="Optional — used if we need to follow up off-email.">
-                  <Input type="tel" value={recipientPhone} onChange={(e) => setRecipientPhone(e.target.value)} placeholder="+1 301-555-0199" />
+            <p className="text-xs font-semibold text-slate-700 pt-2">Billing after they sign</p>
+            <div className="grid sm:grid-cols-2 gap-2">
+              {BILLING_METHOD_OPTIONS.map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setBillingMethod(opt.id)}
+                  className={cn(
+                    "text-left rounded-xl border-2 bg-white p-3 transition-all",
+                    billingMethod === opt.id ? "border-violet-500 shadow-sm" : "border-slate-200 hover:border-violet-300",
+                  )}
+                >
+                  <p className="text-sm font-semibold text-slate-900">{opt.label}</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">{opt.sub}</p>
+                </button>
+              ))}
+            </div>
+            {billingMethod === "invoiced" && (
+              <div className="grid sm:grid-cols-2 gap-3">
+                <Field label="Invoice cycle">
+                  <Select value={invoiceCycle} onValueChange={(v) => setInvoiceCycle(v as InvoiceCycle)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {(Object.keys(INVOICE_CYCLE_LABELS) as InvoiceCycle[]).map((k) => (
+                        <SelectItem key={k} value={k}>{INVOICE_CYCLE_LABELS[k]}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </Field>
-                <Field label="Cover note" hint="Shown at the top of the proposal. Use it for what changed, or what they asked for.">
-                  <Textarea
-                    rows={4}
-                    value={coverNote}
-                    onChange={(e) => setCoverNote(e.target.value)}
-                    placeholder="A line or two on the walkthrough, the cadence, or what moved since the last version."
-                  />
+                <Field label="Payment terms">
+                  <Select value={netTerms} onValueChange={(v) => setNetTerms(v as NetTerms)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {(Object.keys(NET_TERMS_LABELS) as NetTerms[]).map((k) => (
+                        <SelectItem key={k} value={k}>{NET_TERMS_LABELS[k]}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </Field>
-              </FormSection>
-            </>
-          )}
+              </div>
+            )}
+          </FormSection>
+
+          <FormSection
+            number={4}
+            title="Cover note"
+            description="Shown at the top of the proposal. Use it for what changed, or what they asked for."
+            icon={<RiUserLine className="w-4 h-4" />}
+          >
+            <Textarea
+              rows={4}
+              value={coverNote}
+              onChange={(e) => setCoverNote(e.target.value)}
+              placeholder="A line or two on the walkthrough, the cadence, or what moved since the last version."
+            />
+          </FormSection>
         </div>
 
         <aside className="xl:col-span-4">
@@ -746,12 +850,10 @@ export default function CommercialProposalSend({
                 </p>
               </div>
               <CardContent className="space-y-2.5 pt-5 pb-5">
-                {deal ? (
-                  <p className="text-sm font-semibold text-slate-900 truncate">{deal.business_name}</p>
-                ) : (
-                  <p className="text-sm text-slate-400">No account selected</p>
-                )}
-                <SummaryRow label="Sites on this proposal" value={String(proposalSites.length)} />
+                <p className={cn("text-sm truncate", businessName ? "font-semibold text-slate-900" : "text-slate-400")}>
+                  {businessName || "No business name yet"}
+                </p>
+                <SummaryRow label="Sites on this proposal" value={String(sites.length)} />
                 <SummaryRow label="Frequency" value={resolvedFrequency || "—"} />
                 <SummaryRow label="Billing" value={BILLING_METHOD_LABELS[billingMethod]} />
                 <div className="h-px bg-slate-100 my-1.5" />
@@ -804,7 +906,7 @@ export default function CommercialProposalSend({
                 </Button>
                 <Button
                   onClick={() => void submit(false)}
-                  disabled={!accountId || proposalSites.length === 0 || busy !== null}
+                  disabled={!canSubmit || busy !== null}
                   variant="outline"
                   size="sm"
                   className="w-full mt-2 text-slate-600"

@@ -20,6 +20,7 @@ import { runJobDispatchBackfill } from "../_shared/dispatch-backfill.ts";
 import { checklistUrlForToken, ensureJobChecklist } from "../_shared/job-checklist.ts";
 import { checkScheduleBuffer } from "../_shared/schedule-buffer.ts";
 import { accountCompliance, logComplianceBlock } from "../_shared/commercial-config.ts";
+import { isCleanerReadyForFirstJob } from "../_shared/first-job-ready.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -126,6 +127,25 @@ serve(async (req) => {
     }
 
     // ─── ACCEPT ────────────────────────────────────────────────────────
+    const { data: offerCleaner } = await supabase
+      .from("cleaners")
+      .select(
+        "completed_bookings, ob_agreement_signed, phone_verified, supply_checklist_submitted_at, ob_supplies_checklist_viewed, ob_dress_code_ack, ob_job_day_guides_ack, ob_training_complete",
+      )
+      .eq("id", assignment.cleaner_id)
+      .maybeSingle();
+    if (!isCleanerReadyForFirstJob(offerCleaner || {})) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          reason: "onboarding_incomplete",
+          message:
+            "Finish onboarding and the training videos before you can take a job.",
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 403 },
+      );
+    }
+
     const { data: job } = await supabase
       .from("jobs")
       .select("id, customer_id, start_datetime, duration_est_hours, status")

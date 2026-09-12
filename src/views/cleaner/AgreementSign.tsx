@@ -22,6 +22,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 
 import { SignaturePad } from "@/components/booking/SignaturePad";
+import { AgreementPdfPreview } from "@/components/cleaner/AgreementPdfPreview";
 import UrgentHireReturnLink from "@/components/cleaner/UrgentHireReturnLink";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -234,28 +235,7 @@ export default function AgreementSign() {
           <RiFileTextLine className="h-4 w-4 text-slate-500" />
           <p className="text-sm font-medium text-slate-900">The agreement</p>
         </div>
-        {data.previewUrl ? (
-          <>
-            <iframe
-              src={data.previewUrl}
-              title="Independent Contractor Agreement"
-              className="h-[420px] w-full rounded-lg border border-slate-200 bg-slate-50"
-            />
-            <a
-              href={data.previewUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-2 inline-block text-xs font-medium text-indigo-700 underline"
-            >
-              Open in a new tab
-            </a>
-          </>
-        ) : (
-          <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-900">
-            We couldn&apos;t load the document preview right now. You can still sign — the full signed
-            copy will be emailed to you — or come back to this link in a few minutes to read it first.
-          </p>
-        )}
+        <AgreementPdfPreview className="h-[420px] overflow-y-auto rounded-lg border border-slate-200 bg-slate-50" />
       </Card>
 
       <Card>

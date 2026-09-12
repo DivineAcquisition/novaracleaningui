@@ -414,17 +414,13 @@ export const SHOTS: Shot[] = [
   {
     id: "commercial-hub",
     doc: "commercial",
-    caption: "The commercial hub and its five workspaces.",
+    caption: "Commercial jobs — the same list and sheet as Bookings.",
     url: "/admin/commercial",
-    waitForText: "Overview",
-    // Text matching is unreliable here: the sidebar descriptions contain the
-    // same words as the workspace tabs. Target the tab row positionally.
+    waitForText: "Commercial",
     callouts: [
-      { text: "Home", exact: true, nth: 0, label: "Home — pipeline snapshot" },
-      { text: "Deals", exact: true, nth: 0, label: "Deals — walkthroughs and firm price" },
-      { text: "Jobs", exact: true, nth: 0, label: "Jobs — one-off and recurring work" },
-      { text: "Compliance", exact: true, nth: 0, label: "Compliance — insurance certificates" },
-      { text: "STR", exact: true, nth: 0, label: "STR — turnovers and hosts" },
+      { text: "New commercial job", exact: true, nth: 0, label: "Create a commercial job" },
+      { text: "All statuses", nth: 0, label: "Filter by status" },
+      { text: "Refresh", nth: 0, label: "Reload the list" },
     ],
     fullPage: true,
   },
