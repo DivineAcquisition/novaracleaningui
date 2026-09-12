@@ -31,6 +31,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 
 import { processAvatarImage } from "@/lib/image-compression";
+import { TOUR, tourAnchor } from "@/lib/tours/anchors";
 
 interface CleanerProfile {
   id: string;
@@ -419,7 +420,7 @@ export default function CleanerProfile() {
             </div>
 
             {/* Availability Settings - Compact */}
-            <div className="space-y-3">
+            <div className="space-y-3" {...tourAnchor(TOUR.profileAvailability)}>
               <h3 className="text-sm font-semibold">Availability</h3>
               
               <div className="flex items-center justify-between p-3 border rounded-lg">

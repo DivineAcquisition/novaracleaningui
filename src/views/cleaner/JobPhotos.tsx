@@ -34,6 +34,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { MediaThumb } from "@/components/job-media/MediaThumb";
 import { isVideoFile, videoTooLargeMessage } from "@/lib/job-media";
 import { cn } from "@/lib/utils";
+import { TOUR, tourAnchor } from "@/lib/tours/anchors";
 
 interface BookingInfo {
   bookingId: string;
@@ -400,25 +401,29 @@ export default function CleanerJobPhotosPage() {
         </div>
 
         {showBefore && (
-          <PhotoGroup
-            title="Before photos & videos"
-            urls={beforeUrls}
-            uploading={uploadingKind === "before"}
-            onAdd={(files) => handleFiles("before", files)}
-            onRemove={(u) => removeUrl("before", u)}
-          />
+          <div {...tourAnchor(TOUR.photosBefore)}>
+            <PhotoGroup
+              title="Before photos & videos"
+              urls={beforeUrls}
+              uploading={uploadingKind === "before"}
+              onAdd={(files) => handleFiles("before", files)}
+              onRemove={(u) => removeUrl("before", u)}
+            />
+          </div>
         )}
         {showAfter && (
-          <PhotoGroup
-            title="After photos & videos"
-            urls={afterUrls}
-            uploading={uploadingKind === "after"}
-            onAdd={(files) => handleFiles("after", files)}
-            onRemove={(u) => removeUrl("after", u)}
-          />
+          <div {...tourAnchor(TOUR.photosAfter)}>
+            <PhotoGroup
+              title="After photos & videos"
+              urls={afterUrls}
+              uploading={uploadingKind === "after"}
+              onAdd={(files) => handleFiles("after", files)}
+              onRemove={(u) => removeUrl("after", u)}
+            />
+          </div>
         )}
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-3 space-y-2">
+        <div className="rounded-2xl border border-slate-200 bg-white p-3 space-y-2" {...tourAnchor(TOUR.photosNotes)}>
           <label className="text-xs font-semibold text-slate-700 block">
             Notes for the office (optional)
           </label>
@@ -444,6 +449,7 @@ export default function CleanerJobPhotosPage() {
                   : beforeUrls.length === 0 && afterUrls.length === 0)
             }
             className="w-full h-12 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+            {...tourAnchor(TOUR.photosSubmit)}
           >
             {submitting ? (
               <>

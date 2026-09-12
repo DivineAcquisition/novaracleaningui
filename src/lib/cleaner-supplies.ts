@@ -149,16 +149,222 @@ export function scoreSupplyInventory(inventory: SupplyInventory | null | undefin
   };
 }
 
-/** Account setup complete = phone verified + Stripe Connect started/ready. */
-export function isCleanerSetupComplete(c: {
+/** Keep only ids that exist in the catalog, so a stale form can't write junk. */
+export function sanitizeSupplyInventory(
+  submitted: Record<string, unknown> | null | undefined,
+): SupplyInventory {
+  const allowed = new Set(SUPPLY_ITEMS.map((i) => i.id));
+  const inventory: SupplyInventory = {};
+  for (const [id, val] of Object.entries(submitted || {})) {
+    if (allowed.has(id)) inventory[id] = val === true;
+  }
+  return inventory;
+}
+
+/**
+ * The exact columns a supply submission writes. Shared so the tokenized page
+ * and the onboarding portal leave a contractor's row in the same state — the
+ * portal step reads supply_checklist_submitted_at back as "done", and it can
+ * only do that if both writers set it.
+ */
+export function supplySubmissionPatch(
+  inventory: SupplyInventory,
+  now: string = new Date().toISOString(),
+) {
+  return {
+    supply_inventory: inventory,
+    supply_checklist_submitted_at: now,
+    ob_supplies_checklist_viewed: true,
+    ob_supplies_checklist_viewed_at: now,
+    updated_at: now,
+  };
+}
+
+/** Timeline entry for a submission, so admin sees it whichever route was used. */
+export function supplySubmissionEvent(args: {
+  cleanerId: string;
+  firstName?: string | null;
+  inventory: SupplyInventory;
+  source: string;
+}) {
+  const score = scoreSupplyInventory(args.inventory);
+  return {
+    event_type: "cleaner.supply_checklist_submitted",
+    cleaner_id: args.cleanerId,
+    source: args.source,
+    summary:
+      `${args.firstName || "Cleaner"} submitted supply checklist — ` +
+      `${score.ownedNeeded}/${score.totalNeeded} job-needed (${score.percent}%, ready=${score.ready})`,
+    data: {
+      owned_needed: score.ownedNeeded,
+      total_needed: score.totalNeeded,
+      percent: score.percent,
+      ready: score.ready,
+      threshold: score.threshold,
+      inventory: args.inventory,
+    },
+  };
+}
+
+// ─── Account setup sequence ──────────────────────────────────────────────
+//
+// One ordered definition of onboarding, shared by the portal a contractor
+// works through, the page a mailed setup link lands on, and the admin action
+// that sends that link. Before this existed each of those three decided the
+// order for itself, so they could disagree about what was left to do.
+
+export interface CleanerSetupState {
+  ob_agreement_signed?: boolean | null;
   phone_verified?: boolean | null;
+  supply_checklist_submitted_at?: string | null;
+  ob_supplies_checklist_viewed?: boolean | null;
+  ob_dress_code_ack?: boolean | null;
+  ob_job_day_guides_ack?: boolean | null;
+  ob_training_complete?: boolean | null;
+  completed_bookings?: number | null;
   payouts_enabled?: boolean | null;
   ob_payouts_setup?: boolean | null;
   stripe_account_id?: string | null;
-}): boolean {
-  const stripe =
+}
+
+export type CleanerSetupStepId =
+  | "agreement"
+  | "phone"
+  | "supplies"
+  | "dress_code"
+  | "job_day"
+  | "training";
+
+export interface CleanerSetupStep {
+  id: CleanerSetupStepId;
+  /** Sentence-case label, reused in the portal and on the mailed link page. */
+  title: string;
+  done: boolean;
+}
+
+/**
+ * The supply checkoff counts as done once it has been submitted — not once a
+ * contractor owns SUPPLY_READY_PERCENT of the kit. Onboarding asks what they
+ * already have; it never waits on them buying a vacuum. Readiness stays
+ * visible to dispatch either way.
+ *
+ * ob_supplies_checklist_viewed is the legacy flag the old checklist page set
+ * alongside the timestamp, honoured here so contractors who did this before
+ * the timestamp existed are not asked twice.
+ */
+export function isSupplyChecklistSubmitted(c: CleanerSetupState): boolean {
+  return (
+    Boolean(c.supply_checklist_submitted_at) ||
+    Boolean(c.ob_supplies_checklist_viewed)
+  );
+}
+
+export function isAgreementSigned(c: CleanerSetupState): boolean {
+  return Boolean(c.ob_agreement_signed);
+}
+
+/**
+ * The contractor agreed to the dress code, not merely saw it.
+ *
+ * Contractors who acknowledged the old combined "guides" step are treated as
+ * having agreed: that step showed the same graphic, and asking them to tick
+ * a new box for the same picture is theatre.
+ */
+export function isDressCodeAgreed(c: CleanerSetupState): boolean {
+  return Boolean(c.ob_dress_code_ack) || Boolean(c.ob_job_day_guides_ack);
+}
+
+/** Day To Day Job Operations has been read. */
+export function isJobDayAcknowledged(c: CleanerSetupState): boolean {
+  return Boolean(c.ob_job_day_guides_ack);
+}
+
+/** @deprecated Use isJobDayAcknowledged — kept so older imports keep compiling. */
+export function isJobDayGuidesAcknowledged(c: CleanerSetupState): boolean {
+  return isJobDayAcknowledged(c);
+}
+
+export function isRequiredTrainingComplete(c: CleanerSetupState): boolean {
+  return Boolean(c.ob_training_complete);
+}
+
+/** Stripe Connect reached, whether or not payouts have finished enabling. */
+export function isPayoutSetupStarted(c: CleanerSetupState): boolean {
+  return (
     Boolean(c.payouts_enabled) ||
     Boolean(c.ob_payouts_setup) ||
-    Boolean(c.stripe_account_id);
-  return Boolean(c.phone_verified) && stripe;
+    Boolean(c.stripe_account_id)
+  );
+}
+
+/**
+ * Onboarding in the order everything presents it.
+ *
+ * Agreement first: nothing else is asked until the contractor is actually
+ * engaged. Training last: the videos only make sense once they have seen
+ * the dress code, the kit, and what a job day looks like. Payouts stay on
+ * the dashboard — they are how we pay, not how someone becomes eligible
+ * for a first job.
+ */
+export function cleanerSetupSteps(c: CleanerSetupState): CleanerSetupStep[] {
+  return [
+    {
+      id: "agreement",
+      title: "Sign the contractor agreement",
+      done: isAgreementSigned(c),
+    },
+    {
+      id: "phone",
+      title: "Verify your phone number",
+      done: Boolean(c.phone_verified),
+    },
+    {
+      id: "supplies",
+      title: "Check off your supplies",
+      done: isSupplyChecklistSubmitted(c),
+    },
+    {
+      id: "dress_code",
+      title: "Agree to the dress code",
+      done: isDressCodeAgreed(c),
+    },
+    {
+      id: "job_day",
+      title: "Read Day To Day Job Operations",
+      done: isJobDayAcknowledged(c),
+    },
+    {
+      id: "training",
+      title: "Watch the training videos",
+      done: isRequiredTrainingComplete(c),
+    },
+  ];
+}
+
+export function isCleanerSetupComplete(c: CleanerSetupState): boolean {
+  return cleanerSetupSteps(c).every((s) => s.done);
+}
+
+/** Whether every step before `id` is done — used to lock later portal cards. */
+export function isSetupStepUnlocked(
+  c: CleanerSetupState,
+  id: CleanerSetupStepId,
+): boolean {
+  const steps = cleanerSetupSteps(c);
+  const idx = steps.findIndex((s) => s.id === id);
+  if (idx <= 0) return true;
+  return steps.slice(0, idx).every((s) => s.done);
+}
+
+/**
+ * First-job eligibility.
+ *
+ * Someone who has already completed a job is past this gate — we do not
+ * yank offers from people already on the roster. Everyone else has to
+ * finish the sequence, including the training videos, before dispatch
+ * will offer them work.
+ */
+export function isCleanerReadyForFirstJob(c: CleanerSetupState): boolean {
+  if (Number(c.completed_bookings || 0) > 0) return true;
+  return isCleanerSetupComplete(c);
 }

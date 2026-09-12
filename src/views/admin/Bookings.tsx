@@ -627,6 +627,8 @@ interface CleanerOption {
   state?: string | null;
   pay_tier?: string | null;
   pay_percentage?: number | null;
+  ready_for_first_job?: boolean | null;
+  completed_bookings?: number | null;
 }
 
 const MAX_CREW_SELECTION = 8;
@@ -640,6 +642,9 @@ function cleanerDirectoryBadge(c: CleanerOption): { label: string; className: st
   }
   if (c.available_for_bookings === false) {
     return { label: "Not taking jobs", className: "bg-orange-50 text-orange-800" };
+  }
+  if (c.ready_for_first_job === false) {
+    return { label: "Onboarding incomplete", className: "bg-amber-50 text-amber-800" };
   }
   return { label: "Available", className: "bg-emerald-50 text-emerald-800" };
 }

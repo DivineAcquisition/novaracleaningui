@@ -10,6 +10,8 @@
 //       { action:'update_status', issueId, status, note? }
 //       { action:'add_note', issueId, note }
 //       { action:'resolve', issueId, note, resolutionPhotos? }
+//       { action:'add_evidence', issueId, file | evidence }
+//       { action:'remove_evidence', issueId, mediaId }
 //       { action:'attach_cleaner', issueId, cleanerId }  — must be assigned to the job
 //       { action:'detach_cleaner', issueId, cleanerId }
 //
@@ -18,7 +20,7 @@
 // cleaner_id/cleaner_name remain the primary (lead) for scoring/compat.
 //   • Cleaner field report (job_assignments.response_token — same token the
 //     job checklist uses, so a cleaner can flag from the job page):
-//       { action:'field_report', token, description, issueType?, severity? }
+//       { action:'field_report', token, description, issueType?, severity?, evidence? }
 //
 // Every mutation writes a qc_issue_events audit row (who/what/when).
 // High/Critical creations + escalations insert public.events rows, which the
@@ -39,6 +41,13 @@ import {
   statementRequiredByDefault,
 } from "../_shared/qc-statement.ts";
 import { loadQcStatementSettings, requestQcStatement } from "../_shared/qc-statement-ops.ts";
+import {
+  QC_ISSUE_MEDIA_BUCKET,
+  appendQcIssueMedia,
+  normalizeQcIssueMedia,
+  removeQcIssueMedia,
+  type QcIssueMediaFile,
+} from "../_shared/qc-issue-media.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -181,6 +190,7 @@ async function createIssue(admin: SB, opts: {
   zoneId?: string | null;
   zoneName?: string | null;
   statementRequired?: boolean | null;
+  evidenceFiles?: unknown;
 }) {
   const ref = bookingRef(opts.booking);
   // ALL cleaners on the job get attached; the reporter (field reports) or
@@ -207,6 +217,13 @@ async function createIssue(admin: SB, opts: {
   );
   const zoneName = taggedZones[0] || String(opts.zoneName || "").trim() || null;
   const zoneId = String(opts.zoneId || "").trim() || zoneName;
+
+  let evidenceFiles: QcIssueMediaFile[] = [];
+  if (opts.evidenceFiles != null && opts.evidenceFiles !== undefined) {
+    const stamped = appendQcIssueMedia([], opts.evidenceFiles, { bookingId: opts.booking.id });
+    if (!stamped.ok) throw new Error(stamped.error);
+    evidenceFiles = stamped.files;
+  }
 
   const isIncident = opts.issueType === "serious_allegation";
   const recleanStamp: Record<string, unknown> = {};
@@ -275,6 +292,7 @@ async function createIssue(admin: SB, opts: {
       reported_via: opts.reportedVia,
       reported_by: opts.reporterId,
       reported_by_name: opts.reporterName,
+      evidence_files: evidenceFiles,
       ...recleanStamp,
     })
     .select("*")
@@ -292,6 +310,7 @@ async function createIssue(admin: SB, opts: {
       issue_type: opts.issueType,
       severity: isIncident ? "critical" : opts.severity,
       via: opts.reportedVia,
+      evidence_count: evidenceFiles.length,
       ...(isIncident ? {
         allegation_not_finding: true,
         no_auto_score_penalty: true,
@@ -333,6 +352,10 @@ async function createIssue(admin: SB, opts: {
     }).then(() => undefined, () => undefined);
   }
 
+  if (evidenceFiles.length) {
+    await mirrorCaseEvidence(admin, issue, evidenceFiles);
+  }
+
   const settings = await loadQcStatementSettings(admin);
   const wantsStatement = opts.statementRequired === true
     ? true
@@ -359,6 +382,42 @@ async function createIssue(admin: SB, opts: {
   }
 
   return issue;
+}
+
+async function mirrorCaseEvidence(admin: SB, issue: Record<string, unknown>, files: QcIssueMediaFile[]) {
+  const current = normalizeQcIssueMedia(issue.evidence_files);
+  const byPath = new Map(current.map((f) => [f.storagePath, { ...f }]));
+  for (const f of files) byPath.set(f.storagePath, { ...(byPath.get(f.storagePath) || f), ...f });
+  let changed = false;
+  for (const file of files) {
+    try {
+      const { data } = await admin.functions.invoke("qc-statement-drive", {
+        body: {
+          action: "upload_case_evidence",
+          issueId: issue.id,
+          storagePath: file.storagePath,
+          filename: file.filename,
+          contentType: file.contentType,
+        },
+      });
+      const driveFileId = (data as { driveFileId?: string } | null)?.driveFileId || null;
+      const driveFileUrl = (data as { driveFileUrl?: string } | null)?.driveFileUrl || null;
+      if (driveFileId) {
+        const next = { ...(byPath.get(file.storagePath) || file), driveFileId, driveFileUrl };
+        byPath.set(file.storagePath, next);
+        changed = true;
+      }
+    } catch (e) {
+      log("evidence drive mirror skipped", { path: file.storagePath, error: e instanceof Error ? e.message : e });
+    }
+  }
+  if (!changed) return;
+  const nextFiles = [...byPath.values()];
+  await admin.from("qc_issues").update({
+    evidence_files: nextFiles,
+    updated_at: new Date().toISOString(),
+  }).eq("id", issue.id);
+  issue.evidence_files = nextFiles;
 }
 
 serve(async (req) => {
@@ -413,6 +472,11 @@ serve(async (req) => {
         }, 400);
       }
 
+      const evidenceIn = appendQcIssueMedia([], body?.evidence ?? body?.evidenceFiles ?? [], {
+        bookingId: booking.id,
+      });
+      if (!evidenceIn.ok) return json({ ok: false, error: evidenceIn.error }, 400);
+
       const issue = await createIssue(admin, {
         booking: booking as BookingLite,
         issueType,
@@ -426,6 +490,7 @@ serve(async (req) => {
         cleanerName,
         requestReclean: issueType === "reclean",
         zoneName: zoneName || null,
+        evidenceFiles: evidenceIn.files,
       });
       return json({ ok: true, issueId: issue.id, issueNumber: issue.issue_number });
     }
@@ -814,6 +879,61 @@ serve(async (req) => {
         data: photos.length ? { resolution_photos: photos } : null,
       });
       return json({ ok: true });
+    }
+
+    if (action === "add_evidence") {
+      const incoming = body?.file ?? body?.evidence;
+      const result = appendQcIssueMedia(issue.evidence_files, incoming, {
+        issueId: issue.id,
+        bookingId: issue.booking_id,
+      });
+      if (!result.ok) return json({ ok: false, error: result.error }, 400);
+      if (!result.added.length) {
+        return json({ ok: true, issue, added: [] });
+      }
+      const { error: upErr } = await admin.from("qc_issues").update({
+        evidence_files: result.files,
+        updated_at: nowIso,
+      }).eq("id", issueId);
+      if (upErr) throw upErr;
+      const noteBits = result.added.map((f) => `${f.kind} ${f.filename}`).join(", ");
+      await admin.from("qc_issue_events").insert({
+        issue_id: issueId,
+        action: "evidence_added",
+        note: `Added case ${result.added.length === 1 ? "file" : "files"}: ${noteBits}.`,
+        actor_id: actor.id,
+        actor_name: actor.name,
+        data: { added: result.added.map((f) => f.storagePath) },
+      });
+      issue.evidence_files = result.files;
+      await mirrorCaseEvidence(admin, issue, result.added);
+      const { data: fresh } = await admin.from("qc_issues").select("*").eq("id", issueId).maybeSingle();
+      return json({ ok: true, issue: fresh || issue, added: result.added });
+    }
+
+    if (action === "remove_evidence") {
+      const mediaId = String(body?.mediaId || body?.storagePath || "");
+      if (!mediaId) return json({ ok: false, error: "mediaId required" }, 400);
+      const result = removeQcIssueMedia(issue.evidence_files, mediaId);
+      if (!result.removed) return json({ ok: false, error: "That file isn't on this case." }, 404);
+      const { error: upErr } = await admin.from("qc_issues").update({
+        evidence_files: result.files,
+        updated_at: nowIso,
+      }).eq("id", issueId);
+      if (upErr) throw upErr;
+      if (result.removed.storagePath) {
+        await admin.storage.from(QC_ISSUE_MEDIA_BUCKET).remove([result.removed.storagePath]).then(() => undefined, () => undefined);
+      }
+      await admin.from("qc_issue_events").insert({
+        issue_id: issueId,
+        action: "evidence_removed",
+        note: `Removed case ${result.removed.kind}: ${result.removed.filename}.`,
+        actor_id: actor.id,
+        actor_name: actor.name,
+        data: { removed: result.removed.storagePath },
+      });
+      const { data: fresh } = await admin.from("qc_issues").select("*").eq("id", issueId).maybeSingle();
+      return json({ ok: true, issue: fresh || { ...issue, evidence_files: result.files } });
     }
 
     return json({ ok: false, error: `Unknown action '${action}'.` }, 400);

@@ -2,7 +2,9 @@
 //
 // Mirrors contractor-statement uploads and the branded PDF into
 //   <QC root>/QC Cases/{issue_number}/Contractor Statement/
-// Best-effort. Statement rows in Postgres are the source of truth.
+// and case photos/videos into
+//   <QC root>/QC Cases/{issue_number}/Case Evidence/
+// Best-effort. Statement rows and qc_issues.evidence_files in Postgres are the source of truth.
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
@@ -60,6 +62,8 @@ function mimeFor(name: string, fallback?: string): string {
   if (ext === "heic" || ext === "heif") return "image/heic";
   if (ext === "mp4") return "video/mp4";
   if (ext === "mov") return "video/quicktime";
+  if (ext === "webm") return "video/webm";
+  if (ext === "m4v") return "video/x-m4v";
   return "image/jpeg";
 }
 
@@ -98,6 +102,25 @@ async function ensureCaseFolder(admin: SB, issue: Record<string, unknown>): Prom
     .eq("issue_id", issue.id);
 
   return { folderId: statementFolder, folderUrl: url };
+}
+
+async function ensureEvidenceFolder(admin: SB, issue: Record<string, unknown>): Promise<{
+  folderId: string | null;
+  folderUrl: string | null;
+  skipped?: string;
+}> {
+  if (!driveConfigured()) return { folderId: null, folderUrl: null, skipped: "drive_not_configured" };
+  const rootId = await resolveSecret(admin, "GDRIVE_QC_ROOT_FOLDER_ID");
+  if (!rootId) return { folderId: null, folderUrl: null, skipped: "no_root_folder" };
+  const impersonate = await resolveSecret(admin, "GOOGLE_DRIVE_IMPERSONATE_EMAIL");
+  const token = await getDriveToken(impersonate || undefined);
+  if (!token) return { folderId: null, folderUrl: null, skipped: "no_drive_token" };
+
+  const casesRoot = await ensureFolder(token, rootId, "QC Cases");
+  const caseFolder = await ensureFolder(token, casesRoot, String(issue.issue_number || issue.id).slice(0, 40));
+  const evidenceFolder = await ensureFolder(token, caseFolder, "Case Evidence");
+  await shareReadableByLink(token, evidenceFolder);
+  return { folderId: evidenceFolder, folderUrl: folderUrl(evidenceFolder) };
 }
 
 async function uploadNamed(
@@ -177,6 +200,31 @@ serve(async (req) => {
       if (!issue) return json({ error: "Issue not found" }, 404);
       const folder = await ensureCaseFolder(admin, issue);
       return json({ ok: true, ...folder });
+    }
+
+    if (action === "upload_case_evidence") {
+      const issueId = String(body.issueId || "");
+      const storagePath = String(body.storagePath || "");
+      const filename = String(body.filename || storagePath.split("/").pop() || "file");
+      if (!issueId || !storagePath) return json({ error: "issueId and storagePath required" }, 400);
+      const { data: issue } = await admin.from("qc_issues").select("*").eq("id", issueId).maybeSingle();
+      if (!issue) return json({ error: "Issue not found" }, 404);
+      const folder = await ensureEvidenceFolder(admin, issue);
+      if (!folder.folderId) return json({ ok: false, skipped: folder.skipped || "no_folder" });
+      const bytes = await downloadStorage(admin, storagePath);
+      if (!bytes) return json({ ok: false, error: "storage object missing" }, 400);
+      const impersonate = await resolveSecret(admin, "GOOGLE_DRIVE_IMPERSONATE_EMAIL");
+      const token = await getDriveToken(impersonate || undefined);
+      if (!token) return json({ ok: false, skipped: "no_drive_token" });
+      const id = await uploadNamed(
+        token,
+        folder.folderId,
+        filename,
+        bytes,
+        mimeFor(filename, body.contentType),
+        body.driveFileId ? String(body.driveFileId) : null,
+      );
+      return json({ ok: true, driveFileId: id, driveFileUrl: fileUrl(id), folderUrl: folder.folderUrl });
     }
 
     if (action === "upload_one") {

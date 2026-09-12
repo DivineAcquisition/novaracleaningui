@@ -17,6 +17,12 @@ export type WorkspaceNavItem = {
   icon: ComponentType<{ className?: string }>;
   description?: string;
   badge?: string;
+  /**
+   * Guided-walkthrough anchor id, for workspaces that run them (see
+   * `src/lib/tours/anchors.ts`). Plain string here so this shared chrome
+   * doesn't depend on the contractor-only tour catalog.
+   */
+  tourAnchor?: string;
 };
 
 export function isWorkspaceNavActive(pathname: string | null, url: string, hash = "") {
@@ -175,6 +181,7 @@ function SidebarNav({
           <Link
             key={item.url}
             href={item.url}
+            data-tour={item.tourAnchor}
             className={cn(
               "group relative flex items-center gap-3 px-3 py-2 rounded-xl transition-all duration-150 text-sm",
               isActive

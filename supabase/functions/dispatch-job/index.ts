@@ -17,6 +17,10 @@ import {
   complianceBlockMessage,
   logComplianceBlock,
 } from "../_shared/commercial-config.ts";
+import {
+  filterReadyForFirstJob,
+  FIRST_JOB_READY_COLUMNS,
+} from "../_shared/first-job-ready.ts";
 
 // Pull the human-readable date + arrival window for a job from its linked
 // booking. We display the booking's stored time_slot (e.g. "8-12" →
@@ -113,12 +117,12 @@ async function broadcastJob(
 
   const { data: all } = await supabase
     .from("cleaners")
-    .select("id, first_name, last_name, phone, email, sms_notifications_enabled")
+    .select(`id, first_name, last_name, phone, email, sms_notifications_enabled, ${FIRST_JOB_READY_COLUMNS}`)
     .eq("approved", true)
     .eq("available_for_bookings", true)
     .eq("status", "active");
 
-  const eligible = (all || []).filter((c: any) => !!c.phone);
+  const eligible = filterReadyForFirstJob(all || []).filter((c: any) => !!c.phone);
   if (eligible.length === 0) {
     return { broadcastSent: 0, broadcastSkipped: 0, reason: "no_active_cleaners" };
   }
@@ -412,7 +416,9 @@ serve(async (req) => {
         throw new Error(`Error fetching cleaners: ${cleanersError.message}`);
       }
       cleaners = nearbyPool ?? [];
-      logStep(`Found ${cleaners.length} approved nearby-pool cleaners`);
+      const beforeGate = cleaners.length;
+      cleaners = filterReadyForFirstJob(cleaners);
+      logStep(`Found ${beforeGate} approved nearby-pool cleaners, ${cleaners.length} ready for a first job`);
     }
 
     if (!cleaners || cleaners.length === 0) {

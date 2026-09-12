@@ -599,14 +599,20 @@ export type Database = {
           max_weekly_bookings: number | null
           ob_agreement_signed: boolean | null
           ob_agreement_signed_at: string | null
+          ob_dress_code_ack: boolean
+          ob_dress_code_ack_at: string | null
           ob_google_chat_joined: boolean | null
           ob_google_chat_joined_at: string | null
+          ob_job_day_guides_ack: boolean | null
+          ob_job_day_guides_ack_at: string | null
           ob_payouts_setup: boolean | null
           ob_payouts_setup_at: string | null
           ob_supplies_checklist_viewed: boolean | null
           ob_supplies_checklist_viewed_at: string | null
           ob_training_accessed: boolean | null
           ob_training_accessed_at: string | null
+          ob_training_complete: boolean
+          ob_training_complete_at: string | null
           on_time_rate: number | null
           onboarding_complete: boolean | null
           pay_percentage: number
@@ -630,6 +636,7 @@ export type Database = {
           status: string
           status_today: string | null
           stripe_account_id: string | null
+          supply_checklist_submitted_at: string | null
           total_bookings: number | null
           total_earnings_cents: number | null
           total_offers_accepted: number | null
@@ -663,14 +670,20 @@ export type Database = {
           max_weekly_bookings?: number | null
           ob_agreement_signed?: boolean | null
           ob_agreement_signed_at?: string | null
+          ob_dress_code_ack?: boolean
+          ob_dress_code_ack_at?: string | null
           ob_google_chat_joined?: boolean | null
           ob_google_chat_joined_at?: string | null
+          ob_job_day_guides_ack?: boolean | null
+          ob_job_day_guides_ack_at?: string | null
           ob_payouts_setup?: boolean | null
           ob_payouts_setup_at?: string | null
           ob_supplies_checklist_viewed?: boolean | null
           ob_supplies_checklist_viewed_at?: string | null
           ob_training_accessed?: boolean | null
           ob_training_accessed_at?: string | null
+          ob_training_complete?: boolean
+          ob_training_complete_at?: string | null
           on_time_rate?: number | null
           onboarding_complete?: boolean | null
           pay_percentage?: number
@@ -694,6 +707,7 @@ export type Database = {
           status?: string
           status_today?: string | null
           stripe_account_id?: string | null
+          supply_checklist_submitted_at?: string | null
           total_bookings?: number | null
           total_earnings_cents?: number | null
           total_offers_accepted?: number | null
@@ -727,14 +741,20 @@ export type Database = {
           max_weekly_bookings?: number | null
           ob_agreement_signed?: boolean | null
           ob_agreement_signed_at?: string | null
+          ob_dress_code_ack?: boolean
+          ob_dress_code_ack_at?: string | null
           ob_google_chat_joined?: boolean | null
           ob_google_chat_joined_at?: string | null
+          ob_job_day_guides_ack?: boolean | null
+          ob_job_day_guides_ack_at?: string | null
           ob_payouts_setup?: boolean | null
           ob_payouts_setup_at?: string | null
           ob_supplies_checklist_viewed?: boolean | null
           ob_supplies_checklist_viewed_at?: string | null
           ob_training_accessed?: boolean | null
           ob_training_accessed_at?: string | null
+          ob_training_complete?: boolean
+          ob_training_complete_at?: string | null
           on_time_rate?: number | null
           onboarding_complete?: boolean | null
           pay_percentage?: number
@@ -758,6 +778,7 @@ export type Database = {
           status?: string
           status_today?: string | null
           stripe_account_id?: string | null
+          supply_checklist_submitted_at?: string | null
           total_bookings?: number | null
           total_earnings_cents?: number | null
           total_offers_accepted?: number | null

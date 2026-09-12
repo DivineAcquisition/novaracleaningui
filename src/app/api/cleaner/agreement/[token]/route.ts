@@ -23,7 +23,6 @@ import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import {
   sendAgreement,
   buildContractorValues,
-  getAgreementPreviewUrl,
 } from "@/lib/docuseal";
 
 export const runtime = "nodejs";
@@ -145,16 +144,7 @@ export async function GET(
   }
 
   const c = resolved.cleaner;
-  // The preview is best-effort: a DocuSeal outage must not stop somebody from
-  // signing, but they should be told the document couldn't be shown rather
-  // than being handed a blank frame.
-  let previewUrl: string | null = null;
-  try {
-    previewUrl = (await getAgreementPreviewUrl("contractor")) || null;
-  } catch {
-    previewUrl = null;
-  }
-
+  // Same-origin proxy — do not hand the client a DocuSeal file URL to iframe.
   return NextResponse.json({
     ok: true,
     cleaner: {
@@ -165,7 +155,7 @@ export async function GET(
       phone: c.phone || "",
       address: mailingAddress(c),
     },
-    previewUrl,
+    previewUrl: "/api/cleaner/agreement-preview",
     expiresAt: c.agreement_token_expires_at,
   });
 }

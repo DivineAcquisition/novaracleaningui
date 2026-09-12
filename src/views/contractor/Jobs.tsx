@@ -62,6 +62,9 @@ import { Panel } from "@/components/ui/panel";
 import SuspensionBanner from "@/components/cleaner/SuspensionBanner";
 import { BRAND } from "@/lib/brand";
 import { parseServiceDate } from "@/lib/service-date";
+import { QcIssueMediaPicker } from "@/components/qc/QcIssueMedia";
+import type { QcIssueMediaFile } from "@/lib/qc-issue-media";
+import { TOUR, tourAnchor } from "@/lib/tours/anchors";
 
 interface JobPay {
   actualCents: number | null;
@@ -526,18 +529,45 @@ export default function ContractorJobs() {
     };
   }, [cleanerId, loadJobs, scheduleRefetch]);
 
-  // Remembered lookup → auto-reload the portal on return visits.
+  // Remembered lookup → auto-reload the portal on return visits. Failing
+  // that, a signed-in contractor is looked up by their session email: the
+  // page stays usable without an account, but somebody who is already
+  // authenticated shouldn't have to type their own address to see their own
+  // jobs — and the pay walkthrough sends them straight here.
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(LOOKUP_STORAGE_KEY);
-      if (!saved) return;
-      const parsed = JSON.parse(saved) as { type: "email" | "phone"; value: string };
-      if (parsed?.value) {
+    let cancelled = false;
+
+    const remembered = (): boolean => {
+      try {
+        const saved = localStorage.getItem(LOOKUP_STORAGE_KEY);
+        if (!saved) return false;
+        const parsed = JSON.parse(saved) as { type: "email" | "phone"; value: string };
+        if (!parsed?.value) return false;
         setLookupType(parsed.type || "email");
         setLookupValue(parsed.value);
         void runLookup(parsed.type || "email", parsed.value);
+        return true;
+      } catch {
+        return false;
       }
-    } catch { /* ignore */ }
+    };
+
+    if (remembered()) return;
+
+    void supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        const email = data.session?.user?.email;
+        if (cancelled || !email) return;
+        setLookupType("email");
+        setLookupValue(email);
+        void runLookup("email", email);
+      })
+      .catch(() => null);
+
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -783,7 +813,7 @@ export default function ContractorJobs() {
               <p className="text-muted-foreground text-sm">Look up your jobs to check in, mark complete, or view history</p>
             </div>
 
-            <Panel className="p-6">
+            <Panel className="p-6" {...tourAnchor(TOUR.lookupForm)}>
               <form onSubmit={handleSearch} className="space-y-5">
                   <Tabs value={lookupType} onValueChange={(v) => setLookupType(v as "email" | "phone")}>
                     <TabsList className="grid w-full grid-cols-2 mb-4">
@@ -852,7 +882,7 @@ export default function ContractorJobs() {
               </div>
 
               {summary && (
-                <div className="mt-4 grid grid-cols-3 gap-2.5">
+                <div className="mt-4 grid grid-cols-3 gap-2.5" {...tourAnchor(TOUR.payTiles)}>
                   <div className="rounded-2xl bg-white/12 ring-1 ring-white/15 backdrop-blur px-3 py-2.5">
                     <p className="text-[10px] uppercase tracking-wider text-violet-100/90 flex items-center gap-1">
                       <RiWallet3Line className="w-3 h-3" /> Paid to you
@@ -876,7 +906,7 @@ export default function ContractorJobs() {
 
               {/* Your scores — yours only, never other cleaners'. */}
               {scores && (scores.novara != null || scores.quality != null || scores.overall != null) && (
-                <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                <div className="mt-2.5 flex flex-wrap items-center gap-1.5" {...tourAnchor(TOUR.scoreTiles)}>
                   {scores.overall != null && (
                     <span className="text-[10px] font-bold bg-white/20 ring-1 ring-white/25 rounded-full px-2 py-0.5">
                       Overall {Math.round(scores.overall)}
@@ -950,7 +980,7 @@ export default function ContractorJobs() {
 
             {/* ── Tips preview — every tip, 100% yours, separate from job pay ── */}
             {tips.length > 0 && (
-              <section className="rounded-3xl bg-white ring-1 ring-emerald-100 shadow-sm p-4 space-y-2.5">
+              <section className="rounded-3xl bg-white ring-1 ring-emerald-100 shadow-sm p-4 space-y-2.5" {...tourAnchor(TOUR.tips)}>
                 <div className="flex items-center justify-between px-1">
                   <h2 className="text-[11px] font-bold text-emerald-700 uppercase tracking-[0.16em]">
                     💜 Tips from customers
@@ -1364,6 +1394,7 @@ function QcReportBlock({ job }: { job: Job }) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
+  const [evidence, setEvidence] = useState<QcIssueMediaFile[]>([]);
 
   const submit = async () => {
     const description = text.trim();
@@ -1371,7 +1402,13 @@ function QcReportBlock({ job }: { job: Job }) {
     setSending(true);
     try {
       const { data, error } = await supabase.functions.invoke("qc-issues", {
-        body: { action: "field_report", token: job.qcToken, issueType, description },
+        body: {
+          action: "field_report",
+          token: job.qcToken,
+          issueType,
+          description,
+          evidence,
+        },
       });
       if (error) throw error;
       if ((data as { ok?: boolean; error?: string })?.ok === false) {
@@ -1381,6 +1418,7 @@ function QcReportBlock({ job }: { job: Job }) {
       setSent(true);
       setOpen(false);
       setText("");
+      setEvidence([]);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Couldn't send report — text dispatch instead");
     } finally {
@@ -1391,7 +1429,7 @@ function QcReportBlock({ job }: { job: Job }) {
   if (sent) {
     return (
       <p className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 text-center">
-        ✓ QC report submitted — the office has it with this job's photos attached as evidence.
+        ✓ QC report submitted — the office has it with this job&apos;s photos and any photos or videos you attached.
       </p>
     );
   }
@@ -1419,11 +1457,17 @@ function QcReportBlock({ job }: { job: Job }) {
             </SelectContent>
           </Select>
           <Textarea
-            placeholder="What happened? Be specific — this becomes part of the job's QC record with your photos as evidence."
+            placeholder="What happened? Be specific — this becomes part of the job's QC record. Add photos or a short video below."
             value={text}
             onChange={(e) => setText(e.target.value)}
             rows={3}
             className="text-sm"
+          />
+          <QcIssueMediaPicker
+            token={job.qcToken || undefined}
+            attached={evidence}
+            onChange={setEvidence}
+            disabled={sending}
           />
           <div className="flex gap-2">
             <Button size="sm" className="flex-1 h-9 bg-amber-600 hover:bg-amber-700 text-white" disabled={!text.trim() || sending} onClick={() => void submit()}>

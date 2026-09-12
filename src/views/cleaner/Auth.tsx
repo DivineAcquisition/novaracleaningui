@@ -156,11 +156,18 @@ export default function CleanerAuth() {
     try {
       const { routing } = await resolveCleanerAuth();
       if (routing === "auth") return;
-      if (routing === "dashboard") {
-        router.replace("/cleaner/dashboard");
-      } else {
+      if (routing !== "dashboard") {
         router.replace("/cleaner/onboarding");
+        return;
       }
+      // Someone who arrived on a ?setup= link came here to finish the account
+      // setup steps, so land them there rather than on the dashboard — the
+      // link, the email and the SMS all promised those steps. Read from the
+      // query rather than state: this runs in the same tick the token is
+      // stored, so the state would still be null. The portal shows its own
+      // "all set" banner if there is nothing left to do.
+      const setup = searchParams.get("setup")?.trim();
+      router.replace(setup ? "/cleaner/ob-portal" : "/cleaner/dashboard");
     } catch (error) {
       console.error("Post-auth error:", error);
     }

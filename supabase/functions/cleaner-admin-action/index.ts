@@ -914,18 +914,23 @@ serve(async (req) => {
       }
 
       // ─── SEND ACCOUNT SETUP LINK ─────────────────────────────────────
-      // Phone verify + Stripe Connect. Tokenized link lands on a short
-      // setup page, then auth → onboarding portal — same pattern as the
-      // agreement send for contractors who never finished account setup.
+      // Agreement → phone → supplies → dress code → job-day → training.
+      // Same sequence cleanerSetupSteps() defines for the portal. Tokenized
+      // link lands on a short setup page, then auth → onboarding portal.
       case "send_setup": {
+        const agreementOk = cleaner.ob_agreement_signed === true;
         const phoneOk = cleaner.phone_verified === true;
-        const stripeOk =
-          cleaner.payouts_enabled === true ||
-          cleaner.ob_payouts_setup === true ||
-          Boolean(String(cleaner.stripe_account_id || "").trim());
-        if (phoneOk && stripeOk) {
+        const suppliesOk =
+          Boolean(cleaner.supply_checklist_submitted_at) ||
+          cleaner.ob_supplies_checklist_viewed === true;
+        const dressOk =
+          cleaner.ob_dress_code_ack === true ||
+          cleaner.ob_job_day_guides_ack === true;
+        const jobDayOk = cleaner.ob_job_day_guides_ack === true;
+        const trainingOk = cleaner.ob_training_complete === true;
+        if (agreementOk && phoneOk && suppliesOk && dressOk && jobDayOk && trainingOk) {
           return json({
-            error: "Account setup is already complete (phone + payouts).",
+            error: "Account setup is already complete (agreement through training).",
             code: "ALREADY_COMPLETE",
           }, 409);
         }
@@ -950,7 +955,7 @@ serve(async (req) => {
         }
         if (!mintedToken) {
           return json({
-            error: "Account setup is already complete (phone + payouts).",
+            error: "Account setup is already complete (agreement through training).",
             code: "ALREADY_COMPLETE",
           }, 409);
         }
@@ -977,8 +982,12 @@ serve(async (req) => {
                     email,
                     setupUrl: SETUP_URL,
                     loginUrl: SETUP_URL,
+                    needsAgreement: !agreementOk,
                     needsPhone: !phoneOk,
-                    needsStripe: !stripeOk,
+                    needsSupplies: !suppliesOk,
+                    needsDressCode: !dressOk,
+                    needsJobDay: !jobDayOk,
+                    needsTraining: !trainingOk,
                   },
                 },
               },
@@ -998,10 +1007,18 @@ serve(async (req) => {
         }
 
         if (phone) {
-          const missing = [
+          // Listed in the order the portal will ask for them.
+          const outstanding = [
+            !agreementOk ? "sign the agreement" : null,
             !phoneOk ? "verify your phone" : null,
-            !stripeOk ? "connect payouts" : null,
-          ].filter(Boolean).join(" and ");
+            !suppliesOk ? "check off your supplies" : null,
+            !dressOk ? "agree to the dress code" : null,
+            !jobDayOk ? "read Day To Day Job Operations" : null,
+            !trainingOk ? "watch the training videos" : null,
+          ].filter(Boolean) as string[];
+          const missing = outstanding.length > 1
+            ? `${outstanding.slice(0, -1).join(", ")} and ${outstanding[outstanding.length - 1]}`
+            : outstanding.join("");
           const message =
             `Hi ${firstName}! Novara Cleaning — finish account setup (${missing}) here: ${SETUP_URL} ` +
             `It only takes a few minutes. Questions? Just reply.`;
