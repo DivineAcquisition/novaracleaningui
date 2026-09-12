@@ -1,27 +1,39 @@
 ---
-title: Commercial & STR
-area: Commercial
+title: Accounts
+area: Accounts
 category: How the Tool Works
-summary: Commercial accounts, insurance certificates and the block they cause, and short-term-rental turnovers.
+summary: Business accounts, commercial jobs, insurance certificates, STR hosts, and property-manager portfolios.
 whoCanSee: Full admins only
-where: /admin/commercial
-lastVerified: 2026-08-29
+where: /admin/accounts
+lastVerified: 2026-09-11
 order: 12
 ---
 
-Commercial is admin-only. VAs are sent back to the dashboard with **"Admins only."**
+Accounts is admin-only. VAs are sent back to the dashboard with **"Admins only."**
 
-That's worth knowing before you go looking: VAs *can* use [Proposals](/docs/proposals) for
-walkthroughs, pricing and sending.
+That's worth knowing before you go looking: VAs *can* use [Proposals](/docs/proposals) to
+take a request and mail an offer. This hub is the ongoing relationship after that.
 
 @screenshot commercial-hub
 
-Commercial is the Bookings tab for commercial and office jobs: search, filter, open a
-job, then cancel / reschedule / refund / mark complete. **New commercial job** is the
-internal-booking form for a negotiated quote.
+The sidebar item used to say **Commercial**. It is now **Accounts**. Old
+`/admin/commercial` bookmarks redirect here. Sending proposals, firm price, and the deal
+pipeline still live on [Proposals](/docs/proposals). Old `?tab=send`, `?tab=pipeline`, and
+`?tab=walkthroughs` links still redirect there.
 
-Sending proposals, firm price, and the deal pipeline live on [Proposals](/docs/proposals).
-Old `?tab=send`, `?tab=pipeline`, and `?tab=walkthroughs` links still redirect there.
+The tabs are management, not offer-sending:
+
+| Tab | What happens here |
+|---|---|
+| **Accounts** | Business accounts — prospect through offboarded. |
+| **Jobs** | Commercial and office jobs: search, open, cancel / reschedule / refund. |
+| **Book** | Book a site on an existing account. |
+| **Recurring** | Repeating commercial and partner schedules. |
+| **Compliance** | Client certificates of insurance, and the block they cause. |
+| **STR** | Hosts, properties, and turnovers. |
+| **Portfolio** | Property-manager companies and unit registry. |
+| **Checklists** | Published crew lists for commercial jobs. |
+| **Comms** | Partnership templates and the send log. |
 
 ## Accounts
 
@@ -37,7 +49,7 @@ for.
 
 ## Insurance certificates
 
-This is the part of Commercial with the widest blast radius, and it's worth understanding
+This is the part of Accounts with the widest blast radius, and it's worth understanding
 even if you never touch this screen.
 
 Client certificate statuses are **Current**, **Expiring soon**, **Expired** and **Not on
@@ -86,11 +98,12 @@ Remember the fourth dispatch requirement from [Proposals](/docs/proposals): *our
 must have been sent to the client. A deal can be fully priced, signed and billed and still not
 dispatch because of that.
 
-## Jobs, recurring and checklists
+## Jobs, book, recurring and checklists
 
-**Book job** creates a one-off commercial job. **Recurring** manages repeating commercial and
-partner schedules. **Checklists** publishes what the crew is asked to do on site, with
-standard, review and health views.
+**Jobs** is the Bookings list filtered to commercial and office work. **New commercial job**
+is the internal-booking form for a negotiated quote. **Book** is the heavier book-a-site path
+for an existing account. **Recurring** manages repeating commercial and partner schedules.
+**Checklists** publishes what the crew is asked to do on site.
 
 ## STR
 
@@ -99,6 +112,12 @@ buttons sit in the header on the STR and Accounts tabs: **Sync contractors** and
 Airtable**.
 
 Hosts have their own portal at partner.novaracleaning.com; this is the internal side of it.
+Mailing the host agreement and payment setup is **Proposals → Send → STR**, not this tab.
+
+## Portfolio
+
+Property-manager companies, their unit registry, standing rates, and onboarding attention.
+Mailing the portfolio agreement is **Proposals → Send → Property Manager**.
 
 ## Common questions
 

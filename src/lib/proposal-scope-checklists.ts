@@ -50,6 +50,7 @@ export function defaultScopeTemplateForType(
   accountKind?: string,
 ): ScopeTemplateKey {
   if (typeKey === "str" || accountKind === "str") return "standard-clean";
+  if (typeKey === "property_manager" || accountKind === "property_manager") return "move-in-out";
   if (typeKey === "office" || accountKind === "office") return "office";
   return "commercial-standard";
 }

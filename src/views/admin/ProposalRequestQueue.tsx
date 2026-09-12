@@ -18,8 +18,16 @@ import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { PROPOSAL_STATUS_LABELS, walkthroughLink, walkthroughStaffPath, type ProposalRequestStatus } from "@/lib/proposal-request";
+import { DEFAULT_CHECKLISTS, proposalSendFlowForType, propertyTypeByKey, PROPOSAL_STATUS_LABELS, walkthroughLink, walkthroughStaffPath, type ProposalRequestStatus } from "@/lib/proposal-request";
+import type { ProposalSendFlow } from "@/lib/proposal-offer-send";
 import { proposalApi } from "@/lib/proposal-request-api";
+
+export interface ProposalSendTarget {
+  flow: ProposalSendFlow;
+  accountId?: string;
+  hostId?: string;
+  pmAccountId?: string;
+}
 
 interface SiteRow {
   id: string;
@@ -50,6 +58,7 @@ interface RequestRow {
   assigned_cleaner_id?: string | null;
   business_account_id?: string | null;
   host_id?: string | null;
+  pm_account_id?: string | null;
   requires_walkthrough?: boolean;
   sites: SiteRow[];
 }
@@ -80,7 +89,7 @@ interface Candidate {
 function needsWalkthrough(row: RequestRow | null): boolean {
   if (!row) return true;
   if (typeof row.requires_walkthrough === "boolean") return row.requires_walkthrough;
-  return row.property_type_key !== "str";
+  return row.property_type_key !== "str" && row.property_type_key !== "property_manager";
 }
 
 export default function ProposalRequestQueue({
@@ -92,7 +101,7 @@ export default function ProposalRequestQueue({
   rows: RequestRow[];
   loading: boolean;
   onRefresh: () => void;
-  onSend?: (accountId: string) => void;
+  onSend?: (target: ProposalSendTarget) => void;
 }) {
   const [filter, setFilter] = useState("pending_assign");
   const [search, setSearch] = useState("");
@@ -113,6 +122,10 @@ export default function ProposalRequestQueue({
 
   return (
     <div className="space-y-3">
+      <p className="text-sm text-slate-500">
+        Office and commercial walkthroughs. After firm price, Send can search the prospect this request created.
+        Leftover STR or property-manager rows can still be mailed from here; new ones start on Send.
+      </p>
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
         {[
           ["pending_assign", "Pending assign"],
@@ -195,7 +208,7 @@ function AssignSheet({
   row: RequestRow | null;
   onClose: () => void;
   onDone: () => void;
-  onSend?: (accountId: string) => void;
+  onSend?: (target: ProposalSendTarget) => void;
 }) {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(false);
@@ -398,20 +411,33 @@ function AssignSheet({
 
             {!walk && (
               <p className="text-xs text-slate-500 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-                Next: Partnerships → STR. Set a turnover rate on each property, then send the host onboarding link.
-                {row.host_id ? " A host record is already attached to this request." : ""}
+                {row.property_type_key === "property_manager"
+                  ? "Next: price every unit, then send property-manager onboarding from Proposals → Send."
+                  : "Next: set a turnover rate on each property, then send host onboarding from Proposals → Send."}
+                {row.host_id ? " A host record is already attached." : ""}
+                {row.pm_account_id ? " A property-manager account is already attached." : ""}
               </p>
             )}
 
-            {walk && row.business_account_id && (row.status === "walkthrough_conducted" || row.status === "firm_price_set") && (
+            {((!walk && (row.host_id || row.pm_account_id || row.business_account_id))
+              || (walk && row.business_account_id && (row.status === "walkthrough_conducted" || row.status === "firm_price_set"))) && (
               <Button
                 className="w-full"
                 onClick={() => {
-                  onSend?.(row.business_account_id!);
+                  const type = propertyTypeByKey(DEFAULT_CHECKLISTS, row.property_type_key);
+                  onSend?.({
+                    flow: proposalSendFlowForType(type),
+                    accountId: row.business_account_id || undefined,
+                    hostId: row.host_id || undefined,
+                    pmAccountId: row.pm_account_id || undefined,
+                  });
                   onClose();
                 }}
               >
-                <RiMailSendLine className="w-4 h-4 mr-1.5" /> Send proposal
+                <RiMailSendLine className="w-4 h-4 mr-1.5" />
+                {!walk
+                  ? (row.property_type_key === "property_manager" ? "Send PM onboarding" : "Send host onboarding")
+                  : "Send proposal"}
               </Button>
             )}
           </div>

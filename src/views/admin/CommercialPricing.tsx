@@ -291,7 +291,7 @@ export default function CommercialPricing() {
           The multiplier prices the depth. Square feet per cleaner-hour is how fast one cleaner covers ground at that
           depth — it&apos;s what sizes the crew against the service window, so a change here moves recommended crews.
           The checklist under each level is the published customer list — same items the crew works.{" "}
-          <Link href="/admin/commercial?tab=checklists" className="text-violet-700 font-medium hover:underline">
+          <Link href="/admin/accounts?tab=checklists" className="text-violet-700 font-medium hover:underline">
             Open the Checklists workspace
           </Link>
           .

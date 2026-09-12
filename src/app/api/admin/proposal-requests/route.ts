@@ -1,8 +1,8 @@
 // ─── /api/admin/proposal-requests ──────────────────────────────────────────
 //
-// Dedicated Proposals tab. A submit here is a Proposal Request — never a
-// job booking. Creates a prospective account (or STR host) and, for office
-// and commercial, a walkthrough in `requested`. STR skips the walkthrough.
+// Dedicated Proposals tab. A submit here is an office / commercial Proposal
+// Request — never a job booking. Creates a searchable prospect and a
+// walkthrough in `requested`. STR and property-manager offers start on Send.
 
 import { NextResponse } from "next/server";
 import { requireAdmin, AdminAuthError } from "@/lib/admin-auth";
@@ -97,6 +97,12 @@ export async function GET(req: Request): Promise<NextResponse> {
     return {
       ...r,
       requires_walkthrough: typeRequiresWalkthrough(type),
+      pm_account_id:
+        r.pm_account_id
+        || (r.intake_answers && typeof r.intake_answers === "object"
+          ? (r.intake_answers as { _pm_account_id?: string })._pm_account_id
+          : null)
+        || null,
       status_label: proposalRequestStatusLabel(status, type, String(r.property_type_key || "")),
       sites: sitesByRequest.get(String(r.id)) || [],
     };
@@ -163,10 +169,19 @@ export async function POST(req: Request): Promise<NextResponse> {
     ? [firstSite.address, firstSite.city, firstSite.state].filter(Boolean).join(", ")
     : String(request.requester_company || "your property");
 
+  const isPm = type?.accountKind === "property_manager";
   const mail = await sendProposalEmail(supabase, {
     to: String(request.requester_email),
-    subject: needsWalk ? settings.pendingEmailSubject : settings.pendingStrEmailSubject,
-    body: needsWalk ? settings.pendingEmailBody : settings.pendingStrEmailBody,
+    subject: needsWalk
+      ? settings.pendingEmailSubject
+      : isPm
+        ? settings.pendingPmEmailSubject
+        : settings.pendingStrEmailSubject,
+    body: needsWalk
+      ? settings.pendingEmailBody
+      : isPm
+        ? settings.pendingPmEmailBody
+        : settings.pendingStrEmailBody,
     vars: { name: String(request.requester_name || ""), address },
     templateKey: "commercial_proposal_intake",
     trigger: "proposal-request.intake",
@@ -186,7 +201,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       subject: `New proposal request — ${request.requester_name}`,
       body:
         `A proposal request was submitted for ${address} (${request.property_type_key}). ` +
-        `Status: ${needsWalk ? "Pending — Assigning Walkthrough Agent" : "Pending — Price host properties (no walkthrough)"}. This is not a booking.`,
+        `Status: ${needsWalk ? "Pending — Assigning Walkthrough Agent" : isPm ? "Pending — Price portfolio units (no walkthrough)" : "Pending — Price host properties (no walkthrough)"}. This is not a booking.`,
       vars: { name: "team", address },
       templateKey: "commercial_proposal_intake",
       role: "admin",

@@ -14,7 +14,7 @@ export default async function Page({
     if (v) qs.set(key, v);
   }
   const suffix = qs.toString();
-  redirect(suffix ? `/admin/commercial?${suffix}` : "/admin/commercial");
+  redirect(suffix ? `/admin/accounts?${suffix}` : "/admin/accounts");
 }
 
 export const dynamic = "force-dynamic";

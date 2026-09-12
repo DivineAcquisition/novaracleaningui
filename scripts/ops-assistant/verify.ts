@@ -188,12 +188,12 @@ function knowledgeAndAnswers() {
     surface: "workspace",
     entry: "chat",
     role: "admin",
-    page: { surface: "workspace", path: "/admin/commercial", docSlug: "commercial", record: null },
+    page: { surface: "workspace", path: "/admin/accounts", docSlug: "commercial", record: null },
     chunks: pack.chunks,
   });
   assert(walk.intent === "walkthrough", "walk-me-through must use the walkthrough path");
   assert(
-    walk.actions.some((a) => a.kind === "workspace" && a.href.includes("/admin/commercial")),
+    walk.actions.some((a) => a.kind === "workspace" && (a.href.includes("/admin/accounts") || a.href.includes("/admin/commercial"))),
     "a workspace walkthrough must point at the real next screen",
   );
   assert(
@@ -266,7 +266,7 @@ function knowledgeAndAnswers() {
     role: "admin",
     page: {
       surface: "workspace",
-      path: "/admin/commercial",
+      path: "/admin/accounts",
       docSlug: "commercial",
       record: { kind: "account", id: "acct-1", label: "Example LLC" },
     },

@@ -1,12 +1,7 @@
-import { Suspense } from "react";
 import { redirect } from "next/navigation";
-import AdminLayout from "@/components/admin/AdminLayout";
-import { ProtectedRoute } from "@/components/ProtectedRoute";
-import CommercialHub from "@/views/admin/CommercialHub";
 import { proposalsHubTab } from "@/lib/commercial-proposal";
 
-// Canonical Commercial hub. Old /admin/partner bookmarks redirect here.
-// Send, pipeline, and walkthroughs live on the dedicated Proposals tab.
+// Commercial was renamed Accounts. Offer tabs still go to Proposals.
 export default function Page({
   searchParams,
 }: {
@@ -15,7 +10,7 @@ export default function Page({
   const raw = String(searchParams?.tab || "");
   const tab = raw === "proposals" ? "pipeline" : raw;
   if (tab === "send") {
-    redirect(proposalsHubTab("send", searchParams?.account ? { account: searchParams.account } : undefined));
+    redirect(proposalsHubTab("send", searchParams?.account ? { account: searchParams.account, flow: "commercial" } : { flow: "commercial" }));
   }
   if (tab === "pipeline") {
     redirect(proposalsHubTab("pipeline"));
@@ -24,15 +19,11 @@ export default function Page({
     redirect(proposalsHubTab("price"));
   }
 
-  return (
-    <ProtectedRoute requiredRole="admin_strict">
-      <AdminLayout>
-        <Suspense>
-          <CommercialHub />
-        </Suspense>
-      </AdminLayout>
-    </ProtectedRoute>
-  );
+  const params = new URLSearchParams();
+  if (tab) params.set("tab", tab);
+  if (searchParams?.account) params.set("account", searchParams.account);
+  const suffix = params.toString();
+  redirect(suffix ? `/admin/accounts?${suffix}` : "/admin/accounts");
 }
 
 export const dynamic = "force-dynamic";

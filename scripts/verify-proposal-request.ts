@@ -23,6 +23,8 @@ import {
   missingRequired,
   propertyTypeByKey,
   proposalRequestStatusLabel,
+  proposalSendFlowForType,
+  requestablePropertyTypes,
   RETIRED_FINDING_KEYS,
   slugTypeKey,
   typeRequiresWalkthrough,
@@ -39,6 +41,11 @@ import {
   proposalSendRequirements,
 } from "../src/lib/commercial-proposal-send";
 import { isCommercialBookingRow } from "../src/lib/commercial-booking";
+import {
+  PROPOSAL_SEND_FLOWS,
+  pmOfferRequirements,
+  strOfferRequirements,
+} from "../src/lib/proposal-offer-send";
 import {
   walkthroughPreviewPayload,
   walkthroughPreviewTypeKey,
@@ -59,18 +66,41 @@ function check(name: string, actual: unknown, expected: unknown): void {
 console.log("Property types:");
 const keys = DEFAULT_CHECKLISTS.types.map((t) => t.key);
 check(
-  "built-in types are STR, office, and the commercial subtypes",
+  "built-in types are STR, PM, office, and the commercial subtypes",
   keys,
-  ["str", "office", "retail", "warehouse", "restaurant", "gym", "medical", "other"],
+  ["str", "property_manager", "office", "retail", "warehouse", "restaurant", "gym", "medical", "other"],
 );
 check("STR links to a host record, not a commercial account type", propertyTypeByKey(DEFAULT_CHECKLISTS, "str")?.accountKind, "str");
 check("STR does not require a walkthrough", typeRequiresWalkthrough(propertyTypeByKey(DEFAULT_CHECKLISTS, "str")), false);
+check("property manager does not require a walkthrough", typeRequiresWalkthrough(propertyTypeByKey(DEFAULT_CHECKLISTS, "property_manager")), false);
 check("office requires a walkthrough", typeRequiresWalkthrough(propertyTypeByKey(DEFAULT_CHECKLISTS, "office")), true);
 check("warehouse requires a walkthrough", typeRequiresWalkthrough(propertyTypeByKey(DEFAULT_CHECKLISTS, "warehouse")), true);
+check(
+  "New request excludes STR and property manager",
+  requestablePropertyTypes(DEFAULT_CHECKLISTS).map((t) => t.key).includes("str")
+    || requestablePropertyTypes(DEFAULT_CHECKLISTS).map((t) => t.key).includes("property_manager"),
+  false,
+);
+check(
+  "New request includes office and a commercial subtype",
+  requestablePropertyTypes(DEFAULT_CHECKLISTS).some((t) => t.key === "office")
+    && requestablePropertyTypes(DEFAULT_CHECKLISTS).some((t) => t.key === "warehouse"),
+  true,
+);
+check(
+  "every requestable type needs a walkthrough",
+  requestablePropertyTypes(DEFAULT_CHECKLISTS).every((t) => typeRequiresWalkthrough(t)),
+  true,
+);
 check(
   "pending STR status is price host properties",
   proposalRequestStatusLabel("pending_assign", propertyTypeByKey(DEFAULT_CHECKLISTS, "str")),
   "Pending — Price host properties",
+);
+check(
+  "pending PM status is price portfolio units",
+  proposalRequestStatusLabel("pending_assign", propertyTypeByKey(DEFAULT_CHECKLISTS, "property_manager")),
+  "Pending — Price portfolio units",
 );
 check(
   "pending office status still assigns an agent",
@@ -237,6 +267,35 @@ check("send still needs a rate and an email", proposalSendRequirements({
   sites: [{ nickname: "Main", rateCents: null }],
 }), ["Decision-maker's email", "Main still needs a per-visit rate"]);
 check("valid proposal email", isValidProposalEmail("jordan@acme.com"), true);
+
+console.log("\nFour unique send flows:");
+check("flows are STR, office, commercial, and property manager", PROPOSAL_SEND_FLOWS, ["str", "office", "commercial", "property_manager"]);
+check("STR type routes to the host send flow", proposalSendFlowForType(propertyTypeByKey(DEFAULT_CHECKLISTS, "str")), "str");
+check("office type routes to the office send flow", proposalSendFlowForType(propertyTypeByKey(DEFAULT_CHECKLISTS, "office")), "office");
+check("warehouse type routes to the commercial send flow", proposalSendFlowForType(propertyTypeByKey(DEFAULT_CHECKLISTS, "warehouse")), "commercial");
+check("PM type routes to the property-manager send flow", proposalSendFlowForType(propertyTypeByKey(DEFAULT_CHECKLISTS, "property_manager")), "property_manager");
+check("STR send does not require an existing host id", strOfferRequirements({
+  hostName: "Alex Harbor",
+  email: "alex@harbor.test",
+  properties: [{ nickname: "Loft", address: "12 Harbor St", turnoverDollars: 185 }],
+}), []);
+check("STR send still needs a rate and an email", strOfferRequirements({
+  hostName: "Alex Harbor",
+  email: "not-an-email",
+  properties: [{ nickname: "Loft", address: "12 Harbor St", turnoverDollars: null }],
+}), ["Host email", "Loft still needs a turnover rate"]);
+check("PM send does not require an existing account id", pmOfferRequirements({
+  companyName: "Harbor Property Group",
+  contactName: "Jordan Lee",
+  email: "jordan@harbor.test",
+  units: [{ nickname: "2B", address: "44 Pine St", priced: true }],
+}), []);
+check("PM send still needs a company and a priced unit", pmOfferRequirements({
+  companyName: "",
+  contactName: "Jordan Lee",
+  email: "jordan@harbor.test",
+  units: [{ nickname: "2B", address: "44 Pine St", priced: false }],
+}), ["Company name", "2B still needs standing rates (or enough detail to auto-price)"]);
 check("sent proposal without signed agreement is proposal_sent", pipelineStageFromRows({
   proposalStatus: "sent",
   pricedSites: 1,
@@ -244,7 +303,7 @@ check("sent proposal without signed agreement is proposal_sent", pipelineStageFr
   excludedSites: 0,
 }), "proposal_sent");
 
-console.log("\nCommercial tab scope:");
+console.log("\nAccounts jobs scope:");
 check("commercial booking_type is in scope", isCommercialBookingRow({ booking_type: "commercial" }), true);
 check("office booking_type is in scope", isCommercialBookingRow({ booking_type: "office" }), true);
 check("STR turnover is not a commercial-tab job", isCommercialBookingRow({ booking_type: "str_turnover" }), false);

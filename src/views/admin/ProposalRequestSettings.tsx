@@ -42,7 +42,7 @@ export default function ProposalRequestSettings({
         <div>
           <h2 className="font-bold text-slate-900">Requester emails &amp; walkthrough pay</h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Placeholders: [Name] [property/address] [date] [time] [Agent name] [link]. Walkthrough assignment is paid whether or not the proposal converts. STR requests use a separate email — no agent is assigned.
+            Placeholders: [Name] [property/address] [date] [time] [Agent name] [link]. Walkthrough assignment is paid whether or not the proposal converts. STR and property-manager requests use their own emails — no agent is assigned.
           </p>
         </div>
         <Button onClick={() => void save()} disabled={saving}>
@@ -95,6 +95,11 @@ export default function ProposalRequestSettings({
         <Label className="text-xs">Pending — STR, no walkthrough (subject)</Label>
         <Input value={local.pendingStrEmailSubject} onChange={(e) => set({ pendingStrEmailSubject: e.target.value })} />
         <Textarea rows={5} value={local.pendingStrEmailBody} onChange={(e) => set({ pendingStrEmailBody: e.target.value })} className="text-sm" />
+      </div>
+      <div className="space-y-2">
+        <Label className="text-xs">Pending — property manager, no walkthrough (subject)</Label>
+        <Input value={local.pendingPmEmailSubject} onChange={(e) => set({ pendingPmEmailSubject: e.target.value })} />
+        <Textarea rows={5} value={local.pendingPmEmailBody} onChange={(e) => set({ pendingPmEmailBody: e.target.value })} className="text-sm" />
       </div>
       <div className="space-y-2">
         <Label className="text-xs">Walkthrough scheduled (subject)</Label>
