@@ -71,7 +71,9 @@ export function PdfViewer({ url, title = "Document", className }: PdfViewerProps
 
           const ctx = canvas.getContext("2d");
           if (!ctx) continue;
-          await page.render({ canvas, canvasContext: ctx, viewport }).promise;
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = "high";
+          await page.render({ canvas, canvasContext: ctx, viewport, intent: "print" }).promise;
           if (cancelled) return;
           setPagesDone(i);
         }
