@@ -287,7 +287,9 @@ export async function sendPmOffer(supabase: Admin, input: SendPmOfferInput) {
   );
 
   for (const unit of units) {
-    const existingUnitId = clip(unit.unitId, 80) || unitByAddress.get(normalizeAddress(unit.address)) || "";
+    const existingUnitId = String(
+      clip(unit.unitId, 80) || unitByAddress.get(normalizeAddress(unit.address)) || "",
+    );
     if (existingUnitId) {
       if (unit.moveOutCents && unit.moveInCents && unit.standardCents) {
         const priced = await approveUnit(supabase, {
