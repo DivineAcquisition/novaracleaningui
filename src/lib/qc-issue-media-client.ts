@@ -33,7 +33,7 @@ export async function uploadQcIssueMedia(opts: {
     type: opts.file.type,
     size: opts.file.size,
   });
-  if (!check.ok) throw new Error(check.error);
+  if (check.ok === false) throw new Error(check.error);
 
   const headers = await authHeaders(opts.issueId);
   const signRes = await fetch("/api/qc/issue-media", {

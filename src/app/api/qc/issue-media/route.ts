@@ -140,7 +140,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     const size = Number(body.size) || 0;
     const contentType = String(body.contentType || "") || (mediaKindFor({ name: filename }) === "video" ? "video/mp4" : "image/jpeg");
     const check = validateQcIssueMediaFile({ name: filename, type: contentType, size });
-    if (!check.ok) return json({ error: check.error }, 400);
+    if (check.ok === false) return json({ error: check.error }, 400);
 
     const id = crypto.randomUUID().replace(/-/g, "").slice(0, 10);
     const path = qcIssueMediaStoragePath({
