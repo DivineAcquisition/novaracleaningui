@@ -29,6 +29,8 @@
     "qc-incident:verify:node": "tsx scripts/verify-qc-incident.deno.ts",
     "qc-statement:verify": "tsx scripts/verify-qc-statement.deno.ts",
     "qc-statement:verify:deno": "deno run --allow-read scripts/verify-qc-statement.deno.ts",
+    "qc-media:verify": "tsx scripts/verify-qc-issue-media.deno.ts",
+    "qc-media:verify:deno": "deno run --allow-read scripts/verify-qc-issue-media.deno.ts",
     "proposals:verify": "tsx scripts/verify-proposal-request.ts",
     "host-onboarding:verify": "tsx scripts/verify-host-onboarding-session.ts",
     "partnership-comms:verify": "tsx scripts/verify-partnership-comms.ts",
