@@ -9,7 +9,7 @@
 //   3. Cleaners           (directory + onboarding + management)
 //   4. Dispatch           (staff jobs, offers, re-dispatch)
 //   5. Internal Booking   (VA-driven booking submission, formerly "CSR Form")
-//   6. Accounts           (clients · STR · portfolio · compliance · commercial jobs)
+//   6. Accounts           (clients · jobs · certificates · STR · portfolio)
 //   8. Customers          (full account control)
 //   9. Operational Map    (cleaner coverage × booking heatmap)
 //  10. Payroll            (Stripe Connect cleaner payouts)
@@ -134,7 +134,7 @@ const NAV_ITEMS: NavItem[] = [
     title: "Accounts",
     url: "/admin/accounts",
     icon: RiHotelLine,
-    description: "Clients · STR · portfolio · compliance",
+    description: "Clients · jobs · certificates · STR",
     adminOnly: true,
   },
   {

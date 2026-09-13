@@ -35,6 +35,7 @@
     "host-onboarding:verify": "tsx scripts/verify-host-onboarding-session.ts",
     "partnership-comms:verify": "tsx scripts/verify-partnership-comms.ts",
     "partner-portal:verify": "tsx scripts/verify-partner-portal.ts",
+    "accounts-hub:verify": "tsx scripts/verify-accounts-hub.ts",
     "property-manager:verify": "tsx scripts/verify-property-manager.ts",
     "docs:pricing": "tsx scripts/docs/pricing-examples.ts",
     "onboarding:verify": "tsx scripts/verify-onboarding-sequence.ts",

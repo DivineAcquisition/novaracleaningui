@@ -133,7 +133,7 @@ export interface AccountCompliance {
 }
 
 /** Where an admin goes to fix a COI gap, named in every block message. */
-export const COI_CONSOLE_PATH = "/admin/commercial?tab=compliance";
+export const COI_CONSOLE_PATH = "/admin/accounts?tab=accounts&panel=compliance";
 
 /** Where an admin goes to fix a proposal / agreement / billing gap. */
 export const DEAL_CONSOLE_PATH = "/admin/proposals?tab=pipeline";
