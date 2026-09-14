@@ -9,11 +9,17 @@
 //      sync-to-ghl plumbing, but called directly so we can capture the
 //      contact/opportunity ids on the leads row).
 //   3. Round-robin assign to the next on-shift VA (public.va_assignments)
+//      BEFORE insert so the events → Discord ping includes the owner.
 //   4. Fire the "calling you in 2 minutes" auto-SMS via send-ghl-sms so the
 //      lead is expecting the call.
 //   5. Schedule an escalation marker so a separate cron can flag stale
 //      leads (no call within 10 minutes).
-//   6. (Optional) push an internal SMS to the assigned VA's phone.
+//   6. Facebook leads: team Discord via events → discord_routes, plus
+//      email to every admin + VA and the assigned VA's private Discord
+//      webhook when one is configured.
+//
+// Accepts the JSON body below, OR Meta's native Lead Ads webhook (GET
+// hub.challenge verification + POST {object:"page", entry:[leadgen]}).
 //
 // Body shape (all optional except phone OR email):
 //   {
@@ -25,6 +31,7 @@
 //     specialRequests?, notes?,
 //     utmSource?, utmMedium?, utmCampaign?,
 //     leadScore? 'hot' | 'warm' | 'cold',  // defaults to 'hot' for fb/lsa
+//     fbLeadId?,
 //   }
 //
 // Response: { leadId, ghlContactId, ghlOpportunityId, assignedVaUserId }
@@ -41,11 +48,21 @@ import {
   sourceTag,
   zipTag,
 } from "../_shared/ghl-tags.ts";
+import {
+  extractMetaLeadgenIds,
+  fetchMetaLeadById,
+  isFacebookLeadSource,
+  isMetaLeadWebhook,
+  mapMetaLeadFields,
+  notifyFacebookLeadStaff,
+  verifyMetaSignature,
+} from "../_shared/lead-alerts.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, x-hub-signature, x-hub-signature-256",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
 
 const GHL_BASE = "https://services.leadconnectorhq.com";
@@ -81,6 +98,7 @@ interface LeadPayload {
   utmMedium?: string;
   utmCampaign?: string;
   leadScore?: "hot" | "warm" | "cold";
+  fbLeadId?: string;
 }
 
 function digitsOnly(s: string | undefined | null): string {
@@ -311,215 +329,323 @@ async function roundRobinAssignVa(
   return { userId: va.va_user_id, displayName: va.display_name };
 }
 
+function json(payload: unknown, status = 200) {
+  return new Response(JSON.stringify(payload), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    status,
+  });
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "object" && error !== null) {
+    return (error as { message?: string }).message ||
+      (error as { error_description?: string }).error_description ||
+      JSON.stringify(error);
+  }
+  return String(error);
+}
+
+async function handleMetaVerify(req: Request, supabase: { from: (table: string) => unknown }) {
+  const url = new URL(req.url);
+  const mode = url.searchParams.get("hub.mode") || "";
+  const token = url.searchParams.get("hub.verify_token") || "";
+  const challenge = url.searchParams.get("hub.challenge") || "";
+  const expected = await resolveSecret(supabase, "FACEBOOK_WEBHOOK_VERIFY_TOKEN");
+  if (mode === "subscribe" && expected && token === expected && challenge) {
+    return new Response(challenge, {
+      headers: { ...corsHeaders, "Content-Type": "text/plain" },
+      status: 200,
+    });
+  }
+  return json({ error: "facebook webhook verification failed" }, 403);
+}
+
+// deno-lint-ignore no-explicit-any
+async function ingestLead(supabase: any, payload: LeadPayload) {
+  if (!payload.phone && !payload.email) {
+    return { error: "phone or email required", status: 400 as const };
+  }
+
+  const phoneDigits = digitsOnly(payload.phone);
+  const source = (payload.source || "manual").toLowerCase();
+  const leadScore = payload.leadScore || defaultLeadScore(source);
+
+  // 1. Look for a recent duplicate lead from the same phone/email so we
+  // don't double-text + double-assign on a webhook retry.
+  let leadId: string | null = null;
+  let isNew = true;
+  if (phoneDigits || payload.email) {
+    const orFilter = [
+      phoneDigits ? `phone.ilike.%${phoneDigits}%` : null,
+      payload.email ? `email.ilike.${payload.email}` : null,
+    ].filter(Boolean).join(",");
+    const sinceIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { data: existing } = await supabase
+      .from("leads")
+      .select("id")
+      .or(orFilter)
+      .gte("created_at", sinceIso)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (existing?.id) {
+      leadId = existing.id;
+      isNew = false;
+    }
+  }
+
+  // Assign before insert so the leads_fan_out_events trigger (Discord)
+  // includes the owner on Facebook lead pings.
+  let assignedVa: { userId: string | null; displayName: string | null } = {
+    userId: null,
+    displayName: null,
+  };
+  if (isNew && leadScore === "hot") {
+    assignedVa = await roundRobinAssignVa(supabase);
+  }
+
+  if (isNew) {
+    // public.leads has NOT NULL constraints on first_name + last_name
+    // (without DB-level defaults). For an email-only lead (e.g.
+    // exit-intent capture form) we used to blow up with a 23502 NOT
+    // NULL violation that the catch block then turned into a useless
+    // `{ error: "[object Object]" }`. Derive both names from whatever
+    // the form gave us so the insert always succeeds; the canonical
+    // user-supplied data still wins because the row gets enriched on
+    // subsequent calls (idempotent upsert window).
+    const emailLocal = payload.email ? payload.email.split("@")[0] : "";
+    const derivedFirst = payload.firstName || emailLocal || "Lead";
+    const derivedLast = payload.lastName || "(no last name)";
+    const notes = [
+      payload.notes || "",
+      payload.fbLeadId ? `fb_lead_id: ${payload.fbLeadId}` : "",
+    ].filter(Boolean).join("\n") || null;
+
+    const { data: inserted, error: insertErr } = await supabase
+      .from("leads")
+      .insert({
+        first_name: derivedFirst,
+        last_name: derivedLast,
+        email: payload.email || null,
+        phone: phoneDigits || null,
+        source,
+        status: "new",
+        property_type: payload.propertyType || null,
+        bedrooms: payload.bedrooms ?? null,
+        bathrooms: payload.bathrooms ?? null,
+        sqft: payload.sqft ?? null,
+        zip_code: payload.zipCode || null,
+        service_type: payload.serviceType || null,
+        frequency: payload.frequency || null,
+        preferred_date: payload.preferredDate || null,
+        preferred_time: payload.preferredTime || null,
+        special_requests: payload.specialRequests || null,
+        urgency: payload.urgency || (leadScore === "hot" ? "urgent" : null),
+        notes,
+        lead_score: leadScore,
+        assigned_va_user_id: assignedVa.userId,
+        next_action_at: leadScore === "hot"
+          ? new Date(Date.now() + 2 * 60 * 1000).toISOString()
+          : null,
+      })
+      .select("id")
+      .single();
+    if (insertErr) {
+      logStep("insert error", insertErr);
+      throw insertErr;
+    }
+    leadId = inserted.id;
+  }
+  if (!leadId) throw new Error("could not resolve leadId");
+
+  // 2. GHL upsert
+  const ghlToken = (Deno.env.get("GHL_PIT_TOKEN") || "").trim();
+  const ghlLocation = (Deno.env.get("GHL_LOCATION_ID") || "").trim();
+  const { contactId, opportunityId } = await ghlUpsertContactAndOpportunity(
+    payload,
+    leadId,
+    ghlToken,
+    ghlLocation,
+    supabase,
+  );
+  if (contactId || opportunityId) {
+    await supabase
+      .from("leads")
+      .update({
+        ghl_contact_id: contactId,
+        ghl_opportunity_id: opportunityId,
+      })
+      .eq("id", leadId);
+  }
+
+  // 3. Speed-to-lead auto-SMS via GHL conversations (only on new hot leads)
+  if (isNew && leadScore === "hot" && payload.phone && contactId) {
+    try {
+      const fname = payload.firstName || "there";
+      const vaName = assignedVa.displayName || "Novara";
+      const msg =
+        `Hi ${fname}, this is ${vaName} with Novara Cleaning. ` +
+        `Just got your request — calling you from this number in about 2 minutes ` +
+        `to get a quick quote together. Text STOP to opt out.`;
+      await fetch(
+        `${Deno.env.get("SUPABASE_URL")}/functions/v1/send-ghl-sms`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
+          },
+          body: JSON.stringify({
+            contactId,
+            phone: payload.phone,
+            email: payload.email,
+            firstName: payload.firstName,
+            lastName: payload.lastName,
+            message: msg,
+          }),
+        },
+      );
+      await supabase
+        .from("leads")
+        .update({ speed_to_lead_sms_sent_at: new Date().toISOString() })
+        .eq("id", leadId);
+    } catch (smsErr) {
+      logStep("speed-to-lead SMS failed (non-blocking)", smsErr);
+    }
+  }
+
+  // Facebook: email every admin + VA, and ping the assigned VA's private
+  // Discord webhook. Team-channel Discord is the events → discord_routes
+  // bus (lead.facebook.created), fired by the insert trigger above.
+  let alerts: { emailed: boolean; emailRecipients: number; vaDiscord: boolean } | undefined;
+  if (isNew && isFacebookLeadSource(source)) {
+    try {
+      alerts = await notifyFacebookLeadStaff(supabase, {
+        leadId,
+        source,
+        firstName: payload.firstName,
+        lastName: payload.lastName,
+        email: payload.email,
+        phone: payload.phone || phoneDigits,
+        zipCode: payload.zipCode,
+        city: payload.city,
+        state: payload.state,
+        serviceType: payload.serviceType,
+        leadScore,
+        assignedVaUserId: assignedVa.userId,
+        assignedVaName: assignedVa.displayName,
+        fbLeadId: payload.fbLeadId,
+        notes: payload.notes,
+      });
+    } catch (alertErr) {
+      logStep("facebook staff alerts failed (non-blocking)", alertErr);
+    }
+  }
+
+  logStep("lead processed", {
+    leadId,
+    isNew,
+    leadScore,
+    assignedVa: assignedVa.userId,
+    ghlContactId: contactId,
+    ghlOpportunityId: opportunityId,
+    facebookAlerts: alerts,
+  });
+
+  return {
+    success: true,
+    leadId,
+    isNew,
+    leadScore,
+    ghlContactId: contactId,
+    ghlOpportunityId: opportunityId,
+    assignedVaUserId: assignedVa.userId,
+    assignedVaName: assignedVa.displayName,
+    alerts,
+  };
+}
+
+// deno-lint-ignore no-explicit-any
+async function ingestMetaLeads(supabase: any, body: unknown) {
+  const ids = extractMetaLeadgenIds(body);
+  if (!ids.length) {
+    return json({ success: true, processed: 0, reason: "no leadgen ids" });
+  }
+  const results = [];
+  for (const leadgenId of ids) {
+    const graph = await fetchMetaLeadById(supabase, leadgenId);
+    if (!graph) {
+      results.push({ fbLeadId: leadgenId, error: "graph fetch failed" });
+      continue;
+    }
+    const mapped = mapMetaLeadFields(graph.field_data);
+    const payload: LeadPayload = {
+      source: "fb_lead_ads",
+      firstName: mapped.firstName,
+      lastName: mapped.lastName,
+      email: mapped.email,
+      phone: mapped.phone,
+      zipCode: mapped.zipCode,
+      city: mapped.city,
+      state: mapped.state,
+      address: mapped.address,
+      serviceType: mapped.serviceType,
+      notes: mapped.notes,
+      leadScore: "hot",
+      fbLeadId: graph.id || leadgenId,
+    };
+    if (!payload.phone && !payload.email) {
+      results.push({ fbLeadId: leadgenId, error: "phone or email missing on form" });
+      continue;
+    }
+    results.push(await ingestLead(supabase, payload));
+  }
+  return json({ success: true, processed: results.length, results });
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
+
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+  );
+
+  if (req.method === "GET") {
+    return handleMetaVerify(req, supabase);
+  }
+
   try {
-    const payload: LeadPayload = await req.json();
-    if (!payload.phone && !payload.email) {
-      return new Response(
-        JSON.stringify({ error: "phone or email required" }),
-        {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-          status: 400,
-        },
-      );
+    const raw = await req.text();
+    let body: unknown = {};
+    try {
+      body = raw ? JSON.parse(raw) : {};
+    } catch {
+      return json({ error: "invalid json" }, 400);
     }
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-    );
-
-    const phoneDigits = digitsOnly(payload.phone);
-    const source = (payload.source || "manual").toLowerCase();
-    const leadScore = payload.leadScore || defaultLeadScore(source);
-
-    // 1. Look for a recent duplicate lead from the same phone/email so we
-    // don't double-text + double-assign on a webhook retry.
-    let leadId: string | null = null;
-    let isNew = true;
-    if (phoneDigits || payload.email) {
-      const orFilter = [
-        phoneDigits ? `phone.ilike.%${phoneDigits}%` : null,
-        payload.email ? `email.ilike.${payload.email}` : null,
-      ].filter(Boolean).join(",");
-      const sinceIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      const { data: existing } = await supabase
-        .from("leads")
-        .select("id")
-        .or(orFilter)
-        .gte("created_at", sinceIso)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (existing?.id) {
-        leadId = existing.id;
-        isNew = false;
-      }
+    if (isMetaLeadWebhook(body)) {
+      const sig = req.headers.get("x-hub-signature-256") || req.headers.get("x-hub-signature");
+      const ok = await verifyMetaSignature(supabase, raw, sig);
+      if (!ok) return json({ error: "invalid facebook signature" }, 401);
+      return await ingestMetaLeads(supabase, body);
     }
 
-    if (isNew) {
-      // public.leads has NOT NULL constraints on first_name + last_name
-      // (without DB-level defaults). For an email-only lead (e.g.
-      // exit-intent capture form) we used to blow up with a 23502 NOT
-      // NULL violation that the catch block then turned into a useless
-      // `{ error: "[object Object]" }`. Derive both names from whatever
-      // the form gave us so the insert always succeeds; the canonical
-      // user-supplied data still wins because the row gets enriched on
-      // subsequent calls (idempotent upsert window).
-      const emailLocal = payload.email ? payload.email.split("@")[0] : "";
-      const derivedFirst = payload.firstName || emailLocal || "Lead";
-      const derivedLast = payload.lastName || "(no last name)";
-
-      const { data: inserted, error: insertErr } = await supabase
-        .from("leads")
-        .insert({
-          first_name: derivedFirst,
-          last_name: derivedLast,
-          email: payload.email || null,
-          phone: phoneDigits || null,
-          source,
-          status: "new",
-          property_type: payload.propertyType || null,
-          bedrooms: payload.bedrooms ?? null,
-          bathrooms: payload.bathrooms ?? null,
-          sqft: payload.sqft ?? null,
-          zip_code: payload.zipCode || null,
-          service_type: payload.serviceType || null,
-          frequency: payload.frequency || null,
-          preferred_date: payload.preferredDate || null,
-          preferred_time: payload.preferredTime || null,
-          special_requests: payload.specialRequests || null,
-          urgency: payload.urgency || (leadScore === "hot" ? "urgent" : null),
-          notes: payload.notes || null,
-          lead_score: leadScore,
-          next_action_at: leadScore === "hot"
-            ? new Date(Date.now() + 2 * 60 * 1000).toISOString()
-            : null,
-        })
-        .select("id")
-        .single();
-      if (insertErr) {
-        logStep("insert error", insertErr);
-        throw insertErr;
-      }
-      leadId = inserted.id;
+    const payload = body as LeadPayload;
+    const result = await ingestLead(supabase, payload);
+    if ("error" in result && result.error) {
+      return json({ error: result.error }, result.status || 400);
     }
-    if (!leadId) throw new Error("could not resolve leadId");
-
-    // 2. GHL upsert
-    const ghlToken = (Deno.env.get("GHL_PIT_TOKEN") || "").trim();
-    const ghlLocation = (Deno.env.get("GHL_LOCATION_ID") || "").trim();
-    const { contactId, opportunityId } = await ghlUpsertContactAndOpportunity(
-      payload,
-      leadId,
-      ghlToken,
-      ghlLocation,
-      supabase,
-    );
-    if (contactId || opportunityId) {
-      await supabase
-        .from("leads")
-        .update({
-          ghl_contact_id: contactId,
-          ghl_opportunity_id: opportunityId,
-        })
-        .eq("id", leadId);
-    }
-
-    // 3. Round-robin VA assignment (only when new + hot)
-    let assignedVa: { userId: string | null; displayName: string | null } = {
-      userId: null,
-      displayName: null,
-    };
-    if (isNew && leadScore === "hot") {
-      assignedVa = await roundRobinAssignVa(supabase);
-      if (assignedVa.userId) {
-        await supabase
-          .from("leads")
-          .update({ assigned_va_user_id: assignedVa.userId })
-          .eq("id", leadId);
-      }
-    }
-
-    // 4. Speed-to-lead auto-SMS via GHL conversations (only on new hot leads)
-    if (isNew && leadScore === "hot" && payload.phone && contactId) {
-      try {
-        const fname = payload.firstName || "there";
-        const vaName = assignedVa.displayName || "Novara";
-        const msg =
-          `Hi ${fname}, this is ${vaName} with Novara Cleaning. ` +
-          `Just got your request — calling you from this number in about 2 minutes ` +
-          `to get a quick quote together. Text STOP to opt out.`;
-        await fetch(
-          `${Deno.env.get("SUPABASE_URL")}/functions/v1/send-ghl-sms`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
-            },
-            body: JSON.stringify({
-              contactId,
-              phone: payload.phone,
-              email: payload.email,
-              firstName: payload.firstName,
-              lastName: payload.lastName,
-              message: msg,
-            }),
-          },
-        );
-        await supabase
-          .from("leads")
-          .update({ speed_to_lead_sms_sent_at: new Date().toISOString() })
-          .eq("id", leadId);
-      } catch (smsErr) {
-        logStep("speed-to-lead SMS failed (non-blocking)", smsErr);
-      }
-    }
-
-    logStep("lead processed", {
-      leadId,
-      isNew,
-      leadScore,
-      assignedVa: assignedVa.userId,
-      ghlContactId: contactId,
-      ghlOpportunityId: opportunityId,
-    });
-
-    return new Response(
-      JSON.stringify({
-        success: true,
-        leadId,
-        isNew,
-        leadScore,
-        ghlContactId: contactId,
-        ghlOpportunityId: opportunityId,
-        assignedVaUserId: assignedVa.userId,
-        assignedVaName: assignedVa.displayName,
-      }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 200,
-      },
-    );
+    return json(result);
   } catch (error) {
     // PostgREST errors come back as plain objects (not Error instances),
     // so the old `String(err)` branch produced an opaque "[object Object]".
     // Serialize whatever we got so callers can actually debug.
-    const message = error instanceof Error
-      ? error.message
-      : (typeof error === "object" && error !== null
-          ? ((error as { message?: string }).message ||
-             (error as { error_description?: string }).error_description ||
-             JSON.stringify(error))
-          : String(error));
+    const message = errorMessage(error);
     console.error("[lead-intake] error", message, error);
-    return new Response(JSON.stringify({ error: message }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 500,
-    });
+    return json({ error: message }, 500);
   }
 });

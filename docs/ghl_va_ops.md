@@ -19,6 +19,10 @@ public.leads (canonical row)   GHL (contact + open opportunity)
 assigned_va_user_id        via send-ghl-sms
             │
             ▼
+  Discord (Revenue) + email to every admin/VA
+  Facebook leads only: `lead.facebook.created`
+            │
+            ▼
   escalate-stale-leads (cron, every minute)
    • flags any HOT lead with no last_call_at after 10m
    • sends follow-up SMS to customer
@@ -36,7 +40,7 @@ to set them.
 
 | Edge function | Slug | Auth | Purpose |
 |---|---|---|---|
-| `lead-intake` | `lead-intake` | none (webhook) | New lead → leads table + GHL contact/opportunity + VA assignment + speed-to-lead SMS |
+| `lead-intake` | `lead-intake` | none (webhook) | New lead → leads table + GHL contact/opportunity + VA assignment + speed-to-lead SMS. Facebook leads also Discord + email admins/VAs |
 | `escalate-stale-leads` | `escalate-stale-leads` | none (cron) | Flag HOT leads not called within 10 minutes |
 | `send-ghl-sms` | `send-ghl-sms` | none | Send SMS via GHL Conversations API (the SMS transport everywhere now) |
 
@@ -97,9 +101,25 @@ Three paths, pick one per source:
 }
 ```
 
-- **Direct FB Lead Ads → us**: in Meta Business Suite, point the lead webhook at the same URL with a similar body.
+- **Direct FB Lead Ads → us**: in Meta Business Suite, subscribe the Page to `leadgen` and point the webhook at the same URL. `lead-intake` speaks Meta's native handshake:
+
+  - GET `?hub.mode=subscribe&hub.verify_token=…&hub.challenge=…` (plain-text challenge)
+  - POST `{ "object": "page", "entry": [{ "changes": [{ "field": "leadgen", "value": { "leadgen_id": "…" }}]}]}`
+  - Then it fetches the form answers from Graph and runs the normal intake.
+
+  Secrets (app_secrets or edge env): `FACEBOOK_WEBHOOK_VERIFY_TOKEN`, `FACEBOOK_PAGE_ACCESS_TOKEN`, optional `FACEBOOK_APP_SECRET` (verifies `X-Hub-Signature-256`).
 
 - **Website form → us**: have the form POST directly to `https://sxdraeptzuamsgjcvfeg.supabase.co/functions/v1/lead-intake` with the same shape (no auth header needed, the function is public to receive leads).
+
+### 2b. Facebook lead staff alerts
+
+When `source` looks like Facebook / Meta / Instagram (`fb_lead_ads`, `facebook`, `FB Ads`, …):
+
+1. **Discord** — `lead.facebook.created` on the Revenue channel (`DISCORD_WEBHOOK_REVENUE`, falls back to `DISCORD_WEBHOOK_URL`) with @Sales and @Operations. Embed includes name, phone, ZIP, score, and assigned VA. Set those webhook / role secrets if the channel is quiet today.
+2. **Email** — every admin and VA (from `user_roles`) plus optional extras in `LEAD_ALERT_EMAILS`. Needs `RESEND_API_KEY`.
+3. **Assigned VA's private Discord** — if that VA has `va_onboarding.discord_webhook_url` set.
+
+Website / LSA / manual leads still get the generic `lead.created` Discord ping; they do not send the Facebook email blast.
 
 ### 3. Optional: senior CSR escalation alert
 
@@ -139,7 +159,10 @@ curl -X POST 'https://sxdraeptzuamsgjcvfeg.supabase.co/functions/v1/lead-intake'
 # 2. Verify the lead row landed
 psql -c "SELECT id, first_name, lead_score, status, assigned_va_user_id, ghl_contact_id, speed_to_lead_sms_sent_at FROM leads ORDER BY created_at DESC LIMIT 1;"
 
-# 3. Verify escalation fires for an uncalled hot lead (last_call_at stays NULL)
+# 3. Verify the Facebook Discord event landed (needs DISCORD_WEBHOOK_REVENUE or DISCORD_WEBHOOK_URL)
+psql -c "SELECT event_type, source, summary, data FROM events WHERE event_type IN ('lead.created','lead.facebook.created') ORDER BY occurred_at DESC LIMIT 3;"
+
+# 4. Verify escalation fires for an uncalled hot lead (last_call_at stays NULL)
 psql -c "SELECT id, lead_score, escalated_at, escalation_sms_sent_at FROM leads WHERE escalated_at IS NOT NULL ORDER BY escalated_at DESC LIMIT 5;"
 ```
 
