@@ -61,3 +61,33 @@ export function buildRecurringPauseSms(reason: string): string {
 }
 
 export const RECURRING_PAUSE_EMAIL_SUBJECT = "Your Novara recurring cleaning is paused";
+
+/** Not an admin picker option — stamped when the customer pauses themselves. */
+export const CUSTOMER_SELF_PAUSE_REASON_CODE = "customer_self";
+export const CUSTOMER_SELF_PAUSE_REASON = "Paused by the customer.";
+
+/** Clear stored pause copy on every resume so a later pause cannot show stale wording. */
+export function recurringResumeClearFields(): {
+  pause_reason: null;
+  pause_reason_code: null;
+  paused_at: null;
+} {
+  return {
+    pause_reason: null,
+    pause_reason_code: null,
+    paused_at: null,
+  };
+}
+
+/** Overwrite admin pause copy when the customer pauses from the manage link or portal. */
+export function customerSelfPauseFields(): {
+  pause_reason: string;
+  pause_reason_code: string;
+  paused_at: string;
+} {
+  return {
+    pause_reason: CUSTOMER_SELF_PAUSE_REASON,
+    pause_reason_code: CUSTOMER_SELF_PAUSE_REASON_CODE,
+    paused_at: new Date().toISOString(),
+  };
+}

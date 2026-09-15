@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.80.0";
+import { customerSelfPauseFields, recurringResumeClearFields } from "../_shared/recurring-pause.ts";
 
 // customer-manage-recurring
 //
@@ -7,7 +8,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.80.0";
 // portal). Authenticates the caller and only allows acting on a schedule whose
 // email matches the signed-in user. Actions:
 //   get               -> { schedule, upcoming }
-//   pause / resume     -> toggle active
+//   pause / resume     -> toggle active; pause stamps "Paused by the customer.";
+//                         resume clears pause_reason / pause_reason_code / paused_at
 //   skip_next          -> advance next_service_date by one cycle
 //   set_time           -> change preferred_time_slot
 //   request_new_cleaner-> clear preferred cleaner + flag for admin (the
@@ -77,8 +79,8 @@ serve(async (req) => {
     if (!sched) return json({ error: "No recurring plan found" }, 404);
 
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
-    if (action === "pause") patch.active = false;
-    else if (action === "resume") patch.active = true;
+    if (action === "pause") Object.assign(patch, { active: false, ...customerSelfPauseFields() });
+    else if (action === "resume") Object.assign(patch, { active: true, ...recurringResumeClearFields() });
     else if (action === "skip_next") {
       if (!sched.next_service_date) return json({ error: "No upcoming clean to skip" }, 400);
       patch.next_service_date = advance(sched.next_service_date, sched.cadence);

@@ -8,14 +8,22 @@ import { resolve } from "node:path";
 import {
   buildRecurringPauseReason,
   buildRecurringPauseSms,
+  CUSTOMER_SELF_PAUSE_REASON,
+  CUSTOMER_SELF_PAUSE_REASON_CODE,
+  customerSelfPauseFields,
   DEFAULT_RECURRING_PAUSE_REASON,
   RECURRING_PAUSE_EMAIL_SUBJECT,
   RECURRING_PAUSE_PHONE,
+  recurringResumeClearFields,
 } from "../src/lib/recurring-pause";
 import {
   buildRecurringPauseReason as denoReason,
   buildRecurringPauseSms as denoSms,
+  CUSTOMER_SELF_PAUSE_REASON as denoSelfReason,
+  CUSTOMER_SELF_PAUSE_REASON_CODE as denoSelfCode,
+  customerSelfPauseFields as denoSelfPause,
   RECURRING_PAUSE_EMAIL_SUBJECT as denoSubject,
+  recurringResumeClearFields as denoResumeClear,
 } from "../supabase/functions/_shared/recurring-pause.ts";
 
 let failures = 0;
@@ -55,12 +63,33 @@ check("Deno reason matches src", denoReason("cleaner_unavailable", "Laure"), lau
 check("Deno SMS matches src", denoSms(laure), sms);
 check("Deno subject matches src", denoSubject, RECURRING_PAUSE_EMAIL_SUBJECT);
 
+check("customer self-pause copy", CUSTOMER_SELF_PAUSE_REASON, "Paused by the customer.");
+check("customer self-pause code is not an admin picker id", CUSTOMER_SELF_PAUSE_REASON_CODE, "customer_self");
+check("Deno customer self-pause copy matches src", denoSelfReason, CUSTOMER_SELF_PAUSE_REASON);
+check("Deno customer self-pause code matches src", denoSelfCode, CUSTOMER_SELF_PAUSE_REASON_CODE);
+check("resume clears pause_reason", recurringResumeClearFields().pause_reason, null);
+check("resume clears pause_reason_code", recurringResumeClearFields().pause_reason_code, null);
+check("resume clears paused_at", recurringResumeClearFields().paused_at, null);
+check("Deno resume clear matches src", denoResumeClear(), recurringResumeClearFields());
+const selfPause = customerSelfPauseFields();
+check("customer pause overwrites reason", selfPause.pause_reason, CUSTOMER_SELF_PAUSE_REASON);
+check("customer pause stamps customer_self", selfPause.pause_reason_code, CUSTOMER_SELF_PAUSE_REASON_CODE);
+check("customer pause stamps paused_at", typeof selfPause.paused_at === "string" && selfPause.paused_at.length > 0, true);
+const denoPause = denoSelfPause();
+check("Deno customer pause reason matches src", denoPause.pause_reason, selfPause.pause_reason);
+check("Deno customer pause code matches src", denoPause.pause_reason_code, selfPause.pause_reason_code);
+
 console.log("\nWired through pause + email:");
 const wired: Array<[string, string]> = [
   ["supabase/functions/admin-recurring-pause/index.ts", "buildRecurringPauseSms"],
   ["supabase/functions/send-membership-email/index.ts", "recurring_paused"],
   ["src/components/admin/PauseRecurringDialog.tsx", "admin-recurring-pause"],
   ["src/views/admin/RecurringSchedules.tsx", "PauseRecurringDialog"],
+  ["src/views/admin/RecurringSchedules.tsx", "recurringResumeClearFields"],
+  ["supabase/functions/manage-recurring-schedule/index.ts", "recurringResumeClearFields"],
+  ["supabase/functions/manage-recurring-schedule/index.ts", "customerSelfPauseFields"],
+  ["supabase/functions/customer-manage-recurring/index.ts", "recurringResumeClearFields"],
+  ["supabase/functions/customer-manage-recurring/index.ts", "customerSelfPauseFields"],
 ];
 for (const [file, needle] of wired) {
   const src = readFileSync(resolve(file), "utf8");
