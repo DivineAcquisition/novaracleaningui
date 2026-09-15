@@ -125,9 +125,13 @@ next date, time, cleaner, price per clean, and whether it's covered by membershi
 Expanding a row lets you edit cadence, preferred cleaner, time window, next service date,
 price per clean, address and office notes. Changes save as you go.
 
-The icon buttons on each row are: text the customer their self-service manage link, copy that
-link, send the cleaning checklist, send the membership agreement, generate the next clean
-now, pause or resume, and edit.
+Each schedule row has labeled **Pause** / **Resume** buttons, plus: text the customer their
+self-service manage link, copy that link, send the cleaning checklist, send the membership
+agreement, generate the next clean now, and edit.
+
+The member panel has the same **Pause service** / **Resume service** controls. Those are
+separate from **Pause billing** / **Resume billing**, which only stop or restart Stripe
+collection.
 
 **Pause** asks for a reason first. That wording is texted and emailed to the customer, then
 auto-booking stops. Presets cover a cleaner leaving, finding coverage, a quality hold, or a

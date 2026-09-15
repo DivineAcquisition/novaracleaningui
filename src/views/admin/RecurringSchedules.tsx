@@ -879,6 +879,7 @@ export default function AdminRecurringSchedules() {
             onTextManageLink={textManageLink}
             onCopyManageLink={copyManageLink}
             onAskPause={setPauseTarget}
+            onPatch={patch}
             setWorking={setWorking}
           />
         </TabsContent>
@@ -937,6 +938,7 @@ function MemberSheet({
   onTextManageLink,
   onCopyManageLink,
   onAskPause,
+  onPatch,
   setWorking,
 }: {
   member: Member | null;
@@ -948,6 +950,7 @@ function MemberSheet({
   onTextManageLink: (scheduleId: string) => void;
   onCopyManageLink: (token: string | null | undefined) => void;
   onAskPause: (s: Schedule) => void;
+  onPatch: (id: string, fields: Record<string, unknown>) => void;
   setWorking: (v: string | null) => void;
 }) {
   const [priceDollars, setPriceDollars] = useState("");
@@ -1357,12 +1360,21 @@ function MemberSheet({
                           </Button>
                           {s.active ? (
                             <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => onAskPause(s)}>
-                              <RiPauseLine className="w-3.5 h-3.5 mr-1" /> Pause
+                              <RiPauseLine className="w-3.5 h-3.5 mr-1" /> Pause service
                             </Button>
-                          ) : s.pause_reason ? (
-                            <p className="text-[11px] text-amber-800 self-center line-clamp-2">Paused: {s.pause_reason}</p>
-                          ) : null}
+                          ) : (
+                            <Button
+                              size="sm"
+                              className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                              onClick={() => onPatch(s.id, { active: true, ...recurringResumeClearFields() })}
+                            >
+                              <RiPlayLine className="w-3.5 h-3.5 mr-1" /> Resume service
+                            </Button>
+                          )}
                         </div>
+                        {!s.active && s.pause_reason ? (
+                          <p className="text-[11px] text-amber-800">Paused: {s.pause_reason}</p>
+                        ) : null}
                       </div>
                     ))
                   : member.schedules.map((s) => (
@@ -1378,11 +1390,11 @@ function MemberSheet({
                         </div>
                       </div>
                     ))}
-                {!activeSchedule && (
+                {!activeSchedule && schedules.length === 0 && member.schedules.length > 0 ? (
                   <Button size="sm" variant="outline" className="border-amber-300 text-amber-900" onClick={() => onStartSchedule(member)}>
                     <RiCalendarScheduleLine className="w-3.5 h-3.5 mr-1.5" /> Set up schedule
                   </Button>
-                )}
+                ) : null}
               </div>
             )}
           </section>
@@ -1672,7 +1684,7 @@ function ScheduleRow({
             <Button
               size="sm"
               variant={s.active ? "outline" : "default"}
-              className="h-8"
+              className={cn("h-8 text-xs", !s.active && "bg-emerald-600 hover:bg-emerald-700 text-white")}
               title={s.active ? "Pause and tell the customer why" : "Resume this schedule"}
               onClick={() => {
                 if (s.active) {
@@ -1685,7 +1697,9 @@ function ScheduleRow({
                 });
               }}
             >
-              {s.active ? <RiPauseLine className="w-4 h-4" /> : <RiPlayLine className="w-4 h-4" />}
+              {s.active
+                ? <><RiPauseLine className="w-4 h-4 mr-1" /> Pause</>
+                : <><RiPlayLine className="w-4 h-4 mr-1" /> Resume</>}
             </Button>
             <Button size="sm" variant="ghost" className="h-8" onClick={() => setOpen((v) => !v)}>{open ? "Hide" : "Edit"}</Button>
           </div>

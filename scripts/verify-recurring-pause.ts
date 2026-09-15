@@ -86,6 +86,8 @@ const wired: Array<[string, string]> = [
   ["src/components/admin/PauseRecurringDialog.tsx", "admin-recurring-pause"],
   ["src/views/admin/RecurringSchedules.tsx", "PauseRecurringDialog"],
   ["src/views/admin/RecurringSchedules.tsx", "recurringResumeClearFields"],
+  ["src/views/admin/RecurringSchedules.tsx", "Resume service"],
+  ["src/views/admin/RecurringSchedules.tsx", "Pause service"],
   ["supabase/functions/manage-recurring-schedule/index.ts", "recurringResumeClearFields"],
   ["supabase/functions/manage-recurring-schedule/index.ts", "customerSelfPauseFields"],
   ["supabase/functions/customer-manage-recurring/index.ts", "recurringResumeClearFields"],
