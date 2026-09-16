@@ -12,8 +12,8 @@ order: 6
 Everything about a contractor lives here: their status, their onboarding, their scores, their
 jobs, and their conduct record.
 
-The screen has five sections, switched at the top: **Contractors**, **Applicants**,
-**Urgent Hire**, **Pulse check**, and **Crews**.
+The screen has six sections, switched at the top: **Contractors**, **Applicants**,
+**Urgent Hire**, **Pulse**, **Accountability**, and **Crews**.
 
 ## The directory
 
@@ -22,9 +22,9 @@ The screen has five sections, switched at the top: **Contractors**, **Applicants
 Search matches name, email, phone or ZIP. The status filters are **All**, **Active**,
 **Pending**, **Suspended**, **Inactive** and **Terminated**.
 
-Two panels appear above the list when they have anything in them, and hide when they don't:
-contractors working without a signed agreement, and the accountability watchlist. If they're
-showing, they need attention.
+A panel appears above the list when contractors are working without a signed agreement. If
+it's showing, they need attention. Suspensions, strikes, and repeat patterns live on the
+**Accountability** tab.
 
 @screenshot cleaners-row
 
@@ -231,9 +231,9 @@ check is **not** required on this path. A valid supply checklist, signed agreeme
 setup still are. First to finish those steps and accept wins; everyone else keeps their
 onboarding progress. An unfilled window surfaces on Needs Attention and links back here.
 
-## Pulse check
+## Pulse
 
-The **Pulse check** tab is the idle-contractor stay / pause / leave cycle. Every 14 days
+The **Pulse** tab is the idle-contractor stay / pause / leave cycle. Every 14 days
 (tunable), contractors with no recent assignments get an SMS and email with a tokenized form.
 They can stay on the roster, pause for a week or two, or leave. No reply after the reminder
 window terminates the account with a reapply lockout.
@@ -241,6 +241,14 @@ window terminates the account with a reapply lockout.
 Run a cycle, resend a pending link, and mark replies reviewed here. Send one contractor from
 their **Performance** tab. Clicking a name in the cycle list opens that contractor in the
 directory.
+
+## Accountability
+
+The **Accountability** tab is the watchlist: currently suspended, carrying active strikes,
+repeat offenders (two or more strikes in 180 days, including expired ones), and repeat
+quality-miss re-cleans (coaching signal only). Click a name to open their record on the
+Accountability panel. Coaching notes, strikes, suspensions, and removals are still taken
+from that panel, not from this list.
 
 ## Crews
 

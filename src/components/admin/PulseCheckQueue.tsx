@@ -257,7 +257,7 @@ export default function PulseCheckQueue({
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <p className="flex items-center gap-1.5 text-sm font-semibold text-sky-950">
             <RiAlarmWarningLine className="h-4 w-4" />
-            Pulse check
+            Pulse
             {latest.length > 0 ? (
               <span className="font-normal text-sky-800">
                 · {latest.length} in this cycle
