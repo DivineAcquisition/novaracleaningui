@@ -218,15 +218,28 @@ export default function CleanerJobPhotosPage() {
   };
 
   const submit = async () => {
-    const relevant = phase === "before" ? beforeUrls : phase === "after" ? afterUrls : [...beforeUrls, ...afterUrls];
+    const livePhase =
+      typeof window !== "undefined"
+        ? (() => {
+            const p = new URLSearchParams(window.location.search).get("phase");
+            return p === "before" || p === "after" ? p : phase;
+          })()
+        : phase;
+    const relevant = livePhase === "before" ? beforeUrls : livePhase === "after" ? afterUrls : [...beforeUrls, ...afterUrls];
     if (relevant.length === 0) {
-      toast.error(`Add at least one ${phase || ""} photo or video first.`.replace("  ", " "));
+      toast.error(`Add at least one ${livePhase || ""} photo or video first.`.replace("  ", " "));
       return;
     }
     setSubmitting(true);
     try {
       const { data, error } = await supabase.functions.invoke("submit-cleaner-photos", {
-        body: { token, beforeUrls, afterUrls, notes: notes.trim() || undefined },
+        body: {
+          token,
+          beforeUrls,
+          afterUrls,
+          notes: notes.trim() || undefined,
+          phase: livePhase || undefined,
+        },
       });
       if (error) throw error;
       const d = data as { ok?: boolean; reason?: string };

@@ -37,6 +37,10 @@ import {
   RiUserStarLine,
   RiLoginCircleLine,
   RiStickyNoteLine,
+  RiMailLine,
+  RiSmartphoneLine,
+  RiFileCopyLine,
+  RiExternalLinkLine,
 } from "@remixicon/react";
 import { useAdminRole } from "@/hooks/use-admin-role";
 import { useOpsAssistantRecord } from "@/components/ops-assistant/OpsAssistantProvider";
@@ -84,6 +88,8 @@ import {
 import { cn } from "@/lib/utils";
 import { edgeResult } from "@/lib/edge-invoke";
 import { isCommercialBookingRow } from "@/lib/commercial-booking";
+import { sendCustomerChecklist } from "@/lib/membership-admin";
+import { publicChecklistUrl } from "@/lib/checklists";
 
 /** Live contractor checklist progress, as attached by admin-list-bookings. */
 interface ChecklistSummary {
@@ -4046,6 +4052,129 @@ interface ChecklistDetail {
   last_activity_by: string | null;
 }
 
+type ChecklistSendChannel = "email" | "sms" | "both";
+
+function BookingCustomerChecklistSend({ booking }: { booking: BookingRow }) {
+  const [actioning, setActioning] = useState<ChecklistSendChannel | "copy" | null>(null);
+  const viewUrl = publicChecklistUrl(booking.service_type || "standard");
+
+  const runSend = async (channel: ChecklistSendChannel) => {
+    if ((channel === "email" || channel === "both") && !booking.email) {
+      toast.error("No email on this booking");
+      return;
+    }
+    if ((channel === "sms" || channel === "both") && !booking.phone) {
+      toast.error("No phone on this booking");
+      return;
+    }
+    setActioning(channel);
+    try {
+      const data = await sendCustomerChecklist({
+        bookingId: booking.id,
+        email: booking.email,
+        phone: booking.phone,
+        firstName: booking.first_name,
+        serviceType: booking.service_type || "standard",
+        sendEmail: channel === "email" || channel === "both",
+        sendSms: channel === "sms" || channel === "both",
+      });
+      const parts: string[] = [];
+      if (data.emailed) parts.push("emailed");
+      if (data.smsSent) parts.push("texted");
+      toast.success(
+        parts.length ? `Checklist ${parts.join(" + ")}` : "Checklist send completed",
+      );
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to send checklist");
+    } finally {
+      setActioning(null);
+    }
+  };
+
+  const copyLink = async () => {
+    setActioning("copy");
+    try {
+      await navigator.clipboard.writeText(viewUrl);
+      toast.success("Customer checklist link copied");
+    } catch {
+      toast.error("Copy failed");
+    } finally {
+      setActioning(null);
+    }
+  };
+
+  return (
+    <div className="rounded-lg border border-emerald-100 bg-emerald-50/50 px-3 py-2.5 space-y-2">
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-xs text-slate-600">
+          Send the customer what&apos;s included on this clean.
+        </p>
+        <a
+          href={viewUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 shrink-0 text-[11px] font-medium text-violet-700 hover:underline"
+        >
+          Preview <RiExternalLinkLine className="h-3 w-3" />
+        </a>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        <Button
+          size="sm"
+          className="h-8 bg-emerald-600 hover:bg-emerald-700 text-white"
+          onClick={() => void runSend("email")}
+          disabled={actioning !== null || !booking.email}
+        >
+          {actioning === "email" ? (
+            <RiLoader4Line className="h-3.5 w-3.5 mr-1 animate-spin" />
+          ) : (
+            <RiMailLine className="h-3.5 w-3.5 mr-1" />
+          )}
+          Email
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8 border-emerald-200 text-emerald-800 bg-white hover:bg-emerald-50"
+          onClick={() => void runSend("sms")}
+          disabled={actioning !== null || !booking.phone}
+        >
+          {actioning === "sms" ? (
+            <RiLoader4Line className="h-3.5 w-3.5 mr-1 animate-spin" />
+          ) : (
+            <RiSmartphoneLine className="h-3.5 w-3.5 mr-1" />
+          )}
+          Text
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8 border-slate-200 bg-white"
+          onClick={() => void runSend("both")}
+          disabled={actioning !== null || !booking.email || !booking.phone}
+        >
+          {actioning === "both" ? (
+            <RiLoader4Line className="h-3.5 w-3.5 mr-1 animate-spin" />
+          ) : (
+            <RiMailLine className="h-3.5 w-3.5 mr-1" />
+          )}
+          Email + SMS
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8 border-slate-200 bg-white"
+          onClick={() => void copyLink()}
+          disabled={actioning === "copy"}
+        >
+          <RiFileCopyLine className="h-3.5 w-3.5 mr-1" />
+          Copy link
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function BookingChecklist({ booking }: { booking: BookingRow }) {
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState<ChecklistDetail | null>(null);
@@ -4165,6 +4294,8 @@ function BookingChecklist({ booking }: { booking: BookingRow }) {
                 : "Tap to see what's in scope and what's been done."}
           </p>
         </button>
+
+        <BookingCustomerChecklistSend booking={booking} />
 
         {open ? (
           <div className="space-y-3">

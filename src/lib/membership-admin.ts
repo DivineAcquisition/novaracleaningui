@@ -45,6 +45,7 @@ export async function sendMembershipAgreement(input: {
 }
 
 export async function sendCustomerChecklist(input: {
+  bookingId?: string | null;
   email?: string | null;
   phone?: string | null;
   firstName?: string | null;
@@ -54,6 +55,7 @@ export async function sendCustomerChecklist(input: {
 }) {
   const { data, error } = await supabase.functions.invoke("send-cleaning-checklist", {
     body: {
+      bookingId: input.bookingId || undefined,
       email: input.email || undefined,
       phone: input.phone || undefined,
       firstName: input.firstName || undefined,

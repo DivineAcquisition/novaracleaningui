@@ -270,18 +270,9 @@ serve(async (req) => {
         .limit(1);
       customerId = byEmail?.[0]?.id || null;
       if (!customerId) {
-        const { data: created, error: cErr } = await admin
-          .from("customers")
-          .insert({
-            email: emailLc,
-            first_name: booking.first_name,
-            last_name: booking.last_name,
-            phone: booking.phone,
-          })
-          .select("id")
-          .single();
-        if (cErr) throw new Error(`Could not resolve customer: ${cErr.message}`);
-        customerId = created!.id as string;
+        return json({
+          error: "No customer account for this email yet. Wallet credit can only be granted after they have completed a service — use a discount instead.",
+        }, 400);
       }
       const { data: rpcRow, error: rpcErr } = await admin.rpc("grant_customer_credit", {
         _customer_id: customerId,

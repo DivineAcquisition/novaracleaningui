@@ -577,7 +577,7 @@ serve(async (req) => {
           try {
             logStep("Checking/generating customer referral code", { email: confirmedBooking.email });
             
-            // Find or create customer record
+            // Find existing customer — do not create until the service is completed.
             const { data: existingCustomer } = await supabase
               .from('customers')
               .select('id, referral_code')
@@ -596,35 +596,12 @@ serve(async (req) => {
                 logStep("Referral code generated successfully", referralResponse.data);
               }
             } else if (!existingCustomer) {
-              // Create new customer with referral code generation
-              const { data: newCustomer, error: insertError } = await supabase
-                .from('customers')
-                .insert({
-                  email: confirmedBooking.email,
-                  first_name: confirmedBooking.first_name,
-                  last_name: confirmedBooking.last_name,
-                  phone: confirmedBooking.phone,
-                  address: confirmedBooking.address,
-                  city: confirmedBooking.city,
-                  state: confirmedBooking.state,
-                  zip: confirmedBooking.zip_code,
-                })
-                .select('id')
-                .single();
-              
-              if (insertError) {
-                logStep("Customer creation failed (non-blocking)", { error: insertError.message });
-              } else if (newCustomer) {
-                const referralResponse = await supabase.functions.invoke('generate-referral-code', {
-                  body: { customerId: newCustomer.id, email: confirmedBooking.email },
-                });
-                
-                if (referralResponse.error) {
-                  logStep("Referral code generation failed (non-blocking)", { error: referralResponse.error });
-                } else {
-                  logStep("New customer created with referral code", referralResponse.data);
-                }
-              }
+              // Customer accounts are created only after a completed service
+              // (complete-booking). A paid booking is not enough.
+              logStep("Skipping customers insert until service is completed", {
+                email: confirmedBooking.email,
+                bookingId: confirmedBooking.id,
+              });
             } else {
               logStep("Customer already has referral code", { code: existingCustomer.referral_code });
             }

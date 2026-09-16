@@ -8,8 +8,8 @@
 //   * NEVER route a customer into /cleaner/* or /admin/* paths on this host.
 //   * Staff (admin/VA) who land here are signed out and sent to
 //     admin.novaracleaning.com — they cannot open a customer account.
-//   * On a customer auth event, ensure a `customers` row exists for the
-//     authenticated email and route to /account.
+//   * On a customer auth event, route to /account. A `customers` row is
+//     created only after they complete a service — not on first login.
 //   * On password recovery → /update-password.
 //
 // Cleaner Google OAuth uses /cleaner/auth/callback (contractor.*).
@@ -89,43 +89,16 @@ export default function AuthCallback() {
           return;
         }
 
-        // Ensure a customers row exists for this email (Google OAuth
-        // newcomers, magic-link first-timers). This used to be wrapped
-        // in a cleaner-branch detector — that's gone for strict
-        // separation. The cleaners and admin_users tables are NOT
-        // touched from this callback. Staff emails are bounced to the
-        // admin workspace instead of creating a customers row.
+        // Customer accounts are created only after a completed service.
+        // Portal sign-in must not insert a public.customers row for a lead
+        // or a booked-but-not-cleaned email. Staff emails are bounced to
+        // the admin workspace instead of creating a customers row.
         const email = session.user.email || "";
         if (await isStaffCustomerEmail(email)) {
           toast.message("Staff accounts use the admin workspace, not the customer portal.");
           await supabase.auth.signOut();
           window.location.assign(ADMIN_AUTH_URL);
           return;
-        }
-        if (email) {
-          const { data: customerData } = await supabase
-            .from("customers")
-            .select("id")
-            .eq("email", email)
-            .maybeSingle();
-
-          if (!customerData) {
-            const fullName =
-              (session.user.user_metadata as Record<string, unknown> | null)
-                ?.full_name;
-            const [firstName = "", ...rest] =
-              typeof fullName === "string" ? fullName.split(" ") : [""];
-            await supabase
-              .from("customers")
-              .insert({
-                email,
-                first_name: firstName || "",
-                last_name: rest.join(" ") || "",
-              })
-              .then(() => null, (err) => {
-                console.warn("[AuthCallback] customer insert (non-blocking)", err);
-              });
-          }
         }
 
         toast.success("Welcome!");

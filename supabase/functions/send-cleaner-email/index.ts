@@ -389,6 +389,32 @@ serve(async (req) => {
         break;
       }
 
+      case "checklist_quality_nudge": {
+        const first = data.cleanerFirstName || data.firstName || "there";
+        const customerName = data.customerName || "this customer";
+        const checklistUrl = data.checklistUrl || "https://contractor.novaracleaning.com/cleaner/mobile-dashboard";
+        const when = data.serviceDate || "";
+        subject = data.subject || "Before photos are in — work the checklist front to end";
+        html = data.html || `
+          <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#0f172a">
+            <h2 style="margin:0 0 8px;font-size:20px">Before photos are in — now the checklist</h2>
+            <p style="margin:0 0 16px;color:#475569">Hi ${first},</p>
+            <p style="margin:0 0 16px;color:#475569">
+              Your before photos for <strong>${customerName}</strong>${when ? ` (${when})` : ""} are in.
+              Work your job checklist <strong>front to end with great quality</strong> — every line,
+              in order, the way a customer would inspect the home.
+            </p>
+            <p style="margin:24px 0;text-align:center">
+              <a href="${checklistUrl}"
+                 style="display:inline-block;background:#5C0FFE;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600">
+                Open your job checklist
+              </a>
+            </p>
+            <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">Novara Cleaning</p>
+          </div>`;
+        break;
+      }
+
       default:
         throw new Error(`Unknown email type: ${type}`);
     }

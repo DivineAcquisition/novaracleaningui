@@ -120,21 +120,13 @@ serve(async (req) => {
       const { data: byEmail } = await adminClient
         .from("customers").select("id, first_name, last_name, email, phone").ilike("email", customerEmail).limit(1);
       cust = byEmail?.[0] || null;
-      // Create a minimal customer record if none exists for this email so the
-      // credit has a home (credits are email-keyed, so this links cleanly).
+      // Credits attach to people who have completed a service. Do not
+      // mint a customers row for a lead / unpaid booking just to park
+      // a wallet grant.
       if (!cust && action === "grant") {
-        const { data: created, error: createErr } = await adminClient
-          .from("customers")
-          .insert({
-            email: customerEmail.toLowerCase(),
-            first_name: body?.firstName || null,
-            last_name: body?.lastName || null,
-            phone: body?.phone || null,
-          })
-          .select("id, first_name, last_name, email, phone")
-          .single();
-        if (createErr) throw createErr;
-        cust = created;
+        return json({
+          error: "Customer not found. Wallet credits can only be granted after they have completed a service.",
+        }, 404);
       }
     }
     if (!cust) return json({ error: "customer not found" }, 404);

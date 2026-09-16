@@ -868,34 +868,22 @@ serve(async (req) => {
       ? "preauth"
       : "deposit";
 
-    // 2. Upsert the customer row (no Stripe yet). We mirror lat/lng
-    //    from the admin AddressAutocomplete so the Ops Map can plot
-    //    the customer immediately, instead of waiting on the next
-    //    geocode-address pass.
-    const { data: customerRow, error: custErr } = await supabase
+    // 2. Link an existing customer row if this email already completed a
+    //    service. Do NOT create one here — public.customers is reserved for
+    //    people who have actually finished a clean (complete-booking).
+    let customerId: string | null = null;
+    const { data: existingCustomer } = await supabase
       .from("customers")
-      .upsert(
-        {
-          email: body.email,
-          first_name: body.firstName,
-          last_name: body.lastName || "",
-          phone: phoneDigits || null,
-          address: body.address || null,
-          city: body.city || null,
-          state: body.state || null,
-          zip: body.zipCode || null,
-          lat: body.addressLat ?? null,
-          lng: body.addressLng ?? null,
-        },
-        { onConflict: "email" },
-      )
       .select("id")
-      .single();
-    if (custErr) {
-      logStep("customer upsert failed", custErr);
-      throw custErr;
+      .eq("email", String(body.email || "").trim().toLowerCase())
+      .maybeSingle();
+    if (existingCustomer?.id) {
+      customerId = existingCustomer.id as string;
+    } else {
+      logStep("no customers row yet — will be created after completed service", {
+        email: body.email,
+      });
     }
-    const customerId = customerRow.id as string;
 
     // 3. Insert the booking row
     //
@@ -1199,12 +1187,14 @@ serve(async (req) => {
         // Mirror onto customers row so referral/credit lookups by email
         // still work (we deliberately keep customers.id = uuid, not the
         // Stripe cus_…). See `customers.stripe_customer_id`.
-        try {
-          await supabase
-            .from("customers")
-            .update({ stripe_customer_id: stripeCustomerId })
-            .eq("id", customerId);
-        } catch (_) { /* column may not exist on legacy schemas — ignore */ }
+        if (customerId) {
+          try {
+            await supabase
+              .from("customers")
+              .update({ stripe_customer_id: stripeCustomerId })
+              .eq("id", customerId);
+          } catch (_) { /* column may not exist on legacy schemas — ignore */ }
+        }
 
         if (invoiceMode === "deposit_plus_remaining" && depositCents > 0) {
           depositInvoice = await createAndSendInvoice(

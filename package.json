@@ -57,6 +57,7 @@
     "facebook-leads:verify": "node --experimental-strip-types --no-warnings scripts/verify-facebook-lead-alerts.ts",
     "termination-sms:verify": "tsx scripts/verify-termination-sms.ts",
     "recurring-pause:verify": "tsx scripts/verify-recurring-pause.ts",
+    "bookings-checklist:verify": "node --experimental-strip-types --no-warnings scripts/verify-bookings-checklist.ts",
     "eas:supabase:connect": "npm --prefix contractor-app run eas:supabase:connect"
   },
   "dependencies": {

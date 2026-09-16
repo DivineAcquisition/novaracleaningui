@@ -106,19 +106,9 @@ export async function provisionGlowMembership(opts: {
       .eq("email", email)
       .maybeSingle();
 
-    let customerRecord = existingCustomer;
+    const customerRecord = existingCustomer;
     if (!existingCustomer) {
-      const { data: newCustomer, error: customerError } = await supabase
-        .from("customers")
-        .insert({
-          email,
-          first_name: name.split(" ")[0] || "",
-          last_name: name.split(" ").slice(1).join(" ") || "",
-        })
-        .select()
-        .single();
-      if (customerError) logStep("Error creating customer", customerError);
-      else customerRecord = newCustomer;
+      logStep("Skipping customers insert until a service is completed", { email });
     }
 
     if (customerRecord && !customerRecord.referral_code) {
@@ -172,24 +162,33 @@ export async function provisionGlowMembership(opts: {
   }
 
   try {
-    await supabase
+    const { data: existingForMembership } = await supabase
       .from("customers")
-      .upsert({
-        email,
-        first_name: subMeta.first_name || (name.split(" ")[0] || ""),
-        last_name: subMeta.last_name || (name.split(" ").slice(1).join(" ") || ""),
-        phone: phone || null,
-        address: subMeta.address || null,
-        city: subMeta.city || null,
-        state: subMeta.state || null,
-        zip: subMeta.zip_code || null,
-        membership_status: "active",
-        membership_plan: plan,
-        preferred_day_of_week: subMeta.preferred_day_of_week || null,
-        preferred_time_window: subMeta.preferred_time_window || null,
-      }, { onConflict: "email" });
+      .select("id")
+      .eq("email", email)
+      .maybeSingle();
+    if (existingForMembership?.id) {
+      await supabase
+        .from("customers")
+        .update({
+          first_name: subMeta.first_name || (name.split(" ")[0] || ""),
+          last_name: subMeta.last_name || (name.split(" ").slice(1).join(" ") || ""),
+          phone: phone || null,
+          address: subMeta.address || null,
+          city: subMeta.city || null,
+          state: subMeta.state || null,
+          zip: subMeta.zip_code || null,
+          membership_status: "active",
+          membership_plan: plan,
+          preferred_day_of_week: subMeta.preferred_day_of_week || null,
+          preferred_time_window: subMeta.preferred_time_window || null,
+        })
+        .eq("id", existingForMembership.id);
+    } else {
+      logStep("No customers row to stamp Glow membership on — waiting for completed service", { email });
+    }
   } catch (custErr) {
-    logStep("customers upsert failed (non-blocking)", {
+    logStep("customers membership update failed (non-blocking)", {
       error: custErr instanceof Error ? custErr.message : String(custErr),
     });
   }

@@ -8,6 +8,7 @@ import { computeCrewPay, shareFor } from "../_shared/crew-pay.ts";
 import { jobValueForPay } from "../_shared/reclean.ts";
 import { documentBookingAddonsInQcSafe } from "../_shared/addon-qc.ts";
 import { remainingDueAtCompletionCents, billedTotalCents } from "../_shared/booking-balance.ts";
+import { ensureCustomerFromCompletedBooking } from "../_shared/customer-from-completed-service.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -273,6 +274,17 @@ serve(async (req) => {
     }
 
     logStep("Booking marked complete, charging remaining balance");
+
+    // Customer accounts exist only after a completed service. Bookings,
+    // quotes, and portal sign-in no longer insert into public.customers.
+    try {
+      const ensured = await ensureCustomerFromCompletedBooking(supabase, booking);
+      logStep("Customer record after completed service", ensured);
+    } catch (custErr) {
+      logStep("Customer record after completed service failed (non-blocking)", {
+        error: custErr instanceof Error ? custErr.message : String(custErr),
+      });
+    }
 
     // ─── Referral reward grant ────────────────────────────────────────
     // If this booking used a referral_code, grant the REFERRER a $50

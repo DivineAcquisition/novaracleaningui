@@ -6,11 +6,12 @@
 // bookings.before_photos / bookings.after_photos and stamp
 // photo_upload_submitted_at.
 //
-// Once photos land, we mint a single-use customer view token and text/email
-// the customer an open before/after gallery link (/photos/[token]) so they can
-// see the proof of work without logging in. Sent exactly once per booking.
+// After BEFORE photos are submitted (not auto-saved), we text + email the
+// assigned contractor their live job checklist and a reminder to work it
+// front to end with great quality. Once after photos land we mint a
+// customer gallery link and text/email that separately.
 //
-// Body: { token, beforeUrls?: string[], afterUrls?: string[], notes?, mode? }
+// Body: { token, beforeUrls?, afterUrls?, notes?, mode?, phase? }
 // Response: { ok: true, beforeCount, afterCount, galleryUrl }
 //
 // mode: "save" — auto-save of in-progress uploads. The provided arrays are
@@ -25,6 +26,10 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import {
+  notifyContractorsChecklistAfterBeforePhotos,
+  shouldSendContractorChecklistNudge,
+} from "../_shared/contractor-checklist-nudge.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -53,6 +58,7 @@ serve(async (req) => {
       : [];
     const notes = String((body as any)?.notes || "").trim();
     const isSave = String((body as any)?.mode || "") === "save";
+    const phase = String((body as any)?.phase || "").toLowerCase() || null;
     if (!isSave && beforeUrls.length === 0 && afterUrls.length === 0) {
       return json({ ok: false, reason: "no_photos" }, 400);
     }
@@ -65,7 +71,7 @@ serve(async (req) => {
     const { data: booking } = await supabase
       .from("bookings")
       .select(
-        "id, before_photos, after_photos, team_notes, first_name, email, phone, service_date, photo_view_token, photo_view_sent_at",
+        "id, job_id, cleaner_id, before_photos, after_photos, team_notes, first_name, last_name, email, phone, service_date, time_slot, service_type, scope_level, photo_view_token, photo_view_sent_at",
       )
       .eq("photo_upload_token", token)
       .maybeSingle();
@@ -109,8 +115,30 @@ serve(async (req) => {
       booking_id: booking.id,
       source: "submit-cleaner-photos",
       summary: `Cleaner uploaded ${beforeUrls.length} before / ${afterUrls.length} after photos`,
-      data: { beforeCount: beforeUrls.length, afterCount: afterUrls.length },
+      data: { beforeCount: beforeUrls.length, afterCount: afterUrls.length, phase },
     }).then(() => undefined, () => undefined);
+
+    // ─── Contractor checklist quality nudge ──────────────────────────────
+    // After before photos are submitted (not auto-saved), text + email the
+    // assigned crew their live job checklist and a reminder to work it
+    // front to end with great quality. Once per booking.
+    if (
+      shouldSendContractorChecklistNudge({
+        isSave: false,
+        submittedBeforeCount: beforeUrls.length,
+        alreadySent: false,
+        phase,
+      })
+    ) {
+      try {
+        await notifyContractorsChecklistAfterBeforePhotos(supabase, booking);
+      } catch (nudgeErr) {
+        console.warn(
+          "[submit-cleaner-photos] contractor checklist nudge failed (non-blocking)",
+          (nudgeErr as Error).message,
+        );
+      }
+    }
 
     // ─── Open before/after gallery for the customer ──────────────────────
     // Mint a single-use view token (idempotent) and text/email the customer

@@ -13,15 +13,13 @@
 //       * Stripe customer portal link (auto-creates portal session)
 //       * Send billing portal link to customer (email + SMS)
 //       * Sync to GHL (force)
-//   - Create-customer dialog (calls public.customers insert via service
-//     role through book-as-va helper, OR direct insert + send-auth-email
-//     password-set link).
+//   - Accounts appear only after a completed service. Leads, quotes, and
+//     booked-but-not-cleaned emails are not created here.
 //
 // Zero hardcoded data.
 
 import {
   RiSearchLine,
-  RiUserAddLine,
   RiMailLine,
   RiPhoneLine,
   RiMapPinLine,
@@ -45,7 +43,6 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
-import { isStaffCustomerEmail, STAFF_CUSTOMER_ERROR } from "@/lib/staff-customer";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -127,7 +124,6 @@ export default function AdminCustomers() {
   const [bookingCounts, setBookingCounts] = useState<Record<string, number>>({});
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
   const selected = useMemo(
     () => customers.find((c) => c.id === selectedId) || null,
     [customers, selectedId],
@@ -201,16 +197,10 @@ export default function AdminCustomers() {
         <div>
           <h1 className="font-jakarta text-2xl font-bold text-slate-900 tracking-tight">Customers</h1>
           <p className="text-sm text-slate-500">
-            {customers.length} total accounts · search, manage credits, refund bookings, send password resets.
+            {customers.length} total accounts · only people who have completed a service
+            with us. Search, manage credits, refund bookings, send password resets.
           </p>
         </div>
-        <Button
-          onClick={() => setCreateOpen(true)}
-          className="bg-violet-600 hover:bg-violet-700 text-white"
-        >
-          <RiUserAddLine className="w-4 h-4 mr-1.5" />
-          New customer
-        </Button>
       </div>
 
       <Card className="border-slate-200">
@@ -291,12 +281,6 @@ export default function AdminCustomers() {
         customer={selected}
         onClose={() => setSelectedId(null)}
         onChange={load}
-      />
-
-      <CreateCustomerDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        onCreated={load}
       />
     </div>
   );
@@ -1292,125 +1276,6 @@ function CreditAdjustDialog({
               {removing
                 ? `Remove ${dollars(Number.isFinite(removingCents) ? removingCents : 0)}`
                 : `Grant $${amount || "0"}`}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ─── Create-customer dialog ──────────────────────────────────────────────
-
-function CreateCustomerDialog({
-  open,
-  onOpenChange,
-  onCreated,
-}: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  onCreated: () => void;
-}) {
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [zip, setZip] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  const reset = () => {
-    setFirstName("");
-    setLastName("");
-    setEmail("");
-    setPhone("");
-    setZip("");
-  };
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email || !firstName) {
-      toast.error("First name and email are required");
-      return;
-    }
-    const trimmedEmail = email.toLowerCase().trim();
-    if (await isStaffCustomerEmail(trimmedEmail)) {
-      toast.error(STAFF_CUSTOMER_ERROR);
-      return;
-    }
-    setBusy(true);
-    try {
-      const { error } = await supabase.from("customers").insert({
-        first_name: firstName,
-        last_name: lastName || null,
-        email: trimmedEmail,
-        phone: phone.replace(/\D/g, "") || null,
-        zip: zip || null,
-      });
-      if (error) throw error;
-      // Best-effort: kick off a password-set email so they can sign in.
-      try {
-        await supabase.functions.invoke("send-auth-email", {
-          body: {
-            kind: "signup_customer",
-            email: trimmedEmail,
-            metadata: { first_name: firstName, last_name: lastName },
-            redirectTo: "https://app.novaracleaning.com/update-password",
-          },
-        });
-      } catch { /* non-blocking */ }
-      toast.success("Customer created · password-set email sent");
-      reset();
-      onOpenChange(false);
-      onCreated();
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to create customer");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>New customer account</DialogTitle>
-          <DialogDescription>
-            Creates the row in <code>public.customers</code> and emails a magic
-            sign-in link so they can claim the account.
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={submit} className="space-y-3">
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <Label className="text-sm">First name *</Label>
-              <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
-            </div>
-            <div>
-              <Label className="text-sm">Last name</Label>
-              <Input value={lastName} onChange={(e) => setLastName(e.target.value)} />
-            </div>
-          </div>
-          <div>
-            <Label className="text-sm">Email *</Label>
-            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <Label className="text-sm">Phone</Label>
-              <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(555) 555-5555" />
-            </div>
-            <div>
-              <Label className="text-sm">ZIP</Label>
-              <Input value={zip} onChange={(e) => setZip(e.target.value)} placeholder="21202" />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={busy} className="bg-violet-600 hover:bg-violet-700 text-white">
-              {busy ? <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" /> : <RiUserAddLine className="w-4 h-4 mr-1.5" />}
-              Create customer
             </Button>
           </DialogFooter>
         </form>
