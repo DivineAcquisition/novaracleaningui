@@ -220,7 +220,16 @@ export default function PulseCheckQueue({
     }
   };
 
-  if (loading) return null;
+  if (loading) {
+    return (
+      <Card className="border-sky-200 bg-sky-50/40">
+        <CardContent className="flex items-center gap-2 p-6 text-sm text-sky-900">
+          <RiLoader4Line className="h-4 w-4 animate-spin" />
+          Loading pulse checks…
+        </CardContent>
+      </Card>
+    );
+  }
 
   const intervalRows = rows.filter((r) => r.counts_toward_interval !== false);
 
