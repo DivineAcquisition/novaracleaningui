@@ -97,7 +97,25 @@ export default function AccountabilityWatchlist({
   }
 
   const empty = suspended.length === 0 && activeStrikes.length === 0 && repeatOffenders.length === 0 && repeatRecleans.length === 0;
-  if (empty) return null; // nothing to review — keep the directory clean
+  if (empty) {
+    return (
+      <Card className="border-amber-200 bg-amber-50/30">
+        <CardContent className="p-6">
+          <p className="flex items-center gap-1.5 text-sm font-bold text-slate-800">
+            <RiAlarmWarningLine className="h-4 w-4 text-amber-600" /> Accountability
+          </p>
+          <p className="mt-2 text-sm text-slate-600">
+            Nobody needs review right now — no suspensions, active strikes, repeat offenders, or
+            quality-miss re-cleans.
+          </p>
+          <p className="mt-2 text-[11px] text-slate-400">
+            Open a contractor from the directory to take a coaching note, strike, suspension, or
+            removal.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   const Row = ({ id, children }: { id: string; children: React.ReactNode }) => (
     <button

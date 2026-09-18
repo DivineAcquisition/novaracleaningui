@@ -98,11 +98,25 @@ const CLEANER_STATUSES = [
   { value: "terminated", label: "Terminated" },
 ] as const;
 
-type CleanerSection = "contractors" | "applicants" | "crews" | "urgent-hire" | "pulse-check";
+type CleanerSection =
+  | "contractors"
+  | "applicants"
+  | "crews"
+  | "urgent-hire"
+  | "pulse-check"
+  | "accountability";
 
 function parseCleanerSection(raw: string | null | undefined): CleanerSection {
   const s = String(raw || "").toLowerCase().replace(/_/g, "-");
-  if (s === "applicants" || s === "crews" || s === "urgent-hire" || s === "pulse-check") return s;
+  if (
+    s === "applicants" ||
+    s === "crews" ||
+    s === "urgent-hire" ||
+    s === "pulse-check" ||
+    s === "accountability"
+  ) {
+    return s;
+  }
   if (s === "urgent") return "urgent-hire";
   if (s === "pulse") return "pulse-check";
   return "contractors";
@@ -127,9 +141,14 @@ const SECTION_COPY: Record<CleanerSection, { title: string; subtitle: string }> 
       "Last-resort broadcasts to qualified pipeline applicants within 45–55 miles. Launch from Dispatch or Coverage; the log and tunables live here.",
   },
   "pulse-check": {
-    title: "Pulse check",
+    title: "Pulse",
     subtitle:
       "Stay / pause / leave for idle contractors. Run a cycle, resend a link, and review replies here. Send one person from their Performance tab.",
+  },
+  accountability: {
+    title: "Accountability",
+    subtitle:
+      "Suspended contractors, active strikes, repeat offenders, and quality-miss re-cleans. Click a name to open their record.",
   },
 };
 
@@ -238,13 +257,13 @@ export default function AdminCleaners() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [actioning, setActioning] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
-  // One hub, whole lifecycle. Applicants (the talent queue), contractors (the
-  // directory), crews, Urgent Hire (last-resort pipeline coverage), and Pulse
-  // check (idle-contractor stay/pause/leave) are sections here rather than
-  // separate sidebar entries.
+  // One hub, whole lifecycle. Applicants, contractors, crews, Urgent Hire,
+  // Pulse, and Accountability are sections here rather than separate sidebar
+  // entries.
   const [section, setSectionState] = useState<CleanerSection>(() =>
     parseCleanerSection(searchParams?.get("section")),
   );
+  const [sheetTab, setSheetTab] = useState("jobs");
 
   useEffect(() => {
     setSectionState(parseCleanerSection(searchParams?.get("section")));
@@ -477,7 +496,8 @@ export default function AdminCleaners() {
                 { id: "contractors", label: "Contractors" },
                 { id: "applicants", label: "Applicants" },
                 { id: "urgent-hire", label: "Urgent Hire" },
-                { id: "pulse-check", label: "Pulse check" },
+                { id: "pulse-check", label: "Pulse" },
+                { id: "accountability", label: "Accountability" },
                 { id: "crews", label: "Crews" },
               ] as const
             ).map((s) => (
@@ -532,6 +552,17 @@ export default function AdminCleaners() {
       {section === "pulse-check" && (
         <PulseCheckQueue
           onSelectCleaner={(id) => {
+            setSheetTab("performance");
+            setSelectedId(id);
+            setSection("contractors");
+          }}
+        />
+      )}
+
+      {section === "accountability" && (
+        <AccountabilityWatchlist
+          onSelectCleaner={(id) => {
+            setSheetTab("accountability");
             setSelectedId(id);
             setSection("contractors");
           }}
@@ -555,14 +586,14 @@ export default function AdminCleaners() {
 
       {/* Contractors taking work with no signed ICA — one tap sends them a
           tokenized signing link. Hides itself once the backlog is clear. */}
-      <UnsignedAgreements onSelectCleaner={(id) => setSelectedId(id)} />
+      <UnsignedAgreements onSelectCleaner={(id) => {
+        setSheetTab("jobs");
+        setSelectedId(id);
+      }} />
 
       {/* Whether the recorded walkthroughs still show the screens they claim
           to. Quiet when they do. */}
       <TourRecordingFreshness />
-
-      {/* Accountability review queue: suspended / active strikes / repeat offenders. */}
-      <AccountabilityWatchlist onSelectCleaner={(id) => setSelectedId(id)} />
 
       <Card className="border-slate-200">
         <CardContent className="p-3 sm:p-4">
@@ -642,7 +673,10 @@ export default function AdminCleaners() {
                     <tr
                       key={c.id}
                       className="hover:bg-slate-50 cursor-pointer"
-                      onClick={() => setSelectedId(c.id)}
+                      onClick={() => {
+                        setSheetTab("jobs");
+                        setSelectedId(c.id);
+                      }}
                     >
                       <td className="px-4 py-3">
                         <div className="font-medium text-slate-900">{fullName(c)}</div>
@@ -719,6 +753,7 @@ export default function AdminCleaners() {
 
       <CleanerSheet
         cleaner={selected}
+        defaultTab={sheetTab}
         onClose={() => setSelectedId(null)}
         onAction={runAction}
         onDelete={deleteCleaner}
@@ -745,6 +780,7 @@ function StatusBadge({ status }: { status: string | null }) {
 
 function CleanerSheet({
   cleaner,
+  defaultTab = "jobs",
   onClose,
   onAction,
   onDelete,
@@ -753,6 +789,7 @@ function CleanerSheet({
   actioning,
 }: {
   cleaner: CleanerRow | null;
+  defaultTab?: string;
   onClose: () => void;
   onAction: (
     action:
@@ -797,7 +834,7 @@ function CleanerSheet({
             <div className="py-4 space-y-5">
               <ContactSection cleaner={cleaner} />
 
-              <Tabs defaultValue="jobs">
+              <Tabs key={`${cleaner.id}-${defaultTab}`} defaultValue={defaultTab}>
                 <TabsList className="grid grid-cols-3 sm:grid-cols-5 h-auto bg-slate-100">
                   <TabsTrigger value="jobs" className="data-[state=active]:bg-white">
                     Jobs
