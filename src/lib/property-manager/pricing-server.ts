@@ -248,31 +248,29 @@ export interface StandingRateResult {
   message?: string;
 }
 
+/** Zones the estimate and registry will actually price against. */
+export function servedPricingZones(zones: ZoneInfo[]): ZoneInfo[] {
+  return (zones || []).filter((z) => z.status !== "not_served");
+}
+
 /**
- * Compute one unit's full rate set. This is the only place standing rates are
- * produced, so registration, an admin re-price, and a portfolio-wide re-tier
- * cannot drift apart.
+ * Price one typical unit at an already-resolved zone. Same engine, same
+ * demand-off standing-rate rules as registration — the landing-page estimate
+ * and `computeStandingRates` both come through here so they cannot drift.
+ *
+ * Review (unusual size, unserved zip, non-standard flag) is the caller's
+ * job. This function only runs the residential quote.
  */
-export async function computeStandingRates(
-  supabase: Admin,
+export function standingRatesAtZone(
   ctx: PmPricingContext,
-  input: StandingRateInput,
-): Promise<StandingRateResult> {
-  const zip = String(input.zipCode || "").trim() || zipFromAddress(input.address);
-  const zoneResolution = await resolveUnitZone(supabase, zip, ctx.zones);
-
-  const review = reviewDecisionForUnit({
-    sqft: input.sqft,
-    bedrooms: input.bedrooms,
-    flaggedNonStandard: input.flaggedNonStandard,
-    zoneServed: zoneResolution.served,
-    bounds: ctx.bounds,
-  });
-  if (review.needsReview && review.reason) {
-    return { ok: false, reason: review.reason, message: review.message || "This unit needs review." };
-  }
-
-  const zone = zoneResolution.zone;
+  input: {
+    sqft?: number | null;
+    unitCount: number;
+    zipCode?: string | null;
+    zoneDefaulted?: boolean;
+  },
+  zone: ZoneInfo,
+): StandingRateResult {
   const band = bandForSqft(input.sqft);
   if (!zone || !band) {
     return {
@@ -292,8 +290,8 @@ export async function computeStandingRates(
     home_size_id: band.id,
     zone_code: zone.code,
     zone_multiplier: zone.multiplier,
-    zone_defaulted: zoneResolution.defaulted,
-    zip: zip || null,
+    zone_defaulted: !!input.zoneDefaulted,
+    zip: input.zipCode || null,
     computed_at: new Date().toISOString(),
     services: {} as Record<string, unknown>,
   };
@@ -353,6 +351,52 @@ export async function computeStandingRates(
       basis,
     },
   };
+}
+
+/**
+ * Compute one unit's full rate set. Registration, an admin re-price, and a
+ * portfolio-wide re-tier still come through here (review + zone, then the
+ * quote). The residential quote itself is `standingRatesAtZone` so the
+ * landing-page estimate cannot drift from what gets frozen on the unit.
+ */
+export async function computeStandingRates(
+  supabase: Admin,
+  ctx: PmPricingContext,
+  input: StandingRateInput,
+): Promise<StandingRateResult> {
+  const zip = String(input.zipCode || "").trim() || zipFromAddress(input.address);
+  const zoneResolution = await resolveUnitZone(supabase, zip, ctx.zones);
+
+  const review = reviewDecisionForUnit({
+    sqft: input.sqft,
+    bedrooms: input.bedrooms,
+    flaggedNonStandard: input.flaggedNonStandard,
+    zoneServed: zoneResolution.served,
+    bounds: ctx.bounds,
+  });
+  if (review.needsReview && review.reason) {
+    return { ok: false, reason: review.reason, message: review.message || "This unit needs review." };
+  }
+
+  const zone = zoneResolution.zone;
+  if (!zone) {
+    return {
+      ok: false,
+      reason: "pricing_unavailable",
+      message: "We couldn't price this unit automatically. Our team will set its rates.",
+    };
+  }
+
+  return standingRatesAtZone(
+    ctx,
+    {
+      sqft: input.sqft,
+      unitCount: input.unitCount,
+      zipCode: zip,
+      zoneDefaulted: zoneResolution.defaulted,
+    },
+    zone,
+  );
 }
 
 /** Column patch shape for property_manager_units from a computed rate set. */

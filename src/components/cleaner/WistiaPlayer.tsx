@@ -17,6 +17,8 @@ interface WistiaPlayerProps {
   /** padding-top % used for the blurred placeholder (height / width * 100). */
   placeholderPaddingTop?: string;
   className?: string;
+  autoPlay?: boolean;
+  muted?: boolean;
 }
 
 function ensureScript(src: string, asModule = false) {
@@ -34,6 +36,8 @@ export function WistiaPlayer({
   aspect = 1.6783216783216783,
   placeholderPaddingTop = "59.58%",
   className,
+  autoPlay = false,
+  muted = false,
 }: WistiaPlayerProps) {
   useEffect(() => {
     ensureScript("https://fast.wistia.com/player.js");
@@ -47,7 +51,7 @@ export function WistiaPlayer({
       <style dangerouslySetInnerHTML={{ __html: placeholderStyle }} />
       <div
         dangerouslySetInnerHTML={{
-          __html: `<wistia-player media-id="${mediaId}" aspect="${aspect}"></wistia-player>`,
+          __html: `<wistia-player media-id="${mediaId}" aspect="${aspect}"${autoPlay ? ' autoplay="true"' : ""}${muted ? ' muted="true"' : ""}></wistia-player>`,
         }}
       />
     </div>
