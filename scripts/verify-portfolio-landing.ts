@@ -70,6 +70,7 @@ const typical8 = expandEstimateUnits({
 });
 check("8 standard 2BR units expand to 8 rows", typical8.length, 8);
 check("each cloned unit keeps 1200 sqft", typical8.every((u) => u.sqft === 1200), true);
+check("each cloned unit keeps 2 bedrooms", typical8.every((u) => u.bedrooms === 2), true);
 check(
   "8 standard 2BR units are typical — Get Started",
   portfolioCtaFor(typical8).cta,

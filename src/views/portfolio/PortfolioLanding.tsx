@@ -586,7 +586,7 @@ export default function PortfolioLanding() {
                         Estimate
                       </span>
                     </div>
-                    {estimate ? (
+                    {estimate && estimate.ranges.some((r) => r.minCents > 0) ? (
                       <>
                         <div className="grid gap-3 sm:grid-cols-3">
                           {(["move_out", "move_in", "standard"] as PmServiceType[]).map((service) => (
@@ -605,7 +605,9 @@ export default function PortfolioLanding() {
                       </>
                     ) : (
                       <p className="text-sm text-muted-foreground">
-                        Standing-rate ranges come from the same residential engine used at registration. Click Update estimate to price this portfolio.
+                        {cta === "book_call"
+                          ? "This portfolio isn't auto-priced. Book a call and we'll set standing rates after a person reviews the units."
+                          : "Standing-rate ranges come from the same residential engine used at registration. Click Update estimate to price this portfolio."}
                       </p>
                     )}
                     <p className="text-xs leading-relaxed text-muted-foreground">{estimate?.disclaimer || ESTIMATE_DISCLAIMER}</p>
@@ -668,7 +670,7 @@ export default function PortfolioLanding() {
                               <Input className="md:col-span-5" placeholder="Street address" value={unit.address} onChange={(e) => setUnitDrafts((rows) => rows.map((r, idx) => (idx === i ? { ...r, address: e.target.value } : r)))} />
                               <Input className="md:col-span-2" placeholder="ZIP" inputMode="numeric" value={unit.zipCode} onChange={(e) => setUnitDrafts((rows) => rows.map((r, idx) => (idx === i ? { ...r, zipCode: e.target.value.replace(/\D/g, "").slice(0, 5) } : r)))} />
                               <p className="flex items-center text-xs text-muted-foreground md:col-span-2">
-                                {unit.bedrooms || "—"} bd · {unit.sqft || "—"} sf
+                                {unit.bedrooms || bedrooms || "—"} bd · {unit.sqft || sqft || "—"} sf
                               </p>
                             </div>
                           ))}
