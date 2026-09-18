@@ -36,6 +36,7 @@
     "partnership-comms:verify": "tsx scripts/verify-partnership-comms.ts",
     "partner-portal:verify": "tsx scripts/verify-partner-portal.ts",
     "property-manager:verify": "tsx scripts/verify-property-manager.ts",
+    "portfolio-landing:verify": "tsx scripts/verify-portfolio-landing.ts",
     "docs:pricing": "tsx scripts/docs/pricing-examples.ts",
     "onboarding:verify": "tsx scripts/verify-onboarding-sequence.ts",
     "tours:verify": "tsx scripts/verify-contractor-tours.ts",

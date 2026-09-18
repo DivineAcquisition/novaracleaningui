@@ -8,7 +8,8 @@ import { updateSession } from "@/integrations/supabase/middleware";
 //
 //   admin.novaracleaning.com      — admin portal + sign-in only
 //   try.novaracleaning.com        — public marketing, booking funnel,
-//                                    membership browse, demo, pricing
+//                                    membership browse, demo, pricing,
+//                                    PM portfolio landing (/portfolio)
 //   app.novaracleaning.com        — authenticated customer portal
 //                                    (account, manage-booking, membership
 //                                     success, billing returns, auth flows)
@@ -133,6 +134,9 @@ const ROUTE_OWNER: Array<[string, SubdomainKey]> = [
   ["/checklist", "try"],  // /checklist and /checklist/[slug] public scope sheets
   ["/demo", "try"],
   ["/pricing-sheet", "try"],
+  // Public PM / rental-portfolio acquisition. No login. Distinct from
+  // commercial.* intake and partner.* portal.
+  ["/portfolio", "try"],
 
   // Open before/after photo gallery (tokenized public link sent to
   // customers + partner hosts). Lives on the marketing host so a single
