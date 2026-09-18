@@ -18,6 +18,24 @@ export const DEMO_ADMIN = {
   email: "demo.admin@novaracleaning.com",
 };
 
+/** Signed-in contractor for New Hire Series captures. Maps to Dana Whitfield. */
+export const DEMO_CLEANER = {
+  id: "00000000-0000-4000-8000-0000000000c1",
+  email: "dana.whitfield@example.test",
+};
+
+export const DEMO_TOKENS = {
+  checklistBeforeArrival: "demo-checklist-nvc-10241",
+  checklistCheckedIn: "demo-checklist-nvc-10246",
+  photos: "demo-photos-nvc-10246",
+};
+
+export const DEMO_JOB_IDS = {
+  reyes: "j0000000-0000-4000-8000-000000000041",
+  tomas: "j0000000-0000-4000-8000-000000000046",
+  marcus: "j0000000-0000-4000-8000-000000000038",
+};
+
 const today = new Date();
 const iso = (offsetDays: number) => {
   const d = new Date(today.getTime() + offsetDays * 86_400_000);
@@ -48,6 +66,15 @@ export const cleaners = [
     city: "Bethesda",
     state: "MD",
     service_zip_codes: ["20814", "20816", "20817"],
+    user_id: "00000000-0000-4000-8000-0000000000c1",
+    onboarding_complete: true,
+    home_zip: "20814",
+    completed_bookings: 132,
+    total_earnings_cents: 1842000,
+    total_ratings: 98,
+    ob_training_accessed: true,
+    ob_payouts_setup: true,
+    ob_agreement_signed: true,
     pay_percentage: 41,
     pay_tier: "proven",
     novara_score: 88,
@@ -268,6 +295,12 @@ export const bookings = [
     frequency: "one_time",
     access_notes: "Side gate code 4417. Friendly dog — Biscuit.",
     team_notes: "Repeat customer, prefers Dana.",
+    dispatch_notes: "Do not ring the doorbell — baby may be napping. Use the side gate.",
+    job_id: "j0000000-0000-4000-8000-000000000041",
+    cleaner_payout_cents: 12249,
+    photo_upload_token: "demo-photos-nvc-10241",
+    check_in_time: null,
+    payout_status: null,
     created_at: ts(-4),
     payment_intent_id: "demo_pi_10241",
     booking_channel: "internal",
@@ -342,6 +375,13 @@ export const bookings = [
     frequency: "one_time",
     access_notes: "Unit is empty; key at the leasing office.",
     team_notes: "Landlord turnover.",
+    dispatch_notes: null,
+    job_id: "j0000000-0000-4000-8000-000000000038",
+    cleaner_payout_cents: 17435,
+    photo_upload_token: "demo-photos-nvc-10238",
+    check_in_time: ts(-2, 13),
+    completed_at: ts(-2, 16),
+    payout_status: "paid",
     created_at: ts(-14),
     payment_intent_id: "demo_pi_10238",
     booking_channel: "web",
@@ -416,6 +456,12 @@ export const bookings = [
     frequency: "one_time",
     access_notes: "Park in the driveway.",
     team_notes: "",
+    dispatch_notes: "Host is out for the day. Lock the door when you leave.",
+    job_id: "j0000000-0000-4000-8000-000000000046",
+    cleaner_payout_cents: 14086,
+    photo_upload_token: "demo-photos-nvc-10246",
+    check_in_time: ts(0, 9),
+    payout_status: "pending",
     created_at: ts(-5),
     payment_intent_id: "demo_pi_10246",
     booking_channel: "web",
@@ -812,3 +858,350 @@ export const businessAccounts = [
     created_at: ts(-90),
   },
 ];
+
+// ─── Contractor jobs / assignments / pay (New Hire Series captures) ────────
+//
+// Nested `jobs` on each assignment is what supabase-js returns for the
+// `job_assignments.select("..., jobs (...)")` embed the cleaner dashboard uses.
+
+const jobReyes = {
+  id: DEMO_JOB_IDS.reyes,
+  address: "418 Larkspur Lane",
+  city: "Columbia",
+  state: "MD",
+  zip: "21044",
+  service_type: "standard",
+  start_datetime: ts(3, 14),
+  duration_est_hours: 3,
+  check_in_time: null,
+  check_out_time: null,
+  status: "accepted",
+  notes: "Repeat customer, prefers Dana.",
+};
+
+const jobTomas = {
+  id: DEMO_JOB_IDS.tomas,
+  address: "1140 Sagebrush Court",
+  city: "Silver Spring",
+  state: "MD",
+  zip: "20910",
+  service_type: "standard",
+  start_datetime: ts(0, 13),
+  duration_est_hours: 3,
+  check_in_time: ts(0, 9),
+  check_out_time: null,
+  status: "in_progress",
+  notes: "",
+};
+
+const jobMarcus = {
+  id: DEMO_JOB_IDS.marcus,
+  address: "915 Rosemont Terrace",
+  city: "Frederick",
+  state: "MD",
+  zip: "21701",
+  service_type: "moveInOut",
+  start_datetime: ts(-2, 17),
+  duration_est_hours: 4,
+  check_in_time: ts(-2, 13),
+  check_out_time: ts(-2, 16),
+  status: "completed",
+  notes: "Landlord turnover.",
+};
+
+export const jobs = [jobReyes, jobTomas, jobMarcus];
+
+export const jobAssignments = [
+  {
+    id: "ja000000-0000-4000-8000-000000000041",
+    job_id: DEMO_JOB_IDS.reyes,
+    cleaner_id: "c0000000-0000-4000-8000-000000000001",
+    status: "accepted",
+    estimated_pay_cents: 12249,
+    pay_percentage_snapshot: 41,
+    crew_size_snapshot: 1,
+    response_token: DEMO_TOKENS.checklistBeforeArrival,
+    assigned_at: ts(-3),
+    jobs: jobReyes,
+  },
+  {
+    id: "ja000000-0000-4000-8000-000000000046",
+    job_id: DEMO_JOB_IDS.tomas,
+    cleaner_id: "c0000000-0000-4000-8000-000000000001",
+    status: "accepted",
+    estimated_pay_cents: 14086,
+    pay_percentage_snapshot: 41,
+    crew_size_snapshot: 1,
+    response_token: DEMO_TOKENS.checklistCheckedIn,
+    assigned_at: ts(-4),
+    jobs: jobTomas,
+  },
+  {
+    id: "ja000000-0000-4000-8000-000000000038",
+    job_id: DEMO_JOB_IDS.marcus,
+    cleaner_id: "c0000000-0000-4000-8000-000000000001",
+    status: "completed",
+    estimated_pay_cents: 17435,
+    pay_percentage_snapshot: 41,
+    crew_size_snapshot: 1,
+    response_token: "demo-checklist-nvc-10238",
+    assigned_at: ts(-10),
+    jobs: jobMarcus,
+  },
+];
+
+export const manualPayouts = [
+  {
+    id: "mp000000-0000-4000-8000-000000000038",
+    booking_id: "b0000000-0000-4000-8000-000000000003",
+    cleaner_id: "c0000000-0000-4000-8000-000000000001",
+    amount_cents: 17435,
+    status: "paid",
+    revenue_cents: 42525,
+    pct_paid: 41,
+    note: "Proven tier · solo · 41% of job value",
+    cleaner_breakdown: [{ cleanerId: "c0000000-0000-4000-8000-000000000001", amountCents: 17435 }],
+    paid_at: ts(-1, 18),
+    created_at: ts(-2, 17),
+  },
+];
+
+export const cleanerTips = [
+  {
+    id: "ct000000-0000-4000-8000-000000000001",
+    booking_id: "b0000000-0000-4000-8000-000000000003",
+    cleaner_id: "c0000000-0000-4000-8000-000000000001",
+    amount_cents: 2500,
+    allocation: "split",
+    crew_size: 1,
+    total_tip_cents: 2500,
+    created_at: ts(-1, 19),
+  },
+];
+
+const danaPay = (displayCents: number, status: "paid" | "pending" | null, extrasCents = 0) => ({
+  actualCents: status ? displayCents : null,
+  baseCents: status ? displayCents - extrasCents : null,
+  extrasCents,
+  paidCents: status === "paid" ? displayCents : 0,
+  pendingCents: status === "pending" ? displayCents : 0,
+  estimateCents: displayCents,
+  displayCents,
+  isActual: Boolean(status),
+  status,
+  pctPaid: status === "paid" ? 41 : null,
+  crewSize: 1,
+  ratePercent: 41,
+});
+
+/** Canned get-cleaner-portal payload for Dana — invented data only. */
+export function cleanerPortalPayload() {
+  const reyes = bookings.find((b) => b.booking_number === 10241)!;
+  const tomas = bookings.find((b) => b.booking_number === 10246)!;
+  const marcus = bookings.find((b) => b.booking_number === 10238)!;
+  const dana = cleaners[0];
+
+  const job = (
+    b: (typeof bookings)[number],
+    payStatus: "paid" | "pending" | null,
+    displayCents: number,
+    qcToken: string | null,
+    checkInTime: string | null,
+    extrasCents = 0,
+  ) => ({
+    id: b.id,
+    bookingId: b.id,
+    jobId: (b as { job_id?: string }).job_id || null,
+    bookingNumber: b.booking_number,
+    status: b.status,
+    serviceDate: b.service_date,
+    timeSlot: b.time_slot,
+    serviceType: b.service_type,
+    homeSizeId: b.home_size_id,
+    customerName: `${b.first_name} ${b.last_name}`,
+    address: b.address,
+    city: b.city,
+    state: b.state,
+    zip: b.zip_code,
+    checkInTime,
+    cancelledAt: null,
+    qcToken,
+    tipCents: b.booking_number === 10238 ? 2500 : 0,
+    photoUploadToken: (b as { photo_upload_token?: string }).photo_upload_token || null,
+    photoViewToken: null,
+    beforePhotos: [],
+    afterPhotos: [],
+    pay: danaPay(displayCents, payStatus, extrasCents),
+    crew: [{ id: dana.id, name: "Dana W", role: "Lead", isYou: true }],
+    commercial: null,
+    customerDetails: {
+      bedrooms: b.bedrooms,
+      bathrooms: b.bathrooms,
+      sqft: null,
+      dwellingType: b.dwelling_type,
+      flooringType: null,
+      pets: b.booking_number === 10241 ? "Dog — Biscuit" : null,
+      addOns: b.add_ons,
+      frequency: b.frequency,
+      accessNotes: b.access_notes,
+    },
+    internalDetails: {
+      jobValueCents: b.total_estimate_cents,
+      estimateCents: displayCents,
+      baseCents: displayCents,
+      extrasCents,
+      payoutStatus: payStatus,
+      payoutNote: payStatus === "paid" ? "Proven tier · solo · 41% of job value" : null,
+      dispatchNotes: (b as { dispatch_notes?: string | null }).dispatch_notes || null,
+      teamNotes: b.team_notes || null,
+      issuesFlag: false,
+      issuesNotes: null,
+      crewSize: 1,
+      ratePercent: 41,
+    },
+  });
+
+  return {
+    ok: true,
+    found: true,
+    cleaner: {
+      id: dana.id,
+      firstName: dana.first_name,
+      lastName: dana.last_name,
+      name: `${dana.first_name} ${dana.last_name}`,
+      payPercentage: 41,
+      scores: { novara: 88, quality: 91, overall: 89 },
+      qcSummary: null,
+    },
+    summary: {
+      lifetimePaidCents: 17435,
+      pendingCents: 14086,
+      paidJobs: 1,
+      lifetimeTipsCents: 2500,
+    },
+    tips: [
+      {
+        bookingId: marcus.id,
+        bookingRef: "NVC-10238",
+        amountCents: 2500,
+        totalTipCents: 2500,
+        crewSize: 1,
+        allocation: "split",
+        receivedAt: cleanerTips[0].created_at,
+      },
+    ],
+    offers: [],
+    coverageOffers: [],
+    jobs: [
+      job(tomas, "pending", 14086, DEMO_TOKENS.checklistCheckedIn, tomas.check_in_time as string),
+      job(reyes, null, 12249, DEMO_TOKENS.checklistBeforeArrival, null),
+      job(marcus, "paid", 17435, "demo-checklist-nvc-10238", marcus.check_in_time as string),
+    ],
+  };
+}
+
+const STANDARD_SECTIONS = [
+  {
+    title: "Kitchen",
+    items: [
+      "Dust and spot-clean cabinet fronts",
+      "Clean countertops",
+      "Clean sink and polish faucet",
+      "Dust small appliances and items on countertops",
+      "Clean microwave (inside and out)",
+      "Clean and polish oven and refrigerator exterior",
+      "Clean and polish stove top and vent hood",
+      "Vacuum and mop kitchen floor",
+      "Remove trash, replace bag, wipe exterior",
+    ],
+  },
+  {
+    title: "Bathrooms",
+    items: [
+      "Clean mirrors (streak-free)",
+      "Dust light fixtures",
+      "Spot-clean cabinet fronts",
+      "Scrub shower and tub",
+      "Clean counters, sinks, and polish fixtures",
+      "Disinfect toilet and surrounding area",
+      "Vacuum bathroom rugs",
+      "Remove trash, replace bag, wipe exterior",
+      "Clean and disinfect bathroom floor",
+    ],
+  },
+  {
+    title: "All rooms",
+    items: [
+      "Remove cobwebs and dust ceiling fans",
+      "Dust reachable light fixtures",
+      "Dust wall art and A/C vents",
+      "Disinfect light switches and door knobs",
+      "Dust and spot-clean doors and door frames",
+      "Dust window sills and ledges",
+      "Dust baseboards and blinds",
+      "Dust TVs, electronics, knick-knacks, picture frames, lamps",
+      "Dust all furniture (polish as needed)",
+      "Dust banisters and handrails",
+      "Vacuum all floors and stairs; mop hard surfaces",
+      "Vacuum upholstered furniture (where possible)",
+      "Change linens and/or make beds",
+      "Clean front and back door glass",
+    ],
+  },
+];
+
+function checklistFrom(booking: (typeof bookings)[number], items: Record<string, { done?: boolean }>) {
+  const total = STANDARD_SECTIONS.reduce((n, s) => n + s.items.length, 0);
+  const completed = Object.values(items).filter((i) => i.done).length;
+  return {
+    ok: true,
+    canWrite: true,
+    is_crew_lead: true,
+    crew_size: 1,
+    job: {
+      id: (booking as { job_id?: string }).job_id,
+      service_type: booking.service_type,
+      address: booking.address,
+      city: booking.city,
+      state: booking.state,
+      zip: booking.zip_code,
+      start_datetime: null,
+      duration_est_hours: 3,
+      status: booking.status,
+    },
+    booking: {
+      ref: `NVC-${booking.booking_number}`,
+      first_name: booking.first_name,
+      service_date: booking.service_date,
+      time_slot: booking.time_slot,
+      access_notes: booking.access_notes,
+      team_notes: booking.team_notes,
+      dispatch_notes: (booking as { dispatch_notes?: string | null }).dispatch_notes || null,
+      add_ons: booking.add_ons,
+    },
+    cleaner: { id: "c0000000-0000-4000-8000-000000000001", first_name: "Dana" },
+    checklist: {
+      key: "standard",
+      name: "Standard Clean",
+      blurb: "Work through every line as you clean. Check items off one at a time — don't bulk-complete.",
+      sections: STANDARD_SECTIONS,
+      items,
+      total_items: total,
+      completed_items: completed,
+      progress_pct: Math.round((completed / total) * 100),
+      completed_at: null,
+      section_meta: {},
+    },
+    addons: { enabled: false, sharePct: 41, teamSize: 1, catalog: [], requests: [] },
+    findings: [],
+  };
+}
+
+export function freshChecklistState(token: string) {
+  const booking =
+    token === DEMO_TOKENS.checklistCheckedIn
+      ? bookings.find((b) => b.booking_number === 10246)!
+      : bookings.find((b) => b.booking_number === 10241)!;
+  return checklistFrom(booking, {});
+}
+

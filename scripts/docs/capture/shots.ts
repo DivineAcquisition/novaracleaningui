@@ -9,13 +9,29 @@
 
 import type { Page } from "playwright";
 
+export type ShotRole = "admin" | "cleaner";
+
 export interface Shot {
   id: string;
   /** Guide slug this image belongs to (docs/admin-workspace/<doc>.md). */
   doc: string;
+  /**
+   * Capture series. Admin workspace shots omit this. New Hire Series shots
+   * use `new-hire` so they write to a separate folder and stay out of
+   * `docs:verify` for the VA guides.
+   */
+  series?: "new-hire";
   /** Caption rendered under the image. */
   caption: string;
   url: string;
+  /** Who the capture session is signed in as. Defaults to the demo admin. */
+  role?: ShotRole;
+  /** Output directory relative to the repo root. Defaults to the admin screenshots folder. */
+  outDir?: string;
+  /** Viewport override. `height` still wins for tall screens when this is omitted. */
+  viewport?: { width: number; height: number };
+  /** Draw the caption onto the image so a video editor can use it without a guide. */
+  burnCaption?: boolean;
   /** Text that must appear before the shot is taken. */
   waitForText?: string;
   /** Extra interaction (open a tab, expand a sheet) before capturing. */

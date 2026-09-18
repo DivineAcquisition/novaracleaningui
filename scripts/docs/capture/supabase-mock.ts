@@ -122,6 +122,20 @@ function applyQuery(rows: any[], url: URL): any[] {
         out = out.filter((r) => set.includes(String(cmp(r))));
         break;
       }
+      case "not": {
+        const [innerOp, ...innerRest] = value.split(".");
+        const innerVal = innerRest.join(".");
+        if (innerOp === "in") {
+          const set = innerVal
+            .replace(/^\(|\)$/g, "")
+            .split(",")
+            .map((v) => v.replace(/^"|"$/g, ""));
+          out = out.filter((r) => !set.includes(String(cmp(r))));
+        } else if (innerOp === "eq") {
+          out = out.filter((r) => String(cmp(r)) !== innerVal);
+        }
+        break;
+      }
       case "ilike":
         out = out.filter((r) =>
           String(cmp(r) ?? "").toLowerCase().includes(value.replace(/[%*]/g, "").toLowerCase()),
@@ -225,7 +239,11 @@ const TABLES: Record<string, unknown[]> = {
   leads: [],
   va_quotes: demo.vaQuotes,
   custom_quotes: demo.customQuotes,
-  job_assignments: [],
+  job_assignments: demo.jobAssignments,
+  jobs: demo.jobs,
+  manual_payouts: demo.manualPayouts,
+  cleaner_tips: demo.cleanerTips,
+  job_extra_pay: [],
   availability: [],
   availability_slots: [],
   app_settings: [
@@ -261,13 +279,41 @@ const TABLES: Record<string, unknown[]> = {
 
 // ─── RPC fixtures ──────────────────────────────────────────────────────────
 
-const RPCS: Record<string, unknown> = {
+const RPCS: Record<string, unknown | ((body: Record<string, any>) => unknown)> = {
   is_admin_or_va: true,
   has_role: true,
   get_customer_credit_balance_by_email: { balance_cents: 5000 },
   airtable_queue_stats: [{ pending: 0, dead: 0, synced_24h: 128 }],
   suggest_coverage_cleaners: [],
   compute_crew_pay: [],
+  resolve_or_link_cleaner_for_user: (body) => {
+    const email = String(body?.p_email || "").toLowerCase();
+    const dana = demo.cleaners[0];
+    if (email && email === dana.email.toLowerCase()) {
+      return [
+        {
+          id: dana.id,
+          user_id: demo.DEMO_CLEANER.id,
+          first_name: dana.first_name,
+          last_name: dana.last_name,
+          email: dana.email,
+          phone: dana.phone,
+          home_zip: "20814",
+          onboarding_complete: true,
+          approved: true,
+          status: dana.status,
+          stripe_account_id: dana.stripe_account_id,
+          payouts_enabled: dana.payouts_enabled,
+          phone_verified: dana.phone_verified,
+          pay_tier: dana.pay_tier,
+          pay_percentage: dana.pay_percentage,
+          was_linked: false,
+          was_auto_promoted: false,
+        },
+      ];
+    }
+    return [];
+  },
 };
 
 // ─── Edge function fixtures ────────────────────────────────────────────────
@@ -371,6 +417,32 @@ function quoteDynamicPrice(body: Record<string, any>) {
   };
 }
 
+let checklistState = demo.freshChecklistState(demo.DEMO_TOKENS.checklistBeforeArrival);
+
+function recomputeChecklistProgress(state: ReturnType<typeof demo.freshChecklistState>) {
+  const total = state.checklist.total_items;
+  const completed = Object.values(state.checklist.items).filter((i) => i.done).length;
+  state.checklist.completed_items = completed;
+  state.checklist.progress_pct = total ? Math.round((completed / total) * 100) : 0;
+}
+
+export function resetNewHireCaptureState(token?: string) {
+  checklistState = demo.freshChecklistState(token || demo.DEMO_TOKENS.checklistBeforeArrival);
+}
+
+function handleChecklist(body: Record<string, any>) {
+  const action = String(body?.action || "");
+  if (action === "toggle") {
+    const key = String(body.itemKey || "");
+    if (body.done) checklistState.checklist.items[key] = { done: true, at: new Date().toISOString(), by: "Dana" };
+    else delete checklistState.checklist.items[key];
+    recomputeChecklistProgress(checklistState);
+  } else if (action === "complete") {
+    checklistState.checklist.completed_at = new Date().toISOString();
+  }
+  return checklistState;
+}
+
 const FUNCTIONS: Record<string, (body: any) => unknown> = {
   "quote-dynamic-price": quoteDynamicPrice,
   "admin-list-bookings": () => ({ bookings: demo.bookings, total: demo.bookings.length }),
@@ -397,7 +469,36 @@ const FUNCTIONS: Record<string, (body: any) => unknown> = {
   "admin-memberships": () => ({ members: [] }),
   "payroll-operations": () => ({ cleaners: demo.cleaners.filter((c) => c.status === "active"), jobs: [] }),
   "admin-extra-pay": () => ({ payments: [] }),
-  "qc-issues": () => ({ issues: demo.qcIssues }),
+  "qc-issues": (body) =>
+    body?.action === "field_report"
+      ? { ok: true, issueId: "q-demo-field-report", notified: true }
+      : { issues: demo.qcIssues },
+  "get-cleaner-portal": () => demo.cleanerPortalPayload(),
+  "cleaner-job-checklist": handleChecklist,
+  "get-cleaner-photo-form": () => {
+    const tomas = demo.bookings.find((b) => b.booking_number === 10246)!;
+    return {
+      ok: true,
+      bookingId: tomas.id,
+      bookingNumber: tomas.booking_number,
+      serviceDate: tomas.service_date,
+      timeSlot: tomas.time_slot,
+      customerFirstName: tomas.first_name,
+      addressLine: `${tomas.address}, ${tomas.city}, ${tomas.state} ${tomas.zip_code}`,
+      cleanerFirstName: "Dana",
+      status: tomas.status,
+      beforeCount: 0,
+      afterCount: 0,
+      beforePhotos: [],
+      afterPhotos: [],
+      alreadySubmitted: false,
+    };
+  },
+  "submit-cleaner-photos": () => ({ ok: true }),
+  "check-subscription": () => ({ subscribed: false }),
+  "get-contractor-training": () => ({ url: null, embedUrl: null, configured: false }),
+  "cleaner-mark-complete": () => ({ ok: true, photoUploadToken: demo.DEMO_TOKENS.photos }),
+  "job-check-in": () => ({ ok: true }),
   "qc-reclean": () => ({ report: { requests: 0, absorbedCents: 0, qualityMisses: 0, serialRequesters: [] } }),
   "apploye-live-tracking": () => ({ configured: false, cleaners: [] }),
   "admin-create-team-user": () => ({ members: demo.teamMembers }),
@@ -759,6 +860,35 @@ function wantsSingle(request: PWRequest): boolean {
   return accept.includes("application/vnd.pgrst.object+json");
 }
 
+function isCleanerAuth(request: PWRequest): boolean {
+  const auth = request.headers()["authorization"] || "";
+  const raw = request.postData() || "";
+  return auth.includes("demo-cleaner-access-token") || raw.includes("demo-cleaner");
+}
+
+function authUser(cleaner: boolean) {
+  if (cleaner) {
+    return {
+      id: demo.DEMO_CLEANER.id,
+      email: demo.DEMO_CLEANER.email,
+      aud: "authenticated",
+      role: "authenticated",
+      app_metadata: { provider: "email" },
+      user_metadata: { first_name: "Dana", last_name: "Whitfield" },
+      created_at: new Date(Date.now() - 86_400_000 * 200).toISOString(),
+    };
+  }
+  return {
+    id: demo.DEMO_ADMIN.id,
+    email: demo.DEMO_ADMIN.email,
+    aud: "authenticated",
+    role: "authenticated",
+    app_metadata: { provider: "email" },
+    user_metadata: { first_name: "Demo", last_name: "Admin" },
+    created_at: new Date(Date.now() - 86_400_000 * 90).toISOString(),
+  };
+}
+
 export async function handleSupabase(route: Route, request: PWRequest): Promise<void> {
   const url = new URL(request.url());
   const path = url.pathname;
@@ -777,19 +907,12 @@ export async function handleSupabase(route: Route, request: PWRequest): Promise<
 
   // ── auth ──
   if (path.startsWith("/auth/v1/")) {
-    const user = {
-      id: demo.DEMO_ADMIN.id,
-      email: demo.DEMO_ADMIN.email,
-      aud: "authenticated",
-      role: "authenticated",
-      app_metadata: { provider: "email" },
-      user_metadata: { first_name: "Demo", last_name: "Admin" },
-      created_at: new Date(Date.now() - 86_400_000 * 90).toISOString(),
-    };
+    const cleaner = isCleanerAuth(request);
+    const user = authUser(cleaner);
     if (path.includes("/user")) return json(route, user);
     return json(route, {
-      access_token: "demo-access-token",
-      refresh_token: "demo-refresh-token",
+      access_token: cleaner ? "demo-cleaner-access-token" : "demo-access-token",
+      refresh_token: cleaner ? "demo-cleaner-refresh-token" : "demo-refresh-token",
       token_type: "bearer",
       expires_in: 3600,
       expires_at: Math.floor(Date.now() / 1000) + 3600,
@@ -800,12 +923,19 @@ export async function handleSupabase(route: Route, request: PWRequest): Promise<
   // ── rpc ──
   if (path.startsWith("/rest/v1/rpc/")) {
     const name = path.split("/rest/v1/rpc/")[1];
-    const value = name in RPCS ? RPCS[name] : null;
+    const entry = name in RPCS ? RPCS[name] : null;
+    const value = typeof entry === "function" ? entry(parseBody(request)) : entry;
     return json(route, value);
   }
 
   // ── storage (avatars, photos) ──
   if (path.startsWith("/storage/")) {
+    return route.fulfill({ status: 404, body: "" });
+  }
+
+  // Realtime websocket upgrades aren't interceptable as JSON; close them so
+  // the page falls back to its existing poll instead of hanging.
+  if (path.startsWith("/realtime/")) {
     return route.fulfill({ status: 404, body: "" });
   }
 

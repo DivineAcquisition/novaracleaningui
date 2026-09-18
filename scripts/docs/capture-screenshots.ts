@@ -1,7 +1,8 @@
 // ─── Admin workspace screenshot capture ────────────────────────────────────
 //
-//   npm run docs:capture                 # everything
+//   npm run docs:capture                 # admin workspace shots
 //   npm run docs:capture -- bookings     # one guide's shots
+//   npm run docs:capture -- new-hire     # New Hire Series contractor shots
 //
 // Requires the dev server on http://localhost:3100 (npm run dev -- --port 3100).
 //
@@ -24,10 +25,11 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { chromium, type Browser, type Page } from "playwright";
 
-import { drawCallouts, clearCallouts, redact } from "./capture/annotate";
+import { drawCallouts, clearCallouts, redact, drawCaption } from "./capture/annotate";
 import { SHOTS, type Shot } from "./capture/shots";
-import { handleApiRoute, handleSupabase } from "./capture/supabase-mock";
-import { DEMO_ADMIN } from "./capture/demo-data";
+import { NEW_HIRE_SHOTS, NEW_HIRE_SKIPPED, NEW_HIRE_ROOT } from "./capture/new-hire-shots";
+import { handleApiRoute, handleSupabase, resetNewHireCaptureState } from "./capture/supabase-mock";
+import { DEMO_ADMIN, DEMO_CLEANER, DEMO_TOKENS } from "./capture/demo-data";
 
 const ROOT = resolve(__dirname, "../..");
 const OUT_DIR = resolve(ROOT, "docs/admin-workspace/screenshots");
@@ -37,8 +39,26 @@ const BASE_URL = process.env.DOCS_CAPTURE_BASE_URL || "http://localhost:3100";
 const VIEWPORT = { width: 1440, height: 900 };
 
 /** The session supabase-js expects to find in localStorage. */
-function demoSession() {
+function demoSession(role: Shot["role"] = "admin") {
   const now = Math.floor(Date.now() / 1000);
+  if (role === "cleaner") {
+    return {
+      access_token: "demo-cleaner-access-token",
+      refresh_token: "demo-cleaner-refresh-token",
+      token_type: "bearer",
+      expires_in: 3600,
+      expires_at: now + 3600,
+      user: {
+        id: DEMO_CLEANER.id,
+        email: DEMO_CLEANER.email,
+        aud: "authenticated",
+        role: "authenticated",
+        app_metadata: { provider: "email" },
+        user_metadata: { first_name: "Dana", last_name: "Whitfield" },
+        created_at: new Date(Date.now() - 86_400_000 * 200).toISOString(),
+      },
+    };
+  }
   return {
     access_token: "demo-access-token",
     refresh_token: "demo-refresh-token",
@@ -57,9 +77,10 @@ function demoSession() {
   };
 }
 
-async function newPage(browser: Browser): Promise<Page> {
+async function newPage(browser: Browser, shot?: Shot): Promise<Page> {
+  const viewport = shot?.viewport ?? VIEWPORT;
   const context = await browser.newContext({
-    viewport: VIEWPORT,
+    viewport,
     deviceScaleFactor: 2, // retina-sharp text in the guides
     reducedMotion: "reduce",
     colorScheme: "light",
@@ -82,7 +103,7 @@ async function newPage(browser: Browser): Promise<Page> {
         "*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;transition-duration:0s!important}";
       document.documentElement.appendChild(style);
     },
-    [`sb-sxdraeptzuamsgjcvfeg-auth-token`, demoSession()] as const,
+    [`sb-sxdraeptzuamsgjcvfeg-auth-token`, demoSession(shot?.role)] as const,
   );
 
   return context.newPage();
@@ -103,10 +124,22 @@ async function settle(page: Page, shot: Shot) {
 }
 
 async function capture(browser: Browser, shot: Shot) {
-  const page = await newPage(browser);
+  if (shot.series === "new-hire") {
+    const token = shot.url.includes(DEMO_TOKENS.checklistCheckedIn)
+      ? DEMO_TOKENS.checklistCheckedIn
+      : DEMO_TOKENS.checklistBeforeArrival;
+    resetNewHireCaptureState(token);
+  }
+
+  const page = await newPage(browser, shot);
   const problems: string[] = [];
+  const outDir = shot.outDir ? resolve(ROOT, shot.outDir) : OUT_DIR;
+  mkdirSync(outDir, { recursive: true });
   try {
-    await page.setViewportSize({ width: VIEWPORT.width, height: shot.height ?? VIEWPORT.height });
+    await page.setViewportSize({
+      width: shot.viewport?.width ?? VIEWPORT.width,
+      height: shot.height ?? shot.viewport?.height ?? VIEWPORT.height,
+    });
     await page.goto(`${BASE_URL}${shot.url}`, { waitUntil: "commit", timeout: 45_000 });
     await settle(page, shot);
 
@@ -147,7 +180,12 @@ async function capture(browser: Browser, shot: Shot) {
       problems.push(...missing.map((m) => `callout not found: ${m}`));
     }
 
-    const path = resolve(OUT_DIR, `${shot.id}.png`);
+    if (shot.burnCaption) {
+      await drawCaption(page, shot.caption);
+      await page.waitForTimeout(100);
+    }
+
+    const path = resolve(outDir, `${shot.id}.png`);
     if (shot.clipSelector) {
       const target = page.locator(shot.clipSelector).first();
       if ((await target.count()) === 0) {
@@ -187,9 +225,13 @@ async function capture(browser: Browser, shot: Shot) {
 
 async function main() {
   const filter = process.argv.slice(2).filter((a) => !a.startsWith("-"));
-  const shots = filter.length
-    ? SHOTS.filter((s) => filter.includes(s.doc) || filter.includes(s.id))
-    : SHOTS;
+  const newHireRun =
+    filter.length > 0 &&
+    filter.some((f) => f === "new-hire" || f === "new-hire-series" || NEW_HIRE_SHOTS.some((s) => s.id === f || s.doc === f));
+  const pool = newHireRun ? NEW_HIRE_SHOTS : SHOTS;
+  const shots = filter.length && !filter.every((f) => f === "new-hire" || f === "new-hire-series")
+    ? pool.filter((s) => filter.includes(s.doc) || filter.includes(s.id) || filter.includes("new-hire") || filter.includes("new-hire-series"))
+    : pool;
 
   if (shots.length === 0) {
     console.error(`No shots matched ${filter.join(", ")}`);
@@ -223,10 +265,28 @@ async function main() {
   }
   await browser.close();
 
-  // Merge into the existing manifest rather than replacing it. A filtered run
-  // ("npm run docs:capture -- bookings") must not erase the entries for every
-  // other shot — that would leave the guides referencing images the manifest
-  // no longer knows about.
+  if (newHireRun) {
+    writeNewHireManifest(results);
+  } else {
+    writeAdminManifest(results);
+  }
+
+  const failed = results.filter((r) => !r.file);
+  const partial = results.filter((r) => r.file && r.problems.length);
+  const dest = newHireRun ? resolve(ROOT, NEW_HIRE_ROOT) : OUT_DIR;
+  console.log(`\n${results.length - failed.length}/${results.length} captured → ${dest}`);
+  if (partial.length) {
+    console.log(`\n${partial.length} shot(s) had callouts that could not be located:`);
+    for (const p of partial) console.log(`  ${p.id}: ${p.problems.join("; ")}`);
+  }
+  if (failed.length) {
+    console.log(`\n${failed.length} shot(s) failed:`);
+    for (const f of failed) console.log(`  ${f.id}: ${f.problems.join("; ")}`);
+    process.exitCode = 1;
+  }
+}
+
+function writeAdminManifest(results: Array<Record<string, unknown> & { id: string }>) {
   const previous: Record<string, unknown>[] = existsSync(MANIFEST)
     ? (JSON.parse(readFileSync(MANIFEST, "utf8")).shots ?? [])
     : [];
@@ -234,8 +294,6 @@ async function main() {
   for (const shot of previous) merged.set(String((shot as { id: string }).id), shot);
   for (const shot of results) merged.set(shot.id, shot);
 
-  // Keep manifest order stable and matched to the shot definitions so diffs
-  // stay readable across runs.
   const order = new Map(SHOTS.map((s, i) => [s.id, i]));
   const manifestShots = [...merged.values()].sort(
     (a, b) =>
@@ -252,19 +310,76 @@ async function main() {
     shots: manifestShots,
   };
   writeFileSync(MANIFEST, `${JSON.stringify(manifest, null, 2)}\n`);
+}
 
-  const failed = results.filter((r) => !r.file);
-  const partial = results.filter((r) => r.file && r.problems.length);
-  console.log(`\n${results.length - failed.length}/${results.length} captured → ${OUT_DIR}`);
-  if (partial.length) {
-    console.log(`\n${partial.length} shot(s) had callouts that could not be located:`);
-    for (const p of partial) console.log(`  ${p.id}: ${p.problems.join("; ")}`);
+function writeNewHireManifest(results: Array<{
+  id: string;
+  doc: string;
+  caption: string;
+  url: string;
+  file: string | null;
+  callouts: Array<{ n: number; label: string }>;
+  problems: string[];
+  capturedAt: string;
+}>) {
+  const root = resolve(ROOT, NEW_HIRE_ROOT);
+  mkdirSync(root, { recursive: true });
+
+  const byDoc = new Map<string, typeof results>();
+  for (const shot of results) {
+    const list = byDoc.get(shot.doc) ?? [];
+    list.push(shot);
+    byDoc.set(shot.doc, list);
   }
-  if (failed.length) {
-    console.log(`\n${failed.length} shot(s) failed:`);
-    for (const f of failed) console.log(`  ${f.id}: ${f.problems.join("; ")}`);
-    process.exitCode = 1;
+
+  for (const [doc, list] of byDoc) {
+    const dir = resolve(root, doc);
+    mkdirSync(dir, { recursive: true });
+    const lines = [
+      `# ${doc}`,
+      "",
+      "Captured from the live contractor app with invented demo data only.",
+      "",
+      ...list.map((s) => `- \`${s.file ?? "(missing)"}\` — ${s.caption}`),
+      "",
+    ];
+    writeFileSync(resolve(dir, "captions.md"), `${lines.join("\n")}\n`);
   }
+
+  const index = [
+    "# New Hire Series — support screenshots",
+    "",
+    "Real app captures for the five-video New Hire Series. Regenerated with:",
+    "",
+    "```bash",
+    "npm run dev -- --port 3100   # in one terminal",
+    "npm run docs:capture -- new-hire",
+    "```",
+    "",
+    "Every image is driven by Playwright against this repo's contractor screens.",
+    "Supabase is intercepted and answered from `scripts/docs/capture/demo-data.ts`",
+    "so no real client, contractor, or payment record can appear.",
+    "",
+    "## Skipped videos",
+    "",
+    ...NEW_HIRE_SKIPPED.map((s) => `- **Video ${s.video} (${s.slug}):** ${s.reason}`),
+    "",
+    "## Captured",
+    "",
+    ...results.map((s) => `- \`${s.doc}/${s.file ?? "(missing)"}\` — ${s.caption}`),
+    "",
+  ];
+  writeFileSync(resolve(root, "README.md"), `${index.join("\n")}\n`);
+
+  const manifest = {
+    _readme:
+      "GENERATED by npm run docs:capture -- new-hire. Real contractor screens, invented data only. Recapture when a screen changes.",
+    generatedAt: new Date().toISOString(),
+    baseUrl: BASE_URL,
+    skipped: NEW_HIRE_SKIPPED,
+    shots: results,
+  };
+  writeFileSync(resolve(root, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
 }
 
 main();

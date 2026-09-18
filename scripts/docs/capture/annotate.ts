@@ -163,5 +163,36 @@ export async function redact(page: Page, selectors: string[]): Promise<void> {
 export async function clearCallouts(page: Page): Promise<void> {
   await page.evaluate(() => {
     document.querySelectorAll("[data-novara-callout]").forEach((n) => n.remove());
+    document.querySelectorAll("[data-novara-caption]").forEach((n) => n.remove());
   });
+}
+
+/**
+ * Burn a caption strip onto the live page so the PNG is usable without a
+ * separate guide explaining what the screen is. Positioned at the top so it
+ * doesn't cover action buttons at the bottom of contractor screens.
+ */
+export async function drawCaption(page: Page, caption: string): Promise<void> {
+  await page.evaluate((text: string) => {
+    document.querySelectorAll("[data-novara-caption]").forEach((n) => n.remove());
+    const bar = document.createElement("div");
+    bar.setAttribute("data-novara-caption", "1");
+    Object.assign(bar.style, {
+      position: "fixed",
+      top: "0",
+      left: "0",
+      right: "0",
+      zIndex: "2147483646",
+      background: "rgba(15, 10, 30, 0.94)",
+      color: "#fff",
+      font: "600 13px/1.4 ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif",
+      padding: "10px 16px 12px",
+      pointerEvents: "none",
+      boxShadow: "0 8px 24px rgba(0,0,0,0.28)",
+    } as CSSStyleDeclaration);
+    bar.textContent = text;
+    document.documentElement.style.scrollPaddingTop = "56px";
+    document.body.style.paddingTop = "56px";
+    document.body.appendChild(bar);
+  }, caption);
 }
