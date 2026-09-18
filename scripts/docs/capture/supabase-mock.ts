@@ -694,6 +694,17 @@ const API_ROUTES_STATIC: Record<string, unknown> = {
     sizeTiers: [],
   },
   "/api/admin/walkthroughs": { walkthroughs: [], summary: {} },
+  "/api/cleaner/tours": {
+    ok: true,
+    cleanerId: demo.cleaners[0]?.id ?? demo.DEMO_CLEANER.id,
+    settings: {
+      autoStartOnFirstLogin: false,
+      reofferOnVersionChange: false,
+      maxReoffersAtOnce: 2,
+    },
+    progress: demo.DEMO_TOUR_PROGRESS,
+    catalogSignature: "demo-capture",
+  },
   "/api/admin/proposals": { deals: [], summary: {} },
   "/api/admin/scope-adjustment/report": { summary: {}, byReason: [], byCleaner: [], byCustomer: [] },
   "/api/admin/pnl": (() => {

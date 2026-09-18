@@ -21,12 +21,30 @@ const VIDEO5 = `${NEW_HIRE_ROOT}/video-5-when-something-goes-wrong`;
 const PHONE = { width: 430, height: 932 };
 
 const lookupDana = async (page: Page) => {
-  const email = page.getByPlaceholder("contractor@example.com");
-  await email.waitFor({ timeout: 20_000 });
-  await email.fill("dana.whitfield@example.test");
-  await page.getByRole("button", { name: /Find my jobs/i }).click();
-  await page.getByText("Paid to you", { exact: false }).first().waitFor({ timeout: 20_000 });
+  // A signed-in contractor is auto-looked-up by session email, so the
+  // portal lands on jobs rather than the email form.
+  await page.getByText("Paid to you", { exact: false }).first().waitFor({ timeout: 25_000 });
   await page.waitForTimeout(800);
+};
+
+/** First-login walkthroughs are mocked complete; skip anyway if one appears. */
+const dismissTour = async (page: Page) => {
+  const skip = page.getByRole("button", { name: /Skip for now/i });
+  try {
+    await skip.first().waitFor({ timeout: 1_500 });
+    if (await skip.count()) {
+      await skip.first().click();
+      await page.waitForTimeout(400);
+    }
+  } catch {
+    // Overlay not shown — Dana already finished the walkthroughs.
+  }
+};
+
+const checkNamedItem = async (page: Page, name: string) => {
+  const row = page.locator("li").filter({ hasText: name }).first();
+  await row.getByRole("button", { name: "Check off" }).click();
+  await page.waitForTimeout(350);
 };
 
 export const NEW_HIRE_SKIPPED = [
@@ -58,10 +76,14 @@ export const NEW_HIRE_SHOTS: Shot[] = [
       "Video 2 · Dashboard — Dana is on the Proven tier. Upcoming jobs show the Proven rate (41%) and her share.",
     url: "/cleaner/dashboard",
     waitForText: "Proven",
+    setup: async (page) => {
+      await dismissTour(page);
+      await page.getByText("Upcoming Jobs", { exact: true }).first().waitFor({ timeout: 15_000 });
+    },
     callouts: [
-      { text: "Dana Whitfield", label: "Signed-in contractor" },
-      { text: "Proven", nth: 0, label: "Current tier — Proven" },
-      { text: "Upcoming Jobs", label: "Upcoming work" },
+      { text: "Dana Whitfield", exact: true, label: "Signed-in contractor" },
+      { text: "Proven rate 41%", nth: 0, label: "Current tier — Proven" },
+      { text: "Upcoming Jobs", exact: true, label: "Upcoming work" },
     ],
   },
   {
@@ -72,12 +94,12 @@ export const NEW_HIRE_SHOTS: Shot[] = [
     role: "cleaner",
     burnCaption: true,
     viewport: PHONE,
-    height: 932,
+    height: 1100,
     defaultWithin: null,
     caption:
       "Video 2 · Pay — a completed job at the Proven rate (41% solo). The Paid chip is the contractor's share of that job.",
     url: "/contractor/jobs",
-    waitForText: "Find my jobs",
+    waitForText: "Paid to you",
     setup: async (page) => {
       await lookupDana(page);
       await page.getByText("Completed & Submitted", { exact: false }).first().scrollIntoViewIfNeeded();
@@ -91,7 +113,7 @@ export const NEW_HIRE_SHOTS: Shot[] = [
     },
     callouts: [
       { text: "Completed & Submitted", label: "Completed jobs" },
-      { text: "Your pay", nth: 0, label: "Payout at Proven rate" },
+      { text: "$174.35 · paid (41%)", label: "Payout at Proven rate" },
       { text: "Solo · 41%", nth: 0, label: "Solo · 41% tier rate" },
     ],
   },
@@ -108,7 +130,7 @@ export const NEW_HIRE_SHOTS: Shot[] = [
     caption:
       "Video 2 · Tips — 100% pass-through. Novara takes nothing; tips never change job pay or scores.",
     url: "/contractor/jobs",
-    waitForText: "Find my jobs",
+    waitForText: "Paid to you",
     setup: async (page) => {
       await lookupDana(page);
       await page.getByText("Tips from customers", { exact: false }).first().scrollIntoViewIfNeeded();
@@ -156,17 +178,15 @@ export const NEW_HIRE_SHOTS: Shot[] = [
     waitForText: "Kitchen",
     setup: async (page) => {
       await page.getByText("Kitchen", { exact: true }).first().waitFor({ timeout: 20_000 });
-      const boxes = page.getByRole("button", { name: "Check off" });
-      for (let i = 0; i < 3; i++) {
-        await boxes.nth(i).click();
-        await page.waitForTimeout(400);
-      }
+      await checkNamedItem(page, "Dust and spot-clean cabinet fronts");
+      await checkNamedItem(page, "Clean countertops");
+      await checkNamedItem(page, "Clean sink and polish faucet");
       await page.getByText("Kitchen", { exact: true }).first().scrollIntoViewIfNeeded();
     },
     callouts: [
-      { text: "Kitchen", nth: 0, label: "Section in progress" },
-      { text: "Clean countertops", label: "Checked off" },
-      { text: "Clean microwave", nth: 0, label: "Still open" },
+      { text: "Kitchen", nth: 0, exact: true, label: "Section in progress" },
+      { text: "Clean countertops", exact: true, label: "Checked off" },
+      { text: "Clean microwave (inside and out)", exact: true, label: "Still open" },
     ],
   },
   {
@@ -202,6 +222,7 @@ export const NEW_HIRE_SHOTS: Shot[] = [
     url: "/cleaner/dashboard",
     waitForText: "Mark Complete",
     setup: async (page) => {
+      await dismissTour(page);
       await page.getByRole("button", { name: /Mark Complete/i }).first().scrollIntoViewIfNeeded();
     },
     callouts: [
@@ -224,16 +245,17 @@ export const NEW_HIRE_SHOTS: Shot[] = [
     caption:
       "Video 5 · Flag an issue from the job screen. Demo data only — this is not a real QC case.",
     url: "/contractor/jobs",
-    waitForText: "Find my jobs",
+    waitForText: "Paid to you",
     setup: async (page) => {
       await lookupDana(page);
       await page.getByText("Submit a QC report", { exact: false }).first().scrollIntoViewIfNeeded();
       await page.getByText("Submit a QC report", { exact: false }).first().click();
-      await page.waitForTimeout(500);
+      await page.getByRole("button", { name: /Send QC report/i }).first().scrollIntoViewIfNeeded();
+      await page.waitForTimeout(400);
     },
     callouts: [
-      { text: "QC report", nth: 0, label: "Report form" },
-      { text: "Send QC report", label: "Send to the office" },
+      { text: "QC report — goes straight to the office", label: "Report form" },
+      { text: "Send QC report", exact: true, label: "Send to the office" },
     ],
   },
   {
@@ -249,7 +271,7 @@ export const NEW_HIRE_SHOTS: Shot[] = [
     caption:
       "Video 5 · Confirmation — the office has been notified. Demo incident text only; no real QC case content.",
     url: "/contractor/jobs",
-    waitForText: "Find my jobs",
+    waitForText: "Paid to you",
     setup: async (page) => {
       await lookupDana(page);
       await page.getByText("Submit a QC report", { exact: false }).first().click();
@@ -258,6 +280,7 @@ export const NEW_HIRE_SHOTS: Shot[] = [
       );
       await page.getByRole("button", { name: /Send QC report/i }).click();
       await page.getByText("QC report submitted", { exact: false }).waitFor({ timeout: 15_000 });
+      await page.getByText("QC report submitted", { exact: false }).first().scrollIntoViewIfNeeded();
     },
     callouts: [
       { text: "QC report submitted", label: "Office notified" },

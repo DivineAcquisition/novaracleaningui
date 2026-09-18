@@ -24,6 +24,28 @@ export const DEMO_CLEANER = {
   email: "dana.whitfield@example.test",
 };
 
+/**
+ * Dana has already finished the in-app walkthroughs so capture shots are
+ * the working screens, not the first-login overlay.
+ */
+export const DEMO_TOUR_PROGRESS = [
+  "dashboard-basics",
+  "reading-a-job",
+  "working-the-checklist",
+  "photo-documentation",
+  "communication",
+  "pay-and-score",
+  "availability-and-offers",
+].map((tourId) => ({
+  tourId,
+  version: 1,
+  status: "completed" as const,
+  lastStepIndex: 0,
+  startedAt: "2026-06-01T12:00:00.000Z",
+  completedAt: "2026-06-01T12:08:00.000Z",
+  updatedAt: "2026-06-01T12:08:00.000Z",
+}));
+
 export const DEMO_TOKENS = {
   checklistBeforeArrival: "demo-checklist-nvc-10241",
   checklistCheckedIn: "demo-checklist-nvc-10246",

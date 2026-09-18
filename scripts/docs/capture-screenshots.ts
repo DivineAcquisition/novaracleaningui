@@ -29,7 +29,7 @@ import { drawCallouts, clearCallouts, redact, drawCaption } from "./capture/anno
 import { SHOTS, type Shot } from "./capture/shots";
 import { NEW_HIRE_SHOTS, NEW_HIRE_SKIPPED, NEW_HIRE_ROOT } from "./capture/new-hire-shots";
 import { handleApiRoute, handleSupabase, resetNewHireCaptureState } from "./capture/supabase-mock";
-import { DEMO_ADMIN, DEMO_CLEANER, DEMO_TOKENS } from "./capture/demo-data";
+import { DEMO_ADMIN, DEMO_CLEANER, DEMO_TOKENS, DEMO_TOUR_PROGRESS } from "./capture/demo-data";
 
 const ROOT = resolve(__dirname, "../..");
 const OUT_DIR = resolve(ROOT, "docs/admin-workspace/screenshots");
@@ -95,15 +95,22 @@ async function newPage(browser: Browser, shot?: Shot): Promise<Page> {
   );
 
   await context.addInitScript(
-    ([key, session]) => {
+    ([key, session, tourProgress]) => {
       window.localStorage.setItem(key as string, JSON.stringify(session));
-      // Freeze animations so repeat captures are pixel-stable.
+      // Dana has already finished the walkthroughs — capture the working
+      // screens, not the first-login overlay.
+      window.localStorage.setItem(
+        "novara.tours.progress.v1.anon",
+        JSON.stringify(tourProgress),
+      );
+      // Freeze animations so repeat captures are pixel-stable. Hide toasts
+      // so a transient "sent" chip can't cover the screen being documented.
       const style = document.createElement("style");
       style.textContent =
-        "*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;transition-duration:0s!important}";
+        "*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;transition-duration:0s!important}[data-sonner-toaster],[data-sonner-toast]{display:none!important}";
       document.documentElement.appendChild(style);
     },
-    [`sb-sxdraeptzuamsgjcvfeg-auth-token`, demoSession(shot?.role)] as const,
+    [`sb-sxdraeptzuamsgjcvfeg-auth-token`, demoSession(shot?.role), DEMO_TOUR_PROGRESS] as const,
   );
 
   return context.newPage();
@@ -149,11 +156,21 @@ async function capture(browser: Browser, shot: Shot) {
       await page.waitForTimeout(800);
     }
 
+    await page.evaluate(() => {
+      document.querySelectorAll("[data-sonner-toaster], [data-sonner-toast]").forEach((n) => n.remove());
+    });
+
     // Belt and braces: the harness already serves invented data, but blur the
     // signed-in identity chrome so an image can never carry a real operator.
     await redact(page, []);
 
     await clearCallouts(page);
+    // Caption first so padding it adds is in the layout before callout
+    // boxes are measured — otherwise badges sit 56px above their targets.
+    if (shot.burnCaption) {
+      await drawCaption(page, shot.caption);
+      await page.waitForTimeout(100);
+    }
     // When the shot is cropped, badges must stay inside the crop or they get
     // sliced off the edge of the image.
     const cropBounds = shot.clipSelector
@@ -178,11 +195,6 @@ async function capture(browser: Browser, shot: Shot) {
     );
     if (missing.length) {
       problems.push(...missing.map((m) => `callout not found: ${m}`));
-    }
-
-    if (shot.burnCaption) {
-      await drawCaption(page, shot.caption);
-      await page.waitForTimeout(100);
     }
 
     const path = resolve(outDir, `${shot.id}.png`);
