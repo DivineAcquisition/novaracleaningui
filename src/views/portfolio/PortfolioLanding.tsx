@@ -45,7 +45,9 @@ import {
   ESTIMATE_DISCLAIMER,
   PORTFOLIO_URL,
   VALUE_STACK,
+  expandEstimateUnits,
   formatServiceRange,
+  portfolioCtaFor,
   type PortfolioCta,
   type PortfolioMode,
   type ServiceRange,
@@ -193,6 +195,35 @@ export default function PortfolioLanding() {
     return base;
   }, [mode, unitCount, sqft, bedrooms, bathrooms, portfolioZip, flaggedAtypical, mixed, unitDrafts]);
 
+  const localSplit = useMemo(
+    () =>
+      portfolioCtaFor(
+        expandEstimateUnits({
+          mode,
+          unitCount: Number(unitCount) || 0,
+          flaggedAtypical,
+          average: {
+            sqft: Number(sqft) || null,
+            bedrooms: Number(bedrooms) || null,
+            bathrooms: Number(bathrooms) || 0,
+          },
+          units:
+            mode === "mixed"
+              ? mixed.map((u) => ({
+                  label: u.label,
+                  sqft: Number(u.sqft) || null,
+                  bedrooms: Number(u.bedrooms) || null,
+                  bathrooms: Number(u.bathrooms) || 0,
+                  zipCode: u.zipCode,
+                  flaggedNonStandard: flaggedAtypical,
+                }))
+              : [],
+        }),
+        { flaggedAtypical },
+      ),
+    [mode, unitCount, sqft, bedrooms, bathrooms, flaggedAtypical, mixed],
+  );
+
   const runEstimate = async (opts?: { silent?: boolean }) => {
     setEstimating(true);
     if (!opts?.silent) setEstimateError(null);
@@ -328,7 +359,9 @@ export default function PortfolioLanding() {
     }
   };
 
-  const cta = estimate?.cta || "get_started";
+  const cta: PortfolioCta =
+    localSplit.cta === "book_call" || estimate?.cta === "book_call" ? "book_call" : "get_started";
+  const ctaReasons = estimate?.reasons?.length ? estimate.reasons : localSplit.reasons;
 
   return (
     <div className="relative min-h-screen bg-background text-foreground">
@@ -537,63 +570,71 @@ export default function PortfolioLanding() {
 
                   {estimateError && <p className="text-sm text-rose-700">{estimateError}</p>}
 
-                  {estimate && (
-                    <div className="space-y-4 rounded-2xl border border-primary/15 bg-primary/[0.03] p-5">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary">Estimate · not a final standing rate</p>
-                          <p className="mt-1 font-heading text-xl font-bold">
-                            {estimate.unitCount} unit{estimate.unitCount === 1 ? "" : "s"}
-                            {estimate.discount.label ? ` · ${estimate.discount.label}` : ""}
-                            {estimate.discount.percent > 0 ? ` (${estimate.discount.percent}% off)` : ""}
-                          </p>
-                        </div>
-                        <span className="rounded-full bg-amber-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-800">
-                          Estimate
-                        </span>
-                      </div>
-                      <div className="grid gap-3 sm:grid-cols-3">
-                        {(["move_out", "move_in", "standard"] as PmServiceType[]).map((service) => (
-                          <div key={service} className="rounded-xl bg-background/80 p-4">
-                            <p className="text-xs font-semibold text-muted-foreground">{PM_SERVICE_LABELS[service]}</p>
-                            <p className="mt-1 font-heading text-2xl font-bold tabular-nums">{rangeFor(estimate.ranges, service)}</p>
-                            <p className="text-[11px] text-muted-foreground">per unit, standing rate</p>
-                          </div>
-                        ))}
-                      </div>
-                      {estimate.discount.unitsToNextTier != null && estimate.discount.nextPercent != null && (
-                        <p className="text-xs text-muted-foreground">
-                          {estimate.discount.unitsToNextTier} more unit{estimate.discount.unitsToNextTier === 1 ? "" : "s"} reaches the {estimate.discount.nextPercent}% tier.
+                  <div className="space-y-4 rounded-2xl border border-primary/15 bg-primary/[0.03] p-5">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary">Estimate · not a final standing rate</p>
+                        <p className="mt-1 font-heading text-xl font-bold">
+                          {estimate
+                            ? `${estimate.unitCount} unit${estimate.unitCount === 1 ? "" : "s"}${
+                                estimate.discount.label ? ` · ${estimate.discount.label}` : ""
+                              }${estimate.discount.percent > 0 ? ` (${estimate.discount.percent}% off)` : ""}`
+                            : `${Math.max(0, Math.floor(Number(unitCount) || (mode === "mixed" ? mixed.length : 0)))} units · update to see standing rates`}
                         </p>
-                      )}
-                      <p className="text-xs leading-relaxed text-muted-foreground">{estimate.disclaimer || ESTIMATE_DISCLAIMER}</p>
-                      {estimate.reasons.length > 0 && (
+                      </div>
+                      <span className="rounded-full bg-amber-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-800">
+                        Estimate
+                      </span>
+                    </div>
+                    {estimate ? (
+                      <>
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          {(["move_out", "move_in", "standard"] as PmServiceType[]).map((service) => (
+                            <div key={service} className="rounded-xl bg-background/80 p-4">
+                              <p className="text-xs font-semibold text-muted-foreground">{PM_SERVICE_LABELS[service]}</p>
+                              <p className="mt-1 font-heading text-2xl font-bold tabular-nums">{rangeFor(estimate.ranges, service)}</p>
+                              <p className="text-[11px] text-muted-foreground">per unit, standing rate</p>
+                            </div>
+                          ))}
+                        </div>
+                        {estimate.discount.unitsToNextTier != null && estimate.discount.nextPercent != null && (
+                          <p className="text-xs text-muted-foreground">
+                            {estimate.discount.unitsToNextTier} more unit{estimate.discount.unitsToNextTier === 1 ? "" : "s"} reaches the {estimate.discount.nextPercent}% tier.
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        Standing-rate ranges come from the same residential engine used at registration. Click Update estimate to price this portfolio.
+                      </p>
+                    )}
+                    <p className="text-xs leading-relaxed text-muted-foreground">{estimate?.disclaimer || ESTIMATE_DISCLAIMER}</p>
+                      {ctaReasons.length > 0 && (
                         <ul className="space-y-1 text-xs text-amber-900">
-                          {estimate.reasons.map((r) => (
-                            <li key={r.reason}>• {r.message}</li>
+                          {ctaReasons.map((r) => (
+                            <li key={`${r.reason}-${r.message}`}>• {r.message}</li>
                           ))}
                         </ul>
                       )}
-                      <div className="flex flex-wrap gap-3">
-                        {cta === "get_started" ? (
-                          <Button onClick={() => openCta("start")}>
-                            Get Started
-                            <RiArrowRightLine className="h-4 w-4" />
-                          </Button>
-                        ) : (
-                          <Button onClick={() => openCta("call")}>
-                            Book a Call
-                            <RiCalendarCheckLine className="h-4 w-4" />
-                          </Button>
-                        )}
-                        {cta === "get_started" && (
-                          <Button variant="outline" onClick={() => openCta("call")}>
-                            Prefer to talk first
-                          </Button>
-                        )}
-                      </div>
+                    <div className="flex flex-wrap gap-3">
+                      {cta === "get_started" ? (
+                        <Button onClick={() => openCta("start")}>
+                          Get Started
+                          <RiArrowRightLine className="h-4 w-4" />
+                        </Button>
+                      ) : (
+                        <Button onClick={() => openCta("call")}>
+                          Book a Call
+                          <RiCalendarCheckLine className="h-4 w-4" />
+                        </Button>
+                      )}
+                      {cta === "get_started" && (
+                        <Button variant="outline" onClick={() => openCta("call")}>
+                          Prefer to talk first
+                        </Button>
+                      )}
                     </div>
-                  )}
+                  </div>
                 </CardContent>
               </Card>
 

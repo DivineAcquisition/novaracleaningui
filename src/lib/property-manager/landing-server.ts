@@ -5,11 +5,14 @@
 // existing typical/unusual split, the unit registry, and the tokenized
 // onboarding session.
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import { onboardingUrl, PM_ONBOARDING_PATH } from "@/lib/property-manager/onboarding/session";
 import { startPmOnboardingSession } from "@/lib/property-manager/onboarding/admin";
 import { requestIsLocal } from "@/lib/partner-portal/origins";
 import { notifyPmAdmin, registerUnit } from "@/lib/property-manager/registry";
+import type { DynamicPricingConfig, ZoneInfo } from "@/lib/dynamic-pricing";
 import {
   expandEstimateUnits,
   portfolioCtaFor,
@@ -20,6 +23,7 @@ import {
   type PortfolioEstimateResult,
 } from "./landing";
 import { estimatePortfolioFromContext } from "./landing-estimate";
+import { DEFAULT_AUTO_PRICE_BOUNDS, DEFAULT_VOLUME_DISCOUNTS } from "./pricing";
 import {
   loadPmPricingContext,
   loadPmSettings,
@@ -118,6 +122,35 @@ export async function estimateLandingPortfolio(
   const units = expandEstimateUnits(input);
   const hints = await zoneHints(supabase, ctx, units);
   return estimatePortfolioFromContext(ctx, input, hints);
+}
+
+export function isMissingServiceRole(err: unknown): boolean {
+  return /SUPABASE_SERVICE_ROLE_KEY/.test(String((err as Error)?.message || err || ""));
+}
+
+/**
+ * Same engine, same snapshot the verify script uses. Only for environments
+ * that cannot open the admin client (local/preview without a service role).
+ * Production always prices from the live tables.
+ */
+export function estimateFromPricingSnapshot(input: PortfolioEstimateInput): PortfolioEstimateResult | null {
+  try {
+    const snap = JSON.parse(
+      readFileSync(join(process.cwd(), "docs/admin-workspace/_data/pricing-snapshot.json"), "utf8"),
+    ) as { config_version: number; config: DynamicPricingConfig; zones: ZoneInfo[] };
+    const ctx: PmPricingContext = {
+      config: snap.config,
+      configVersion: snap.config_version,
+      zones: snap.zones,
+      payRates: { soloFoundationPercent: 37, crewFoundationPercent: 40 },
+      discounts: DEFAULT_VOLUME_DISCOUNTS,
+      bounds: DEFAULT_AUTO_PRICE_BOUNDS,
+      condition: "standard",
+    };
+    return estimatePortfolioFromContext(ctx, input);
+  } catch {
+    return null;
+  }
 }
 
 export function landingOnboardingUrl(req: Request, token: string): string {

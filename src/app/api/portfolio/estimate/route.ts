@@ -6,7 +6,12 @@
 
 import { NextResponse } from "next/server";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
-import { estimateLandingPortfolio, parseEstimateInput } from "@/lib/property-manager/landing-server";
+import {
+  estimateFromPricingSnapshot,
+  estimateLandingPortfolio,
+  isMissingServiceRole,
+  parseEstimateInput,
+} from "@/lib/property-manager/landing-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,10 +24,17 @@ export async function POST(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "Invalid request" }, { status: 400 });
   }
 
+  const input = parseEstimateInput(body);
   try {
-    const estimate = await estimateLandingPortfolio(getAdminSupabase(), parseEstimateInput(body));
+    const estimate = await estimateLandingPortfolio(getAdminSupabase(), input);
     return NextResponse.json({ ...estimate, ok: true, priced: estimate.ok });
   } catch (err) {
+    if (isMissingServiceRole(err) && process.env.NODE_ENV !== "production") {
+      const estimate = estimateFromPricingSnapshot(input);
+      if (estimate) {
+        return NextResponse.json({ ...estimate, ok: true, priced: estimate.ok });
+      }
+    }
     console.error("[portfolio/estimate]", (err as Error).message);
     return NextResponse.json(
       { ok: false, error: "Could not compute that estimate. Please try again." },
