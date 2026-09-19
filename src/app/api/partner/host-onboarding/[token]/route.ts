@@ -23,6 +23,7 @@ import {
   requestAdditionalProperty,
   requestContext,
   requireSigned,
+  resolveEntityType,
   signHostAgreement,
   validateSignature,
 } from "@/lib/host-onboarding/operations";
@@ -52,8 +53,10 @@ export async function GET(
 ): Promise<NextResponse> {
   const { token } = await ctx.params;
   if (isHostOnboardingPreviewToken(token) && isLocalHostRequest(req)) {
-    const step = new URL(req.url).searchParams.get("step") || undefined;
-    return NextResponse.json(hostOnboardingPreviewPayload(step));
+    const params = new URL(req.url).searchParams;
+    const step = params.get("step") || undefined;
+    const entity = params.get("entity") === "1" || params.get("entity") === "entity";
+    return NextResponse.json(hostOnboardingPreviewPayload(step, entity));
   }
   const supabase = getAdminSupabase();
   const resolved = await resolveSession(supabase, token);
@@ -127,6 +130,12 @@ export async function POST(
     const signerName = clip(body.signerName, 120);
     const signatureDataUrl = clip(body.signatureDataUrl, 400_000);
     const pdfBase64 = clip(body.pdfBase64, 12_000_000);
+    // The entity/individual branch decides whether a Personal Guarantee is
+    // required. Resolve it from the stored submission, not the request body.
+    const entityType = await resolveEntityType(supabase, session);
+    const needsGuarantee = entityType === "entity";
+    const guarantorName = clip(body.guarantorName, 120);
+
     const invalid = validateSignature({
       signerName,
       agreedToTerms: body.agreedToTerms,
@@ -135,6 +144,9 @@ export async function POST(
       acknowledgedArbitration: body.acknowledgedArbitration,
       signatureDataUrl,
       pdfBase64,
+      requiresPersonalGuarantee: needsGuarantee,
+      personalGuaranteeAccepted: body.personalGuaranteeAccepted,
+      guarantorName,
     });
     if (invalid) return NextResponse.json({ ok: false, message: invalid }, { status: 400 });
 
@@ -147,8 +159,10 @@ export async function POST(
         (session.recipient_email as string) ||
         (host.email as string) ||
         "",
-      entityType: clip(body.entityType, 40) || null,
+      entityType,
       entityName: clip(body.entityName, 200) || null,
+      requiresPersonalGuarantee: needsGuarantee,
+      guarantorName: needsGuarantee ? guarantorName : null,
       signatureDataUrl,
       pdfBase64,
       ctx: reqCtx,

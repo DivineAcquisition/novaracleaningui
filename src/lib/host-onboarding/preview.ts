@@ -108,7 +108,11 @@ export function applyHostOnboardingPreviewAction(action: string, body: Record<st
   return { ok: false, status: 400, message: `Unknown action "${action}".` };
 }
 
-export function hostOnboardingPreviewPayload(step?: string) {
+/**
+ * `entity` renders the Personal Guarantee branch so both paths can be
+ * checked locally: ?entity=1 shows the block, the default hides it.
+ */
+export function hostOnboardingPreviewPayload(step?: string, entity = false) {
   if (step === "legal") resetHostOnboardingPreview();
   // `step` is a jump, not persistent state. The page strips it after the first
   // POST so a reload does not undo sign / rate decisions.
@@ -200,8 +204,9 @@ export function hostOnboardingPreviewPayload(step?: string) {
       id: "preview-host",
       name: "Jordan Hale",
       email: "jordan@example.com",
-      entityType: "individual",
-      entityName: null,
+      entityType: entity ? "entity" : "individual",
+      entityName: entity ? "Hale Property Holdings LLC" : null,
+      requiresPersonalGuarantee: entity,
       hasPortal: previewMem.portal,
       cardOnFile: previewMem.card,
     },

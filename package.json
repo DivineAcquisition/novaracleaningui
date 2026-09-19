@@ -33,6 +33,7 @@
     "qc-media:verify:deno": "deno run --allow-read scripts/verify-qc-issue-media.deno.ts",
     "proposals:verify": "tsx scripts/verify-proposal-request.ts",
     "host-onboarding:verify": "tsx scripts/verify-host-onboarding-session.ts",
+    "str-claim:verify": "tsx scripts/verify-str-claim.ts",
     "partnership-comms:verify": "tsx scripts/verify-partnership-comms.ts",
     "partner-portal:verify": "tsx scripts/verify-partner-portal.ts",
     "property-manager:verify": "tsx scripts/verify-property-manager.ts",
