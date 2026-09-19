@@ -6,6 +6,8 @@
 // through a full portfolio. No login. No email gate on the VSL. Messaging
 // never switches persona; the calculator is what personalizes. Typical units
 // Claim This Rate into existing onboarding; unusual ones Book a Call.
+// Larger portfolios that need stable cleaners can also book from the
+// always-visible calendar — the banner is an invitation, not a cutoff.
 
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -47,6 +49,7 @@ import {
   type PmServiceType,
 } from "@/lib/property-manager/pricing";
 import {
+  CALENDAR_BANNER,
   ESTIMATE_DISCLAIMER,
   PM_QUOTE_LOCK_HOURS,
   PORTFOLIO_URL,
@@ -251,7 +254,8 @@ export default function PortfolioLanding() {
     setPanel(which);
     setFormError(null);
     requestAnimationFrame(() => {
-      document.getElementById("cta-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      const id = which === "call" ? "book-call" : "cta-form";
+      document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   };
 
@@ -347,6 +351,9 @@ export default function PortfolioLanding() {
               <RiPhoneLine className="h-4 w-4" />
               (844) 735-2070
             </a>
+            <Button size="sm" variant="outline" className="hidden h-9 sm:inline-flex" onClick={() => openCta("call")}>
+              Book a call
+            </Button>
             <Button size="sm" className="h-9" onClick={() => document.getElementById("estimate")?.scrollIntoView({ behavior: "smooth" })}>
               Instant estimate
             </Button>
@@ -618,59 +625,74 @@ export default function PortfolioLanding() {
                     </CardContent>
                   </Card>
                 )}
-
-                {panel === "call" && !callDone && (
-                  <Card>
-                    <CardContent className="space-y-5 p-6 md:p-8">
-                      <div>
-                        <h3 className="font-heading text-2xl font-bold">Book a call</h3>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          Unusual or non-standard units are reviewed by a person before onboarding is
-                          generated — the same typical/unusual split already used when a unit is registered.
-                          Unit count does not decide this.
-                        </p>
-                      </div>
-                      <ContactFields
-                        contactName={contactName}
-                        setContactName={setContactName}
-                        email={email}
-                        setEmail={setEmail}
-                        phone={phone}
-                        setPhone={setPhone}
-                      />
-                      <div>
-                        <Label>What should we know?</Label>
-                        <Textarea
-                          className="mt-1"
-                          rows={3}
-                          value={notes}
-                          onChange={(e) => setNotes(e.target.value)}
-                          placeholder="Unusual unit types, a large building, mixed commercial, etc."
-                        />
-                      </div>
-                      {formError && <p className="text-sm text-rose-700">{formError}</p>}
-                      <Button size="lg" disabled={busy} onClick={() => void submitCall()}>
-                        {busy ? <RiLoader4Line className="h-4 w-4 animate-spin" /> : null}
-                        Save my details and show times
-                      </Button>
-                      <PortfolioCalEmbed name={contactName} email={email} notes={notes} />
-                    </CardContent>
-                  </Card>
-                )}
-
-                {callDone && (
-                  <Card>
-                    <CardContent className="space-y-4 p-6 text-center md:p-10">
-                      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full" style={{ background: PURPLE }}>
-                        <RiCheckboxCircleLine className="h-7 w-7 text-white" />
-                      </div>
-                      <h3 className="font-heading text-2xl font-bold">Pick a time</h3>
-                      <p className="text-muted-foreground">{callDone.message}</p>
-                      <PortfolioCalEmbed name={contactName} email={email} notes={notes} />
-                    </CardContent>
-                  </Card>
-                )}
               </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="book-call" className="scroll-mt-24 border-b border-border/40 bg-primary/[0.02]">
+          <div className="container mx-auto px-4 py-16 md:py-20">
+            <div className="mx-auto max-w-4xl space-y-6">
+              <div className="text-center">
+                <Badge variant="secondary" className="mb-4 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider">
+                  {CALENDAR_BANNER.eyebrow}
+                </Badge>
+                <h2 className="font-heading text-3xl font-bold md:text-4xl">Need a crew you can count on?</h2>
+                <p className="mx-auto mt-3 max-w-2xl text-muted-foreground">{CALENDAR_BANNER.body}</p>
+              </div>
+
+              {panel === "call" && !callDone && (
+                <Card>
+                  <CardContent className="space-y-5 p-6 md:p-8">
+                    <div>
+                      <h3 className="font-heading text-2xl font-bold">Leave your details</h3>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Optional — pick a time on the calendar either way. Unusual or non-standard
+                        units are reviewed by a person before onboarding is generated. Unit count
+                        does not decide that. A bigger portfolio that needs stable cleaners can
+                        book here too.
+                      </p>
+                    </div>
+                    <ContactFields
+                      contactName={contactName}
+                      setContactName={setContactName}
+                      email={email}
+                      setEmail={setEmail}
+                      phone={phone}
+                      setPhone={setPhone}
+                    />
+                    <div>
+                      <Label>What should we know?</Label>
+                      <Textarea
+                        className="mt-1"
+                        rows={3}
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        placeholder="Portfolio size, buildings that need a dedicated crew, unusual unit types, mixed commercial, etc."
+                      />
+                    </div>
+                    {formError && <p className="text-sm text-rose-700">{formError}</p>}
+                    <Button size="lg" disabled={busy} onClick={() => void submitCall()}>
+                      {busy ? <RiLoader4Line className="h-4 w-4 animate-spin" /> : null}
+                      Save my details
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
+
+              {callDone && (
+                <Card>
+                  <CardContent className="space-y-4 p-6 text-center md:p-10">
+                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full" style={{ background: PURPLE }}>
+                      <RiCheckboxCircleLine className="h-7 w-7 text-white" />
+                    </div>
+                    <h3 className="font-heading text-2xl font-bold">Pick a time</h3>
+                    <p className="text-muted-foreground">{callDone.message}</p>
+                  </CardContent>
+                </Card>
+              )}
+
+              <PortfolioCalEmbed name={contactName} email={email} notes={notes} />
             </div>
           </div>
         </section>

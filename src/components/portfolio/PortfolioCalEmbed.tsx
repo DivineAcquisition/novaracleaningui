@@ -1,10 +1,15 @@
 "use client";
 
-// Cal.com 15-minute discovery calendar for unusual rental units.
-// Same event the rest of intake already uses: malik-sannie-clwphb/15min.
+// Cal.com 15-minute discovery calendar for unusual rental units and for
+// larger portfolios that want a stable crew. Same event the rest of intake
+// already uses: malik-sannie-clwphb/15min. The banner is an invitation, not
+// a unit-count cutoff — typical units still Claim This Rate.
 
 import { useEffect, useId, useRef } from "react";
+import { RiCalendarCheckLine } from "@remixicon/react";
+import { BRAND } from "@/lib/brand";
 import {
+  CALENDAR_BANNER,
   PORTFOLIO_CAL_LINK,
   PORTFOLIO_CAL_NAMESPACE,
   PORTFOLIO_CAL_ORIGIN,
@@ -106,8 +111,32 @@ export function PortfolioCalEmbed({
   }, [elementId, name, email, notes]);
 
   return (
-    <div className="h-[720px] w-full overflow-hidden rounded-xl border border-border bg-background md:h-[800px]">
-      <div id={elementId} className="h-full w-full overflow-auto" />
+    <div className="overflow-hidden rounded-xl border border-border bg-background">
+      <div
+        className="flex gap-3 border-b border-primary/20 bg-primary/[0.06] px-4 py-3 md:px-5 md:py-4"
+        data-testid="portfolio-cal-banner"
+      >
+        <div
+          className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white"
+          style={{ background: BRAND.gradient }}
+        >
+          <RiCalendarCheckLine className="h-4 w-4" />
+        </div>
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary">
+            {CALENDAR_BANNER.eyebrow}
+          </p>
+          <p className="mt-1 font-heading text-base font-bold leading-snug md:text-lg">
+            {CALENDAR_BANNER.title}
+          </p>
+          <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+            {CALENDAR_BANNER.body}
+          </p>
+        </div>
+      </div>
+      <div className="h-[720px] w-full md:h-[800px]">
+        <div id={elementId} className="h-full w-full overflow-auto" />
+      </div>
     </div>
   );
 }
