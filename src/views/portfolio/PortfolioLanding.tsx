@@ -634,7 +634,7 @@ export default function PortfolioLanding() {
           <div className="container mx-auto px-4 py-16 md:py-20">
             <div className="mx-auto max-w-4xl space-y-6">
               <div className="text-center">
-                <Badge variant="secondary" className="mb-4 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider">
+                <Badge variant="secondary" className="mb-4 whitespace-nowrap px-4 py-1.5 text-xs font-semibold uppercase tracking-wider">
                   {CALENDAR_BANNER.eyebrow}
                 </Badge>
                 <h2 className="font-heading text-3xl font-bold md:text-4xl">Need a crew you can count on?</h2>

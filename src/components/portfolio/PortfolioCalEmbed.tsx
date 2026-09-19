@@ -123,7 +123,7 @@ export function PortfolioCalEmbed({
           <RiCalendarCheckLine className="h-4 w-4" />
         </div>
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary">
+          <p className="whitespace-nowrap text-[11px] font-bold uppercase tracking-wider text-primary">
             {CALENDAR_BANNER.eyebrow}
           </p>
           <p className="mt-1 font-heading text-base font-bold leading-snug md:text-lg">
