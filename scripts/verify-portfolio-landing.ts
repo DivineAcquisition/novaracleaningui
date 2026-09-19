@@ -205,6 +205,7 @@ const files: Record<string, string> = {
   page: readFileSync(join(ROOT, "src/app/portfolio/page.tsx"), "utf8"),
   view: readFileSync(join(ROOT, "src/views/portfolio/PortfolioLanding.tsx"), "utf8"),
   vsl: readFileSync(join(ROOT, "src/components/portfolio/PortfolioVsl.tsx"), "utf8"),
+  cal: readFileSync(join(ROOT, "src/components/portfolio/PortfolioCalEmbed.tsx"), "utf8"),
   estimateApi: readFileSync(join(ROOT, "src/app/api/portfolio/estimate/route.ts"), "utf8"),
   startApi: readFileSync(join(ROOT, "src/app/api/portfolio/start/route.ts"), "utf8"),
   callApi: readFileSync(join(ROOT, "src/app/api/portfolio/call/route.ts"), "utf8"),
@@ -222,8 +223,26 @@ check("Get Started calls startPmOnboardingSession", files.landingServer.includes
 check("Get Started registers units through registerUnit", files.landingServer.includes("registerUnit"), true);
 check("unusual path does not mint onboarding", files.callApi.includes("bookCallPortfolio") && !files.callApi.includes("startPmOnboardingSession"), true);
 check("the page labels the number as an estimate", files.view.includes("not a final standing rate"), true);
-check("Get Started carries units into onboarding", files.view.includes("Units carrying into the registry"), true);
+check("Get Started carries units into onboarding", files.view.includes("These units carry into the registry"), true);
+check("calculator asks how many units", files.view.includes("How many units?"), true);
+check(
+  "typical size is a 1–4 bed preset, not a required sq ft form",
+  files.view.includes('label: "1 bed"') && files.view.includes("Adjust square footage or baths"),
+  true,
+);
+check(
+  "mixed sizes start as two starter rows, not a clone of the unit count",
+  files.view.includes("{ ...emptyUnit(0), sqft, bedrooms, bathrooms, zipCode: portfolioZip }") &&
+    files.view.includes("{ ...emptyUnit(1), sqft, bedrooms, bathrooms, zipCode: portfolioZip }"),
+  true,
+);
 check("footer restates Get Started and Book a Call", files.view.includes("Ready to stop re-quoting") && files.view.includes("Book a Call"), true);
+check(
+  "Book a Call embeds the Cal.com 15min calendar",
+  files.view.includes("PortfolioCalEmbed") && files.cal.includes("malik-sannie-clwphb/15min"),
+  true,
+);
+check("the Cal embed uses month view", files.cal.includes("month_view") && files.cal.includes("app.cal.com"), true);
 check(
   "the public page does not import the admin client",
   !files.view.includes("landing-server") && !files.view.includes("getAdminSupabase") && !files.page.includes("getAdminSupabase"),
