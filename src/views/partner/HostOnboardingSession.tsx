@@ -779,15 +779,11 @@ function PaymentStep({
                 action: "create_portal",
                 email: data.host.email,
                 fullName: data.host.name,
-              }).then((res) => {
-                const url = (res as { handoffUrl?: string; portalUrl?: string } | null)?.handoffUrl
-                  || (res as { portalUrl?: string } | null)?.portalUrl;
-                if (url) window.location.assign(url);
               })
             }
             className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-violet-600 text-sm font-semibold text-white disabled:opacity-60"
           >
-            {busy ? <RiLoader4Line className="h-4 w-4 animate-spin" /> : "Enter the host portal"}
+            {busy ? <RiLoader4Line className="h-4 w-4 animate-spin" /> : "Continue to confirmation"}
           </button>
         </Card>
       )}
@@ -801,16 +797,16 @@ function DoneCard({ data }: { data: Payload }) {
       <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500 text-white">
         <RiCheckLine className="h-6 w-6" />
       </div>
-      <h2 className="mt-4 text-xl font-semibold">You&apos;re set up</h2>
+      <h2 className="mt-4 text-xl font-semibold">You&apos;re confirmed</h2>
       <p className="mt-2 text-sm leading-relaxed text-slate-600">
         The Host Partnership Agreement is signed, your rate schedule is on file, and payment is
-        ready. Open the host portal to book turnovers.
+        ready. Go to My Account to open the host portal and book turnovers.
       </p>
       <a
         href={data.handoffUrl || data.portalUrl}
         className="mt-5 inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-violet-600 px-5 text-sm font-semibold text-white hover:bg-violet-700"
       >
-        Open host portal <RiExternalLinkLine className="h-4 w-4" />
+        Go to My Account <RiExternalLinkLine className="h-4 w-4" />
       </a>
       <p className="mt-3 text-xs text-slate-400">You&apos;re already signed in from this setup session.</p>
     </Card>
