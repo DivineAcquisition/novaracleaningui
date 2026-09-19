@@ -5,11 +5,39 @@
 // tooling to surface chat history without leaving the dashboard.
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+/**
+ * This endpoint returns a contact's full SMS/call history, so the caller must
+ * prove an admin/VA role. The anon key alone is not sufficient: it ships to
+ * browsers, and `verify_jwt = false` means the gateway forwards anonymous
+ * requests straight through.
+ */
+async function ensureAdminOrVa(jwt: string): Promise<void> {
+  if (!jwt) throw new Error("Not signed in.");
+  const userClient = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+    { global: { headers: { Authorization: `Bearer ${jwt}` } } },
+  );
+  const { data: u } = await userClient.auth.getUser();
+  const callerId = u?.user?.id;
+  if (!callerId) throw new Error("Not signed in.");
+
+  const admin = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+  );
+  const { data: roles } = await admin.from("user_roles").select("role").eq("user_id", callerId);
+  const allowed = (roles || []).some((r: { role: string }) => ["admin", "va"].includes(r.role));
+  if (!allowed) throw new Error("Admins or VAs only.");
+}
+
 const BASE = "https://services.leadconnectorhq.com";
 const VERSION = "2021-07-28";
 
@@ -33,6 +61,16 @@ async function ghl(path: string, init: RequestInit = {}) {
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
   try {
+    try {
+      await ensureAdminOrVa((req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, ""));
+    } catch (authErr) {
+      const msg = authErr instanceof Error ? authErr.message : String(authErr);
+      return new Response(JSON.stringify({ error: msg }), {
+        status: msg.includes("Not signed in") ? 401 : 403,
+        headers: { ...cors, "Content-Type": "application/json" },
+      });
+    }
+
     const body = await req.json().catch(() => ({}));
     const email = String(body.email || "").trim().toLowerCase();
     const phone = String(body.phone || "").trim();
