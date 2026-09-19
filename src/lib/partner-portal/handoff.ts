@@ -1,13 +1,18 @@
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import { ensureIdentity } from "./identity";
 import { mintHandoffToken } from "./magic-link";
-import { establishSession } from "./session";
+import { createSessionCookie, type PortalSessionCookie } from "./session";
 import { hashToken, normalizeEmail } from "./tokens";
 
+/**
+ * Consumes a sign-in link and mints the portal session. The session cookie is
+ * returned, not set — only the calling Route Handler can attach it.
+ */
 export async function consumeLoginToken(raw: string): Promise<{
   ok: boolean;
   message?: string;
   email?: string;
+  cookie?: PortalSessionCookie;
 }> {
   if (!raw || raw.length < 16) return { ok: false, message: "This sign-in link isn't valid." };
   const supabase = getAdminSupabase();
@@ -35,8 +40,8 @@ export async function consumeLoginToken(raw: string): Promise<{
     .update({ consumed_at: new Date().toISOString() })
     .eq("id", data.id);
 
-  await establishSession(identity.id, identity.email);
-  return { ok: true, email: identity.email };
+  const cookie = await createSessionCookie(identity.id, identity.email);
+  return { ok: true, email: identity.email, cookie };
 }
 
 export async function provisionHostPortalAccess(input: {

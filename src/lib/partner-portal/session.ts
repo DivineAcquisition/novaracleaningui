@@ -89,8 +89,22 @@ export async function revokePortalSession(raw?: string | null): Promise<void> {
   await clearSessionCookie();
 }
 
-export async function establishSession(identityId: string, email: string): Promise<Date> {
+export interface PortalSessionCookie {
+  name: string;
+  value: string;
+  options: ReturnType<typeof cookieOptions>;
+}
+
+/**
+ * Mint a session and hand back the cookie rather than setting it. Next only
+ * permits a cookie write from a Route Handler or Server Action, so the caller
+ * attaches this to its own response; setting it here crashed any page render.
+ */
+export async function createSessionCookie(
+  identityId: string,
+  email: string,
+): Promise<PortalSessionCookie> {
   const { raw, expiresAt } = await createPortalSession(identityId, email);
-  await setSessionCookie(raw, expiresAt);
-  return expiresAt;
+  const maxAge = Math.max(60, Math.floor((expiresAt.getTime() - Date.now()) / 1000));
+  return { name: SESSION_COOKIE, value: raw, options: cookieOptions(maxAge) };
 }
