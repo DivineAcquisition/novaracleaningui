@@ -84,10 +84,12 @@ export function applyHostOnboardingPreviewAction(action: string, body: Record<st
     }
     previewMem.paymentOption = option;
     previewMem.card = true;
+    previewMem.portal = true;
     return { ok: true, status: 200, outcome: "payment_ready", message: "Payment method on file (preview)." };
   }
   if (action === "confirm_payment") {
     previewMem.card = true;
+    previewMem.portal = true;
     return { ok: true, status: 200, outcome: "payment_ready", message: "Pre-Auth hold is on file (preview)." };
   }
   if (action === "payment_status") {

@@ -9,7 +9,8 @@ import { updateSession } from "@/integrations/supabase/middleware";
 //   admin.novaracleaning.com      — admin portal + sign-in only
 //   try.novaracleaning.com        — public marketing, booking funnel,
 //                                    membership browse, demo, pricing,
-//                                    PM portfolio landing (/portfolio)
+//                                    PM portfolio landing (/portfolio),
+//                                    STR/Airbnb host landing (/str)
 //   app.novaracleaning.com        — authenticated customer portal
 //                                    (account, manage-booking, membership
 //                                     success, billing returns, auth flows)
@@ -137,6 +138,9 @@ const ROUTE_OWNER: Array<[string, SubdomainKey]> = [
   // Public PM / rental-portfolio acquisition. No login. Distinct from
   // commercial.* intake and partner.* portal.
   ["/portfolio", "try"],
+  // Public STR / Airbnb-host acquisition. Separate service from /portfolio
+  // (guest turnovers, Host Partnership Agreement, Part Two rate table).
+  ["/str", "try"],
 
   // Open before/after photo gallery (tokenized public link sent to
   // customers + partner hosts). Lives on the marketing host so a single

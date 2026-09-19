@@ -19,6 +19,8 @@ export interface StartHostOnboardingInput {
   recipientEmail?: string | null;
   recipientPhone?: string | null;
   send?: boolean;
+  /** Override the emailed/texted URL (local try.* origins, preview hosts). */
+  link?: string | null;
 }
 
 export interface StartHostOnboardingResult {
@@ -146,7 +148,7 @@ export async function startHostOnboardingSession(
       .eq("id", submission.id);
   }
 
-  const link = onboardingUrl(token);
+  const link = input.link || onboardingUrl(token);
   const result: StartHostOnboardingResult = {
     ok: true,
     status: 200,

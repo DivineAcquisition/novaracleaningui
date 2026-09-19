@@ -76,7 +76,8 @@ export async function GET(
     .eq("id", s.id as string);
 
   const payload = await sessionPayload(supabase, s);
-  return NextResponse.json({ ok: true, ...payload });
+  const withHandoff = await attachAccountHandoff(payload);
+  return NextResponse.json({ ok: true, ...withHandoff });
 }
 
 export async function POST(
@@ -252,6 +253,7 @@ export async function POST(
       );
     }
     await touchActivity(supabase, sessionId, "payment");
+    await provisionPortalAfterPayment(supabase, session, host);
     return finish({
       outcome: "payment_ready",
       paymentMethodId: refreshed.paymentMethodId,
@@ -270,6 +272,9 @@ export async function POST(
     if (refreshed.ok && host.user_id) {
       await markPortalAlreadyLinked(supabase, session, host);
       await touchActivity(supabase, sessionId, "payment");
+    }
+    if (refreshed.ok) {
+      await provisionPortalAfterPayment(supabase, session, host);
     }
     return finish({
       outcome: refreshed.ok ? "payment_ready" : "payment_pending",
@@ -312,4 +317,41 @@ export async function POST(
   }
 
   return NextResponse.json({ ok: false, message: `Unknown action "${action}".` }, { status: 400 });
+}
+
+async function provisionPortalAfterPayment(
+  supabase: ReturnType<typeof getAdminSupabase>,
+  session: Row,
+  host: Row,
+): Promise<void> {
+  const email = (session.recipient_email as string) || (host.email as string) || "";
+  if (!email) return;
+  if (host.user_id || session.portal_user_id || session.portal_provisioned_at) {
+    await markPortalAlreadyLinked(supabase, session, host);
+    return;
+  }
+  await provisionHostPortal(supabase, {
+    session,
+    host,
+    email,
+    fullName: (session.signer_name as string) || (host.name as string) || undefined,
+  }).catch(() => null);
+}
+
+async function attachAccountHandoff(
+  payload: Awaited<ReturnType<typeof sessionPayload>>,
+): Promise<Awaited<ReturnType<typeof sessionPayload>> & { handoffUrl?: string }> {
+  if (payload.progress.current_step !== "done" && !payload.progress.complete) return payload;
+  if (!payload.host.email) return payload;
+  try {
+    const { provisionHostPortalAccess } = await import("@/lib/partner-portal/handoff");
+    const access = await provisionHostPortalAccess({
+      email: payload.host.email,
+      hostId: payload.host.id,
+      displayName: payload.host.name,
+    });
+    return { ...payload, handoffUrl: access.handoffUrl || payload.portalUrl };
+  } catch {
+    return payload;
+  }
 }
