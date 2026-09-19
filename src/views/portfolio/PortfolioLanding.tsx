@@ -395,9 +395,12 @@ export default function PortfolioLanding() {
     }
   };
 
+  const liveCount =
+    mode === "mixed" ? mixed.length : Math.max(0, Math.floor(Number(unitCount) || 0));
+  const quote = estimate && estimate.unitCount === liveCount ? estimate : null;
   const cta: PortfolioCta =
-    localSplit.cta === "book_call" || estimate?.cta === "book_call" ? "book_call" : "get_started";
-  const ctaReasons = estimate?.reasons?.length ? estimate.reasons : localSplit.reasons;
+    localSplit.cta === "book_call" || quote?.cta === "book_call" ? "book_call" : "get_started";
+  const ctaReasons = quote?.reasons?.length ? quote.reasons : localSplit.reasons;
   const selectedPreset =
     UNIT_PRESETS.find((p) => p.sqft === sqft && p.bedrooms === bedrooms && p.bathrooms === bathrooms)?.id ?? "custom";
   const unitSummary =
@@ -680,10 +683,10 @@ export default function PortfolioLanding() {
                         <div>
                           <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary">Estimate · not a final standing rate</p>
                           <p className="mt-1 font-heading text-xl font-bold">
-                            {estimate
-                              ? `${estimate.unitCount} unit${estimate.unitCount === 1 ? "" : "s"}${
-                                  estimate.discount.label ? ` · ${estimate.discount.label}` : ""
-                                }${estimate.discount.percent > 0 ? ` (${estimate.discount.percent}% off)` : ""}`
+                            {quote
+                              ? `${quote.unitCount} unit${quote.unitCount === 1 ? "" : "s"}${
+                                  quote.discount.label ? ` · ${quote.discount.label}` : ""
+                                }${quote.discount.percent > 0 ? ` (${quote.discount.percent}% off)` : ""}`
                               : unitSummary}
                           </p>
                         </div>
@@ -692,20 +695,20 @@ export default function PortfolioLanding() {
                           Estimate
                         </span>
                       </div>
-                      {estimate && estimate.ranges.some((r) => r.minCents > 0) ? (
+                      {quote && quote.ranges.some((r) => r.minCents > 0) ? (
                         <>
                           <div className="grid gap-3 sm:grid-cols-3">
                             {(["move_out", "move_in", "standard"] as PmServiceType[]).map((service) => (
                               <div key={service} className="rounded-xl bg-background/80 p-4">
                                 <p className="text-xs font-semibold text-muted-foreground">{PM_SERVICE_LABELS[service]}</p>
-                                <p className="mt-1 font-heading text-xl font-bold tabular-nums sm:text-2xl">{rangeFor(estimate.ranges, service)}</p>
+                                <p className="mt-1 font-heading text-xl font-bold tabular-nums sm:text-2xl">{rangeFor(quote.ranges, service)}</p>
                                 <p className="text-[11px] text-muted-foreground">per unit</p>
                               </div>
                             ))}
                           </div>
-                          {estimate.discount.unitsToNextTier != null && estimate.discount.nextPercent != null && (
+                          {quote.discount.unitsToNextTier != null && quote.discount.nextPercent != null && (
                             <p className="text-xs text-muted-foreground">
-                              {estimate.discount.unitsToNextTier} more unit{estimate.discount.unitsToNextTier === 1 ? "" : "s"} reaches {estimate.discount.nextPercent}% off.
+                              {quote.discount.unitsToNextTier} more unit{quote.discount.unitsToNextTier === 1 ? "" : "s"} reaches {quote.discount.nextPercent}% off.
                             </p>
                           )}
                         </>
@@ -717,7 +720,7 @@ export default function PortfolioLanding() {
                         </p>
                       )}
                       {estimateError && <p className="text-sm text-rose-700">{estimateError}</p>}
-                      <p className="text-xs leading-relaxed text-muted-foreground">{estimate?.disclaimer || ESTIMATE_DISCLAIMER}</p>
+                      <p className="text-xs leading-relaxed text-muted-foreground">{quote?.disclaimer || ESTIMATE_DISCLAIMER}</p>
                       {ctaReasons.length > 0 && (
                         <ul className="space-y-1 text-xs text-amber-900">
                           {ctaReasons.map((r) => (
