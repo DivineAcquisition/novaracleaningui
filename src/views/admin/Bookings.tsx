@@ -289,14 +289,16 @@ export default function AdminBookings({
   scope = "all",
   title = "Bookings",
   newJob,
+  initialCreating = false,
 }: {
   scope?: "all" | "commercial";
   title?: string;
   newJob?: { label: string; render: () => ReactNode };
+  initialCreating?: boolean;
 } = {}) {
   const searchParams = useSearchParams();
   const highlightId = searchParams.get("highlight");
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState(initialCreating);
 
   const [bookings, setBookings] = useState<BookingRow[]>([]);
   const [loading, setLoading] = useState(true);
