@@ -62,6 +62,7 @@
     "eas:supabase:connect": "npm --prefix contractor-app run eas:supabase:connect"
   },
   "dependencies": {
+    "@calcom/embed-react": "^1.5.3",
     "@capacitor/android": "^7.4.4",
     "@capacitor/app": "^7.1.2",
     "@capacitor/camera": "^7.0.2",

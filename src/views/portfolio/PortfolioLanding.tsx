@@ -30,13 +30,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { BlurFade } from "@/components/magicui/blur-fade";
 import { BorderBeam } from "@/components/magicui/border-beam";
 import { Marquee } from "@/components/magicui/marquee";
 import { Particles } from "@/components/magicui/particles";
 import { PortfolioVsl } from "@/components/portfolio/PortfolioVsl";
+import { PortfolioCalEmbed } from "@/components/portfolio/PortfolioCalEmbed";
 import { formatPhoneNumber } from "@/lib/input-formatters";
 import { BRAND } from "@/lib/brand";
 import { cn } from "@/lib/utils";
@@ -85,8 +85,6 @@ const TESTIMONIALS = [
     rating: 5,
   },
 ];
-
-const TIMINGS = ["As soon as possible", "Within 2 weeks", "Within a month", "Just exploring"];
 
 const UNIT_PRESETS = [
   { id: "1", label: "1 bed", hint: "~800 sq ft", sqft: "800", bedrooms: "1", bathrooms: "1" },
@@ -162,17 +160,14 @@ export default function PortfolioLanding() {
   const [estimate, setEstimate] = useState<EstimatePayload | null>(null);
   const [estimateError, setEstimateError] = useState<string | null>(null);
 
-  const [panel, setPanel] = useState<"none" | "start" | "call">("none");
+  const [panel, setPanel] = useState<"none" | "start">("none");
   const [companyName, setCompanyName] = useState("");
   const [contactName, setContactName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [notes, setNotes] = useState("");
-  const [timing, setTiming] = useState("");
   const [unitDrafts, setUnitDrafts] = useState<EstimateUnit[]>([]);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [callDone, setCallDone] = useState<{ message: string; calendarUrl: string | null } | null>(null);
 
   const body = useMemo(() => {
     const base = {
@@ -303,8 +298,15 @@ export default function PortfolioLanding() {
   }, [mode, unitCount, sqft, bedrooms, bathrooms, portfolioZip, flaggedAtypical, mixed]);
 
   const openCta = (which: "start" | "call") => {
-    setPanel(which);
     setFormError(null);
+    if (which === "call") {
+      setPanel("none");
+      requestAnimationFrame(() => {
+        document.getElementById("book-call")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+      return;
+    }
+    setPanel("start");
     requestAnimationFrame(() => {
       document.getElementById("cta-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
@@ -354,8 +356,10 @@ export default function PortfolioLanding() {
       const json = await res.json();
       if (!res.ok || !json?.ok) {
         if (json?.cta === "book_call") {
-          setPanel("call");
           setFormError(json.message || "This portfolio needs a call rather than instant onboarding.");
+          requestAnimationFrame(() => {
+            document.getElementById("book-call")?.scrollIntoView({ behavior: "smooth", block: "start" });
+          });
           return;
         }
         throw new Error(json?.message || json?.error || "Could not start onboarding.");
@@ -363,33 +367,6 @@ export default function PortfolioLanding() {
       window.location.href = json.onboardingUrl;
     } catch (e) {
       setFormError(e instanceof Error ? e.message : "Could not start onboarding.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const submitCall = async () => {
-    setBusy(true);
-    setFormError(null);
-    try {
-      const res = await fetch("/api/portfolio/call", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...body,
-          companyName,
-          contactName,
-          email,
-          phone,
-          notes,
-          timing,
-        }),
-      });
-      const json = await res.json();
-      if (!res.ok || !json?.ok) throw new Error(json?.message || json?.error || "Could not submit.");
-      setCallDone({ message: json.message, calendarUrl: json.calendarUrl || null });
-    } catch (e) {
-      setFormError(e instanceof Error ? e.message : "Could not submit.");
     } finally {
       setBusy(false);
     }
@@ -787,67 +764,31 @@ export default function PortfolioLanding() {
                     </CardContent>
                   </Card>
                 )}
+              </div>
 
-                {panel === "call" && !callDone && (
-                  <Card>
-                    <CardContent className="space-y-5 p-6 md:p-8">
-                      <div>
-                        <h3 className="font-heading text-2xl font-bold">Book a call</h3>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          Large or non-standard portfolios are reviewed by a person before onboarding is
-                          generated — the same typical/unusual split already used when a unit is registered.
-                        </p>
-                      </div>
-                      <ContactFields
-                        companyName={companyName} setCompanyName={setCompanyName}
-                        contactName={contactName} setContactName={setContactName}
-                        email={email} setEmail={setEmail}
-                        phone={phone} setPhone={setPhone}
-                      />
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <div>
-                          <Label>Timing</Label>
-                          <select
-                            className="mt-1 flex h-10 w-full rounded-xl border border-input bg-background px-3 text-sm"
-                            value={timing}
-                            onChange={(e) => setTiming(e.target.value)}
-                          >
-                            <option value="">Select…</option>
-                            {TIMINGS.map((t) => (
-                              <option key={t} value={t}>{t}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div className="sm:col-span-2">
-                          <Label>What should we know?</Label>
-                          <Textarea className="mt-1" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Unusual unit types, a large building, mixed commercial, etc." />
-                        </div>
-                      </div>
-                      {formError && <p className="text-sm text-rose-700">{formError}</p>}
-                      <Button size="lg" disabled={busy} onClick={() => void submitCall()}>
-                        {busy ? <RiLoader4Line className="h-4 w-4 animate-spin" /> : null}
-                        Request a call
-                      </Button>
-                    </CardContent>
-                  </Card>
-                )}
-
-                {callDone && (
-                  <Card>
-                    <CardContent className="space-y-4 p-6 text-center md:p-10">
-                      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full" style={{ background: PURPLE }}>
-                        <RiCheckboxCircleLine className="h-7 w-7 text-white" />
-                      </div>
-                      <h3 className="font-heading text-2xl font-bold">Request received</h3>
-                      <p className="text-muted-foreground">{callDone.message}</p>
-                      {callDone.calendarUrl && (
-                        <div className="overflow-hidden rounded-xl border border-border">
-                          <iframe title="Schedule a call" src={callDone.calendarUrl} className="h-[640px] w-full" />
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                )}
+              <div id="book-call" className="scroll-mt-28">
+                <Card>
+                  <CardContent className="space-y-5 p-6 md:p-8">
+                    <div>
+                      <h3 className="font-heading text-2xl font-bold">Book a 15-minute call</h3>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Unusual or large portfolios are reviewed by a person before onboarding is
+                        generated — pick a time below. Typical units can still Get Started above.
+                      </p>
+                    </div>
+                    <PortfolioCalEmbed
+                      name={contactName}
+                      email={email}
+                      notes={[
+                        unitSummary,
+                        flaggedAtypical ? "Not standard homes" : "",
+                        companyName ? `Company: ${companyName}` : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    />
+                  </CardContent>
+                </Card>
               </div>
             </div>
           </div>

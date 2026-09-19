@@ -205,6 +205,7 @@ const files: Record<string, string> = {
   page: readFileSync(join(ROOT, "src/app/portfolio/page.tsx"), "utf8"),
   view: readFileSync(join(ROOT, "src/views/portfolio/PortfolioLanding.tsx"), "utf8"),
   vsl: readFileSync(join(ROOT, "src/components/portfolio/PortfolioVsl.tsx"), "utf8"),
+  cal: readFileSync(join(ROOT, "src/components/portfolio/PortfolioCalEmbed.tsx"), "utf8"),
   estimateApi: readFileSync(join(ROOT, "src/app/api/portfolio/estimate/route.ts"), "utf8"),
   startApi: readFileSync(join(ROOT, "src/app/api/portfolio/start/route.ts"), "utf8"),
   callApi: readFileSync(join(ROOT, "src/app/api/portfolio/call/route.ts"), "utf8"),
@@ -236,6 +237,12 @@ check(
   true,
 );
 check("footer restates Get Started and Book a Call", files.view.includes("Ready to stop re-quoting") && files.view.includes("Book a Call"), true);
+check(
+  "Book a Call embeds the Cal.com 15min calendar",
+  files.view.includes("PortfolioCalEmbed") && files.cal.includes("malik-sannie-clwphb/15min"),
+  true,
+);
+check("the Cal embed uses month view", files.cal.includes("month_view") && files.cal.includes("app.cal.com"), true);
 check(
   "the public page does not import the admin client",
   !files.view.includes("landing-server") && !files.view.includes("getAdminSupabase") && !files.page.includes("getAdminSupabase"),
