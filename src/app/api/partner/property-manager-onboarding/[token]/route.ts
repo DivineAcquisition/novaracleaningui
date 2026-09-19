@@ -21,6 +21,7 @@ import {
   requestContext,
   requireSigned,
   signPmAgreement,
+  updateUnitDetailsDuringOnboarding,
   validateSignature,
 } from "@/lib/property-manager/onboarding/operations";
 import {
@@ -41,6 +42,12 @@ type Row = Record<string, unknown>;
 function numOrUndefined(value: unknown): number | undefined {
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
+function numAllowZero(value: unknown): number | null | undefined {
+  if (value == null || value === "") return undefined;
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? n : undefined;
 }
 
 async function loadAccount(supabase: ReturnType<typeof getAdminSupabase>, pmAccountId: string) {
@@ -154,7 +161,6 @@ export async function POST(
         (session.recipient_email as string) ||
         (account.email as string) ||
         "",
-      entityType: clip(body.entityType, 40) || null,
       entityName: clip(body.entityName, 200) || null,
       signatureDataUrl,
       pdfBase64: clip(body.pdfBase64, 12_000_000),
@@ -214,8 +220,28 @@ export async function POST(
       outcome: result.autoPriced ? "unit_added" : "unit_routed",
       unitId: result.unitId,
       autoPriced: result.autoPriced,
+      countReview: !!result.countReview,
       message: result.message,
     });
+  }
+
+  if (action === "update_unit") {
+    const gate = requireSigned(session);
+    if (gate) return NextResponse.json({ ok: false, message: gate }, { status: 409 });
+    const result = await updateUnitDetailsDuringOnboarding(supabase, {
+      session,
+      account,
+      unitId: clip(body.unitId, 80),
+      sqft: numOrUndefined(body.sqft) ?? null,
+      bedrooms: numAllowZero(body.bedrooms) ?? null,
+      bathrooms: numAllowZero(body.bathrooms) ?? null,
+      byName,
+    });
+    if (!result.ok) {
+      return NextResponse.json({ ok: false, message: result.message }, { status: result.status });
+    }
+    await touchActivity(supabase, sessionId);
+    return finish({ outcome: "unit_updated", rates: result.rates, message: result.message });
   }
 
   if (action === "configure_billing") {
@@ -230,6 +256,10 @@ export async function POST(
       account,
       billingMethod: method as PmBillingMethod,
       billingEmail: clip(body.billingEmail, 200) || undefined,
+      billingContactName: clip(body.billingContactName, 120) || undefined,
+      billingContactPhone: clip(body.billingContactPhone, 40) || undefined,
+      invoiceCycle: clip(body.invoiceCycle, 20) || undefined,
+      netTerms: clip(body.netTerms, 20) || undefined,
     });
     if (!result.ok) {
       return NextResponse.json({ ok: false, message: result.message }, { status: result.status });

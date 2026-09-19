@@ -430,8 +430,9 @@ export default function PortfolioLanding() {
                 </Badge>
                 <h2 className="font-heading text-3xl font-bold md:text-4xl">See standing rates and the portfolio tier</h2>
                 <p className="mx-auto mt-3 max-w-2xl text-muted-foreground">
-                  Same residential pricing engine that prices Move-Out, Move-In, and Standard everywhere
-                  else in this system. The volume tier updates live as the unit count changes.
+                  Section 4.1 Standing Rates — size, bed/bath, service area — from the same residential
+                  engine used at registration. Section 5.1 portfolio pricing updates live as units are
+                  added and is reflected directly in each unit&apos;s Standing Rate.
                 </p>
               </div>
 
@@ -487,20 +488,25 @@ export default function PortfolioLanding() {
                   ) : (
                     <div className="space-y-3">
                       {mixed.map((unit, i) => (
-                        <div key={i} className="grid gap-2 rounded-xl border border-border/60 p-3 sm:grid-cols-12">
-                          <Input className="sm:col-span-3" placeholder="Label" value={unit.label} onChange={(e) => setMixed((rows) => rows.map((r, idx) => (idx === i ? { ...r, label: e.target.value } : r)))} />
-                          <Input className="sm:col-span-2" placeholder="Sq ft" inputMode="numeric" value={unit.sqft} onChange={(e) => setMixed((rows) => rows.map((r, idx) => (idx === i ? { ...r, sqft: e.target.value.replace(/\D/g, "") } : r)))} />
-                          <Input className="sm:col-span-2" placeholder="Beds" inputMode="numeric" value={unit.bedrooms} onChange={(e) => setMixed((rows) => rows.map((r, idx) => (idx === i ? { ...r, bedrooms: e.target.value.replace(/\D/g, "") } : r)))} />
-                          <Input className="sm:col-span-2" placeholder="Baths" inputMode="decimal" value={unit.bathrooms} onChange={(e) => setMixed((rows) => rows.map((r, idx) => (idx === i ? { ...r, bathrooms: e.target.value } : r)))} />
-                          <Input className="sm:col-span-2" placeholder="ZIP" inputMode="numeric" value={unit.zipCode} onChange={(e) => setMixed((rows) => rows.map((r, idx) => (idx === i ? { ...r, zipCode: e.target.value.replace(/\D/g, "").slice(0, 5) } : r)))} />
-                          <button
-                            type="button"
-                            className="inline-flex h-10 items-center justify-center rounded-xl text-muted-foreground hover:text-rose-600 sm:col-span-1"
-                            onClick={() => setMixed((rows) => (rows.length === 1 ? rows : rows.filter((_, idx) => idx !== i)))}
-                            aria-label="Remove unit"
-                          >
-                            <RiDeleteBinLine className="h-4 w-4" />
-                          </button>
+                        <div key={i} className="space-y-2 rounded-xl border border-border/60 p-3">
+                          <div className="grid gap-2 sm:grid-cols-12">
+                            <Input className="sm:col-span-3" placeholder="Label" value={unit.label} onChange={(e) => setMixed((rows) => rows.map((r, idx) => (idx === i ? { ...r, label: e.target.value } : r)))} />
+                            <Input className="sm:col-span-6" placeholder="Street address" value={unit.address} onChange={(e) => setMixed((rows) => rows.map((r, idx) => (idx === i ? { ...r, address: e.target.value } : r)))} />
+                            <Input className="sm:col-span-2" placeholder="ZIP" inputMode="numeric" value={unit.zipCode} onChange={(e) => setMixed((rows) => rows.map((r, idx) => (idx === i ? { ...r, zipCode: e.target.value.replace(/\D/g, "").slice(0, 5) } : r)))} />
+                            <button
+                              type="button"
+                              className="inline-flex h-10 items-center justify-center rounded-xl text-muted-foreground hover:text-rose-600 sm:col-span-1"
+                              onClick={() => setMixed((rows) => (rows.length === 1 ? rows : rows.filter((_, idx) => idx !== i)))}
+                              aria-label="Remove unit"
+                            >
+                              <RiDeleteBinLine className="h-4 w-4" />
+                            </button>
+                          </div>
+                          <div className="grid gap-2 sm:grid-cols-3">
+                            <Input placeholder="Approx. sq ft" inputMode="numeric" value={unit.sqft} onChange={(e) => setMixed((rows) => rows.map((r, idx) => (idx === i ? { ...r, sqft: e.target.value.replace(/\D/g, "") } : r)))} />
+                            <Input placeholder="Bedrooms" inputMode="numeric" value={unit.bedrooms} onChange={(e) => setMixed((rows) => rows.map((r, idx) => (idx === i ? { ...r, bedrooms: e.target.value.replace(/\D/g, "") } : r)))} />
+                            <Input placeholder="Bathrooms" inputMode="decimal" value={unit.bathrooms} onChange={(e) => setMixed((rows) => rows.map((r, idx) => (idx === i ? { ...r, bathrooms: e.target.value } : r)))} />
+                          </div>
                         </div>
                       ))}
                       <Button type="button" variant="outline" size="sm" onClick={() => setMixed((rows) => [...rows, emptyUnit(rows.length)])}>
@@ -596,10 +602,12 @@ export default function PortfolioLanding() {
                       <div>
                         <h3 className="font-heading text-2xl font-bold">Claim This Rate</h3>
                         <p className="mt-1 text-sm text-muted-foreground">
-                          Name, email, and phone. The quoted rate is locked for {lockHours} hours.
-                          You continue into onboarding in this same browser — Legal &amp; Signature, then
-                          Unit Registry &amp; Rates (already filled), then Billing. The same link is
-                          texted and emailed so you can pick up later.
+                          Name, email, and phone. No individual-versus-entity question — the Property
+                          Management Services Agreement has no Personal Guarantee. The quoted rate is
+                          locked for {lockHours} hours. You continue into onboarding in this same
+                          browser — Legal &amp; Signature, then Unit Registry &amp; Rates (already
+                          filled), then Billing (Invoiced pre-selected). The same link is texted and
+                          emailed so you can pick up later.
                         </p>
                       </div>
                       <ContactFields

@@ -24,6 +24,7 @@ import {
   payBasisCents,
   resolveVolumeDiscount,
   reviewDecisionForUnit,
+  significantUnitCountChange,
   standingFromList,
 } from "../src/lib/property-manager/pricing";
 import {
@@ -35,6 +36,8 @@ import {
 import {
   AGREEMENT_CLAUSES,
   BINDING_ACKNOWLEDGMENTS,
+  CONSOLIDATED_INVOICING_COPY,
+  INVOICED_DEFAULT_COPY,
   PM_BILLING_OPTIONS,
 } from "../src/lib/property-manager/onboarding/agreement";
 import {
@@ -257,6 +260,12 @@ check("auto-pay is ready once the card lands", billingReady({ billingMethod: "au
 check("nothing is ready before the choice is confirmed", billingReady({ billingMethod: "invoiced", billingConfirmed: false, paymentMethodOnFile: true }), false);
 check("Invoiced is the recommended option", PM_BILLING_OPTIONS.invoiced.recommended, true);
 check("Auto-Pay is offered but not recommended", PM_BILLING_OPTIONS.auto_pay.recommended, false);
+check("only two billing methods — no Pay After, no three-way choice", Object.keys(PM_BILLING_OPTIONS), [
+  "invoiced",
+  "auto_pay",
+]);
+check("Section 6.1 default copy states invoiced applies", INVOICED_DEFAULT_COPY.includes("Unless otherwise agreed in writing"), true);
+check("Section 6.2 consolidated copy lives outside the Agreement text", CONSOLIDATED_INVOICING_COPY.includes("itemized by unit"), true);
 
 const billedNoPortal = derivePmOnboardingProgress({
   signed: true,
@@ -306,6 +315,23 @@ check("billing is one consolidated invoice, itemized by unit", clauseText.includ
 check("the needed-by date is a hard completion deadline", clauseText.includes("hard completion"), true);
 check("a scope adjustment does not re-price the unit", clauseText.includes("standing rate is not changed by a scope adjustment"), true);
 check("the manager confirms rather than negotiates a rate", clauseText.includes("does not set, negotiate, or edit a rate"), true);
+check("Section 4.1 Standing Rates are determined by the Company", clauseText.includes("determined by the Company"), true);
+check("Section 5.1 portfolio pricing is reflected in each Standing Rate", clauseText.includes("reflected directly in each Unit's Standing Rate"), true);
+check("Section 5.2 makes pricing contingent on represented unit count", clauseText.includes("remaining substantially as represented"), true);
+check("Section 6.1 invoiced is the contractual default", clauseText.includes("Unless otherwise agreed in writing, invoiced billing applies"), true);
+check("Section 6.2 is consolidated invoicing", clauseText.includes("Consolidated Invoicing"), true);
+check("Part Two is Section 17", clauseText.includes("17. Unit Registry"), true);
+check("visits are contract-based, not requested per turnover", clauseText.includes("rather than requested per turnover"), true);
+check("there is no Personal Guarantee clause", /personal guarantee/i.test(clauseText), false);
+check("there is no individual-vs-entity split", /individual vs|signing as an individual/i.test(clauseText), false);
+
+console.log("\nSection 5.2 significant unit-count change:");
+check("adding 1 unit to 8 is not a 5.2 review (still 5% tier)", significantUnitCountChange(8, 9).significant, false);
+check("8 → 10 crosses one adjacent tier and is not a sudden jump", significantUnitCountChange(8, 10).significant, false);
+check("8 → 20 jumps two tiers and is a 5.2 review", significantUnitCountChange(8, 20).significant, true);
+check("4 → 5 is the live 5.1 mechanic, not a 5.2 review", significantUnitCountChange(4, 5).significant, false);
+check("1 → 40 is a sudden count jump", significantUnitCountChange(1, 40).significant, true);
+check("shrinking the registry is not a 5.2 add-unit review", significantUnitCountChange(20, 8).significant, false);
 
 // ─── Consolidated billing periods ──────────────────────────────────────────
 

@@ -9,12 +9,20 @@
 // the rate schedule binding.
 
 import { resolveAppSecret, stripeCall } from "@/lib/stripe-rest";
-import { registerUnit } from "../registry";
-import { PM_SERVICE_LABELS, PM_SERVICE_TYPES, formatRate } from "../pricing";
+import { countRegisteredUnits, registerUnit, UNIT_COLS } from "../registry";
+import { PM_SERVICE_LABELS, PM_SERVICE_TYPES, formatRate, significantUnitCountChange } from "../pricing";
+import { computeStandingRates, loadPmPricingContext, loadVolumeDiscounts, ratesToColumns } from "../pricing-server";
 import { sendPartnershipMessage } from "@/lib/partnership-comms/server";
-import { PM_BILLING_OPTIONS, type PmBillingMethod } from "./agreement";
+import {
+  PM_BILLING_OPTIONS,
+  PM_INVOICE_CYCLES,
+  PM_NET_TERMS,
+  type PmBillingMethod,
+  type PmInvoiceCycle,
+  type PmNetTerms,
+} from "./agreement";
 import { buildPmAgreementBase64 } from "./agreement-pdf";
-import { parseSnapshot, portalUrl } from "./session";
+import { parseSnapshot, replaceSnapshotUnit, snapshotUnitFromRow, portalUrl } from "./session";
 
 // eslint-disable-next-line
 type Admin = any;
@@ -74,7 +82,6 @@ export async function signPmAgreement(
     account: Row;
     signerName: string;
     signerEmail: string;
-    entityType?: string | null;
     entityName?: string | null;
     signatureDataUrl: string;
     pdfBase64?: string;
@@ -105,7 +112,6 @@ export async function signPmAgreement(
     pdfBase64 = await buildPmAgreementBase64({
       signerName: input.signerName,
       signerEmail: input.signerEmail,
-      entityType: input.entityType,
       entityName: input.entityName,
       companyName: (input.account.company_name as string) || null,
       units,
@@ -145,7 +151,6 @@ export async function signPmAgreement(
       session_id: session.id,
       signer_name: input.signerName,
       signer_email: input.signerEmail,
-      entity_type: input.entityType || null,
       entity_name: input.entityName || null,
       signed_at: now,
       signature_path: sigPath,
@@ -319,7 +324,14 @@ export async function addUnitDuringOnboarding(
     flagNonStandard?: boolean;
     byName: string;
   },
-): Promise<{ ok: boolean; status: number; message: string; autoPriced?: boolean; unitId?: string }> {
+): Promise<{
+  ok: boolean;
+  status: number;
+  message: string;
+  autoPriced?: boolean;
+  unitId?: string;
+  countReview?: boolean;
+}> {
   const gate = requireSigned(input.session);
   if (gate) return { ok: false, status: 409, message: gate };
 
@@ -327,6 +339,13 @@ export async function addUnitDuringOnboarding(
   if (address.length < 5) {
     return { ok: false, status: 400, message: "Add the unit's street address." };
   }
+
+  const snapshot = parseSnapshot(input.session.unit_snapshot);
+  const representedCount = snapshot.length;
+  const existingCount = await countRegisteredUnits(supabase, String(input.session.pm_account_id));
+  const prospectiveCount = existingCount + 1;
+  const discounts = await loadVolumeDiscounts(supabase);
+  const countChange = significantUnitCountChange(representedCount, prospectiveCount, discounts);
 
   const registered = await registerUnit(supabase, {
     pmAccountId: String(input.session.pm_account_id),
@@ -342,8 +361,17 @@ export async function addUnitDuringOnboarding(
     flaggedNonStandard: !!input.flagNonStandard,
     source: "onboarding",
     actorName: input.byName,
+    priceAtUnitCount: countChange.significant ? representedCount : undefined,
+    skipPortfolioReprice: countChange.significant,
   });
   if (!registered.ok) return { ok: false, status: registered.status, message: registered.message };
+
+  const countReviewNote = countChange.significant
+    ? `Section 5.2 review: registered count moving from ${representedCount} to ${prospectiveCount}` +
+      (countChange.reason === "tier_jump"
+        ? ` (portfolio tier ${countChange.representedPercent}% → ${countChange.newPercent}%).`
+        : " (sudden unit-count change).")
+    : null;
 
   await supabase.from("property_manager_onboarding_session_items").insert({
     session_id: input.session.id,
@@ -355,11 +383,34 @@ export async function addUnitDuringOnboarding(
     requested_sqft: input.sqft ?? null,
     requested_bedrooms: input.bedrooms ?? null,
     requested_bathrooms: input.bathrooms ?? null,
-    requested_notes: clip(input.notes, 2000) || null,
+    requested_notes:
+      [clip(input.notes, 2000) || null, countReviewNote].filter(Boolean).join(" ") || null,
     auto_priced: !!registered.autoPriced,
     submitted_by_name: input.byName,
-    status: registered.autoPriced ? "actioned" : "pending",
+    status: registered.autoPriced && !countChange.significant ? "actioned" : "pending",
   });
+
+  if (countChange.significant) {
+    await notifyAdmin(supabase, {
+      subject: `Section 5.2 unit-count review — ${String(input.account.company_name || "property manager")}`,
+      html: [
+        `<p><strong>${escapeHtml(input.byName)}</strong> added a unit during onboarding that changes the represented portfolio size.</p>`,
+        `<p>Claimed / signed registry: <strong>${representedCount}</strong> units. After this add: <strong>${prospectiveCount}</strong>.</p>`,
+        `<p>The new unit ${registered.autoPriced ? "auto-priced at the represented tier" : "routed for pricing"}; existing Standing Rates were not silently re-priced.</p>`,
+        `<p>Review in Commercial → Portfolio. This does not block the rest of their session.</p>`,
+      ].join(""),
+      eventType: "property_manager.onboarding.unit_count_review",
+      summary: `${input.byName} added a unit (${representedCount} → ${prospectiveCount}); Section 5.2 review raised.`,
+      data: {
+        pm_account_id: input.session.pm_account_id,
+        session_id: input.session.id,
+        unit_id: registered.unitId || null,
+        represented_count: representedCount,
+        new_count: prospectiveCount,
+        reason: countChange.reason,
+      },
+    });
+  }
 
   // An added unit joins the registry after the snapshot was frozen. It is
   // deliberately NOT added to the snapshot: Page 2 is the schedule attached
@@ -375,7 +426,123 @@ export async function addUnitDuringOnboarding(
     status: 200,
     unitId: registered.unitId,
     autoPriced: !!registered.autoPriced,
-    message: registered.message,
+    countReview: countChange.significant,
+    message: countChange.significant
+      ? `${registered.message} This add changes the represented unit count, so our team will review portfolio pricing (Section 5.2). You can keep going.`
+      : registered.message,
+  };
+}
+
+// ─── Page 2: correct inputs, recompute Standing Rates ──────────────────────
+
+/**
+ * The visitor corrects size or bed/bath — they do not set a rate. The
+ * Company's formula recomputes the Standing Rate (Section 4.1). Rates stay
+ * read-only on the page; only the inputs that feed the engine are editable.
+ */
+export async function updateUnitDetailsDuringOnboarding(
+  supabase: Admin,
+  input: {
+    session: Row;
+    account: Row;
+    unitId: string;
+    sqft?: number | null;
+    bedrooms?: number | null;
+    bathrooms?: number | null;
+    byName: string;
+  },
+): Promise<{ ok: boolean; status: number; message: string; rates?: Record<string, number> }> {
+  const gate = requireSigned(input.session);
+  if (gate) return { ok: false, status: 409, message: gate };
+
+  const snapshot = parseSnapshot(input.session.unit_snapshot);
+  const unit = snapshot.find((u) => u.unit_id === input.unitId);
+  if (!unit) return { ok: false, status: 404, message: "That unit isn't on this registry." };
+
+  const sqft = input.sqft == null ? unit.sqft : Number(input.sqft);
+  const bedrooms = input.bedrooms == null ? unit.bedrooms : Number(input.bedrooms);
+  const bathrooms = input.bathrooms == null ? unit.bathrooms : Number(input.bathrooms);
+  if (!(Number(sqft) > 0)) {
+    return { ok: false, status: 400, message: "Add the unit's approximate square footage." };
+  }
+
+  const ctx = await loadPmPricingContext(supabase);
+  const unitCount = snapshot.length;
+  const computed = ctx
+    ? await computeStandingRates(supabase, ctx, {
+        address: unit.address,
+        zipCode: unit.zip_code,
+        sqft,
+        bedrooms,
+        bathrooms,
+        unitCount,
+      })
+    : { ok: false as const, message: "We couldn't reach the pricing tables." };
+
+  const patch: Row = {
+    sqft: Number.isFinite(Number(sqft)) ? Math.round(Number(sqft)) : null,
+    bedrooms: Number.isFinite(Number(bedrooms)) ? Number(bedrooms) : null,
+    bathrooms: Number.isFinite(Number(bathrooms)) ? Number(bathrooms) : null,
+  };
+
+  if (computed.ok && "rates" in computed && computed.rates) {
+    Object.assign(patch, ratesToColumns(computed.rates));
+    patch.status = "active";
+    patch.review_reason = null;
+  }
+
+  const { error } = await supabase.from("property_manager_units").update(patch).eq("id", input.unitId);
+  if (error) return { ok: false, status: 400, message: error.message };
+
+  const { data: fresh } = await supabase
+    .from("property_manager_units")
+    .select(UNIT_COLS)
+    .eq("id", input.unitId)
+    .maybeSingle();
+  const next = fresh ? snapshotUnitFromRow(fresh as Row) : null;
+  if (next) {
+    const updated = replaceSnapshotUnit(snapshot, next);
+    await supabase
+      .from("property_manager_onboarding_sessions")
+      .update({
+        unit_snapshot: updated,
+        last_activity_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", input.session.id as string);
+  }
+
+  await supabase
+    .from("property_manager_onboarding_session_items")
+    .delete()
+    .eq("session_id", input.session.id as string)
+    .eq("unit_id", input.unitId)
+    .eq("kind", "unit_decision");
+
+  if (!computed.ok) {
+    await notifyAdmin(supabase, {
+      subject: `Unit needs pricing after a size correction — ${String(input.account.company_name || "property manager")}`,
+      html: [
+        `<p><strong>${escapeHtml(input.byName)}</strong> corrected size details on a registered unit and the engine could not auto-price it.</p>`,
+        `<p><strong>${escapeHtml(unit.unit_label || unit.address || "Unit")}</strong></p>`,
+        `<p>${escapeHtml(computed.message || "Needs review.")}</p>`,
+      ].join(""),
+      eventType: "property_manager.onboarding.unit_reprice_review",
+      summary: `${input.byName} corrected ${unit.unit_label || "a unit"}; engine could not re-price.`,
+      data: { pm_account_id: input.session.pm_account_id, session_id: input.session.id, unit_id: input.unitId },
+    });
+    return {
+      ok: true,
+      status: 200,
+      message: computed.message || "Those details are saved. Our team will set this unit's Standing Rates.",
+    };
+  }
+
+  return {
+    ok: true,
+    status: 200,
+    rates: next?.rates,
+    message: "Standing Rates updated from the corrected size — determined by the Company (Section 4.1).",
   };
 }
 
@@ -393,6 +560,10 @@ export async function configureBilling(
     account: Row;
     billingMethod: PmBillingMethod;
     billingEmail?: string;
+    billingContactName?: string;
+    billingContactPhone?: string;
+    invoiceCycle?: string;
+    netTerms?: string;
   },
 ): Promise<{
   ok: boolean;
@@ -410,15 +581,35 @@ export async function configureBilling(
   const now = new Date().toISOString();
   const email =
     clip(input.billingEmail, 200) ||
+    clip(input.account.billing_contact_email, 200) ||
     clip(input.account.email, 200) ||
     clip(input.session.recipient_email, 200);
   if (!email) {
     return { ok: false, status: 400, message: "Add a billing email so we know where invoices go." };
   }
 
+  const cycle = PM_INVOICE_CYCLES.includes(String(input.invoiceCycle) as PmInvoiceCycle)
+    ? (input.invoiceCycle as PmInvoiceCycle)
+    : ((input.account.invoice_cycle as PmInvoiceCycle) || "monthly");
+  const terms = PM_NET_TERMS.includes(String(input.netTerms) as PmNetTerms)
+    ? (input.netTerms as PmNetTerms)
+    : ((input.account.net_terms as PmNetTerms) || "net_15");
+  const contactName =
+    clip(input.billingContactName, 120) || clip(input.account.contact_name, 120) || null;
+  const contactPhone =
+    clip(input.billingContactPhone, 40) || clip(input.account.phone, 40) || null;
+
   await supabase
     .from("property_manager_accounts")
-    .update({ billing_method: input.billingMethod, email })
+    .update({
+      billing_method: input.billingMethod,
+      email,
+      billing_contact_email: email,
+      billing_contact_name: contactName,
+      billing_contact_phone: contactPhone,
+      invoice_cycle: cycle,
+      net_terms: terms,
+    })
     .eq("id", input.session.pm_account_id as string);
 
   if (input.billingMethod === "invoiced") {

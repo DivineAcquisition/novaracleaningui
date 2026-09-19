@@ -147,6 +147,14 @@ interface PmData {
     paymentBrand: string | null;
     paymentLast4: string | null;
     invoices: Invoice[];
+    charges?: Array<{
+      id: string;
+      date: string;
+      amountCents: number;
+      url: string | null;
+      status: string;
+      dueDate?: string | null;
+    }>;
   };
   services: Array<{ key: string; label: string; summary: string }>;
   units: Unit[];
@@ -234,8 +242,8 @@ export default function PropertyManagerPortal() {
 
   const tabs: Array<{ id: Tab; label: string }> = [
     { id: "portfolio", label: "Portfolio" },
-    { id: "turnovers", label: "Turnovers" },
-    { id: "invoices", label: "Invoices" },
+    { id: "turnovers", label: "Scheduled visits" },
+    { id: "invoices", label: "Billing" },
     { id: "documents", label: "Documents" },
     { id: "issue", label: "Report an issue" },
   ];
@@ -290,16 +298,16 @@ export default function PropertyManagerPortal() {
           <Card>
             <CardContent className="p-5">
               <p className="text-sm text-slate-600">
-                Every unit below is registered with its own standing rates. Book a turnover by
-                picking the unit and the date it has to be ready — no walkthrough, no quote, and the
-                rate never changes between tenants.
+                Every unit below is registered with its own Standing Rates. Scheduled visits generate
+                from this registered relationship — you don&apos;t request each turnover. Open a unit
+                to see visits already on the calendar.
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button size="sm" variant="outline" onClick={() => setAddOpen(true)}>
-                  <RiAddLine className="mr-1 h-4 w-4" /> Add a unit
+                  <RiAddLine className="mr-1 h-4 w-4" /> Request an additional unit
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => setTab("turnovers")}>
-                  <RiCalendarEventLine className="mr-1 h-4 w-4" /> All turnover activity
+                  <RiCalendarEventLine className="mr-1 h-4 w-4" /> Scheduled visits
                 </Button>
               </div>
             </CardContent>
@@ -346,14 +354,15 @@ export default function PropertyManagerPortal() {
             </Card>
           ) : (
             <p className="text-sm text-slate-500">
-              Every turnover across the portfolio. Open a unit from the Portfolio tab to see just
-              that apartment.
+              Scheduled visits across the portfolio — already generated from your registered units,
+              not requested one at a time. Open a unit from the Portfolio tab to see just that
+              apartment.
             </p>
           )}
 
-          <h2 className="font-bold">Upcoming</h2>
+          <h2 className="font-bold">Upcoming (already scheduled)</h2>
           {upcoming.length === 0 && (
-            <Empty>No upcoming turnovers. Book one from any registered unit.</Empty>
+            <Empty>No upcoming visits on the calendar yet.</Empty>
           )}
           {upcoming.map((t) => (
             <TurnoverRow key={t.id} t={t} onPhotos={() => setPhotosFor(t)} onDone={() => load(unitId)} />
@@ -371,25 +380,60 @@ export default function PropertyManagerPortal() {
         <section className="space-y-3">
           <Card>
             <CardContent className="p-4 text-sm text-slate-600">
-              One invoice per {data.billing.invoiceCycle.replace(/_/g, " ")} billing period covering
-              every turnover across the portfolio, itemized by unit.{" "}
-              {data.billing.method === "auto_pay"
-                ? `Charged automatically to ${
-                    data.billing.paymentLast4
-                      ? `${data.billing.paymentBrand || "card"} ···· ${data.billing.paymentLast4}`
-                      : "the card on file"
-                  }.`
-                : data.billing.netTermsLabel
-                  ? `Payable on ${data.billing.netTermsLabel} terms.`
-                  : ""}
+              {data.billing.method === "auto_pay" ? (
+                <>
+                  Auto-Pay. Payment method on file
+                  {data.billing.paymentLast4
+                    ? `: ${(data.billing.paymentBrand || "card")} ···· ${data.billing.paymentLast4}`
+                    : data.billing.cardOnFile
+                      ? "."
+                      : " is not on file yet."}{" "}
+                  Charge history below. This account does not show an invoice list.
+                </>
+              ) : (
+                <>
+                  Invoiced. One invoice per {data.billing.invoiceCycle.replace(/_/g, " ")} billing
+                  period covering every visit across the portfolio, itemized by unit
+                  {data.billing.netTermsLabel ? `, payable on ${data.billing.netTermsLabel} terms` : ""}.
+                  This account does not keep a card on file.
+                </>
+              )}
             </CardContent>
           </Card>
-          {data.billing.invoices.length === 0 && (
-            <Empty>Your first consolidated invoice appears here at the end of the period.</Empty>
+          {data.billing.method === "invoiced" ? (
+            <>
+              {data.billing.invoices.length === 0 && (
+                <Empty>Your first consolidated invoice appears here at the end of the period.</Empty>
+              )}
+              {data.billing.invoices.map((inv) => (
+                <InvoiceCard key={inv.id} invoice={inv} />
+              ))}
+            </>
+          ) : (
+            <>
+              {(data.billing.charges || []).length === 0 && (
+                <Empty>Charge history appears here after Auto-Pay statements are collected.</Empty>
+              )}
+              {(data.billing.charges || []).map((row) => (
+                <Card key={row.id}>
+                  <CardContent className="flex items-center justify-between p-4">
+                    <div>
+                      <p className="font-semibold">{row.date || "Charge"}</p>
+                      <p className="text-xs text-slate-500">{row.status}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold">{money(row.amountCents)}</p>
+                      {row.url && (
+                        <a href={row.url} className="text-xs font-semibold text-[#5C0FFE]" target="_blank" rel="noreferrer">
+                          Receipt
+                        </a>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </>
           )}
-          {data.billing.invoices.map((inv) => (
-            <InvoiceCard key={inv.id} invoice={inv} />
-          ))}
         </section>
       )}
 
@@ -534,21 +578,20 @@ function UnitCard({
         </p>
 
         <div className="mt-3 flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            className="text-white"
-            style={{ background: PURPLE }}
-            disabled={!unit.bookable}
-            onClick={onBook}
-          >
-            Book a turnover
-          </Button>
           <Button size="sm" variant="outline" onClick={onHistory}>
-            History &amp; photos
+            Scheduled visits
           </Button>
           <Button size="sm" variant="outline" onClick={onAccess}>
             <RiKey2Line className="mr-1 h-3.5 w-3.5" />
             {unit.accessOnFile ? "Access details" : "Add access details"}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!unit.bookable}
+            onClick={onBook}
+          >
+            Add a lease date
           </Button>
         </div>
       </CardContent>
@@ -751,8 +794,11 @@ function BookModal({
   };
 
   return (
-    <Modal title="Book a turnover" onClose={onClose}>
-      <p className="text-sm text-slate-500">{unit.label}</p>
+    <Modal title="Add a lease date" onClose={onClose}>
+      <p className="text-sm text-slate-500">
+        {unit.label}. This generates a scheduled visit at the unit&apos;s Standing Rate — it is not a
+        turnover request.
+      </p>
       <div className="mt-3 space-y-2">
         {services.map((s) => {
           const cents = unit.rates.find((r) => r.service === s.key)?.standingCents ?? null;
@@ -944,10 +990,10 @@ function AddUnitModal({ onClose, onDone }: { onClose: () => void; onDone: () => 
   };
 
   return (
-    <Modal title="Add a unit" onClose={onClose}>
+    <Modal title="Request an additional unit" onClose={onClose}>
       <p className="text-sm text-slate-500">
-        A typical unit prices itself from its size, bedrooms, and zone and is bookable right away.
-        Only a genuinely unusual one goes to our team first — we&apos;ll tell you which happened.
+        Additional units requested from the portal are reviewed by our team rather than auto-priced.
+        This does not change the Standing Rates already on file.
       </p>
       <Input
         className="mt-3"

@@ -11,6 +11,7 @@
 // cannot claim Page 2 is open when Page 1 was never signed.
 
 import { PARTNER_ORIGIN, portalHomeUrl } from "@/lib/partner-portal/origins";
+import { LANDING_UNIT_TAG } from "../landing";
 import { PM_SERVICE_LABELS, PM_SERVICE_TYPES, type PmServiceType } from "../pricing";
 import { PM_BILLING_OPTIONS, type PmBillingMethod } from "./agreement";
 import { derivePmOnboardingProgress, type PmOnboardingProgress, type UnitDecision } from "./progress";
@@ -154,6 +155,39 @@ export function parseSnapshot(raw: unknown): SnapshotUnit[] {
     .filter((u): u is SnapshotUnit => !!u);
 }
 
+/** Build a snapshot row from a live `property_manager_units` record. */
+export function snapshotUnitFromRow(u: Row): SnapshotUnit | null {
+  const id = String(u.id || u.unit_id || "");
+  if (!id) return null;
+  const rates = {} as Record<PmServiceType, number>;
+  let complete = true;
+  for (const service of PM_SERVICE_TYPES) {
+    const cents = Number(u[`standing_${service}_cents`] ?? (u.rates as Row | undefined)?.[service]);
+    if (!Number.isFinite(cents) || cents <= 0) complete = false;
+    rates[service] = Number.isFinite(cents) ? Math.round(cents) : 0;
+  }
+  if (!complete) return null;
+  return {
+    unit_id: id,
+    unit_label: (u.unit_label as string) || null,
+    address: (u.address as string) || null,
+    city: (u.city as string) || null,
+    state: (u.state as string) || null,
+    zip_code: (u.zip_code as string) || null,
+    sqft: u.sqft == null ? null : Number(u.sqft),
+    bedrooms: u.bedrooms == null ? null : Number(u.bedrooms),
+    bathrooms: u.bathrooms == null ? null : Number(u.bathrooms),
+    zone_code: (u.zone_code as string) || null,
+    rates,
+    discount_percent: Number(u.discount_percent_applied || u.discount_percent || 0),
+    special_notes: (u.special_notes as string) || null,
+  };
+}
+
+export function replaceSnapshotUnit(snapshot: SnapshotUnit[], unit: SnapshotUnit): SnapshotUnit[] {
+  return snapshot.map((u) => (u.unit_id === unit.unit_id ? unit : u));
+}
+
 export async function loadItems(supabase: Admin, sessionId: string): Promise<Row[]> {
   const { data } = await supabase
     .from("property_manager_onboarding_session_items")
@@ -256,6 +290,9 @@ export interface PmSessionPayload {
     cardOnFile: boolean;
     invoiceCycle: string | null;
     netTerms: string | null;
+    billingContactName: string | null;
+    billingContactEmail: string | null;
+    billingContactPhone: string | null;
     volumeDiscountPercent: number;
     volumeDiscountLabel: string | null;
   };
@@ -265,6 +302,7 @@ export interface PmSessionPayload {
       flagNote: string | null;
       rateLines: Array<{ service: PmServiceType; label: string; cents: number }>;
       rateEditable: false;
+      claimedFromLanding: boolean;
     }
   >;
   addedUnits: Row[];
@@ -279,9 +317,7 @@ export async function sessionPayload(supabase: Admin, session: Row): Promise<PmS
   const [{ data: account }, items] = await Promise.all([
     supabase
       .from("property_manager_accounts")
-      .select(
-        "id, company_name, contact_name, email, phone, user_id, portal_provisioned_at, default_payment_method_id, stripe_customer_id, invoice_cycle, net_terms, volume_discount_percent, volume_discount_label",
-      )
+      .select("*")
       .eq("id", pmAccountId)
       .maybeSingle(),
     loadItems(supabase, String(session.id)),
@@ -312,7 +348,10 @@ export async function sessionPayload(supabase: Admin, session: Row): Promise<PmS
       hasPortal: !!(session.portal_user_id || session.portal_provisioned_at || acct.portal_provisioned_at),
       cardOnFile: !!(session.payment_method_id || acct.default_payment_method_id),
       invoiceCycle: (acct.invoice_cycle as string) || "monthly",
-      netTerms: (acct.net_terms as string) || null,
+      netTerms: (acct.net_terms as string) || "net_15",
+      billingContactName: (acct.billing_contact_name as string) || (acct.contact_name as string) || null,
+      billingContactEmail: (acct.billing_contact_email as string) || (acct.email as string) || (session.recipient_email as string) || null,
+      billingContactPhone: (acct.billing_contact_phone as string) || (acct.phone as string) || (session.recipient_phone as string) || null,
       volumeDiscountPercent: Number(acct.volume_discount_percent || 0),
       volumeDiscountLabel: (acct.volume_discount_label as string) || null,
     },
@@ -329,6 +368,7 @@ export async function sessionPayload(supabase: Admin, session: Row): Promise<PmS
           cents: u.rates[service],
         })),
         rateEditable: false as const,
+        claimedFromLanding: String(u.special_notes || "").includes(LANDING_UNIT_TAG),
       };
     }),
     addedUnits: items.filter((i) => i.kind === "additional_unit"),

@@ -27,12 +27,12 @@ export const PORTFOLIO_ORIGIN = "https://try.novaracleaning.com";
 export const PORTFOLIO_URL = `${PORTFOLIO_ORIGIN}${PORTFOLIO_PATH}`;
 
 export const ESTIMATE_DISCLAIMER =
-  "This is an estimate, not a final standing rate. Rates are set by Novara " +
-  "from each unit's size, bedroom count, and service zone once the unit is " +
-  "registered at onboarding. The number you claim is locked for 48 hours and " +
-  "confirmed on the Unit Registry page. A unit materially outside our normal " +
-  "residential size range, or one you flag as non-standard, is priced by a " +
-  "person before it becomes bookable.";
+  "This is an estimate, not a final standing rate. Under Section 4.1, Standing " +
+  "Rates are determined by the Company from each unit's size, bedroom and " +
+  "bathroom count, and service area, without further quotation. Final rates " +
+  "confirm at onboarding. The number you claim is locked for 48 hours. A unit " +
+  "materially outside our normal residential size range, or one you flag as " +
+  "non-standard, is priced by a person before it becomes bookable.";
 
 /** Same integrity window as dynamic-pricing `quote_lock_hours` (shipped default). */
 export const PM_QUOTE_LOCK_HOURS = 48;
@@ -52,7 +52,7 @@ export const VALUE_STACK = [
   {
     key: "standing",
     title: "Standing rate per unit, set once",
-    body: "True starting at unit one. No re-quoting every turnover — Move-Out, Move-In, and Standard are priced once from the same residential engine we use everywhere else.",
+    body: "Section 4.1 — determined by the Company from size, bed/bath, and service area, without further quotation. Move-Out, Move-In, and Standard are priced once from the same residential engine we use everywhere else.",
   },
   {
     key: "photos",
@@ -62,12 +62,12 @@ export const VALUE_STACK = [
   {
     key: "volume",
     title: "Portfolio pricing that improves as you add units",
-    body: "The calculator updates the tier live as the unit count changes. The discount is already in the standing number you book against — not claimed abstractly.",
+    body: "Section 5.1 — portfolio pricing is reflected directly in each unit's Standing Rate, and the calculator updates the tier live as units are added. Not a marketing device: it is the contractual mechanic.",
   },
   {
     key: "invoice",
     title: "One consolidated invoice per period, itemized by unit",
-    body: "As your portfolio grows, this is where it pays off: one bill covering every turnover, not a separate invoice per job.",
+    body: "Section 6.2 — invoicing consolidates all units into one statement per period, itemized by unit. Invoiced billing is the Section 6.1 default; Auto-Pay is a self-serve switch.",
   },
 ] as const;
 

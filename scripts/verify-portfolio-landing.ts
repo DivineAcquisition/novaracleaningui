@@ -238,12 +238,13 @@ check("a 9,000 sqft unit is outside_size_bands", unusualEst.reasons.some((r) => 
 
 console.log("\nCopy and wiring:");
 check("range formatting uses an en-dash for a spread", formatRange(30000, 40000).includes("–"), true);
-check("disclaimer constant mentions onboarding registration", ESTIMATE_DISCLAIMER.includes("registered at onboarding"), true);
+check("disclaimer constant cites Section 4.1", ESTIMATE_DISCLAIMER.includes("Section 4.1"), true);
 check("disclaimer mentions the 48-hour lock", ESTIMATE_DISCLAIMER.includes("locked for 48 hours"), true);
 check("hero names one unit or fifty", HERO_HEADLINE.includes("one unit or fifty"), true);
 check("value stack includes standing rate set once", VALUE_STACK.some((v) => v.title.toLowerCase().includes("standing rate")), true);
 check("value stack includes live portfolio pricing", VALUE_STACK.some((v) => /improves as you add units/i.test(`${v.title} ${v.body}`)), true);
-check("value stack frames the invoice as paying off at scale", VALUE_STACK.some((v) => /as your portfolio grows/i.test(v.body)), true);
+check("value stack cites Section 5.1 on the live tier", VALUE_STACK.some((v) => /Section 5\.1/.test(v.body)), true);
+check("value stack cites Section 6.2 consolidated invoicing", VALUE_STACK.some((v) => /Section 6\.2/.test(v.body)), true);
 
 const files: Record<string, string> = {
   middleware: readFileSync(join(ROOT, "src/middleware.ts"), "utf8"),
@@ -283,6 +284,20 @@ check("Cal.com embed is on the Book a Call path", files.cal.includes("malik-sann
 check("volume tier is computed live from resolveVolumeDiscount", files.view.includes("resolveVolumeDiscount"), true);
 check("confirmation button is Go to My Account", files.onboardingView.includes("Go to My Account"), true);
 check("billing auto-provisions the portal", files.onboardingApi.includes("provisionPortalAfterBilling"), true);
+check("Claim has no individual-vs-entity field", !/entityType|entity_type|individual vs|Individual owner/.test(files.view + files.landingServer), true);
+check("Claim copy states there is no Personal Guarantee question", files.view.includes("no Personal Guarantee"), true);
+check("mixed calculator collects a street address", files.view.includes("Street address"), true);
+check("Invoiced is pre-selected on billing", files.onboardingView.includes("Invoiced (pre-selected)"), true);
+check("Auto-Pay is a switch, not a default", files.onboardingView.includes("Switch to Auto-Pay"), true);
+check("billing page states consolidated invoicing", files.onboardingView.includes("CONSOLIDATED_INVOICING_COPY") || files.onboardingView.includes("Consolidated invoicing"), true);
+check("billing collects cycle, net terms, and billing contact", files.onboardingView.includes("Billing cycle") && files.onboardingView.includes("Net terms") && files.onboardingView.includes("Billing contact"), true);
+check("Legal has no Personal Guarantee block", !/personal guarantee|PERSONAL_GUARANTEE/i.test(files.onboardingView), true);
+check("Legal cites Section 17, not a guarantee", files.onboardingView.includes("Section 17"), true);
+check("Page 2 recomputes rates from corrected size", files.onboardingApi.includes("update_unit") && files.onboardingView.includes("update_unit"), true);
+check("Add Unit raises a Section 5.2 review for a count jump", files.onboardingView.includes("Section 5.2"), true);
+check("confirmation lists units, signed agreement, and billing", files.onboardingView.includes("unit") && files.onboardingView.includes("Agreement signed") && files.onboardingView.includes("Billing configured"), true);
+check("portal additional units force review rather than auto-price", readFileSync(join(ROOT, "src/lib/partner-portal/property-manager.ts"), "utf8").includes("forceReview: true"), true);
+check("portal shows scheduled visits, not request-a-turnover", readFileSync(join(ROOT, "src/views/partner/PropertyManagerPortal.tsx"), "utf8").includes("already scheduled") && !readFileSync(join(ROOT, "src/views/partner/PropertyManagerPortal.tsx"), "utf8").includes("Book a turnover"), true);
 check(
   "the public page does not import the admin client",
   !files.view.includes("landing-server") && !files.view.includes("getAdminSupabase") && !files.page.includes("getAdminSupabase"),

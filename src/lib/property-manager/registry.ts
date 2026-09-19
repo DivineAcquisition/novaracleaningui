@@ -138,6 +138,12 @@ export interface RegisterUnitInput {
   flaggedNonStandard?: boolean;
   source: "admin" | "onboarding" | "portal";
   actorName?: string | null;
+  /** Portal additional-site requests always route; they are not auto-priced. */
+  forceReview?: boolean;
+  /** Price this unit at a represented count (Section 5.2) instead of current+1. */
+  priceAtUnitCount?: number | null;
+  /** Skip silently re-pricing the rest of the portfolio (Section 5.2 review). */
+  skipPortfolioReprice?: boolean;
 }
 
 export interface RegisterUnitResult {
@@ -180,6 +186,66 @@ export async function registerUnit(
   const zip = clip(input.zipCode, 10) || zipFromAddress(address) || null;
   const pricingCtx = ctx ?? (await loadPmPricingContext(supabase));
 
+  if (input.forceReview) {
+    const { data: inserted, error } = await supabase
+      .from("property_manager_units")
+      .insert({
+        pm_account_id: input.pmAccountId,
+        unit_label: clip(input.unitLabel, 120) || null,
+        address,
+        city: clip(input.city, 120) || null,
+        state: clip(input.state, 40) || null,
+        zip_code: zip,
+        sqft: toInt(input.sqft),
+        bedrooms: toNum(input.bedrooms),
+        bathrooms: toNum(input.bathrooms),
+        access_method: clip(input.accessMethod, 120) || null,
+        access_code: clip(input.accessCode, 120) || null,
+        access_notes: clip(input.accessNotes, 2000) || null,
+        parking_notes: clip(input.parkingNotes, 1000) || null,
+        special_notes: clip(input.notes, 2000) || null,
+        flagged_non_standard: !!input.flaggedNonStandard,
+        source: input.source,
+        created_by_name: clip(input.actorName, 120) || null,
+        status: "pending_review",
+        review_reason: "additional_site_request",
+      })
+      .select(UNIT_COLS)
+      .single();
+    if (error || !inserted) {
+      return { ok: false, status: 400, message: error?.message || "Could not register that unit." };
+    }
+    const unitRow = inserted as Row;
+    const label = unitDisplayName(unitRow as { unit_label?: string | null; address?: string | null });
+    await notifyPmAdmin(supabase, {
+      subject: `Additional unit request — ${String(account.company_name)}`,
+      html: [
+        `<p>An additional unit was requested from the Partner Portal for <strong>${escapeHtml(String(account.company_name))}</strong>.</p>`,
+        `<p><strong>${escapeHtml(label)}</strong><br/>${escapeHtml(address)}</p>`,
+        `<p>Portal additional-site requests are not auto-priced. Set standing rates in Commercial → Portfolio.</p>`,
+      ].join(""),
+      eventType: "property_manager.unit.review_required",
+      summary: `Portal additional-site request "${label}" routed for pricing.`,
+      data: {
+        pm_account_id: input.pmAccountId,
+        unit_id: unitRow.id,
+        reason: "additional_site_request",
+        source: input.source,
+      },
+    });
+    return {
+      ok: true,
+      status: 200,
+      unitId: String(unitRow.id),
+      unit: publicUnit(unitRow),
+      autoPriced: false,
+      routedForReview: true,
+      reviewReason: "additional_site_request",
+      message:
+        "Sent to our team for pricing. Additional units from the portal are reviewed rather than auto-priced.",
+    };
+  }
+
   const base: Row = {
     pm_account_id: input.pmAccountId,
     unit_label: clip(input.unitLabel, 120) || null,
@@ -201,8 +267,13 @@ export async function registerUnit(
   };
 
   // The tier this unit is priced at includes itself: registering the fifth
-  // unit is what puts the portfolio in the 5+ band.
+  // unit is what puts the portfolio in the 5+ band. Section 5.2 can pin the
+  // price to the represented count instead of silently applying a new tier.
   const existingCount = await countRegisteredUnits(supabase, input.pmAccountId);
+  const unitCount =
+    input.priceAtUnitCount != null && Number(input.priceAtUnitCount) > 0
+      ? Math.floor(Number(input.priceAtUnitCount))
+      : existingCount + 1;
   const computed: StandingRateResult = pricingCtx
     ? await computeStandingRates(supabase, pricingCtx, {
         address,
@@ -211,7 +282,7 @@ export async function registerUnit(
         bedrooms: toNum(input.bedrooms),
         bathrooms: toNum(input.bathrooms),
         flaggedNonStandard: !!input.flaggedNonStandard,
-        unitCount: existingCount + 1,
+        unitCount,
       })
     : {
         ok: false,
@@ -267,12 +338,15 @@ export async function registerUnit(
 
   // Adding this unit may have moved the whole portfolio into a better tier.
   // Everyone's stored rate has to follow, or the manager sees two prices for
-  // the same portfolio depending on which unit they look at.
-  await repricePortfolio(supabase, input.pmAccountId, {
-    actorName: input.actorName,
-    skipUnitIds: [],
-    ctx: pricingCtx,
-  });
+  // the same portfolio depending on which unit they look at. Section 5.2
+  // skips this silent re-price when the count change is significant.
+  if (!input.skipPortfolioReprice) {
+    await repricePortfolio(supabase, input.pmAccountId, {
+      actorName: input.actorName,
+      skipUnitIds: [],
+      ctx: pricingCtx,
+    });
+  }
 
   const { data: fresh } = await supabase
     .from("property_manager_units")

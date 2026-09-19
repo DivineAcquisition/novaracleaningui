@@ -40,7 +40,7 @@ import {
   publicTurnover,
   syncOpenTurnovers,
 } from "@/lib/property-manager/turnovers";
-import { describeCustomerPaymentMethod, netTermsLabel } from "./stripe-billing";
+import { describeCustomerPaymentMethod, listStripeCharges, netTermsLabel } from "./stripe-billing";
 import type { PartnerIdentity } from "./identity";
 import { stripCrewContact } from "./sanitize";
 
@@ -185,7 +185,11 @@ export async function propertyManagerOverview(identity: PartnerIdentity, unitId?
         )
       : { onFile: false, id: null, brand: null, last4: null, type: null };
 
-  const invoices = await listPmInvoices(supabase, pmAccountId);
+  const invoices = billingMethod === "invoiced" ? await listPmInvoices(supabase, pmAccountId) : [];
+  const charges =
+    billingMethod === "auto_pay"
+      ? await listStripeCharges(acct.stripe_customer_id as string)
+      : [];
 
   const documents: Array<{ label: string; url: string | null; date: string; kind: string }> = [];
   for (const a of (agreements || []) as Row[]) {
@@ -239,6 +243,7 @@ export async function propertyManagerOverview(identity: PartnerIdentity, unitId?
       paymentLast4: payment.last4,
       canUpdatePayment: billingMethod === "auto_pay",
       invoices,
+      charges,
     },
     services: PM_SERVICE_TYPES.map((service) => ({
       key: service,
@@ -256,8 +261,8 @@ export async function propertyManagerOverview(identity: PartnerIdentity, unitId?
 // ─── Booking ───────────────────────────────────────────────────────────────
 
 /**
- * Book a turnover from the portal. No quote, no walkthrough: pick the unit,
- * the service, and the date it has to be ready by.
+ * Generate a scheduled visit from a lease date. Confirms immediately at the
+ * unit's Standing Rate — no quote, no walkthrough.
  */
 export async function bookPortalTurnover(
   identity: PartnerIdentity,
@@ -372,6 +377,7 @@ export async function addPortalUnit(
     flaggedNonStandard: !!input.flagNonStandard,
     source: "portal",
     actorName: identity.displayName || identity.email,
+    forceReview: true,
   });
   if (!result.ok) return { ok: false as const, error: result.message };
 

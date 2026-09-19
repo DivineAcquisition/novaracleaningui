@@ -1,7 +1,7 @@
 // Builds the executed Property Management Services Agreement in the browser.
 // Same pdf-lib approach as the host, commercial, and residential agreements.
 //
-// Section 16 is the part that matters here: every registered unit as its own
+// Section 17 is the part that matters here: every registered unit as its own
 // block with the Company-set Move-Out, Move-In and Standard rates printed on
 // it, so the signed document and the portal always show the same numbers.
 
@@ -152,13 +152,12 @@ export async function buildPmAgreementBase64(fields: PmAgreementPdfFields): Prom
 
   field("Effective Date", today);
   field("Manager", fields.entityName || fields.companyName || fields.signerName);
-  field("Signing as", fields.entityType === "individual" ? "Individual" : "Business entity");
   field("Authorized Signer", fields.signerName);
   field("Signer Email", fields.signerEmail);
   field("Registered units", String(fields.units.length));
-  if (billing) field("§7 billing", billing.title);
+  if (billing) field("Section 6.1 billing", billing.title);
   if (Number(fields.volumeDiscountPercent || 0) > 0) {
-    field("§6 volume discount", `${Number(fields.volumeDiscountPercent)}% (Company margin)`);
+    field("Section 5.1 portfolio pricing", `${Number(fields.volumeDiscountPercent)}% (reflected in each Standing Rate)`);
   }
 
   y -= 4;
@@ -176,11 +175,12 @@ export async function buildPmAgreementBase64(fields: PmAgreementPdfFields): Prom
   }
 
   newPage();
-  text("Section 16 — Unit Registry & Standing Rates", { size: 15, f: bold, color: purple, dy: 20 });
+  text("Section 17 — Unit Registry & Standing Rates", { size: 15, f: bold, color: purple, dy: 20 });
   wrap(
-    "Each block below is a registered Unit. Its standing rates were set by the Company under " +
-      "Section 5 from the Unit's size, bedroom count and service zone, and hold for every turnover " +
-      "on that Unit until the Company changes them. The Manager confirms the details; the Manager " +
+    "Each block below is a registered Unit. Its Standing Rates were determined by the Company under " +
+      "Section 4.1 from the Unit's size, bedroom and bathroom count and service area, and hold for every " +
+      "visit on that Unit until the Company changes them. Portfolio pricing under Section 5.1 is " +
+      "reflected directly in each Unit's Standing Rate. The Manager confirms the details; the Manager " +
       "does not edit a rate.",
     { size: 9, color: gray },
   );

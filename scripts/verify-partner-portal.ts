@@ -6,7 +6,7 @@ import { computeCancelFee, serviceInstantMs } from "../src/lib/partner-portal/ca
 import { kindsOf } from "../src/lib/partner-portal/identity";
 import { publicStatusLabel, publicTurnoverStatus, stripCrewContact } from "../src/lib/partner-portal/sanitize";
 import { DEFAULT_PORTAL_SETTINGS } from "../src/lib/partner-portal/settings";
-import { previewKindFromToken, previewMe, previewCommercialOverview, previewHostOverview } from "../src/lib/partner-portal/preview";
+import { previewKindFromToken, previewMe, previewCommercialOverview, previewHostOverview, previewPropertyManagerOverview } from "../src/lib/partner-portal/preview";
 import { requestMagicLink } from "../src/lib/partner-portal/magic-link";
 import { portalCallbackUrl } from "../src/lib/partner-portal/origins";
 import {
@@ -84,8 +84,9 @@ check("status label has no cleaner word", publicStatusLabel("cleaner_confirmed")
 console.log("\nLocalhost preview tokens:");
 check("preview-host", previewKindFromToken("preview-host"), "host");
 check("preview-mixed", previewKindFromToken("preview-mixed"), "mixed");
-check("mixed preview lists both kinds", previewMe("mixed").kinds, ["host", "commercial"]);
+check("mixed preview lists all three kinds", previewMe("mixed").kinds, ["host", "commercial", "property_manager"]);
 check("host preview has no commercial account", previewMe("host").accounts.length, 0);
+check("property-manager preview has no host", previewMe("property_manager").hosts.length, 0);
 
 console.log("\nBilling is method-specific, never both:");
 check("invoiced accounts cannot update a card", portalCanUpdatePayment("invoiced"), false);
@@ -106,6 +107,11 @@ const preAuthPreview = previewCommercialOverview("auto_pay");
 check("pre-auth preview lists charges", preAuthPreview.billing.charges.length > 0, true);
 check("pre-auth preview has no invoices", preAuthPreview.billing.invoices.length, 0);
 check("pre-auth preview can update payment", preAuthPreview.billing.canUpdatePayment, true);
+const pmPreview = previewPropertyManagerOverview();
+check("PM preview is invoiced", pmPreview.billing.method, "invoiced");
+check("PM invoiced preview lists invoices", pmPreview.billing.invoices.length > 0, true);
+check("PM invoiced preview has no charges", pmPreview.billing.charges.length, 0);
+check("PM invoiced preview cannot update payment", pmPreview.billing.canUpdatePayment, false);
 
 const hostPreview = previewHostOverview();
 check("host rates are read-only", hostPreview.properties.every((p) => p.rateEditable === false), true);
@@ -124,12 +130,18 @@ check(
 console.log("\nPortal source never offers host-style visit requests to commercial, or cleaner contact:");
 const hostUi = readFileSync(resolve("src/views/partner/HostPortalView.tsx"), "utf8");
 const commercialUi = readFileSync(resolve("src/views/partner/CommercialPortal.tsx"), "utf8");
+const pmUi = readFileSync(resolve("src/views/partner/PropertyManagerPortal.tsx"), "utf8");
 check("host can update payment method", hostUi.includes("Update payment method"), true);
 check("host cannot type a rate", /turnoverPrice/.test(hostUi) && !/<Input[^>]*turnover/.test(hostUi), true);
 check("commercial has no Request a turnover", commercialUi.includes("Request a turnover"), false);
 check("commercial invoiced copy has no card field", commercialUi.includes("does not keep a card on file"), true);
 check("host UI has no cleaner contact", /cleaner|crew member/i.test(hostUi), false);
 check("commercial UI has no cleaner contact", /cleaner_phone|crew member/i.test(commercialUi), false);
+check("PM portal shows scheduled visits", pmUi.includes("Scheduled visits"), true);
+check("PM portal has no Request a turnover", pmUi.includes("Request a turnover"), false);
+check("PM invoiced copy has no card field", pmUi.includes("does not keep a card on file"), true);
+check("PM Auto-Pay copy does not show an invoice list", pmUi.includes("does not show an invoice list"), true);
+check("PM UI has no cleaner contact", /cleaner_phone|crew member/i.test(pmUi), false);
 
 const cb = portalCallbackUrl(
   new Request("https://partner.novaracleaning.com/api/partner-portal/host"),

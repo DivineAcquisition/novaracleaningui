@@ -29,8 +29,16 @@ import { EmbeddedSetupForm } from "@/components/token/EmbeddedSetupForm";
 import {
   AGREEMENT_CLAUSES,
   BINDING_ACKNOWLEDGMENTS,
+  CONSOLIDATED_INVOICING_COPY,
   IMPORTANT_NOTICE,
+  INVOICED_DEFAULT_COPY,
+  PM_INVOICE_CYCLE_LABELS,
+  PM_INVOICE_CYCLES,
+  PM_NET_TERMS,
+  PM_NET_TERMS_LABELS,
   type PmBillingMethod,
+  type PmInvoiceCycle,
+  type PmNetTerms,
 } from "@/lib/property-manager/onboarding/agreement";
 import type { PmOnboardingProgress } from "@/lib/property-manager/onboarding/progress";
 import type { PmSessionPayload } from "@/lib/property-manager/onboarding/session";
@@ -84,16 +92,187 @@ function Card({
   );
 }
 
-function unitSizeLine(unit: {
-  sqft: number | null;
-  bedrooms: number | null;
-  bathrooms: number | null;
-}): string {
-  const parts: string[] = [];
-  if (unit.bedrooms) parts.push(`${unit.bedrooms} bd`);
-  if (unit.bathrooms) parts.push(`${unit.bathrooms} ba`);
-  if (unit.sqft) parts.push(`${Math.round(unit.sqft).toLocaleString()} sq ft`);
-  return parts.length ? parts.join(" · ") : "Size on file";
+type RegistryUnit = Payload["units"][number];
+
+function UnitRegistryCard({
+  unit: u,
+  index,
+  total,
+  busy,
+  flagFor,
+  flagNote,
+  setFlagFor,
+  setFlagNote,
+  onPost,
+}: {
+  unit: RegistryUnit;
+  index: number;
+  total: number;
+  busy: boolean;
+  flagFor: string | null;
+  flagNote: string;
+  setFlagFor: (id: string | null) => void;
+  setFlagNote: (note: string) => void;
+  onPost: (body: Record<string, unknown>) => Promise<unknown>;
+}) {
+  const [sqft, setSqft] = useState(u.sqft != null ? String(u.sqft) : "");
+  const [bedrooms, setBedrooms] = useState(u.bedrooms != null ? String(u.bedrooms) : "");
+  const [bathrooms, setBathrooms] = useState(u.bathrooms != null ? String(u.bathrooms) : "");
+
+  const saveInputs = () => {
+    const nextSqft = sqft ? Number(sqft) : null;
+    const nextBeds = bedrooms === "" ? null : Number(bedrooms);
+    const nextBaths = bathrooms === "" ? null : Number(bathrooms);
+    const same =
+      nextSqft === u.sqft && nextBeds === u.bedrooms && nextBaths === u.bathrooms;
+    if (same) return;
+    void onPost({
+      action: "update_unit",
+      unitId: u.unit_id,
+      sqft: nextSqft,
+      bedrooms: nextBeds,
+      bathrooms: nextBaths,
+    });
+  };
+
+  return (
+    <Card>
+      <p className="text-[11px] font-bold uppercase tracking-wide text-violet-600">
+        Section 17 · Unit {index + 1} of {total}
+        {u.claimedFromLanding ? " · from your claimed quote" : ""}
+      </p>
+      <h3 className="mt-1 text-base font-semibold">{u.unit_label || "Unit"}</h3>
+      <p className="mt-1 flex items-start gap-1.5 text-sm text-slate-600">
+        <RiMapPin2Line className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+        <span>
+          {u.address || "Address on file"}
+          {u.city ? `, ${u.city}` : ""}
+          {u.state ? `, ${u.state}` : ""}
+          {u.zip_code ? ` ${u.zip_code}` : ""}
+        </span>
+      </p>
+      {u.zone_code ? <p className="mt-1 text-xs text-slate-500">Zone {u.zone_code}</p> : null}
+
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        <label className="block">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Sq ft</span>
+          <input
+            className={`${inputCls} mt-1`}
+            inputMode="numeric"
+            value={sqft}
+            onChange={(e) => setSqft(e.target.value.replace(/\D/g, "").slice(0, 5))}
+            onBlur={saveInputs}
+            disabled={busy}
+          />
+        </label>
+        <label className="block">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Bedrooms</span>
+          <input
+            className={`${inputCls} mt-1`}
+            inputMode="numeric"
+            value={bedrooms}
+            onChange={(e) => setBedrooms(e.target.value.replace(/\D/g, "").slice(0, 2))}
+            onBlur={saveInputs}
+            disabled={busy}
+          />
+        </label>
+        <label className="block">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Bathrooms</span>
+          <input
+            className={`${inputCls} mt-1`}
+            inputMode="decimal"
+            value={bathrooms}
+            onChange={(e) => setBathrooms(e.target.value.replace(/[^\d.]/g, "").slice(0, 4))}
+            onBlur={saveInputs}
+            disabled={busy}
+          />
+        </label>
+      </div>
+
+      <div className="mt-3 divide-y divide-violet-100 rounded-xl bg-violet-50 px-3">
+        {u.rateLines.map((line) => (
+          <div key={line.service} className="flex items-center justify-between py-2">
+            <span className="text-sm text-slate-600">{line.label}</span>
+            <span className="text-base font-bold text-violet-800">{formatRate(line.cents)}</span>
+          </div>
+        ))}
+      </div>
+      <p className="mt-1 text-[11px] text-slate-400">
+        Standing Rates are determined by the Company (Section 4.1) and are not editable. Correcting
+        size re-computes them live through the pricing engine.
+      </p>
+
+      {u.decision === "confirmed" && (
+        <p className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-emerald-700">
+          <RiCheckLine className="h-4 w-4" /> Confirmed
+        </p>
+      )}
+      {u.decision === "flagged" && (
+        <p className="mt-3 text-sm text-amber-800">
+          <RiFlagLine className="mr-1 inline h-4 w-4" />
+          Flagged for review{u.flagNote ? ` — ${u.flagNote}` : ""}
+        </p>
+      )}
+
+      {!u.decision && (
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() =>
+              void onPost({ action: "decide_unit", unitId: u.unit_id, decision: "confirmed" })
+            }
+            className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-violet-600 px-4 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
+          >
+            Confirm as shown
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              setFlagFor(u.unit_id);
+              setFlagNote("");
+            }}
+            className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-slate-300 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            <RiFlagLine className="h-4 w-4" /> Flag for review
+          </button>
+        </div>
+      )}
+
+      {flagFor === u.unit_id && (
+        <div className="mt-3 space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+          <textarea
+            className={inputCls}
+            rows={3}
+            placeholder="What's wrong? (address, square footage, bed count, …)"
+            value={flagNote}
+            onChange={(e) => setFlagNote(e.target.value)}
+          />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={busy || flagNote.trim().length < 3}
+              onClick={() =>
+                void onPost({
+                  action: "decide_unit",
+                  unitId: u.unit_id,
+                  decision: "flagged",
+                  note: flagNote,
+                }).then(() => setFlagFor(null))
+              }
+              className="h-9 rounded-lg bg-amber-700 px-3 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              Send flag
+            </button>
+            <button type="button" onClick={() => setFlagFor(null)} className="h-9 px-3 text-sm text-slate-600">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
 }
 
 export default function PropertyManagerOnboardingSession({ token }: { token: string }) {
@@ -292,7 +471,6 @@ function LegalStep({
         signerName: name.trim(),
         signerEmail: data.account.email,
         entityName: entityName.trim() || data.account.companyName,
-        entityType: "property_manager",
         agreedToTerms: agreed,
         acknowledgedNonCircumvention: acks.non_circumvention,
         acknowledgedChargebacks: acks.chargebacks,
@@ -334,10 +512,11 @@ function LegalStep({
             </section>
           ))}
           <section>
-            <h3 className="text-[13px] font-bold text-slate-900">Section 16 schedule</h3>
+            <h3 className="text-[13px] font-bold text-slate-900">Section 17 schedule</h3>
             <p className="mt-1 text-[13px] leading-relaxed text-slate-600">
-              {data.units.length} unit{data.units.length === 1 ? "" : "s"} with Company-set standing
-              rates attach as the Section 16 schedule. You review them on the next page.
+              {data.units.length} unit{data.units.length === 1 ? "" : "s"} with Company-set Standing
+              Rates attach as the Section 17 Unit Registry. You review them on the next page — pre-filled
+              from the quote you claimed.
             </p>
           </section>
         </div>
@@ -366,7 +545,7 @@ function LegalStep({
           />
           <span className="text-sm text-slate-700">
             I have read and agree to the Property Management Services Agreement, including the Unit
-            Registry &amp; Standing Rates schedule in Section 16.
+            Registry &amp; Standing Rates schedule in Section 17.
           </span>
         </label>
       </div>
@@ -377,11 +556,12 @@ function LegalStep({
           <input className={`${inputCls} mt-1`} value={name} onChange={(e) => setName(e.target.value)} />
         </label>
         <label className="block">
-          <span className="text-sm font-medium text-slate-700">Company / entity</span>
+          <span className="text-sm font-medium text-slate-700">Company name (optional)</span>
           <input
             className={`${inputCls} mt-1`}
             value={entityName}
             onChange={(e) => setEntityName(e.target.value)}
+            placeholder="If you manage under a company name"
           />
         </label>
       </div>
@@ -450,132 +630,37 @@ function RegistryStep({
           <h2 className="text-lg font-semibold text-slate-900">Unit Registry &amp; Rates</h2>
         </div>
         <p className="mt-1 text-sm text-slate-500">
-          Every unit in your portfolio with its standing rates already set by Novara from the
-          unit&apos;s size, bedroom count, and service zone. Confirm each one as shown, or flag it if
-          a detail is wrong. Flagging notifies us and doesn&apos;t hold up the rest of this session.
-          Rates aren&apos;t editable here.
+          Pre-filled from the quote you claimed. Each block is a Section 17 Unit with Standing Rates
+          determined by the Company (Section 4.1) — size, bed/bath, and service area, without further
+          quotation. Rates are read-only. Correcting square footage or bed/bath count re-computes that
+          unit&apos;s Standing Rates through the same engine.
         </p>
         <p className="mt-3 text-sm text-slate-600">
-          These rates stand for every turnover on that unit. You book a turnover by picking the unit
-          and the date it has to be ready — there is no re-quote when a tenant moves out.
+          Scheduled visits generate from this registered relationship. You confirm the registry; you
+          do not re-quote a unit to have it serviced.
         </p>
         {discount > 0 && (
           <p className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
-            Portfolio volume discount of <strong>{discount}%</strong>
+            Section 5.1 portfolio pricing of <strong>{discount}%</strong>
             {data.account.volumeDiscountLabel ? ` (${data.account.volumeDiscountLabel})` : ""} is
-            already reflected in every rate below.
+            already reflected directly in every Standing Rate below.
           </p>
         )}
       </Card>
 
       {data.units.map((u, i) => (
-        <Card key={u.unit_id}>
-          <p className="text-[11px] font-bold uppercase tracking-wide text-violet-600">
-            Unit {i + 1} of {data.units.length}
-          </p>
-          <h3 className="mt-1 text-base font-semibold">{u.unit_label || "Unit"}</h3>
-          <p className="mt-1 flex items-start gap-1.5 text-sm text-slate-600">
-            <RiMapPin2Line className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-            <span>
-              {u.address || "Address on file"}
-              {u.city ? `, ${u.city}` : ""}
-              {u.state ? `, ${u.state}` : ""}
-              {u.zip_code ? ` ${u.zip_code}` : ""}
-            </span>
-          </p>
-          <p className="mt-2 text-sm text-slate-600">
-            {unitSizeLine(u)}
-            {u.zone_code ? ` · Zone ${u.zone_code}` : ""}
-          </p>
-
-          <div className="mt-3 divide-y divide-violet-100 rounded-xl bg-violet-50 px-3">
-            {u.rateLines.map((line) => (
-              <div key={line.service} className="flex items-center justify-between py-2">
-                <span className="text-sm text-slate-600">{line.label}</span>
-                <span className="text-base font-bold text-violet-800">{formatRate(line.cents)}</span>
-              </div>
-            ))}
-          </div>
-          <p className="mt-1 text-[11px] text-slate-400">
-            Set by Novara and not editable here. Flag the unit if the address, size, or bed/bath
-            count is wrong.
-          </p>
-          {u.special_notes && <p className="mt-2 text-xs text-slate-500">{u.special_notes}</p>}
-
-          {u.decision === "confirmed" && (
-            <p className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-emerald-700">
-              <RiCheckLine className="h-4 w-4" /> Confirmed
-            </p>
-          )}
-          {u.decision === "flagged" && (
-            <p className="mt-3 text-sm text-amber-800">
-              <RiFlagLine className="mr-1 inline h-4 w-4" />
-              Flagged for review{u.flagNote ? ` — ${u.flagNote}` : ""}
-            </p>
-          )}
-
-          {!u.decision && (
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() =>
-                  void onPost({ action: "decide_unit", unitId: u.unit_id, decision: "confirmed" })
-                }
-                className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-violet-600 px-4 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
-              >
-                Confirm as shown
-              </button>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => {
-                  setFlagFor(u.unit_id);
-                  setFlagNote("");
-                }}
-                className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-slate-300 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
-              >
-                <RiFlagLine className="h-4 w-4" /> Flag for review
-              </button>
-            </div>
-          )}
-
-          {flagFor === u.unit_id && (
-            <div className="mt-3 space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
-              <textarea
-                className={inputCls}
-                rows={3}
-                placeholder="What's wrong? (address, square footage, bed count, …)"
-                value={flagNote}
-                onChange={(e) => setFlagNote(e.target.value)}
-              />
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  disabled={busy || flagNote.trim().length < 3}
-                  onClick={() =>
-                    void onPost({
-                      action: "decide_unit",
-                      unitId: u.unit_id,
-                      decision: "flagged",
-                      note: flagNote,
-                    }).then(() => setFlagFor(null))
-                  }
-                  className="h-9 rounded-lg bg-amber-700 px-3 text-sm font-semibold text-white disabled:opacity-60"
-                >
-                  Send flag
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFlagFor(null)}
-                  className="h-9 px-3 text-sm text-slate-600"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
-        </Card>
+        <UnitRegistryCard
+          key={u.unit_id}
+          unit={u}
+          index={i}
+          total={data.units.length}
+          busy={busy}
+          flagFor={flagFor}
+          flagNote={flagNote}
+          setFlagFor={setFlagFor}
+          setFlagNote={setFlagNote}
+          onPost={onPost}
+        />
       ))}
 
       <Card>
@@ -587,9 +672,9 @@ function RegistryStep({
           {addOpen ? "Close add-a-unit form" : "Add a unit"}
         </button>
         <p className="mt-1 text-xs text-slate-500">
-          A typical unit prices itself from its size, bedrooms, and zone and joins your registry
-          right away. Only a genuinely unusual one goes to our team first. Either way you can keep
-          going.
+          A typical unit auto-prices from the same engine and does not block you from Billing. An
+          unusual unit routes to our team for pricing. A significant, sudden change in unit count is
+          reviewed under Section 5.2 rather than silently re-pricing the portfolio you claimed.
         </p>
         {addOpen && (
           <div className="mt-3 space-y-2">
@@ -733,6 +818,23 @@ function BillingStep({
   const [method, setMethod] = useState<PmBillingMethod>(
     (data.session.billingMethod as PmBillingMethod) || "invoiced",
   );
+  const [cycle, setCycle] = useState<PmInvoiceCycle>(
+    PM_INVOICE_CYCLES.includes(data.account.invoiceCycle as PmInvoiceCycle)
+      ? (data.account.invoiceCycle as PmInvoiceCycle)
+      : "monthly",
+  );
+  const [netTerms, setNetTerms] = useState<PmNetTerms>(
+    PM_NET_TERMS.includes(data.account.netTerms as PmNetTerms)
+      ? (data.account.netTerms as PmNetTerms)
+      : "net_15",
+  );
+  const [billingName, setBillingName] = useState(
+    data.account.billingContactName || data.account.contactName || "",
+  );
+  const [billingEmail, setBillingEmail] = useState(
+    data.account.billingContactEmail || data.account.email || "",
+  );
+  const [billingPhone, setBillingPhone] = useState(data.account.billingContactPhone || "");
   const [embed, setEmbed] = useState<{ clientSecret: string } | null>(null);
   const billingReady = data.progress.billing_ready;
   const needsPortal = !data.account.hasPortal;
@@ -741,7 +843,11 @@ function BillingStep({
     const json = (await onPost({
       action: "configure_billing",
       billingMethod: method,
-      billingEmail: data.account.email,
+      billingEmail,
+      billingContactName: billingName,
+      billingContactPhone: billingPhone,
+      invoiceCycle: cycle,
+      netTerms,
     })) as { outcome?: string; clientSecret?: string } | null;
     if (json?.outcome === "embed" && json.clientSecret) {
       setEmbed({ clientSecret: json.clientSecret });
@@ -755,35 +861,104 @@ function BillingStep({
           <RiBankCardLine className="h-5 w-5" />
           <h2 className="text-lg font-semibold text-slate-900">Billing</h2>
         </div>
-        <p className="mt-1 text-sm text-slate-500">
-          One consolidated invoice per billing period covering every turnover across your portfolio,
-          itemized by unit. Not one invoice per turnover.
+        <p className="mt-1 text-sm text-slate-500">{INVOICED_DEFAULT_COPY}</p>
+        <p className="mt-3 rounded-xl border border-violet-100 bg-violet-50 px-3 py-2 text-sm text-violet-950">
+          {CONSOLIDATED_INVOICING_COPY}
         </p>
 
-        <div className="mt-4 grid gap-2">
-          {data.billingOptions.map((o) => (
-            <button
-              key={o.key}
-              type="button"
+        <div className="mt-4 rounded-xl border border-violet-500 bg-violet-50 p-3">
+          <span className="block text-sm font-semibold">Invoiced (pre-selected)</span>
+          <span className="mt-0.5 block text-xs text-slate-500">
+            {data.billingOptions.find((o) => o.key === "invoiced")?.summary}
+          </span>
+        </div>
+
+        {!billingReady && (
+          <label className="mt-3 flex items-start gap-3 rounded-xl border border-slate-200 p-3">
+            <input
+              type="checkbox"
+              className="mt-1 h-4 w-4 accent-[#5500FF]"
+              checked={method === "auto_pay"}
               disabled={billingReady}
-              onClick={() => setMethod(o.key)}
-              className={`rounded-xl border p-3 text-left transition-colors disabled:opacity-70 ${
-                method === o.key
-                  ? "border-violet-500 bg-violet-50"
-                  : "border-slate-200 hover:bg-slate-50"
-              }`}
+              onChange={(e) => {
+                setMethod(e.target.checked ? "auto_pay" : "invoiced");
+                setEmbed(null);
+              }}
+            />
+            <span className="text-sm text-slate-700">
+              <span className="font-semibold">Switch to Auto-Pay.</span> Same consolidated statement,
+              charged automatically to a card on file. No admin approval — this is a self-serve
+              switch away from the Section 6.1 default.
+            </span>
+          </label>
+        )}
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">Billing cycle</span>
+            <select
+              className={`${inputCls} mt-1`}
+              value={cycle}
+              disabled={billingReady}
+              onChange={(e) => setCycle(e.target.value as PmInvoiceCycle)}
             >
-              <span className="block text-sm font-semibold">{o.title}</span>
-              <span className="mt-0.5 block text-xs text-slate-500">{o.summary}</span>
-              <span className="mt-2 block text-[13px] leading-relaxed text-slate-600">{o.body}</span>
-            </button>
-          ))}
+              {PM_INVOICE_CYCLES.map((c) => (
+                <option key={c} value={c}>
+                  {PM_INVOICE_CYCLE_LABELS[c]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">Net terms</span>
+            <select
+              className={`${inputCls} mt-1`}
+              value={netTerms}
+              disabled={billingReady}
+              onChange={(e) => setNetTerms(e.target.value as PmNetTerms)}
+            >
+              {PM_NET_TERMS.map((t) => (
+                <option key={t} value={t}>
+                  {PM_NET_TERMS_LABELS[t]}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="mt-4 space-y-3">
+          <p className="text-sm font-medium text-slate-700">
+            Billing contact <span className="font-normal text-slate-500">(may differ from the signer)</span>
+          </p>
+          <input
+            className={inputCls}
+            placeholder="Name"
+            value={billingName}
+            disabled={billingReady}
+            onChange={(e) => setBillingName(e.target.value)}
+          />
+          <input
+            className={inputCls}
+            type="email"
+            placeholder="Email"
+            value={billingEmail}
+            disabled={billingReady}
+            onChange={(e) => setBillingEmail(e.target.value)}
+          />
+          <input
+            className={inputCls}
+            type="tel"
+            placeholder="Phone (optional)"
+            value={billingPhone}
+            disabled={billingReady}
+            onChange={(e) => setBillingPhone(e.target.value)}
+          />
         </div>
 
         {!billingReady && !embed && (
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || billingEmail.trim().length < 5}
             onClick={() => void choose()}
             className="mt-5 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-violet-600 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
           >
@@ -792,7 +967,7 @@ function BillingStep({
             ) : (
               <RiBankCardLine className="h-4 w-4" />
             )}
-            {method === "invoiced" ? "Bill me by invoice" : "Add a card for Auto-Pay"}
+            {method === "invoiced" ? "Confirm invoiced billing" : "Add a card for Auto-Pay"}
           </button>
         )}
 
@@ -814,7 +989,7 @@ function BillingStep({
             Billing set —{" "}
             {data.session.billingMethod === "auto_pay"
               ? "Auto-Pay, card on file"
-              : `invoiced${data.account.netTerms ? ` · ${data.account.netTerms.replace(/_/g, " ")}` : ""}`}
+              : `Invoiced${data.account.netTerms ? ` · ${data.account.netTerms.replace(/_/g, " ")}` : ""}`}
             {data.account.invoiceCycle ? ` · ${data.account.invoiceCycle}` : ""}
           </p>
         )}
@@ -825,7 +1000,7 @@ function BillingStep({
           <h3 className="text-base font-semibold">Open your portal</h3>
           <p className="mt-1 text-sm text-slate-500">
             No password. This signs you in from this same setup session and drops you into your
-            portfolio, where you book turnovers.
+            portfolio.
           </p>
           <p className="mt-3 text-sm text-slate-600">
             Email: <strong>{data.account.email}</strong>
@@ -855,17 +1030,30 @@ function BillingStep({
 }
 
 function DoneCard({ data }: { data: Payload }) {
+  const billingLabel =
+    data.session.billingMethod === "auto_pay" ? "Auto-Pay" : "Invoiced";
   return (
     <Card className="text-center">
       <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500 text-white">
         <RiCheckLine className="h-6 w-6" />
       </div>
       <h2 className="mt-4 text-xl font-semibold">You&apos;re set up</h2>
-      <p className="mt-2 text-sm leading-relaxed text-slate-600">
-        The agreement is signed, your unit registry and standing rates are on file, and billing is
-        set. Open the portal to book a turnover — pick the unit, pick the date it has to be ready,
-        done.
-      </p>
+      <ul className="mx-auto mt-3 max-w-sm space-y-1 text-left text-sm text-slate-600">
+        <li>
+          <RiCheckLine className="mr-1 inline h-4 w-4 text-emerald-600" />
+          {data.units.length} unit{data.units.length === 1 ? "" : "s"} registered
+        </li>
+        <li>
+          <RiCheckLine className="mr-1 inline h-4 w-4 text-emerald-600" />
+          Property Management Services Agreement signed
+          {data.signerName ? ` by ${data.signerName}` : ""}
+        </li>
+        <li>
+          <RiCheckLine className="mr-1 inline h-4 w-4 text-emerald-600" />
+          Billing configured — {billingLabel}
+          {data.account.invoiceCycle ? ` · ${data.account.invoiceCycle}` : ""}
+        </li>
+      </ul>
       <a
         href={data.handoffUrl || data.portalUrl}
         className="mt-5 inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-violet-600 px-5 text-sm font-semibold text-white hover:bg-violet-700"
@@ -873,7 +1061,7 @@ function DoneCard({ data }: { data: Payload }) {
         Go to My Account
       </a>
       <p className="mt-3 text-xs text-slate-400">
-        You&apos;re already signed in from this setup session.
+        You&apos;re already signed in from this setup session. Your portfolio is the default view.
       </p>
     </Card>
   );

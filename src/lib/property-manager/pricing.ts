@@ -206,7 +206,9 @@ export type UnitReviewReason =
   | "too_many_bedrooms"
   | "flagged_non_standard"
   | "zone_not_served"
-  | "pricing_unavailable";
+  | "pricing_unavailable"
+  | "additional_site_request"
+  | "unit_count_change";
 
 export interface ReviewDecision {
   needsReview: boolean;
@@ -227,6 +229,10 @@ const REVIEW_MESSAGES: Record<UnitReviewReason, string> = {
     "This address is outside our current service area. Our team will follow up.",
   pricing_unavailable:
     "We couldn't reach the pricing tables for this unit. Our team will set its rates.",
+  additional_site_request:
+    "Additional units requested from the portal are priced by our team rather than auto-added.",
+  unit_count_change:
+    "This add changes the registered unit count enough that portfolio pricing needs a second look (Section 5.2).",
 };
 
 /**
@@ -301,6 +307,65 @@ export function standingFromList(
     move_in: applyVolumeDiscount(list.move_in, percent),
     standard: applyVolumeDiscount(list.standard, percent),
   };
+}
+
+/**
+ * Section 5.2 — portfolio pricing is contingent on the registered Unit count
+ * remaining substantially as represented. Crossing one adjacent volume tier by
+ * adding a couple of units is the live 5.1 mechanic. Jumping two or more
+ * tiers, or adding at least half the represented count (minimum five), is a
+ * sudden change worth a second look rather than a silent re-price.
+ */
+export function significantUnitCountChange(
+  representedCount: number,
+  newCount: number,
+  config: VolumeDiscountConfig = DEFAULT_VOLUME_DISCOUNTS,
+): {
+  significant: boolean;
+  reason: "tier_jump" | "count_jump" | null;
+  representedPercent: number;
+  newPercent: number;
+  thresholdsCrossed: number;
+} {
+  const represented = Math.max(0, Math.floor(Number(representedCount) || 0));
+  const next = Math.max(0, Math.floor(Number(newCount) || 0));
+  const from = resolveVolumeDiscount(config, represented);
+  const to = resolveVolumeDiscount(config, next);
+  const empty = {
+    significant: false as const,
+    reason: null,
+    representedPercent: from.percent,
+    newPercent: to.percent,
+    thresholdsCrossed: 0,
+  };
+  if (next <= represented) return empty;
+
+  const tiers = (config.tiers || [])
+    .filter((t) => Number.isFinite(Number(t?.min_units)))
+    .map((t) => Math.max(0, Math.floor(Number(t.min_units))))
+    .sort((a, b) => a - b);
+  const thresholdsCrossed = tiers.filter((min) => represented < min && next >= min).length;
+  if (thresholdsCrossed >= 2) {
+    return {
+      significant: true,
+      reason: "tier_jump",
+      representedPercent: from.percent,
+      newPercent: to.percent,
+      thresholdsCrossed,
+    };
+  }
+  const added = next - represented;
+  const threshold = Math.max(5, Math.ceil(represented * 0.5));
+  if (added >= threshold) {
+    return {
+      significant: true,
+      reason: "count_jump",
+      representedPercent: from.percent,
+      newPercent: to.percent,
+      thresholdsCrossed,
+    };
+  }
+  return { ...empty, thresholdsCrossed };
 }
 
 export function formatRate(cents: number | null | undefined): string {

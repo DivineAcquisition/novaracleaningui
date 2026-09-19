@@ -255,6 +255,7 @@ export function previewPropertyManagerOverview() {
           ],
         },
       ],
+      charges: [],
     },
     services: [
       { key: "move_out", label: "Move-Out", summary: "Full turnover clean after a tenant vacates." },
