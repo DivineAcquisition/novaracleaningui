@@ -224,6 +224,17 @@ check("unusual path does not mint onboarding", files.callApi.includes("bookCallP
 check("the page labels the number as an estimate", files.view.includes("not a final standing rate"), true);
 check("Get Started carries units into onboarding", files.view.includes("These units carry into the registry"), true);
 check("calculator asks how many units", files.view.includes("How many units?"), true);
+check(
+  "typical size is a 1–4 bed preset, not a required sq ft form",
+  files.view.includes('label: "1 bed"') && files.view.includes("Adjust square footage or baths"),
+  true,
+);
+check(
+  "mixed sizes start as two starter rows, not a clone of the unit count",
+  files.view.includes("{ ...emptyUnit(0), sqft, bedrooms, bathrooms, zipCode: portfolioZip }") &&
+    files.view.includes("{ ...emptyUnit(1), sqft, bedrooms, bathrooms, zipCode: portfolioZip }"),
+  true,
+);
 check("footer restates Get Started and Book a Call", files.view.includes("Ready to stop re-quoting") && files.view.includes("Book a Call"), true);
 check(
   "the public page does not import the admin client",

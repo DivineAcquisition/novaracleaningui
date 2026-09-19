@@ -591,6 +591,9 @@ export default function PortfolioLanding() {
                       ) : (
                         <div className="space-y-2">
                           <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Each unit</p>
+                          <p className="text-xs text-muted-foreground">
+                            Two starter rows — add one per unit. Sizes don&apos;t need to match.
+                          </p>
                           {mixed.map((unit, i) => (
                             <div key={i} className="grid grid-cols-[1fr_70px_70px_36px] gap-2">
                               <Input placeholder="Sq ft" inputMode="numeric" value={unit.sqft} onChange={(e) => setMixed((rows) => rows.map((r, idx) => (idx === i ? { ...r, sqft: e.target.value.replace(/\D/g, "") } : r)))} />
@@ -619,6 +622,7 @@ export default function PortfolioLanding() {
                                     sqft,
                                     bedrooms,
                                     bathrooms,
+                                    zipCode: portfolioZip,
                                   },
                                 ])
                               }
@@ -646,16 +650,10 @@ export default function PortfolioLanding() {
                           className="font-medium text-primary hover:underline"
                           onClick={() => {
                             if (mode === "uniform") {
-                              const n = Math.min(MAX_LANDING_UNITS, Math.max(2, Math.floor(Number(unitCount) || 2)));
-                              setMixed(
-                                Array.from({ length: n }, (_, i) => ({
-                                  ...emptyUnit(i),
-                                  sqft,
-                                  bedrooms,
-                                  bathrooms,
-                                  zipCode: portfolioZip,
-                                })),
-                              );
+                              setMixed([
+                                { ...emptyUnit(0), sqft, bedrooms, bathrooms, zipCode: portfolioZip },
+                                { ...emptyUnit(1), sqft, bedrooms, bathrooms, zipCode: portfolioZip },
+                              ]);
                               setMode("mixed");
                             } else {
                               setUnitCount(String(mixed.length || 1));
