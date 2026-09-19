@@ -27,6 +27,7 @@ import {
   BINDING_ACKNOWLEDGMENTS,
   IMPORTANT_NOTICE,
   PAY_AFTER_DISCRETION,
+  PERSONAL_GUARANTEE,
   bedsBathsLabel,
   formatTurnoverRate,
   type PaymentOptionKey,
@@ -55,6 +56,7 @@ interface Payload {
     email: string | null;
     entityType: string | null;
     entityName: string | null;
+    requiresPersonalGuarantee: boolean;
     hasPortal: boolean;
     cardOnFile: boolean;
   };
@@ -308,12 +310,21 @@ function LegalStep({
   const [acks, setAcks] = useState({ non_circumvention: false, chargebacks: false, arbitration: false });
   const [signature, setSignature] = useState<string | null>(null);
 
+  // Entity Hosts guarantee personally; individual Hosts never see this block.
+  const needsGuarantee = data.host.requiresPersonalGuarantee;
+  const [guaranteeAccepted, setGuaranteeAccepted] = useState(false);
+  const [guarantorName, setGuarantorName] = useState(
+    data.host.name || data.session.recipientName || "",
+  );
+  const guaranteeReady = !needsGuarantee || (guaranteeAccepted && guarantorName.trim().length >= 2);
+
   const ready =
     name.trim().length >= 2 &&
     agreed &&
     acks.non_circumvention &&
     acks.chargebacks &&
     acks.arbitration &&
+    guaranteeReady &&
     Boolean(signature && signature.length > 100);
 
   const sign = async () => {
@@ -332,6 +343,8 @@ function LegalStep({
         acknowledgedNonCircumvention: acks.non_circumvention,
         acknowledgedChargebacks: acks.chargebacks,
         acknowledgedArbitration: acks.arbitration,
+        personalGuaranteeAccepted: needsGuarantee ? guaranteeAccepted : undefined,
+        guarantorName: needsGuarantee ? guarantorName.trim() : undefined,
         signatureDataUrl: signature,
       });
     } catch (err) {
@@ -404,6 +417,33 @@ function LegalStep({
           </span>
         </label>
       </div>
+
+      {needsGuarantee && (
+        <div className="mt-5 rounded-xl border-2 border-violet-300 bg-violet-50/60 p-4">
+          <p className="text-sm font-semibold text-violet-900">{PERSONAL_GUARANTEE.label}</p>
+          <p className="mt-1 text-[13px] text-violet-900/80">
+            {PERSONAL_GUARANTEE.intro}
+            {data.host.entityName ? ` Entity: ${data.host.entityName}.` : ""}
+          </p>
+          <label className="mt-3 flex items-start gap-3 rounded-lg border border-violet-200 bg-white p-3">
+            <input
+              type="checkbox"
+              className="mt-1 h-4 w-4 accent-[#5500FF]"
+              checked={guaranteeAccepted}
+              onChange={(e) => setGuaranteeAccepted(e.target.checked)}
+            />
+            <span className="text-sm text-slate-700">{PERSONAL_GUARANTEE.text}</span>
+          </label>
+          <label className="mt-3 block">
+            <span className="text-sm font-medium text-slate-700">{PERSONAL_GUARANTEE.nameLabel}</span>
+            <input
+              className={`${inputCls} mt-1`}
+              value={guarantorName}
+              onChange={(e) => setGuarantorName(e.target.value)}
+            />
+          </label>
+        </div>
+      )}
 
       <label className="mt-5 block">
         <span className="text-sm font-medium text-slate-700">Full legal name</span>
@@ -659,8 +699,11 @@ function PaymentStep({
   busy: boolean;
   onPost: (body: Record<string, unknown>) => Promise<unknown>;
 }) {
-  const [option, setOption] = useState<PaymentOptionKey>(
-    (data.session.paymentOption as PaymentOptionKey) || data.paymentOptions[0]?.key || "full",
+  // §6.2 — the Host actively selects one. The Agreement establishes no
+  // default, so nothing is pre-selected here. A previously saved choice is
+  // restored; a first visit starts with none.
+  const [option, setOption] = useState<PaymentOptionKey | null>(
+    (data.session.paymentOption as PaymentOptionKey) || null,
   );
   const needsPortal = !data.host.hasPortal;
   const cardReady = data.host.cardOnFile || data.progress.payment_ready;
@@ -716,10 +759,17 @@ function PaymentStep({
           ))}
         </div>
 
+        {!cardReady && !option && (
+          <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-900">
+            Choose one of the options above to continue. Section 6.2 requires you to select a
+            payment option — we don&apos;t pick one for you.
+          </p>
+        )}
+
         {!cardReady && preview && (
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || !option}
             onClick={() => void onPost({ action: "setup_payment", paymentOption: option })}
             className="mt-5 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-violet-600 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
           >
@@ -730,7 +780,7 @@ function PaymentStep({
         {!cardReady && !preview && !embed && (
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || !option}
             onClick={() => void openEmbed()}
             className="mt-5 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-violet-600 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
           >

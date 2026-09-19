@@ -42,6 +42,21 @@ export function requestContext(req: Request): RequestContext {
   };
 }
 
+/**
+ * Authoritative entity type for a session. Read from the submission row the
+ * Claim flow (or the admin flow) wrote — NEVER from the request body, since
+ * that would let a client send "individual" to skip the guarantee.
+ */
+export async function resolveEntityType(supabase: Admin, session: Row): Promise<"individual" | "entity"> {
+  if (!session.submission_id) return "individual";
+  const { data } = await supabase
+    .from("host_onboarding_submissions")
+    .select("entity_type")
+    .eq("id", session.submission_id as string)
+    .maybeSingle();
+  return data?.entity_type === "entity" ? "entity" : "individual";
+}
+
 export function validateSignature(input: {
   signerName: string;
   agreedToTerms: unknown;
@@ -50,6 +65,10 @@ export function validateSignature(input: {
   acknowledgedArbitration: unknown;
   signatureDataUrl: string;
   pdfBase64?: string;
+  /** Resolved server-side from the submission, not from the request body. */
+  requiresPersonalGuarantee?: boolean;
+  personalGuaranteeAccepted?: unknown;
+  guarantorName?: string;
 }): string | null {
   if (input.signerName.length < 2) return "Please enter your full legal name to sign.";
   if (input.agreedToTerms !== true) return "Please confirm you've read and agree to the agreement.";
@@ -61,6 +80,18 @@ export function validateSignature(input: {
   }
   if (input.acknowledgedArbitration !== true) {
     return "Please acknowledge the arbitration provision.";
+  }
+  if (input.requiresPersonalGuarantee) {
+    if (input.personalGuaranteeAccepted !== true) {
+      return "A business entity Host must accept the Personal Guarantee to sign.";
+    }
+    if (!input.guarantorName || input.guarantorName.trim().length < 2) {
+      return "Enter the guarantor's full legal name.";
+    }
+  } else if (input.personalGuaranteeAccepted === true) {
+    // An individual signer is already personally bound; the block is never
+    // presented to them, so accepting one means the client sent stale state.
+    return "A Personal Guarantee does not apply to an individual Host.";
   }
   if (!/^data:image\/png;base64,/.test(input.signatureDataUrl)) {
     return "Please draw your signature in the box above.";
@@ -82,6 +113,8 @@ export async function signHostAgreement(
     signerEmail: string;
     entityType?: string | null;
     entityName?: string | null;
+    requiresPersonalGuarantee?: boolean;
+    guarantorName?: string | null;
     signatureDataUrl: string;
     pdfBase64?: string;
     ctx: RequestContext;
@@ -192,6 +225,10 @@ export async function signHostAgreement(
       acknowledged_non_circumvention: true,
       acknowledged_chargebacks: true,
       acknowledged_arbitration: true,
+      personal_guarantee_required: !!input.requiresPersonalGuarantee,
+      personal_guarantee_accepted: !!input.requiresPersonalGuarantee,
+      guarantor_name: input.requiresPersonalGuarantee ? input.guarantorName || input.signerName : null,
+      guarantor_signed_at: input.requiresPersonalGuarantee ? now : null,
       ip: input.ctx.ip,
       user_agent: input.ctx.userAgent,
     })

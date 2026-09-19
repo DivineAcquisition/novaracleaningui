@@ -80,6 +80,46 @@ export const PAYMENT_OPTIONS: Record<
 export const PAY_AFTER_DISCRETION =
   "Pay After is available at the Company's discretion to Hosts in good standing.";
 
+// ─── Personal Guarantee (entity signers only) ──────────────────────────────
+//
+// Presented at signature ONLY when the Host is signing as a business entity.
+// An individual Host is already personally bound, so the block does not
+// appear at all for them — showing it would be legally meaningless.
+//
+// !! CITATION MISMATCH — needs a decision, see the flow spec. The spec cites
+// "Section 6.10 / Section 15" for the guarantee. The Agreement text in
+// AGREEMENT_CLAUSES below has no Section 6.10 (Section 6 runs 6.1–6.3), and
+// Section 15 is Dispute Resolution and Arbitration, not a guarantee. The
+// guarantee itself is real — the executed packet carries a Guarantor role
+// (see lib/docuseal.ts) — but the clause is not in this document's body.
+// Resolve by EITHER adding the guarantee clause to AGREEMENT_CLAUSES and
+// numbering it, OR correcting the citation below to the section that
+// actually contains it. Changing this one constant updates every place the
+// citation is rendered.
+export const PERSONAL_GUARANTEE_CITATION = "Sections 6.10 and 15";
+
+/** §6.10 / §15 — the guarantee block is presented only to an entity signer. */
+export function requiresPersonalGuarantee(entityType: string | null | undefined): boolean {
+  return entityType === "entity";
+}
+
+export const PERSONAL_GUARANTEE = {
+  key: "personal_guarantee" as const,
+  label: `Personal Guarantee (${PERSONAL_GUARANTEE_CITATION})`,
+  intro:
+    "You told us the Host signing this Agreement is a business entity. A " +
+    "personal guarantee is part of signing as an entity.",
+  text:
+    "I personally and unconditionally guarantee the entity Host's payment " +
+    "obligations under this Agreement, including per-turnover fees, " +
+    "cancellation fees, and amounts owed after a chargeback. This guarantee " +
+    "is continuing, applies to every Property registered under this " +
+    "Agreement now or later, and survives termination. The Company may " +
+    "enforce it against me directly without first proceeding against the " +
+    "entity.",
+  nameLabel: "Guarantor's full legal name",
+};
+
 export const AGREEMENT_CLAUSES: Array<[string, string]> = [
   [
     "1. Parties and Appointment",
