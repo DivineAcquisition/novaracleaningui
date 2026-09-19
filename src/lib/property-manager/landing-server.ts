@@ -287,9 +287,10 @@ async function ensurePricedLandingUnits(
     .from("property_manager_units")
     .select(UNIT_COLS)
     .eq("pm_account_id", accountId)
-    .neq("status", "inactive");
+    .neq("status", "inactive")
+    .order("created_at", { ascending: true });
   const rows = (existing || []) as Row[];
-  const landing = rows.filter((u) => String(u.special_notes || "").includes(LANDING_UNIT_TAG));
+  const unusedLanding = rows.filter((u) => String(u.special_notes || "").includes(LANDING_UNIT_TAG));
   const other = rows.filter((u) => !String(u.special_notes || "").includes(LANDING_UNIT_TAG));
   const otherUnpriced = other.filter(isUnpriced);
   if (otherUnpriced.length > 0) {
@@ -301,11 +302,18 @@ async function ensurePricedLandingUnits(
     };
   }
 
+  const takeLandingUnit = (unit: EstimateUnitInput, index: number): Row | undefined => {
+    const label = (unit.label || `Unit ${index + 1}`).trim().toLowerCase();
+    const byLabel = unusedLanding.findIndex((u) => String(u.unit_label || "").trim().toLowerCase() === label);
+    if (byLabel >= 0) return unusedLanding.splice(byLabel, 1)[0];
+    return unusedLanding.shift();
+  };
+
   for (let i = 0; i < estimate.units.length; i++) {
     const unit = estimate.units[i];
     const address = unitAddress(unit, i);
     const notes = landingNote(unit, i, lockedUntil);
-    const prior = landing[i];
+    const prior = takeLandingUnit(unit, i);
     if (prior?.id) {
       const computed = ctx
         ? await computeStandingRates(supabase, ctx, {
