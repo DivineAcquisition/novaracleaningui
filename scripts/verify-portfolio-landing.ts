@@ -222,7 +222,8 @@ check("Get Started calls startPmOnboardingSession", files.landingServer.includes
 check("Get Started registers units through registerUnit", files.landingServer.includes("registerUnit"), true);
 check("unusual path does not mint onboarding", files.callApi.includes("bookCallPortfolio") && !files.callApi.includes("startPmOnboardingSession"), true);
 check("the page labels the number as an estimate", files.view.includes("not a final standing rate"), true);
-check("Get Started carries units into onboarding", files.view.includes("Units carrying into the registry"), true);
+check("Get Started carries units into onboarding", files.view.includes("These units carry into the registry"), true);
+check("calculator asks how many units", files.view.includes("How many units?"), true);
 check("footer restates Get Started and Book a Call", files.view.includes("Ready to stop re-quoting") && files.view.includes("Book a Call"), true);
 check(
   "the public page does not import the admin client",
