@@ -641,6 +641,8 @@ export default function PortfolioLanding() {
                 <p className="mx-auto mt-3 max-w-2xl text-muted-foreground">{CALENDAR_BANNER.body}</p>
               </div>
 
+              <PortfolioCalEmbed name={contactName} email={email} notes={notes} />
+
               {panel === "call" && !callDone && (
                 <Card>
                   <CardContent className="space-y-5 p-6 md:p-8">
@@ -691,8 +693,6 @@ export default function PortfolioLanding() {
                   </CardContent>
                 </Card>
               )}
-
-              <PortfolioCalEmbed name={contactName} email={email} notes={notes} />
             </div>
           </div>
         </section>
