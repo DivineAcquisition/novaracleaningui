@@ -253,6 +253,12 @@ export function servedPricingZones(zones: ZoneInfo[]): ZoneInfo[] {
   return (zones || []).filter((z) => z.status !== "not_served");
 }
 
+/** Default (or first served) zone — used when a typical unit has no ZIP yet. */
+export function defaultServedZone(zones: ZoneInfo[]): ZoneInfo | null {
+  const served = servedPricingZones(zones);
+  return served.find((z) => z.is_default) || served[0] || null;
+}
+
 /**
  * Price one typical unit at an already-resolved zone. Same engine, same
  * demand-off standing-rate rules as registration — the landing-page estimate
@@ -365,6 +371,36 @@ export async function computeStandingRates(
   input: StandingRateInput,
 ): Promise<StandingRateResult> {
   const zip = String(input.zipCode || "").trim() || zipFromAddress(input.address);
+  const hasZip = /^\d{5}$/.test(zip || "");
+
+  // A missing ZIP is not "unserved." Typical units still auto-price at the
+  // default served zone so Claim can lock a standing rate before onboarding
+  // confirms the address. An explicit unserved ZIP still routes for review.
+  if (!hasZip) {
+    const review = reviewDecisionForUnit({
+      sqft: input.sqft,
+      bedrooms: input.bedrooms,
+      flaggedNonStandard: input.flaggedNonStandard,
+      bounds: ctx.bounds,
+    });
+    if (review.needsReview && review.reason) {
+      return { ok: false, reason: review.reason, message: review.message || "This unit needs review." };
+    }
+    const zone = defaultServedZone(ctx.zones);
+    if (!zone) {
+      return {
+        ok: false,
+        reason: "pricing_unavailable",
+        message: "We couldn't price this unit automatically. Our team will set its rates.",
+      };
+    }
+    return standingRatesAtZone(
+      ctx,
+      { sqft: input.sqft, unitCount: input.unitCount, zipCode: zip, zoneDefaulted: true },
+      zone,
+    );
+  }
+
   const zoneResolution = await resolveUnitZone(supabase, zip, ctx.zones);
 
   const review = reviewDecisionForUnit({

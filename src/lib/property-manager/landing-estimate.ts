@@ -9,6 +9,7 @@
 import { PM_SERVICE_TYPES, resolveVolumeDiscount, type PmServiceType } from "./pricing";
 import {
   ESTIMATE_DISCLAIMER,
+  PM_QUOTE_LOCK_HOURS,
   expandEstimateUnits,
   portfolioCtaFor,
   type PortfolioEstimateInput,
@@ -122,12 +123,13 @@ export function estimatePortfolioFromContext(
       discount,
       ranges: [],
       unitEstimates: [],
+      lockHours: PM_QUOTE_LOCK_HOURS,
       reasons: split.reasons,
       message: "Add at least one unit to see an estimate.",
     };
   }
 
-  if (split.cta === "get_started" && !pricedAny) {
+  if (split.cta === "claim" && !pricedAny) {
     return {
       ok: false,
       cta: "book_call",
@@ -138,6 +140,7 @@ export function estimatePortfolioFromContext(
       discount,
       ranges: [],
       unitEstimates,
+      lockHours: PM_QUOTE_LOCK_HOURS,
       reasons: [
         ...split.reasons,
         {
@@ -163,8 +166,9 @@ export function estimatePortfolioFromContext(
       maxCents: portfolioRange[service].maxCents,
     })),
     unitEstimates,
+    lockHours: PM_QUOTE_LOCK_HOURS,
     reasons: split.reasons,
-    message: engineFailed && split.cta === "get_started"
+    message: engineFailed && split.cta === "claim"
       ? "Some units could not be priced; the range covers the ones that could."
       : undefined,
   };

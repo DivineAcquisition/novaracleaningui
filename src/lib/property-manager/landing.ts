@@ -1,13 +1,15 @@
 // ─── Property-manager public landing: estimate + CTA split ─────────────────
 //
 // PURE module (client-safe). The /portfolio page is an acquisition front
-// door, not a second pricing or onboarding system. Copy, calculator shape,
-// and the typical/unusual CTA live here so the page, the APIs, and
-// `npm run portfolio-landing:verify` cannot disagree. Engine math lives in
-// `landing-estimate.ts` so this file never imports the admin client.
+// door for everyone renting out long-term property — one unit through a
+// full portfolio. Copy, calculator shape, and the typical/unusual CTA live
+// here so the page, the APIs, and `npm run portfolio-landing:verify` cannot
+// disagree. Engine math lives in `landing-estimate.ts` so this file never
+// imports the admin client.
 //
-// Final standing rates are confirmed at onboarding once units are actually
-// registered. Everything shown here is labeled as an estimate.
+// Typical units Claim This Rate into existing onboarding. Unusual ones
+// Book a Call. Final standing rates are confirmed at onboarding. Everything
+// shown here is labeled as an estimate.
 
 import {
   DEFAULT_AUTO_PRICE_BOUNDS,
@@ -27,40 +29,50 @@ export const PORTFOLIO_URL = `${PORTFOLIO_ORIGIN}${PORTFOLIO_PATH}`;
 export const ESTIMATE_DISCLAIMER =
   "This is an estimate, not a final standing rate. Rates are set by Novara " +
   "from each unit's size, bedroom count, and service zone once the unit is " +
-  "registered at onboarding. A unit materially outside our normal residential " +
-  "size range, or one you flag as non-standard, is priced by a person before " +
-  "it becomes bookable.";
+  "registered at onboarding. The number you claim is locked for 48 hours and " +
+  "confirmed on the Unit Registry page. A unit materially outside our normal " +
+  "residential size range, or one you flag as non-standard, is priced by a " +
+  "person before it becomes bookable.";
+
+/** Same integrity window as dynamic-pricing `quote_lock_hours` (shipped default). */
+export const PM_QUOTE_LOCK_HOURS = 48;
+
+/** Marks units minted from this page so a re-claim updates them instead of duplicating. */
+export const LANDING_UNIT_TAG = "portfolio-landing";
+
+/** Existing discovery-call calendar — same 15-minute slot as the rest of intake. */
+export const PORTFOLIO_CAL_LINK = "malik-sannie-clwphb/15min";
+export const PORTFOLIO_CAL_ORIGIN = "https://app.cal.com";
+export const PORTFOLIO_CAL_NAMESPACE = "portfolio-15min";
+
+export const HERO_HEADLINE =
+  "Reliable move-in, move-out, and standard cleaning for your rental properties — whether it's one unit or fifty.";
 
 export const VALUE_STACK = [
   {
     key: "standing",
-    title: "Standing rates per unit",
-    body: "Set once at registration from the same residential engine we use everywhere else. No quote cycle every time a tenant turns over.",
-  },
-  {
-    key: "invoice",
-    title: "One consolidated invoice",
-    body: "One bill per period across the whole portfolio, itemized by unit — not a separate invoice per job.",
+    title: "Standing rate per unit, set once",
+    body: "True starting at unit one. No re-quoting every turnover — Move-Out, Move-In, and Standard are priced once from the same residential engine we use everywhere else.",
   },
   {
     key: "photos",
-    title: "Before/after photo documentation",
-    body: "Every turnover is photographed. Useful when you're deciding a tenant deposit, not reconstructing what the unit looked like.",
+    title: "Before/after photos on every clean",
+    body: "Useful for tenant deposit determinations at any scale — a record of the unit as we left it, not a reconstruction later.",
   },
   {
     key: "volume",
-    title: "Portfolio pricing",
-    body: "The more units on the registry, the better the rate. The discount is already in the standing number you book against.",
+    title: "Portfolio pricing that improves as you add units",
+    body: "The calculator updates the tier live as the unit count changes. The discount is already in the standing number you book against — not claimed abstractly.",
   },
   {
-    key: "contact",
-    title: "One point of contact",
-    body: "One crew relationship and one portal. Not juggling individual cleaners across properties.",
+    key: "invoice",
+    title: "One consolidated invoice per period, itemized by unit",
+    body: "As your portfolio grows, this is where it pays off: one bill covering every turnover, not a separate invoice per job.",
   },
 ] as const;
 
 export type PortfolioMode = "uniform" | "mixed";
-export type PortfolioCta = "get_started" | "book_call";
+export type PortfolioCta = "claim" | "book_call";
 
 export interface EstimateUnitInput {
   label?: string | null;
@@ -117,6 +129,7 @@ export interface PortfolioEstimateResult {
   discount: ResolvedDiscount;
   ranges: ServiceRange[];
   unitEstimates: UnitEstimate[];
+  lockHours: number;
   reasons: Array<{ reason: UnitReviewReason | "flagged_atypical"; message: string }>;
   message?: string;
 }
@@ -234,7 +247,7 @@ export function portfolioCtaFor(
   }
 
   const unusual = opts.flaggedAtypical || reviews.some((r) => r.needsReview);
-  return { cta: unusual ? "book_call" : "get_started", reviews, reasons };
+  return { cta: unusual ? "book_call" : "claim", reviews, reasons };
 }
 
 export function formatRange(minCents: number, maxCents: number): string {

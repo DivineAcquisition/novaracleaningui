@@ -1,22 +1,28 @@
-// ─── Server: public portfolio landing estimate + conversion ────────────────
+// ─── Server: public portfolio landing estimate + Claim / Book a Call ───────
 //
-// The page never prices in the browser. Estimate, Get Started, and Book a
+// The page never prices in the browser. Estimate, Claim This Rate, and Book a
 // Call all come through here so they share the live residential engine, the
 // existing typical/unusual split, the unit registry, and the tokenized
-// onboarding session.
+// onboarding session. Claiming captures name, email, and phone only.
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import { onboardingUrl, PM_ONBOARDING_PATH } from "@/lib/property-manager/onboarding/session";
-import { startPmOnboardingSession } from "@/lib/property-manager/onboarding/admin";
+import { sendPmOnboardingLink, startPmOnboardingSession } from "@/lib/property-manager/onboarding/admin";
 import { requestIsLocal } from "@/lib/partner-portal/origins";
-import { notifyPmAdmin, registerUnit } from "@/lib/property-manager/registry";
+import { notifyPmAdmin, registerUnit, UNIT_COLS } from "@/lib/property-manager/registry";
+import { PM_SERVICE_TYPES } from "@/lib/property-manager/pricing";
 import type { DynamicPricingConfig, ZoneInfo } from "@/lib/dynamic-pricing";
 import {
+  ESTIMATE_DISCLAIMER,
+  LANDING_UNIT_TAG,
+  PM_QUOTE_LOCK_HOURS,
+  PORTFOLIO_CAL_LINK,
+  PORTFOLIO_PATH,
+  PORTFOLIO_URL,
   expandEstimateUnits,
   portfolioCtaFor,
-  ESTIMATE_DISCLAIMER,
   type EstimateUnitInput,
   type PortfolioCta,
   type PortfolioEstimateInput,
@@ -25,8 +31,10 @@ import {
 import { estimatePortfolioFromContext } from "./landing-estimate";
 import { DEFAULT_AUTO_PRICE_BOUNDS, DEFAULT_VOLUME_DISCOUNTS } from "./pricing";
 import {
+  computeStandingRates,
   loadPmPricingContext,
   loadPmSettings,
+  ratesToColumns,
   resolveUnitZone,
   type PmPricingContext,
 } from "./pricing-server";
@@ -114,6 +122,7 @@ export async function estimateLandingPortfolio(
       discount: { percent: 0, label: null, unitCount: units.length, unitsToNextTier: null, nextPercent: null },
       ranges: [],
       unitEstimates: [],
+      lockHours: PM_QUOTE_LOCK_HOURS,
       reasons: split.reasons,
       message: "Live pricing isn't available right now. Book a call and we'll price the portfolio.",
     };
@@ -163,13 +172,12 @@ export function landingOnboardingUrl(req: Request, token: string): string {
   return onboardingUrl(token);
 }
 
-export function discoveryCalendarUrl(raw: Record<string, unknown> | null | undefined): string | null {
+export function discoveryCalendarUrl(raw: Record<string, unknown> | null | undefined): string {
   const fromSettings = clip(raw?.discovery_calendar_url, 400);
   const fromEnv = clip(process.env.NEXT_PUBLIC_PM_DISCOVERY_CALENDAR_URL, 400);
   const url = fromSettings || fromEnv;
-  if (!url) return null;
-  if (!/^https:\/\//i.test(url)) return null;
-  return url;
+  if (url && /^https:\/\//i.test(url)) return url;
+  return `https://cal.com/${PORTFOLIO_CAL_LINK}`;
 }
 
 async function upsertPmAccount(
@@ -221,15 +229,14 @@ async function upsertPmAccount(
 }
 
 function contactFrom(body: Record<string, unknown>) {
-  const companyName = clip(body.companyName || body.company, 200);
-  const contactName = clip(body.contactName || body.name, 120);
+  const contactName = clip(body.contactName || body.name || body.fullName, 120);
   const email = clip(body.email, 200).toLowerCase();
   const phone = clip(body.phone, 40).replace(/\D/g, "");
+  const companyName = clip(body.companyName || body.company, 200) || contactName;
   return { companyName, contactName, email, phone };
 }
 
-function contactError(c: { companyName: string; contactName: string; email: string; phone: string }): string | null {
-  if (c.companyName.length < 2) return "Add the management company or owner name.";
+function contactError(c: { contactName: string; email: string; phone: string }): string | null {
   if (c.contactName.length < 2) return "Add your name.";
   if (!emailOk(c.email)) return "A valid email is required.";
   if (c.phone.length < 10) return "A valid phone number is required.";
@@ -245,72 +252,106 @@ function unitAddress(unit: EstimateUnitInput, index: number): string {
   return label.length >= 5 ? label : `${label} — address at onboarding`;
 }
 
-export async function startTypicalPortfolio(
-  supabase: Admin,
-  req: Request,
-  body: Record<string, unknown>,
-): Promise<{
-  ok: boolean;
-  status: number;
-  cta?: PortfolioCta;
-  message?: string;
-  onboardingUrl?: string;
-  sessionId?: string;
-  unitCount?: number;
-  estimate?: PortfolioEstimateResult;
-}> {
-  const contact = contactFrom(body);
-  const invalid = contactError(contact);
-  if (invalid) return { ok: false, status: 400, message: invalid };
+function quoteLockedUntilIso(): string {
+  return new Date(Date.now() + PM_QUOTE_LOCK_HOURS * 3600_000).toISOString();
+}
 
-  const input = parseEstimateInput(body);
-  const estimate = await estimateLandingPortfolio(supabase, input);
-  if (estimate.cta !== "get_started") {
+function landingNote(unit: EstimateUnitInput, index: number, lockedUntil: string): string {
+  const size = [
+    unit.bedrooms != null ? `${unit.bedrooms} bd` : null,
+    unit.sqft ? `${unit.sqft} sqft` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return [
+    LANDING_UNIT_TAG,
+    `Quoted from ${PORTFOLIO_URL}.`,
+    size ? `Estimate (${size}).` : "Estimate from calculator.",
+    `Claimed standing rates locked until ${lockedUntil} (${PM_QUOTE_LOCK_HOURS}h window).`,
+    `Label: ${unit.label || `Unit ${index + 1}`}.`,
+  ].join(" ");
+}
+
+function isUnpriced(unit: Row): boolean {
+  return PM_SERVICE_TYPES.some((s) => !(Number(unit[`standing_${s}_cents`]) > 0));
+}
+
+async function ensurePricedLandingUnits(
+  supabase: Admin,
+  accountId: string,
+  estimate: PortfolioEstimateResult,
+  lockedUntil: string,
+): Promise<{ ok: true } | { ok: false; status: number; message: string; cta?: PortfolioCta }> {
+  const ctx = await loadPmPricingContext(supabase);
+  const { data: existing } = await supabase
+    .from("property_manager_units")
+    .select(UNIT_COLS)
+    .eq("pm_account_id", accountId)
+    .neq("status", "inactive");
+  const rows = (existing || []) as Row[];
+  const landing = rows.filter((u) => String(u.special_notes || "").includes(LANDING_UNIT_TAG));
+  const other = rows.filter((u) => !String(u.special_notes || "").includes(LANDING_UNIT_TAG));
+  const otherUnpriced = other.filter(isUnpriced);
+  if (otherUnpriced.length > 0) {
     return {
       ok: false,
       status: 409,
       cta: "book_call",
-      estimate,
-      message: "This portfolio needs a call rather than instant onboarding.",
+      message: "This account already has unpriced units — book a call and we'll finish the schedule.",
     };
   }
 
-  const missingZip = estimate.units.some((u) => !/^\d{5}$/.test(String(u.zipCode || "")));
-  if (missingZip) {
-    return {
-      ok: false,
-      status: 400,
-      message: "Add a 5-digit ZIP for the portfolio (or each unit) so we can set the service zone.",
-    };
-  }
-
-  const account = await upsertPmAccount(supabase, {
-    ...contact,
-    notes: `Landing estimate: ${estimate.unitCount} units. ${estimate.disclaimer}`,
-  });
-  if (account.ok === false) return { ok: false, status: account.status, message: account.message };
-
-  const { data: existingUnits } = await supabase
-    .from("property_manager_units")
-    .select("address")
-    .eq("pm_account_id", account.id)
-    .neq("status", "inactive");
-  const seen = new Set(
-    ((existingUnits || []) as Array<{ address?: string | null }>).map((u) =>
-      clip(u.address, 300).toLowerCase(),
-    ),
-  );
-
-  const ctx = await loadPmPricingContext(supabase);
   for (let i = 0; i < estimate.units.length; i++) {
     const unit = estimate.units[i];
     const address = unitAddress(unit, i);
-    if (seen.has(address.toLowerCase())) continue;
-    seen.add(address.toLowerCase());
+    const notes = landingNote(unit, i, lockedUntil);
+    const prior = landing[i];
+    if (prior?.id) {
+      const computed = ctx
+        ? await computeStandingRates(supabase, ctx, {
+            address,
+            zipCode: unit.zipCode,
+            sqft: unit.sqft,
+            bedrooms: unit.bedrooms,
+            bathrooms: unit.bathrooms,
+            flaggedNonStandard: !!unit.flaggedNonStandard,
+            unitCount: estimate.unitCount,
+          })
+        : { ok: false as const, message: "Pricing tables unavailable." };
+      if (!computed.ok || !("rates" in computed) || !computed.rates) {
+        return {
+          ok: false,
+          status: 409,
+          cta: "book_call",
+          message: computed.message || "A unit in this portfolio needs review — book a call instead.",
+        };
+      }
+      const { error } = await supabase
+        .from("property_manager_units")
+        .update({
+          unit_label: unit.label || `Unit ${i + 1}`,
+          address,
+          city: unit.city || null,
+          zip_code: unit.zipCode || null,
+          state: unit.state || null,
+          sqft: unit.sqft,
+          bedrooms: unit.bedrooms,
+          bathrooms: unit.bathrooms,
+          flagged_non_standard: !!unit.flaggedNonStandard,
+          special_notes: notes,
+          ...ratesToColumns(computed.rates),
+          status: "active",
+          review_reason: null,
+        })
+        .eq("id", prior.id);
+      if (error) return { ok: false, status: 400, message: error.message };
+      continue;
+    }
+
     const registered = await registerUnit(
       supabase,
       {
-        pmAccountId: account.id,
+        pmAccountId: accountId,
         unitLabel: unit.label,
         address,
         city: unit.city,
@@ -320,6 +361,7 @@ export async function startTypicalPortfolio(
         bedrooms: unit.bedrooms,
         bathrooms: unit.bathrooms,
         flaggedNonStandard: !!unit.flaggedNonStandard,
+        notes,
         source: "onboarding",
         actorName: "portfolio-landing",
       },
@@ -338,31 +380,124 @@ export async function startTypicalPortfolio(
     }
   }
 
+  return { ok: true };
+}
+
+export async function claimTypicalPortfolio(
+  supabase: Admin,
+  req: Request,
+  body: Record<string, unknown>,
+): Promise<{
+  ok: boolean;
+  status: number;
+  cta?: PortfolioCta;
+  message?: string;
+  onboardingUrl?: string;
+  sessionId?: string;
+  token?: string;
+  emailed?: boolean;
+  texted?: boolean;
+  lockedUntil?: string;
+  unitCount?: number;
+  estimate?: PortfolioEstimateResult;
+}> {
+  const contact = contactFrom(body);
+  const invalid = contactError(contact);
+  if (invalid) return { ok: false, status: 400, message: invalid };
+
+  const input = parseEstimateInput(body);
+  const estimate = await estimateLandingPortfolio(supabase, input);
+  if (estimate.cta !== "claim" || !estimate.ok) {
+    return {
+      ok: false,
+      status: 409,
+      cta: "book_call",
+      estimate,
+      message: estimate.reasons[0]?.message || "This portfolio needs a call rather than instant onboarding.",
+    };
+  }
+
+  const lockedUntil = quoteLockedUntilIso();
+  const account = await upsertPmAccount(supabase, {
+    ...contact,
+    notes: `Landing claim from ${PORTFOLIO_URL}: ${estimate.unitCount} units. Rates locked until ${lockedUntil}. ${estimate.disclaimer}`,
+  });
+  if (account.ok === false) return { ok: false, status: account.status, message: account.message };
+
+  const priced = await ensurePricedLandingUnits(supabase, account.id, estimate, lockedUntil);
+  if (priced.ok === false) {
+    return { ok: false, status: priced.status, cta: priced.cta, message: priced.message, estimate };
+  }
+
   const started = await startPmOnboardingSession(supabase, {
     pmAccountId: account.id,
     actorName: "portfolio-landing",
     recipientName: contact.contactName,
     recipientEmail: contact.email,
     recipientPhone: contact.phone,
-    send: true,
+    send: false,
   });
   if (!started.ok || !started.token) {
     return {
       ok: false,
       status: started.status || 400,
       message: started.message || "Could not open onboarding.",
+      estimate,
     };
   }
+
+  const continueUrl = landingOnboardingUrl(req, started.token);
+  const sent = await sendPmOnboardingLink(supabase, {
+    sessionId: String(started.sessionId),
+    pmAccountId: account.id,
+    companyName: contact.companyName,
+    recipientName: contact.contactName,
+    recipientEmail: contact.email,
+    recipientPhone: contact.phone,
+    link: continueUrl,
+    unitCount: started.unitCount,
+    discountPercent: estimate.discount.percent,
+    rateSummary: estimate.units
+      .slice(0, 6)
+      .map((u, i) => `${u.label || `Unit ${i + 1}`} (locked ${PM_QUOTE_LOCK_HOURS}h)`)
+      .join("; "),
+  });
+
+  await supabase.from("events").insert({
+    event_type: "property_manager.landing.claimed",
+    source: "portfolio-landing",
+    summary: `${contact.contactName} claimed a rental standing rate (${estimate.unitCount} unit${estimate.unitCount === 1 ? "" : "s"}).`,
+    data: {
+      pm_account_id: account.id,
+      session_id: started.sessionId,
+      unit_count: estimate.unitCount,
+      quote_locked_until: lockedUntil,
+      path: PORTFOLIO_PATH,
+    },
+  });
 
   return {
     ok: true,
     status: 200,
-    cta: "get_started",
-    onboardingUrl: landingOnboardingUrl(req, started.token),
+    cta: "claim",
+    onboardingUrl: continueUrl,
     sessionId: started.sessionId,
+    token: started.token,
+    emailed: sent.emailed,
+    texted: sent.texted,
+    lockedUntil,
     unitCount: started.unitCount,
     estimate,
   };
+}
+
+/** @deprecated Use claimTypicalPortfolio — kept so older /start callers still convert. */
+export async function startTypicalPortfolio(
+  supabase: Admin,
+  req: Request,
+  body: Record<string, unknown>,
+) {
+  return claimTypicalPortfolio(supabase, req, body);
 }
 
 export async function bookCallPortfolio(
@@ -386,7 +521,7 @@ export async function bookCallPortfolio(
   const summaryUnits = estimate.units
     .slice(0, 8)
     .map((u, i) => {
-      const size = [u.bedrooms ? `${u.bedrooms} bd` : null, u.sqft ? `${u.sqft} sqft` : null]
+      const size = [u.bedrooms != null ? `${u.bedrooms} bd` : null, u.sqft ? `${u.sqft} sqft` : null]
         .filter(Boolean)
         .join(" · ");
       return `${u.label || `Unit ${i + 1}`}${size ? ` (${size})` : ""}`;
@@ -396,7 +531,7 @@ export async function bookCallPortfolio(
   const account = await upsertPmAccount(supabase, {
     ...contact,
     notes: [
-      "Book-a-call from try.novaracleaning.com/portfolio.",
+      `Book-a-call from ${PORTFOLIO_URL}.`,
       `${estimate.unitCount} units.`,
       estimate.reasons.map((r) => r.message).join(" "),
       notes,
@@ -423,15 +558,15 @@ export async function bookCallPortfolio(
     email: contact.email,
     phone: contact.phone,
     source: "portfolio_landing",
-    channel: "try.novaracleaning.com/portfolio",
+    channel: PORTFOLIO_URL,
     status: "new",
     lead_score: estimate.unitCount >= 20 ? "hot" : "warm",
     service_type: "property_manager",
-    property_type: "property_manager",
+    property_type: "rental",
     sqft: estimate.units[0]?.sqft ?? null,
     urgency: timing || null,
     notes: [
-      `Company: ${contact.companyName}`,
+      `Name: ${contact.contactName}`,
       `Units: ${estimate.unitCount}`,
       summaryUnits ? `Preview: ${summaryUnits}` : null,
       estimate.reasons.map((r) => r.message).join(" ") || null,
@@ -453,19 +588,19 @@ export async function bookCallPortfolio(
   const calendarUrl = discoveryCalendarUrl(settings.raw);
 
   await notifyPmAdmin(supabase, {
-    subject: `PM discovery call — ${contact.companyName}`,
+    subject: `Rental discovery call — ${contact.contactName}`,
     html: [
-      `<p><strong>${escapeHtml(contact.contactName)}</strong> (${escapeHtml(contact.companyName)}) asked to book a call from the portfolio landing page.</p>`,
+      `<p><strong>${escapeHtml(contact.contactName)}</strong> asked to book a call from the rental landing page.</p>`,
       `<p>${escapeHtml(contact.email)} · ${escapeHtml(contact.phone)}</p>`,
       `<p>${estimate.unitCount} unit${estimate.unitCount === 1 ? "" : "s"}. ${escapeHtml(
-        estimate.reasons.map((r) => r.message).join(" ") || "Unusual or large portfolio.",
+        estimate.reasons.map((r) => r.message).join(" ") || "Unusual or non-standard units.",
       )}</p>`,
       summaryUnits ? `<p>${escapeHtml(summaryUnits)}</p>` : "",
       notes ? `<p>${escapeHtml(notes)}</p>` : "",
       `<p>Review in Admin → Commercial → Portfolio. Do not auto-send onboarding until the units are priced.</p>`,
     ].join(""),
     eventType: "property_manager.landing.call_requested",
-    summary: `${contact.contactName} booked a PM discovery call (${estimate.unitCount} units).`,
+    summary: `${contact.contactName} booked a rental discovery call (${estimate.unitCount} units).`,
     data: {
       pm_account_id: account.id,
       lead_id: leadId,
@@ -479,9 +614,7 @@ export async function bookCallPortfolio(
     status: 200,
     calendarUrl,
     leadId,
-    message: calendarUrl
-      ? "Pick a time below — we'll review the portfolio before onboarding."
-      : "Request received. We'll reach out to schedule a call, usually within one business day.",
+    message: "Pick a time below — we'll review the units before onboarding.",
   };
 }
 
