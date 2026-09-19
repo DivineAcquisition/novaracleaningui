@@ -960,8 +960,9 @@ function EntityFields({
       </div>
       {entityType === "entity" && (
         <div>
-          <Label>Entity / business name</Label>
+          <Label htmlFor="str-entity-name">Entity / business name</Label>
           <Input
+            id="str-entity-name"
             className="mt-1"
             value={entityName}
             onChange={(e) => setEntityName(e.target.value)}
