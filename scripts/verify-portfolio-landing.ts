@@ -1,10 +1,11 @@
-// Offline verification of the public PM landing page.
+// Offline verification of the public rental landing page.
 //
 //   • /portfolio is public on try.novaracleaning.com — no login, no VSL gate
+//   • one page, one URL, one calculator — messaging spans one unit or fifty
 //   • the estimate uses the residential standing-rate engine, not a side table
-//   • typical vs unusual is reviewDecisionForUnit, not a new unit-count cutoff
-//   • Get Started mints the existing onboarding session with units carried forward
-//   • unusual portfolios book a call instead of auto-onboarding
+//   • typical vs unusual is reviewDecisionForUnit, not a unit-count cutoff
+//   • Claim This Rate = name/email/phone, quote lock, existing onboarding
+//   • unusual units book a call instead of auto-onboarding
 //   • the estimate is labeled non-final
 //
 //   Run:  npm run portfolio-landing:verify
@@ -22,12 +23,15 @@ import {
 } from "../src/lib/property-manager/pricing";
 import {
   ESTIMATE_DISCLAIMER,
+  HERO_HEADLINE,
+  PM_QUOTE_LOCK_HOURS,
+  VALUE_STACK,
   expandEstimateUnits,
   formatRange,
   portfolioCtaFor,
 } from "../src/lib/property-manager/landing";
 import { estimatePortfolioFromContext } from "../src/lib/property-manager/landing-estimate";
-import { standingRatesAtZone, type PmPricingContext } from "../src/lib/property-manager/pricing-server";
+import { defaultServedZone, standingRatesAtZone, type PmPricingContext } from "../src/lib/property-manager/pricing-server";
 
 let failures = 0;
 function check(name: string, actual: unknown, expected: unknown): void {
@@ -72,9 +76,9 @@ check("8 standard 2BR units expand to 8 rows", typical8.length, 8);
 check("each cloned unit keeps 1200 sqft", typical8.every((u) => u.sqft === 1200), true);
 check("each cloned unit keeps 2 bedrooms", typical8.every((u) => u.bedrooms === 2), true);
 check(
-  "8 standard 2BR units are typical — Get Started",
+  "8 standard 2BR units are typical — Claim This Rate",
   portfolioCtaFor(typical8).cta,
-  "get_started",
+  "claim",
 );
 check(
   "a 9,000 sqft house is unusual — Book a Call",
@@ -97,14 +101,26 @@ check(
   "book_call",
 );
 check(
-  "the landing does not invent a unit-count cutoff: 50 typical 2BRs still Get Started",
+  "the landing does not invent a unit-count cutoff: 50 typical 2BRs still Claim",
   portfolioCtaFor(
     expandEstimateUnits({ mode: "uniform", unitCount: 50, average: { sqft: 1200, bedrooms: 2, bathrooms: 1 } }),
   ).cta,
-  "get_started",
+  "claim",
+);
+check(
+  "a 3-unit unusual set books a call (not unit count)",
+  portfolioCtaFor(
+    expandEstimateUnits({ mode: "uniform", unitCount: 3, average: { sqft: 9000, bedrooms: 6, bathrooms: 5 } }),
+  ).cta,
+  "book_call",
 );
 check(
   "reviewDecisionForUnit agrees that 1200/2BR is typical",
+  reviewDecisionForUnit({ sqft: 1200, bedrooms: 2 }).needsReview,
+  false,
+);
+check(
+  "missing ZIP is not treated as unserved",
   reviewDecisionForUnit({ sqft: 1200, bedrooms: 2 }).needsReview,
   false,
 );
@@ -147,6 +163,10 @@ check("Move-Out list matches computeQuote for that unit", engine.rates?.list.mov
 check("Move-In list matches Move-Out (same residential service)", engine.rates?.list.move_in, quoteMoveOut.totalCents);
 check("Standard list matches computeQuote", engine.rates?.list.standard, quoteStandard.totalCents);
 check("8 units sit in the 5% portfolio tier", resolveVolumeDiscount(DEFAULT_VOLUME_DISCOUNTS, 8).percent, 5);
+check("1 unit sits in the 0% standard tier", resolveVolumeDiscount(DEFAULT_VOLUME_DISCOUNTS, 1).percent, 0);
+check("5 units sit in the 5% tier", resolveVolumeDiscount(DEFAULT_VOLUME_DISCOUNTS, 5).percent, 5);
+check("20 units sit in the 12% tier", resolveVolumeDiscount(DEFAULT_VOLUME_DISCOUNTS, 20).percent, 12);
+check("50 units sit in the 15% tier", resolveVolumeDiscount(DEFAULT_VOLUME_DISCOUNTS, 50).percent, 15);
 check(
   "standing Move-Out is the list with the 5% portfolio discount",
   engine.rates?.standing.move_out,
@@ -158,10 +178,29 @@ const estimated = estimatePortfolioFromContext(ctx, {
   unitCount: 8,
   average: { sqft: 1200, bedrooms: 2, bathrooms: 1 },
 });
-check("8 × 2BR estimate is Get Started", estimated.cta, "get_started");
+check("8 × 2BR estimate is Claim", estimated.cta, "claim");
 check("8 × 2BR estimate is labeled an estimate", estimated.estimate, true);
 check("disclaimer is the non-final standing-rate language", estimated.disclaimer.includes("not a final standing rate"), true);
 check("volume tier is Portfolio 5+", estimated.discount.label, "Portfolio 5+");
+check("quote lock is the standard 48h window", estimated.lockHours, 48);
+check("PM_QUOTE_LOCK_HOURS matches dynamic-pricing snapshot", PM_QUOTE_LOCK_HOURS, snap.config.guardrails.quote_lock_hours);
+
+const oneUnit = estimatePortfolioFromContext(ctx, {
+  mode: "uniform",
+  unitCount: 1,
+  average: { sqft: 1200, bedrooms: 2, bathrooms: 1 },
+});
+check("1 typical unit still Claims (no persona switch)", oneUnit.cta, "claim");
+check("1 unit is Standard tier (0%)", oneUnit.discount.percent, 0);
+
+const fifty = estimatePortfolioFromContext(ctx, {
+  mode: "uniform",
+  unitCount: 50,
+  average: { sqft: 1200, bedrooms: 2, bathrooms: 1 },
+});
+check("50 typical 2BRs still Claim", fifty.cta, "claim");
+check("50 units are Portfolio 50+", fifty.discount.label, "Portfolio 50+");
+check("50-unit standing Move-Out is 15% off list", fifty.ranges.find((r) => r.service === "move_out")?.minCents != null, true);
 
 const zoneA = snap.zones.find((z) => z.code === "A") as ZoneInfo;
 const zoneC = snap.zones.find((z) => z.code === "C") as ZoneInfo;
@@ -187,6 +226,7 @@ check(
   ).ranges.find((r) => r.service === "move_out")?.minCents,
   engine.rates?.standing.move_out,
 );
+check("missing ZIP still has a default served zone to lock against", !!defaultServedZone(snap.zones), true);
 
 const unusualEst = estimatePortfolioFromContext(ctx, {
   mode: "uniform",
@@ -199,17 +239,26 @@ check("a 9,000 sqft unit is outside_size_bands", unusualEst.reasons.some((r) => 
 console.log("\nCopy and wiring:");
 check("range formatting uses an en-dash for a spread", formatRange(30000, 40000).includes("–"), true);
 check("disclaimer constant mentions onboarding registration", ESTIMATE_DISCLAIMER.includes("registered at onboarding"), true);
+check("disclaimer mentions the 48-hour lock", ESTIMATE_DISCLAIMER.includes("locked for 48 hours"), true);
+check("hero names one unit or fifty", HERO_HEADLINE.includes("one unit or fifty"), true);
+check("value stack includes standing rate set once", VALUE_STACK.some((v) => v.title.toLowerCase().includes("standing rate")), true);
+check("value stack includes live portfolio pricing", VALUE_STACK.some((v) => /improves as you add units/i.test(`${v.title} ${v.body}`)), true);
+check("value stack frames the invoice as paying off at scale", VALUE_STACK.some((v) => /as your portfolio grows/i.test(v.body)), true);
 
 const files: Record<string, string> = {
   middleware: readFileSync(join(ROOT, "src/middleware.ts"), "utf8"),
   page: readFileSync(join(ROOT, "src/app/portfolio/page.tsx"), "utf8"),
   view: readFileSync(join(ROOT, "src/views/portfolio/PortfolioLanding.tsx"), "utf8"),
   vsl: readFileSync(join(ROOT, "src/components/portfolio/PortfolioVsl.tsx"), "utf8"),
+  cal: readFileSync(join(ROOT, "src/components/portfolio/PortfolioCalEmbed.tsx"), "utf8"),
   estimateApi: readFileSync(join(ROOT, "src/app/api/portfolio/estimate/route.ts"), "utf8"),
+  claimApi: readFileSync(join(ROOT, "src/app/api/portfolio/claim/route.ts"), "utf8"),
   startApi: readFileSync(join(ROOT, "src/app/api/portfolio/start/route.ts"), "utf8"),
   callApi: readFileSync(join(ROOT, "src/app/api/portfolio/call/route.ts"), "utf8"),
   landingServer: readFileSync(join(ROOT, "src/lib/property-manager/landing-server.ts"), "utf8"),
   pricingServer: readFileSync(join(ROOT, "src/lib/property-manager/pricing-server.ts"), "utf8"),
+  onboardingView: readFileSync(join(ROOT, "src/views/partner/PropertyManagerOnboardingSession.tsx"), "utf8"),
+  onboardingApi: readFileSync(join(ROOT, "src/app/api/partner/property-manager-onboarding/[token]/route.ts"), "utf8"),
 };
 
 check("middleware owns /portfolio on try.*", files.middleware.includes('["/portfolio", "try"]'), true);
@@ -218,12 +267,22 @@ check("VSL plays with no email gate", files.vsl.includes("no email gate") && fil
 check("estimate API uses the landing estimator", files.estimateApi.includes("estimateLandingPortfolio"), true);
 check("estimator calls standingRatesAtZone", files.pricingServer.includes("export function standingRatesAtZone"), true);
 check("computeStandingRates delegates to standingRatesAtZone", files.pricingServer.includes("return standingRatesAtZone("), true);
-check("Get Started calls startPmOnboardingSession", files.landingServer.includes("startPmOnboardingSession"), true);
-check("Get Started registers units through registerUnit", files.landingServer.includes("registerUnit"), true);
+check("missing ZIP defaults to a served zone instead of review", files.pricingServer.includes("defaultServedZone"), true);
+check("Claim This Rate calls startPmOnboardingSession", files.landingServer.includes("startPmOnboardingSession"), true);
+check("Claim registers units through registerUnit", files.landingServer.includes("registerUnit"), true);
+check("Claim captures name/email/phone only (no company required)", files.landingServer.includes('return "Add your name."') && !files.landingServer.includes("Add the management company"), true);
+check("Claim does not require a ZIP", !files.landingServer.includes("Add a 5-digit ZIP"), true);
+check("Claim mints the session then sends the in-browser link", files.landingServer.includes("send: false") && files.landingServer.includes("sendPmOnboardingLink"), true);
 check("unusual path does not mint onboarding", files.callApi.includes("bookCallPortfolio") && !files.callApi.includes("startPmOnboardingSession"), true);
 check("the page labels the number as an estimate", files.view.includes("not a final standing rate"), true);
-check("Get Started carries units into onboarding", files.view.includes("Units carrying into the registry"), true);
-check("footer restates Get Started and Book a Call", files.view.includes("Ready to stop re-quoting") && files.view.includes("Book a Call"), true);
+check("Claim This Rate is the typical CTA", files.view.includes("Claim This Rate") && files.claimApi.includes("claimTypicalPortfolio"), true);
+check("claim form is name, email, and phone", files.view.includes("Name, email, and phone"), true);
+check("footer restates Claim / Book a Call", files.view.includes("Claim This Rate") && files.view.includes("Book a Call") && files.view.includes("Typical units?"), true);
+check("hero copy spans one unit or fifty", files.view.includes("one unit or fifty"), true);
+check("Cal.com embed is on the Book a Call path", files.cal.includes("malik-sannie-clwphb/15min") && files.view.includes("PortfolioCalEmbed"), true);
+check("volume tier is computed live from resolveVolumeDiscount", files.view.includes("resolveVolumeDiscount"), true);
+check("confirmation button is Go to My Account", files.onboardingView.includes("Go to My Account"), true);
+check("billing auto-provisions the portal", files.onboardingApi.includes("provisionPortalAfterBilling"), true);
 check(
   "the public page does not import the admin client",
   !files.view.includes("landing-server") && !files.view.includes("getAdminSupabase") && !files.page.includes("getAdminSupabase"),

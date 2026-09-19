@@ -2,10 +2,10 @@
 
 // ─── try.novaracleaning.com/portfolio ──────────────────────────────────────
 //
-// Public acquisition page for property managers and rental-portfolio owners.
-// No login. No email gate on the VSL. The calculator calls the live
-// residential standing-rate engine. Typical portfolios open the existing
-// tokenized onboarding flow with units pre-filled; unusual ones book a call.
+// One public page for everyone renting out long-term property — one unit
+// through a full portfolio. No login. No email gate on the VSL. Messaging
+// never switches persona; the calculator is what personalizes. Typical units
+// Claim This Rate into existing onboarding; unusual ones Book a Call.
 
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -22,7 +22,6 @@ import {
   RiPhoneLine,
   RiShieldCheckLine,
   RiStarLine,
-  RiUserFollowLine,
 } from "@remixicon/react";
 import { SEO } from "@/components/SEO";
 import { BrandAtmosphere } from "@/components/brand/atmosphere";
@@ -37,12 +36,19 @@ import { BorderBeam } from "@/components/magicui/border-beam";
 import { Marquee } from "@/components/magicui/marquee";
 import { Particles } from "@/components/magicui/particles";
 import { PortfolioVsl } from "@/components/portfolio/PortfolioVsl";
+import { PortfolioCalEmbed } from "@/components/portfolio/PortfolioCalEmbed";
 import { formatPhoneNumber } from "@/lib/input-formatters";
 import { BRAND } from "@/lib/brand";
 import { cn } from "@/lib/utils";
-import { PM_SERVICE_LABELS, type PmServiceType } from "@/lib/property-manager/pricing";
+import {
+  DEFAULT_VOLUME_DISCOUNTS,
+  PM_SERVICE_LABELS,
+  resolveVolumeDiscount,
+  type PmServiceType,
+} from "@/lib/property-manager/pricing";
 import {
   ESTIMATE_DISCLAIMER,
+  PM_QUOTE_LOCK_HOURS,
   PORTFOLIO_URL,
   VALUE_STACK,
   expandEstimateUnits,
@@ -58,34 +64,37 @@ const PURPLE = BRAND.gradient;
 
 const VALUE_ICONS = {
   standing: RiBuilding2Line,
-  invoice: RiFileList3Line,
   photos: RiCameraLine,
   volume: RiCheckboxCircleLine,
-  contact: RiUserFollowLine,
+  invoice: RiFileList3Line,
 } as const;
 
 const TESTIMONIALS = [
   {
-    name: "Sarah M.",
-    location: "Bethesda, MD",
-    text: "Novara is the first cleaning service that actually shows up when they say they will. My home has never looked better.",
+    name: "Priya S.",
+    location: "Silver Spring, MD · 1 rental",
+    text: "It's one basement apartment. Same Move-Out rate every turnover — I don't run a portfolio, I just needed someone who shows up.",
     rating: 5,
   },
   {
-    name: "James R.",
-    location: "Rockville, MD",
-    text: "I signed up for the membership and it's been a game-changer. Same team every time, and they know exactly how I like things.",
+    name: "Daniel K.",
+    location: "Arlington, VA · 2 rentals",
+    text: "Two condos. Standing rates meant I wasn't getting a new quote every time a tenant left. Before/after photos made the deposit conversation straightforward.",
     rating: 5,
   },
   {
-    name: "Michelle T.",
-    location: "Silver Spring, MD",
-    text: "The deep clean exceeded my expectations. Every corner was spotless. Worth every penny.",
+    name: "Marcus W.",
+    location: "Bethesda, MD · 18 units",
+    text: "Eighteen doors, one invoice, itemized by unit. The volume tier showed up in the calculator before we even signed.",
+    rating: 5,
+  },
+  {
+    name: "Elena R.",
+    location: "Alexandria, VA · 40 units",
+    text: "Forty ordinary apartments. We claimed the rate and finished onboarding the same afternoon — nobody from their office had to price us first.",
     rating: 5,
   },
 ];
-
-const TIMINGS = ["As soon as possible", "Within 2 weeks", "Within a month", "Just exploring"];
 
 type EstimateUnit = {
   label: string;
@@ -116,6 +125,7 @@ type EstimatePayload = {
   }>;
   discount: { percent: number; label: string | null; unitsToNextTier: number | null; nextPercent: number | null };
   ranges: ServiceRange[];
+  lockHours?: number;
   reasons: Array<{ reason: string; message: string }>;
   message?: string;
   error?: string;
@@ -136,93 +146,77 @@ function rangeFor(ranges: ServiceRange[], service: PmServiceType): string {
   return formatServiceRange(ranges.find((r) => r.service === service));
 }
 
+function numOrNull(value: string): number | null {
+  if (value.trim() === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 export default function PortfolioLanding() {
   const [mode, setMode] = useState<PortfolioMode>("uniform");
-  const [unitCount, setUnitCount] = useState("8");
+  const [unitCount, setUnitCount] = useState("1");
   const [sqft, setSqft] = useState("1200");
   const [bedrooms, setBedrooms] = useState("2");
   const [bathrooms, setBathrooms] = useState("1");
   const [portfolioZip, setPortfolioZip] = useState("");
   const [flaggedAtypical, setFlaggedAtypical] = useState(false);
-  const [mixed, setMixed] = useState<EstimateUnit[]>([emptyUnit(0), emptyUnit(1)]);
+  const [mixed, setMixed] = useState<EstimateUnit[]>([emptyUnit(0)]);
 
   const [estimating, setEstimating] = useState(false);
   const [estimate, setEstimate] = useState<EstimatePayload | null>(null);
   const [estimateError, setEstimateError] = useState<string | null>(null);
 
-  const [panel, setPanel] = useState<"none" | "start" | "call">("none");
-  const [companyName, setCompanyName] = useState("");
+  const [panel, setPanel] = useState<"none" | "claim" | "call">("none");
   const [contactName, setContactName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [notes, setNotes] = useState("");
-  const [timing, setTiming] = useState("");
-  const [unitDrafts, setUnitDrafts] = useState<EstimateUnit[]>([]);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [callDone, setCallDone] = useState<{ message: string; calendarUrl: string | null } | null>(null);
 
-  const body = useMemo(() => {
-    const base = {
+  const liveCount =
+    mode === "mixed" ? mixed.length : Math.max(0, Math.floor(Number(unitCount) || 0));
+
+  const estimateBody = useMemo(
+    () => ({
       mode,
       unitCount: Number(unitCount) || 0,
       portfolioZip,
       flaggedAtypical,
-      average: { sqft: Number(sqft) || null, bedrooms: Number(bedrooms) || null, bathrooms: Number(bathrooms) || 0 },
+      average: {
+        sqft: numOrNull(sqft),
+        bedrooms: numOrNull(bedrooms),
+        bathrooms: numOrNull(bathrooms),
+      },
       units:
         mode === "mixed"
           ? mixed.map((u) => ({
               label: u.label,
-              sqft: Number(u.sqft) || null,
-              bedrooms: Number(u.bedrooms) || null,
-              bathrooms: Number(u.bathrooms) || 0,
+              sqft: numOrNull(u.sqft),
+              bedrooms: numOrNull(u.bedrooms),
+              bathrooms: numOrNull(u.bathrooms),
               zipCode: u.zipCode,
               address: u.address,
               city: u.city,
               state: u.state,
+              flaggedNonStandard: flaggedAtypical,
             }))
-          : unitDrafts.map((u) => ({
-              label: u.label,
-              sqft: Number(u.sqft) || Number(sqft) || null,
-              bedrooms: Number(u.bedrooms) || Number(bedrooms) || null,
-              bathrooms: Number(u.bathrooms) || Number(bathrooms) || 0,
-              zipCode: u.zipCode || portfolioZip,
-              address: u.address,
-              city: u.city,
-              state: u.state,
-            })),
-    };
-    return base;
-  }, [mode, unitCount, sqft, bedrooms, bathrooms, portfolioZip, flaggedAtypical, mixed, unitDrafts]);
+          : [],
+    }),
+    [mode, unitCount, sqft, bedrooms, bathrooms, portfolioZip, flaggedAtypical, mixed],
+  );
 
   const localSplit = useMemo(
     () =>
-      portfolioCtaFor(
-        expandEstimateUnits({
-          mode,
-          unitCount: Number(unitCount) || 0,
-          flaggedAtypical,
-          average: {
-            sqft: Number(sqft) || null,
-            bedrooms: Number(bedrooms) || null,
-            bathrooms: Number(bathrooms) || 0,
-          },
-          units:
-            mode === "mixed"
-              ? mixed.map((u) => ({
-                  label: u.label,
-                  sqft: Number(u.sqft) || null,
-                  bedrooms: Number(u.bedrooms) || null,
-                  bathrooms: Number(u.bathrooms) || 0,
-                  zipCode: u.zipCode,
-                  flaggedNonStandard: flaggedAtypical,
-                }))
-              : [],
-        }),
-        { flaggedAtypical },
-      ),
-    [mode, unitCount, sqft, bedrooms, bathrooms, flaggedAtypical, mixed],
+      portfolioCtaFor(expandEstimateUnits(estimateBody), { flaggedAtypical }),
+    [estimateBody, flaggedAtypical],
   );
+
+  const liveDiscount = useMemo(() => {
+    if (estimate && estimate.unitCount === liveCount) return estimate.discount;
+    return resolveVolumeDiscount(DEFAULT_VOLUME_DISCOUNTS, liveCount);
+  }, [estimate, liveCount]);
 
   const runEstimate = async (opts?: { silent?: boolean }) => {
     setEstimating(true);
@@ -231,41 +225,13 @@ export default function PortfolioLanding() {
       const res = await fetch("/api/portfolio/estimate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mode,
-          unitCount: Number(unitCount) || 0,
-          portfolioZip,
-          flaggedAtypical,
-          average: { sqft: Number(sqft) || null, bedrooms: Number(bedrooms) || null, bathrooms: Number(bathrooms) || 0 },
-          units:
-            mode === "mixed"
-              ? mixed.map((u) => ({
-                  label: u.label,
-                  sqft: Number(u.sqft) || null,
-                  bedrooms: Number(u.bedrooms) || null,
-                  bathrooms: Number(u.bathrooms) || 0,
-                  zipCode: u.zipCode,
-                }))
-              : [],
-        }),
+        body: JSON.stringify(estimateBody),
       });
       const json = (await res.json()) as EstimatePayload;
       if (!res.ok) {
         throw new Error(json.error || json.message || "Could not compute that estimate.");
       }
       setEstimate(json);
-      setUnitDrafts(
-        (json.units || []).map((u, i) => ({
-          label: u.label || `Unit ${i + 1}`,
-          sqft: u.sqft != null ? String(u.sqft) : sqft,
-          bedrooms: u.bedrooms != null ? String(u.bedrooms) : bedrooms,
-          bathrooms: u.bathrooms != null ? String(u.bathrooms) : bathrooms,
-          zipCode: u.zipCode || portfolioZip,
-          address: u.address || "",
-          city: u.city || "",
-          state: u.state || "",
-        })),
-      );
     } catch (e) {
       if (!opts?.silent) {
         setEstimateError(e instanceof Error ? e.message : "Could not compute that estimate.");
@@ -276,13 +242,12 @@ export default function PortfolioLanding() {
   };
 
   useEffect(() => {
-    // First paint: run the default typical example (8 × 2BR) so the page
-    // isn't an empty calculator. Failures stay silent until they click.
-    void runEstimate({ silent: true });
+    const t = window.setTimeout(() => void runEstimate({ silent: true }), 350);
+    return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [estimateBody]);
 
-  const openCta = (which: "start" | "call") => {
+  const openCta = (which: "claim" | "call") => {
     setPanel(which);
     setFormError(null);
     requestAnimationFrame(() => {
@@ -290,26 +255,16 @@ export default function PortfolioLanding() {
     });
   };
 
-  const submitStart = async () => {
+  const submitClaim = async () => {
     setBusy(true);
     setFormError(null);
     try {
-      const res = await fetch("/api/portfolio/start", {
+      const res = await fetch("/api/portfolio/claim", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...body,
-          units: unitDrafts.map((u) => ({
-            label: u.label,
-            sqft: Number(u.sqft) || null,
-            bedrooms: Number(u.bedrooms) || null,
-            bathrooms: Number(u.bathrooms) || 0,
-            zipCode: u.zipCode || portfolioZip,
-            address: u.address,
-            city: u.city,
-            state: u.state,
-          })),
-          companyName,
+          ...estimateBody,
+          name: contactName,
           contactName,
           email,
           phone,
@@ -322,11 +277,11 @@ export default function PortfolioLanding() {
           setFormError(json.message || "This portfolio needs a call rather than instant onboarding.");
           return;
         }
-        throw new Error(json?.message || json?.error || "Could not start onboarding.");
+        throw new Error(json?.message || json?.error || "Could not claim that rate.");
       }
       window.location.href = json.onboardingUrl;
     } catch (e) {
-      setFormError(e instanceof Error ? e.message : "Could not start onboarding.");
+      setFormError(e instanceof Error ? e.message : "Could not claim that rate.");
     } finally {
       setBusy(false);
     }
@@ -340,13 +295,12 @@ export default function PortfolioLanding() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...body,
-          companyName,
+          ...estimateBody,
+          name: contactName,
           contactName,
           email,
           phone,
           notes,
-          timing,
         }),
       });
       const json = await res.json();
@@ -360,15 +314,17 @@ export default function PortfolioLanding() {
   };
 
   const cta: PortfolioCta =
-    localSplit.cta === "book_call" || estimate?.cta === "book_call" ? "book_call" : "get_started";
+    localSplit.cta === "book_call" || estimate?.cta === "book_call" ? "book_call" : "claim";
   const ctaReasons = estimate?.reasons?.length ? estimate.reasons : localSplit.reasons;
+  const estimateFresh = Boolean(estimate && estimate.unitCount === liveCount);
+  const lockHours = estimate?.lockHours || PM_QUOTE_LOCK_HOURS;
 
   return (
     <div className="relative min-h-screen bg-background text-foreground">
       <BrandAtmosphere />
       <SEO
-        title="Property Manager Turnover Cleaning — Standing Rates, No Re-quoting"
-        description="One standing rate per rental unit, set once. Consolidated invoicing, before/after photos, and portfolio pricing across Maryland, D.C., and Virginia."
+        title="Rental Property Cleaning — Standing Rates for One Unit or Fifty"
+        description="Reliable move-in, move-out, and standard cleaning for rental properties — whether it's one unit or fifty. Instant standing-rate estimate across Maryland, D.C., and Virginia."
         canonical={PORTFOLIO_URL}
       />
 
@@ -380,7 +336,7 @@ export default function PortfolioLanding() {
               Novara<span className="text-primary">Cleaning</span>
             </span>
             <span className="hidden rounded-md bg-brand-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-primary sm:inline">
-              Portfolio
+              Rentals
             </span>
           </div>
           <div className="flex items-center gap-3">
@@ -392,7 +348,7 @@ export default function PortfolioLanding() {
               (844) 735-2070
             </a>
             <Button size="sm" className="h-9" onClick={() => document.getElementById("estimate")?.scrollIntoView({ behavior: "smooth" })}>
-              Get an estimate
+              Instant estimate
             </Button>
           </div>
         </div>
@@ -412,23 +368,22 @@ export default function PortfolioLanding() {
                   </div>
                 </BlurFade>
                 <BlurFade delay={0.1} inView>
-                  <h1 className="font-heading text-4xl font-extrabold leading-[1.1] tracking-tight md:text-5xl lg:text-[52px]">
-                    One standing rate per unit, set once —{" "}
-                    <span className="text-gradient">no re-quoting every turnover.</span>
+                  <h1 className="font-heading text-4xl font-extrabold leading-[1.1] tracking-tight md:text-5xl lg:text-[48px]">
+                    Reliable move-in, move-out, and standard cleaning for your rental properties —{" "}
+                    <span className="text-gradient">whether it&apos;s one unit or fifty.</span>
                   </h1>
                 </BlurFade>
                 <p className="max-w-xl text-lg leading-relaxed text-muted-foreground">
-                  Unreliable cleaners across multiple units. Inconsistent quality from property to
-                  property. Getting re-quoted or chased down every time a unit turns over. We replace
-                  that with a registry: typical units auto-price, unusual ones get a person.
+                  Standing rates set once. Photos on every clean. Pricing that improves as you add
+                  units — shown live in the calculator, not claimed in a brochure.
                 </p>
                 <div className="flex flex-wrap gap-3">
                   <Button size="lg" onClick={() => document.getElementById("estimate")?.scrollIntoView({ behavior: "smooth" })}>
-                    Instant portfolio estimate
+                    Instant estimate
                     <RiArrowRightLine className="h-4 w-4" />
                   </Button>
-                  <Button size="lg" variant="outline" onClick={() => openCta("call")}>
-                    Book a call
+                  <Button size="lg" variant="outline" onClick={() => openCta(cta === "book_call" ? "call" : "claim")}>
+                    {cta === "book_call" ? "Book a Call" : "Claim This Rate"}
                   </Button>
                 </div>
               </div>
@@ -441,9 +396,9 @@ export default function PortfolioLanding() {
           <div className="mx-auto max-w-5xl">
             <div className="mb-10 text-center">
               <Badge variant="secondary" className="mb-4 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider">
-                What you actually get
+                True at any scale
               </Badge>
-              <h2 className="font-heading text-3xl font-bold md:text-4xl">Built into the portfolio, not promised in a brochure</h2>
+              <h2 className="font-heading text-3xl font-bold md:text-4xl">The same service, from one door to a full portfolio</h2>
             </div>
             <div className="grid gap-4 md:grid-cols-2">
               {VALUE_STACK.map((item) => {
@@ -471,12 +426,12 @@ export default function PortfolioLanding() {
             <div className="mx-auto max-w-4xl space-y-8">
               <div className="text-center">
                 <Badge variant="secondary" className="mb-4 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider">
-                  Instant portfolio estimate
+                  Instant estimate
                 </Badge>
-                <h2 className="font-heading text-3xl font-bold md:text-4xl">See the standing-rate range</h2>
+                <h2 className="font-heading text-3xl font-bold md:text-4xl">See standing rates and the portfolio tier</h2>
                 <p className="mx-auto mt-3 max-w-2xl text-muted-foreground">
                   Same residential pricing engine that prices Move-Out, Move-In, and Standard everywhere
-                  else in this system. Not a separate estimate table.
+                  else in this system. The volume tier updates live as the unit count changes.
                 </p>
               </div>
 
@@ -486,7 +441,7 @@ export default function PortfolioLanding() {
                   <div className="grid gap-2 sm:grid-cols-2">
                     {(
                       [
-                        ["uniform", "Most units are similar", "Enter an average size and we'll copy it across the portfolio."],
+                        ["uniform", "Most units are similar", "Enter an average size and we'll copy it across the set."],
                         ["mixed", "Enter units individually", "Different sizes, bedrooms, or a mixed building."],
                       ] as const
                     ).map(([id, title, desc]) => (
@@ -507,26 +462,27 @@ export default function PortfolioLanding() {
 
                   {mode === "uniform" ? (
                     <div className="space-y-3">
-                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-                      <Field label="Number of units">
-                        <Input inputMode="numeric" value={unitCount} onChange={(e) => setUnitCount(e.target.value.replace(/\D/g, "").slice(0, 3))} />
-                      </Field>
-                      <Field label="Approx. sq ft">
-                        <Input inputMode="numeric" value={sqft} onChange={(e) => setSqft(e.target.value.replace(/\D/g, "").slice(0, 5))} />
-                      </Field>
-                      <Field label="Bedrooms">
-                        <Input inputMode="numeric" value={bedrooms} onChange={(e) => setBedrooms(e.target.value.replace(/\D/g, "").slice(0, 2))} />
-                      </Field>
-                      <Field label="Bathrooms">
-                        <Input inputMode="decimal" value={bathrooms} onChange={(e) => setBathrooms(e.target.value.replace(/[^\d.]/g, "").slice(0, 4))} />
-                      </Field>
-                      <Field label="Portfolio ZIP (optional)">
-                        <Input inputMode="numeric" placeholder="20814" value={portfolioZip} onChange={(e) => setPortfolioZip(e.target.value.replace(/\D/g, "").slice(0, 5))} />
-                      </Field>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      ZIP is optional for the estimate — without one we show the standing-rate range across served DMV zones. A 5-digit ZIP is required to Get Started so we can set the service zone.
-                    </p>
+                      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                        <Field label="Number of units">
+                          <Input inputMode="numeric" value={unitCount} onChange={(e) => setUnitCount(e.target.value.replace(/\D/g, "").slice(0, 3))} />
+                        </Field>
+                        <Field label="Approx. sq ft">
+                          <Input inputMode="numeric" value={sqft} onChange={(e) => setSqft(e.target.value.replace(/\D/g, "").slice(0, 5))} />
+                        </Field>
+                        <Field label="Bedrooms">
+                          <Input inputMode="numeric" value={bedrooms} onChange={(e) => setBedrooms(e.target.value.replace(/\D/g, "").slice(0, 2))} />
+                        </Field>
+                        <Field label="Bathrooms">
+                          <Input inputMode="decimal" value={bathrooms} onChange={(e) => setBathrooms(e.target.value.replace(/[^\d.]/g, "").slice(0, 4))} />
+                        </Field>
+                        <Field label="ZIP (optional)">
+                          <Input inputMode="numeric" placeholder="20814" value={portfolioZip} onChange={(e) => setPortfolioZip(e.target.value.replace(/\D/g, "").slice(0, 5))} />
+                        </Field>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        ZIP is optional. Without one we show the standing-rate range across served DMV zones.
+                        Claiming locks the default-zone rate; final rates confirm at onboarding.
+                      </p>
                     </div>
                   ) : (
                     <div className="space-y-3">
@@ -540,7 +496,7 @@ export default function PortfolioLanding() {
                           <button
                             type="button"
                             className="inline-flex h-10 items-center justify-center rounded-xl text-muted-foreground hover:text-rose-600 sm:col-span-1"
-                            onClick={() => setMixed((rows) => rows.filter((_, idx) => idx !== i))}
+                            onClick={() => setMixed((rows) => (rows.length === 1 ? rows : rows.filter((_, idx) => idx !== i)))}
                             aria-label="Remove unit"
                           >
                             <RiDeleteBinLine className="h-4 w-4" />
@@ -560,13 +516,8 @@ export default function PortfolioLanding() {
                       checked={flaggedAtypical}
                       onChange={(e) => setFlaggedAtypical(e.target.checked)}
                     />
-                    Something about this portfolio is atypical (unusual unit types, mixed commercial, or sizes well outside a normal apartment).
+                    Something about these units is atypical (unusual types, mixed commercial, or sizes well outside a normal apartment).
                   </label>
-
-                  <Button size="lg" className="w-full sm:w-auto" disabled={estimating} onClick={() => void runEstimate()}>
-                    {estimating ? <RiLoader4Line className="h-4 w-4 animate-spin" /> : null}
-                    {estimating ? "Pricing from the live engine…" : "Update estimate"}
-                  </Button>
 
                   {estimateError && <p className="text-sm text-rose-700">{estimateError}</p>}
 
@@ -575,53 +526,51 @@ export default function PortfolioLanding() {
                       <div>
                         <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary">Estimate · not a final standing rate</p>
                         <p className="mt-1 font-heading text-xl font-bold">
-                          {estimate
-                            ? `${estimate.unitCount} unit${estimate.unitCount === 1 ? "" : "s"}${
-                                estimate.discount.label ? ` · ${estimate.discount.label}` : ""
-                              }${estimate.discount.percent > 0 ? ` (${estimate.discount.percent}% off)` : ""}`
-                            : `${Math.max(0, Math.floor(Number(unitCount) || (mode === "mixed" ? mixed.length : 0)))} units · update to see standing rates`}
+                          {liveCount} unit{liveCount === 1 ? "" : "s"}
+                          {liveDiscount.label ? ` · ${liveDiscount.label}` : ""}
+                          {liveDiscount.percent > 0 ? ` (${liveDiscount.percent}% off)` : ""}
                         </p>
-                      </div>
-                      <span className="rounded-full bg-amber-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-800">
-                        Estimate
-                      </span>
-                    </div>
-                    {estimate && estimate.ranges.some((r) => r.minCents > 0) ? (
-                      <>
-                        <div className="grid gap-3 sm:grid-cols-3">
-                          {(["move_out", "move_in", "standard"] as PmServiceType[]).map((service) => (
-                            <div key={service} className="rounded-xl bg-background/80 p-4">
-                              <p className="text-xs font-semibold text-muted-foreground">{PM_SERVICE_LABELS[service]}</p>
-                              <p className="mt-1 font-heading text-2xl font-bold tabular-nums">{rangeFor(estimate.ranges, service)}</p>
-                              <p className="text-[11px] text-muted-foreground">per unit, standing rate</p>
-                            </div>
-                          ))}
-                        </div>
-                        {estimate.discount.unitsToNextTier != null && estimate.discount.nextPercent != null && (
-                          <p className="text-xs text-muted-foreground">
-                            {estimate.discount.unitsToNextTier} more unit{estimate.discount.unitsToNextTier === 1 ? "" : "s"} reaches the {estimate.discount.nextPercent}% tier.
+                        {liveDiscount.unitsToNextTier != null && liveDiscount.nextPercent != null && (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {liveDiscount.unitsToNextTier} more unit{liveDiscount.unitsToNextTier === 1 ? "" : "s"} reaches the {liveDiscount.nextPercent}% tier.
                           </p>
                         )}
-                      </>
+                      </div>
+                      <span className="rounded-full bg-amber-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-800">
+                        {estimating ? "Updating…" : "Estimate"}
+                      </span>
+                    </div>
+                    {estimateFresh && estimate && estimate.ranges.some((r) => r.minCents > 0) ? (
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        {(["move_out", "move_in", "standard"] as PmServiceType[]).map((service) => (
+                          <div key={service} className="rounded-xl bg-background/80 p-4">
+                            <p className="text-xs font-semibold text-muted-foreground">{PM_SERVICE_LABELS[service]}</p>
+                            <p className="mt-1 font-heading text-2xl font-bold tabular-nums">{rangeFor(estimate.ranges, service)}</p>
+                            <p className="text-[11px] text-muted-foreground">per unit, standing rate</p>
+                          </div>
+                        ))}
+                      </div>
                     ) : (
                       <p className="text-sm text-muted-foreground">
                         {cta === "book_call"
-                          ? "This portfolio isn't auto-priced. Book a call and we'll set standing rates after a person reviews the units."
-                          : "Standing-rate ranges come from the same residential engine used at registration. Click Update estimate to price this portfolio."}
+                          ? "These units aren't auto-priced. Book a call and we'll set standing rates after a person reviews them."
+                          : estimating
+                            ? "Pricing from the live residential engine…"
+                            : "Standing-rate ranges come from the same residential engine used at registration."}
                       </p>
                     )}
                     <p className="text-xs leading-relaxed text-muted-foreground">{estimate?.disclaimer || ESTIMATE_DISCLAIMER}</p>
-                      {ctaReasons.length > 0 && (
-                        <ul className="space-y-1 text-xs text-amber-900">
-                          {ctaReasons.map((r) => (
-                            <li key={`${r.reason}-${r.message}`}>• {r.message}</li>
-                          ))}
-                        </ul>
-                      )}
+                    {ctaReasons.length > 0 && (
+                      <ul className="space-y-1 text-xs text-amber-900">
+                        {ctaReasons.map((r) => (
+                          <li key={`${r.reason}-${r.message}`}>• {r.message}</li>
+                        ))}
+                      </ul>
+                    )}
                     <div className="flex flex-wrap gap-3">
-                      {cta === "get_started" ? (
-                        <Button onClick={() => openCta("start")}>
-                          Get Started
+                      {cta === "claim" ? (
+                        <Button onClick={() => openCta("claim")}>
+                          Claim This Rate
                           <RiArrowRightLine className="h-4 w-4" />
                         </Button>
                       ) : (
@@ -630,7 +579,7 @@ export default function PortfolioLanding() {
                           <RiCalendarCheckLine className="h-4 w-4" />
                         </Button>
                       )}
-                      {cta === "get_started" && (
+                      {cta === "claim" && (
                         <Button variant="outline" onClick={() => openCta("call")}>
                           Prefer to talk first
                         </Button>
@@ -641,45 +590,30 @@ export default function PortfolioLanding() {
               </Card>
 
               <div id="cta-form" className="scroll-mt-28">
-                {panel === "start" && (
+                {panel === "claim" && cta === "claim" && (
                   <Card>
                     <CardContent className="space-y-5 p-6 md:p-8">
                       <div>
-                        <h3 className="font-heading text-2xl font-bold">Get started</h3>
+                        <h3 className="font-heading text-2xl font-bold">Claim This Rate</h3>
                         <p className="mt-1 text-sm text-muted-foreground">
-                          Typical units go straight into the existing onboarding flow — Legal & Signature,
-                          then Unit Registry & Rates pre-filled from what you just entered. No admin step.
+                          Name, email, and phone. The quoted rate is locked for {lockHours} hours.
+                          You continue into onboarding in this same browser — Legal &amp; Signature, then
+                          Unit Registry &amp; Rates (already filled), then Billing. The same link is
+                          texted and emailed so you can pick up later.
                         </p>
                       </div>
                       <ContactFields
-                        companyName={companyName} setCompanyName={setCompanyName}
-                        contactName={contactName} setContactName={setContactName}
-                        email={email} setEmail={setEmail}
-                        phone={phone} setPhone={setPhone}
+                        contactName={contactName}
+                        setContactName={setContactName}
+                        email={email}
+                        setEmail={setEmail}
+                        phone={phone}
+                        setPhone={setPhone}
                       />
-                      <div>
-                        <p className="mb-2 text-sm font-semibold">Units carrying into the registry</p>
-                        <p className="mb-3 text-xs text-muted-foreground">
-                          Size is already filled. Add an address or ZIP so we can set the zone. You confirm
-                          the standing rates on page 2 of onboarding.
-                        </p>
-                        <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
-                          {unitDrafts.map((unit, i) => (
-                            <div key={i} className="grid gap-2 rounded-xl border border-border/60 p-3 md:grid-cols-12">
-                              <Input className="md:col-span-3" value={unit.label} onChange={(e) => setUnitDrafts((rows) => rows.map((r, idx) => (idx === i ? { ...r, label: e.target.value } : r)))} />
-                              <Input className="md:col-span-5" placeholder="Street address" value={unit.address} onChange={(e) => setUnitDrafts((rows) => rows.map((r, idx) => (idx === i ? { ...r, address: e.target.value } : r)))} />
-                              <Input className="md:col-span-2" placeholder="ZIP" inputMode="numeric" value={unit.zipCode} onChange={(e) => setUnitDrafts((rows) => rows.map((r, idx) => (idx === i ? { ...r, zipCode: e.target.value.replace(/\D/g, "").slice(0, 5) } : r)))} />
-                              <p className="flex items-center text-xs text-muted-foreground md:col-span-2">
-                                {unit.bedrooms || bedrooms || "—"} bd · {unit.sqft || sqft || "—"} sf
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
                       {formError && <p className="text-sm text-rose-700">{formError}</p>}
-                      <Button size="lg" disabled={busy} onClick={() => void submitStart()}>
+                      <Button size="lg" disabled={busy} onClick={() => void submitClaim()}>
                         {busy ? <RiLoader4Line className="h-4 w-4 animate-spin" /> : null}
-                        Continue to onboarding
+                        Claim This Rate
                       </Button>
                     </CardContent>
                   </Card>
@@ -691,40 +625,35 @@ export default function PortfolioLanding() {
                       <div>
                         <h3 className="font-heading text-2xl font-bold">Book a call</h3>
                         <p className="mt-1 text-sm text-muted-foreground">
-                          Large or non-standard portfolios are reviewed by a person before onboarding is
+                          Unusual or non-standard units are reviewed by a person before onboarding is
                           generated — the same typical/unusual split already used when a unit is registered.
+                          Unit count does not decide this.
                         </p>
                       </div>
                       <ContactFields
-                        companyName={companyName} setCompanyName={setCompanyName}
-                        contactName={contactName} setContactName={setContactName}
-                        email={email} setEmail={setEmail}
-                        phone={phone} setPhone={setPhone}
+                        contactName={contactName}
+                        setContactName={setContactName}
+                        email={email}
+                        setEmail={setEmail}
+                        phone={phone}
+                        setPhone={setPhone}
                       />
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <div>
-                          <Label>Timing</Label>
-                          <select
-                            className="mt-1 flex h-10 w-full rounded-xl border border-input bg-background px-3 text-sm"
-                            value={timing}
-                            onChange={(e) => setTiming(e.target.value)}
-                          >
-                            <option value="">Select…</option>
-                            {TIMINGS.map((t) => (
-                              <option key={t} value={t}>{t}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div className="sm:col-span-2">
-                          <Label>What should we know?</Label>
-                          <Textarea className="mt-1" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Unusual unit types, a large building, mixed commercial, etc." />
-                        </div>
+                      <div>
+                        <Label>What should we know?</Label>
+                        <Textarea
+                          className="mt-1"
+                          rows={3}
+                          value={notes}
+                          onChange={(e) => setNotes(e.target.value)}
+                          placeholder="Unusual unit types, a large building, mixed commercial, etc."
+                        />
                       </div>
                       {formError && <p className="text-sm text-rose-700">{formError}</p>}
                       <Button size="lg" disabled={busy} onClick={() => void submitCall()}>
                         {busy ? <RiLoader4Line className="h-4 w-4 animate-spin" /> : null}
-                        Request a call
+                        Save my details and show times
                       </Button>
+                      <PortfolioCalEmbed name={contactName} email={email} notes={notes} />
                     </CardContent>
                   </Card>
                 )}
@@ -735,13 +664,9 @@ export default function PortfolioLanding() {
                       <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full" style={{ background: PURPLE }}>
                         <RiCheckboxCircleLine className="h-7 w-7 text-white" />
                       </div>
-                      <h3 className="font-heading text-2xl font-bold">Request received</h3>
+                      <h3 className="font-heading text-2xl font-bold">Pick a time</h3>
                       <p className="text-muted-foreground">{callDone.message}</p>
-                      {callDone.calendarUrl && (
-                        <div className="overflow-hidden rounded-xl border border-border">
-                          <iframe title="Schedule a call" src={callDone.calendarUrl} className="h-[640px] w-full" />
-                        </div>
-                      )}
+                      <PortfolioCalEmbed name={contactName} email={email} notes={notes} />
                     </CardContent>
                   </Card>
                 )}
@@ -754,14 +679,14 @@ export default function PortfolioLanding() {
           <div className="mx-auto max-w-5xl space-y-12">
             <div className="text-center">
               <Badge variant="secondary" className="mb-4 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider">
-                Proof & trust
+                Proof &amp; trust
               </Badge>
-              <h2 className="font-heading text-3xl font-bold md:text-4xl">The same standard owners already know</h2>
+              <h2 className="font-heading text-3xl font-bold md:text-4xl">From a single rental to a full portfolio</h2>
             </div>
             <div className="relative overflow-hidden">
               <Marquee pauseOnHover className="[--duration:42s]">
                 {TESTIMONIALS.map((t) => (
-                  <Card key={t.name} className="w-[280px] shrink-0">
+                  <Card key={t.name} className="w-[300px] shrink-0">
                     <CardContent className="space-y-3 p-5">
                       <div className="flex gap-0.5">
                         {Array.from({ length: t.rating }).map((_, i) => (
@@ -815,17 +740,28 @@ export default function PortfolioLanding() {
           <div className="relative container mx-auto px-4 py-16 md:py-20">
             <div className="relative mx-auto max-w-2xl overflow-hidden rounded-3xl panel p-10 text-center sm:p-12">
               <BorderBeam size={120} duration={8} />
-              <h2 className="font-heading text-3xl font-bold md:text-4xl">Ready to stop re-quoting turnovers?</h2>
+              <h2 className="font-heading text-3xl font-bold md:text-4xl">Typical units? Claim the rate. Unusual ones? Book a call.</h2>
               <p className="mt-3 text-muted-foreground">
-                Typical portfolios start onboarding immediately. Unusual ones get a call. Same split the
-                registry already uses.
+                Ordinary apartments — one or forty — start onboarding immediately. Unusual properties
+                get a person before onboarding is generated. Same split the registry already uses,
+                independent of unit count.
               </p>
               <div className="mt-6 flex flex-wrap justify-center gap-3">
-                <Button size="lg" onClick={() => openCta(cta === "book_call" ? "call" : "start")}>
-                  {cta === "book_call" ? "Book a Call" : "Get Started"}
+                <Button size="lg" onClick={() => openCta(cta === "book_call" ? "call" : "claim")}>
+                  {cta === "book_call" ? "Book a Call" : "Claim This Rate"}
                 </Button>
-                <Button size="lg" variant="outline" onClick={() => openCta(cta === "book_call" ? "start" : "call")}>
-                  {cta === "book_call" ? "Get Started" : "Book a Call"}
+                <Button
+                  size="lg"
+                  variant="outline"
+                  onClick={() => {
+                    if (cta === "book_call") {
+                      document.getElementById("estimate")?.scrollIntoView({ behavior: "smooth" });
+                      return;
+                    }
+                    openCta("call");
+                  }}
+                >
+                  {cta === "book_call" ? "See the calculator" : "Book a Call"}
                 </Button>
               </div>
             </div>
@@ -834,7 +770,7 @@ export default function PortfolioLanding() {
       </main>
 
       <footer className="border-t border-border/40 py-8 text-center text-xs text-muted-foreground">
-        © {new Date().getFullYear()} Novara Cleaning · Maryland, Virginia, D.C.
+        © {new Date().getFullYear()} Novara Cleaning · Maryland, Virginia, D.C. · Rental property cleaning
       </footer>
     </div>
   );
@@ -850,20 +786,15 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 function ContactFields({
-  companyName, setCompanyName, contactName, setContactName, email, setEmail, phone, setPhone,
+  contactName, setContactName, email, setEmail, phone, setPhone,
 }: {
-  companyName: string; setCompanyName: (v: string) => void;
   contactName: string; setContactName: (v: string) => void;
   email: string; setEmail: (v: string) => void;
   phone: string; setPhone: (v: string) => void;
 }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      <div>
-        <Label>Company / owner</Label>
-        <Input className="mt-1" value={companyName} onChange={(e) => setCompanyName(e.target.value)} />
-      </div>
-      <div>
+      <div className="sm:col-span-2">
         <Label>Your name</Label>
         <Input className="mt-1" value={contactName} onChange={(e) => setContactName(e.target.value)} />
       </div>

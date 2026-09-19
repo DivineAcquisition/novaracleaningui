@@ -16,7 +16,6 @@ import {
   RiBankCardLine,
   RiBuilding2Line,
   RiCheckLine,
-  RiExternalLinkLine,
   RiFileTextLine,
   RiFlagLine,
   RiLoader4Line,
@@ -847,7 +846,7 @@ function BillingStep({
             }
             className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-violet-600 text-sm font-semibold text-white disabled:opacity-60"
           >
-            {busy ? <RiLoader4Line className="h-4 w-4 animate-spin" /> : "Enter the partner portal"}
+            {busy ? <RiLoader4Line className="h-4 w-4 animate-spin" /> : "Go to My Account"}
           </button>
         </Card>
       )}
@@ -871,7 +870,7 @@ function DoneCard({ data }: { data: Payload }) {
         href={data.handoffUrl || data.portalUrl}
         className="mt-5 inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-violet-600 px-5 text-sm font-semibold text-white hover:bg-violet-700"
       >
-        Open partner portal <RiExternalLinkLine className="h-4 w-4" />
+        Go to My Account
       </a>
       <p className="mt-3 text-xs text-slate-400">
         You&apos;re already signed in from this setup session.

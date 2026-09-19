@@ -1,9 +1,11 @@
 "use client";
 
-// Autoplaying VSL for the PM landing page. Same brand palette as the rest of
-// try.novaracleaning.com (Novara purple, particles, Plus Jakarta). Plays
+// Autoplaying VSL for the rental landing page. Same brand palette as the rest
+// of try.novaracleaning.com (Novara purple, particles, Plus Jakarta). Plays
 // immediately — no email gate. A recorded Wistia id, when configured, wins;
 // otherwise the branded animation is the VSL.
+//
+// Copy spans one unit through a full portfolio. It never switches persona.
 
 import { useEffect, useMemo, useState } from "react";
 import { RiPauseFill, RiPlayFill, RiVolumeMuteLine, RiVolumeUpLine } from "@remixicon/react";
@@ -15,28 +17,28 @@ import { cn } from "@/lib/utils";
 const SCENES = [
   {
     kicker: "The problem",
-    title: "Unreliable cleaners across a whole portfolio.",
-    body: "Different people, different standards, different no-shows — and you're the one the owner calls.",
+    title: "Turnovers that still feel like a new job every time.",
+    body: "Whether it's one rental or fifty, chasing a cleaner and a quote at every move-out is the same friction — just more of it.",
   },
   {
     kicker: "The problem",
-    title: "Quality that changes from property to property.",
-    body: "One unit looks ready. The next one isn't. Tenants notice. So do security-deposit disputes.",
-  },
-  {
-    kicker: "The problem",
-    title: "Re-quoted and chased down on every turnover.",
-    body: "A 2-bedroom shouldn't become a new sales cycle every time a lease ends.",
+    title: "Quality you can't show a tenant.",
+    body: "Deposit determinations need a record. Without before-and-after photos, you're reconstructing what the unit looked like.",
   },
   {
     kicker: "The difference",
     title: "One standing rate per unit. Set once.",
-    body: "Move-Out, Move-In, and Standard — priced from the same residential engine, frozen until something about the unit changes.",
+    body: "Move-Out, Move-In, and Standard — priced from the same residential engine, true starting at unit one.",
   },
   {
     kicker: "The difference",
-    title: "No re-quoting every turnover.",
-    body: "You book the unit. The rate is already there. One invoice for the period, itemized by unit, with before-and-after photos on file.",
+    title: "Pricing that improves as you add units.",
+    body: "The calculator updates the portfolio tier live. A 40-unit set of ordinary apartments claims the same way a single condo does.",
+  },
+  {
+    kicker: "The difference",
+    title: "One invoice as the portfolio grows.",
+    body: "Itemized by unit, one bill per period. That's where scale pays off — not a different product, the same service running cleaner.",
   },
 ];
 
@@ -78,7 +80,7 @@ function AnimatedVsl({ className }: { className?: string }) {
       )}
       style={{ aspectRatio: "16 / 9" }}
       role="region"
-      aria-label="Property manager video sales letter"
+      aria-label="Rental property video sales letter"
     >
       <Particles className="absolute inset-0 z-0" quantity={36} color={BRAND.primaryLight} ease={80} size={0.45} />
       <div
@@ -92,7 +94,7 @@ function AnimatedVsl({ className }: { className?: string }) {
 
       <div className="relative z-10 flex h-full flex-col justify-between p-5 sm:p-8">
         <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.18em] text-white/70">
-          <span>Novara Cleaning · Portfolio</span>
+          <span>Novara Cleaning · Rentals</span>
           <span>
             {index + 1} / {SCENES.length}
           </span>

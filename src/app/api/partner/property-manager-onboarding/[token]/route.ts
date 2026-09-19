@@ -78,7 +78,8 @@ export async function GET(
     .eq("id", s.id as string);
 
   const payload = await sessionPayload(supabase, s);
-  return NextResponse.json({ ok: true, ...payload });
+  const withHandoff = await attachAccountHandoff(payload);
+  return NextResponse.json({ ok: true, ...withHandoff });
 }
 
 export async function POST(
@@ -242,6 +243,7 @@ export async function POST(
         message: result.message,
       });
     }
+    await provisionPortalAfterBilling(supabase, sessionId, account);
     return finish({ outcome: "billing_ready", message: result.message });
   }
 
@@ -253,6 +255,7 @@ export async function POST(
       return NextResponse.json({ ok: false, message: result.message }, { status: result.status });
     }
     if (result.ok) await touchActivity(supabase, sessionId, "billing");
+    if (result.ok) await provisionPortalAfterBilling(supabase, sessionId, account);
     return finish({
       outcome: result.ok ? "billing_ready" : "billing_pending",
       message: result.message,
@@ -282,3 +285,45 @@ export async function POST(
 
   return NextResponse.json({ ok: false, message: `Unknown action "${action}".` }, { status: 400 });
 }
+
+async function provisionPortalAfterBilling(
+  supabase: ReturnType<typeof getAdminSupabase>,
+  sessionId: string,
+  account: Row,
+): Promise<void> {
+  const { data: fresh } = await supabase
+    .from("property_manager_onboarding_sessions")
+    .select("*")
+    .eq("id", sessionId)
+    .maybeSingle();
+  if (!fresh) return;
+  if (fresh.portal_provisioned_at || account.portal_provisioned_at) return;
+  if (!fresh.billing_configured_at) return;
+  const email = (account.email as string) || (fresh.recipient_email as string) || "";
+  if (!email) return;
+  await provisionPmPortal(supabase, {
+    session: fresh,
+    account,
+    email,
+    fullName: (fresh.signer_name as string) || (account.contact_name as string) || undefined,
+  }).catch(() => null);
+}
+
+async function attachAccountHandoff(
+  payload: Awaited<ReturnType<typeof sessionPayload>>,
+): Promise<Awaited<ReturnType<typeof sessionPayload>> & { handoffUrl?: string }> {
+  if (payload.progress.current_step !== "done" && !payload.progress.complete) return payload;
+  if (!payload.account.email) return payload;
+  try {
+    const { provisionPropertyManagerPortalAccess } = await import("@/lib/partner-portal/handoff");
+    const access = await provisionPropertyManagerPortalAccess({
+      email: payload.account.email,
+      pmAccountId: payload.account.id,
+      displayName: payload.account.contactName,
+    });
+    return { ...payload, handoffUrl: access.handoffUrl || payload.portalUrl };
+  } catch {
+    return payload;
+  }
+}
+
