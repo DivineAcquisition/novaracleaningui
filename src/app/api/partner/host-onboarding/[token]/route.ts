@@ -52,8 +52,10 @@ export async function GET(
 ): Promise<NextResponse> {
   const { token } = await ctx.params;
   if (isHostOnboardingPreviewToken(token) && isLocalHostRequest(req)) {
-    const step = new URL(req.url).searchParams.get("step") || undefined;
-    return NextResponse.json(hostOnboardingPreviewPayload(step));
+    const url = new URL(req.url);
+    const step = url.searchParams.get("step") || undefined;
+    const entity = url.searchParams.get("entity") === "1" || url.searchParams.get("entity") === "entity";
+    return NextResponse.json(hostOnboardingPreviewPayload(step, { entity }));
   }
   const supabase = getAdminSupabase();
   const resolved = await resolveSession(supabase, token);
@@ -128,6 +130,19 @@ export async function POST(
     const signerName = clip(body.signerName, 120);
     const signatureDataUrl = clip(body.signatureDataUrl, 400_000);
     const pdfBase64 = clip(body.pdfBase64, 12_000_000);
+    let entityType = "individual";
+    let entityName: string | null = null;
+    if (session.submission_id) {
+      const { data: sub } = await supabase
+        .from("host_onboarding_submissions")
+        .select("entity_type, entity_name")
+        .eq("id", session.submission_id as string)
+        .maybeSingle();
+      entityType = sub?.entity_type === "entity" ? "entity" : "individual";
+      entityName = (sub?.entity_name as string) || null;
+    }
+    const needsGuarantee = entityType === "entity";
+    const guarantorName = clip(body.guarantorName, 120) || signerName;
     const invalid = validateSignature({
       signerName,
       agreedToTerms: body.agreedToTerms,
@@ -136,6 +151,9 @@ export async function POST(
       acknowledgedArbitration: body.acknowledgedArbitration,
       signatureDataUrl,
       pdfBase64,
+      requiresPersonalGuarantee: needsGuarantee,
+      acknowledgedPersonalGuarantee: body.acknowledgedPersonalGuarantee,
+      guarantorName,
     });
     if (invalid) return NextResponse.json({ ok: false, message: invalid }, { status: 400 });
 
@@ -148,8 +166,10 @@ export async function POST(
         (session.recipient_email as string) ||
         (host.email as string) ||
         "",
-      entityType: clip(body.entityType, 40) || null,
-      entityName: clip(body.entityName, 200) || null,
+      entityType,
+      entityName,
+      acknowledgedPersonalGuarantee: needsGuarantee,
+      guarantorName: needsGuarantee ? guarantorName : null,
       signatureDataUrl,
       pdfBase64,
       ctx: reqCtx,

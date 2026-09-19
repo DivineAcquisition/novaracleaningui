@@ -9,7 +9,7 @@
 // open when Page 1 was never signed.
 
 import { PARTNER_ORIGIN, portalHomeUrl } from "@/lib/partner-portal/origins";
-import { PAYMENT_OPTIONS, type PaymentOptionKey } from "./agreement";
+import { PAYMENT_OPTIONS, requiresPersonalGuarantee, type PaymentOptionKey } from "./agreement";
 import {
   deriveHostOnboardingProgress,
   type HostOnboardingProgress,
@@ -250,6 +250,8 @@ export interface SessionPayload {
   portalUrl: string;
   agreementSignedAt: string | null;
   signerName: string | null;
+  requiresPersonalGuarantee: boolean;
+  prefillSource: "claimed_submission" | "proposal";
 }
 
 export async function sessionPayload(supabase: Admin, session: Row): Promise<SessionPayload> {
@@ -283,6 +285,7 @@ export async function sessionPayload(supabase: Admin, session: Row): Promise<Ses
   const options = (Object.values(PAYMENT_OPTIONS) as Array<(typeof PAYMENT_OPTIONS)[PaymentOptionKey]>).filter(
     (o) => o.key !== "pay_after" || payAfter,
   );
+  const entityType = ((submission as Row | null)?.entity_type as string) || "individual";
 
   return {
     session: {
@@ -299,7 +302,7 @@ export async function sessionPayload(supabase: Admin, session: Row): Promise<Ses
       id: hostId,
       name: (hostRow.name as string) || ((submission as Row | null)?.full_name as string) || null,
       email: (hostRow.email as string) || (session.recipient_email as string) || null,
-      entityType: ((submission as Row | null)?.entity_type as string) || "individual",
+      entityType,
       entityName: ((submission as Row | null)?.entity_name as string) || null,
       hasPortal: !!(session.portal_user_id || session.portal_provisioned_at || hostRow.user_id),
       cardOnFile: !!(session.payment_method_id || hostRow.default_payment_method_id),
@@ -318,5 +321,7 @@ export async function sessionPayload(supabase: Admin, session: Row): Promise<Ses
     portalUrl: portalUrl(),
     agreementSignedAt: (session.signed_at as string) || null,
     signerName: (session.signer_name as string) || null,
+    requiresPersonalGuarantee: requiresPersonalGuarantee(entityType),
+    prefillSource: session.created_by_name === "str-landing" ? "claimed_submission" : "proposal",
   };
 }

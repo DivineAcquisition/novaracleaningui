@@ -18,6 +18,8 @@ import {
   STR_PATH,
   STR_URL,
   estimateStrLanding,
+  parseClaimEntity,
+  type ClaimEntityType,
   type StrCta,
   type StrEstimateInput,
   type StrEstimateResult,
@@ -57,6 +59,7 @@ export function parseEstimateInput(body: Record<string, unknown>): StrEstimateIn
       const l = (row || {}) as Record<string, unknown>;
       return {
         label: clip(l.label, 80) || null,
+        address: clip(l.address, 200) || null,
         bedrooms: numOrNull(l.bedrooms),
         bathrooms: numOrNull(l.bathrooms),
         linen: l.linen === true,
@@ -122,8 +125,14 @@ function landingNote(listing: StrEstimateResult["listings"][number], lockedUntil
 }
 
 function listingAddress(listing: StrListingInput, index: number): string {
+  const address = clip(listing.address, 200);
+  if (address.length >= 5) return address;
   const label = clip(listing.label, 80) || `Listing ${index + 1}`;
   return `${label} — address confirmed at onboarding`;
+}
+
+function listingsMissingAddress(listings: StrListingInput[]): boolean {
+  return listings.some((l) => clip(l.address, 200).length < 5);
 }
 
 async function upsertHost(
@@ -154,6 +163,7 @@ async function upsertHost(
       email,
       name: input.name || null,
       phone: input.phone || null,
+      pay_after_enabled: false,
     })
     .select("id")
     .maybeSingle();
@@ -214,6 +224,8 @@ async function recordSubmission(
     name: string;
     email: string;
     phone: string;
+    entityType: ClaimEntityType;
+    entityName: string | null;
     estimate: StrEstimateResult;
     lockedUntil: string;
   },
@@ -235,7 +247,8 @@ async function recordSubmission(
       full_name: input.name,
       email: input.email,
       phone: input.phone,
-      entity_type: "individual",
+      entity_type: input.entityType,
+      entity_name: input.entityName,
       properties,
       consent_agreement: false,
       status: "submitted",
@@ -266,6 +279,9 @@ export async function claimTypicalHost(
   const invalid = contactError(contact);
   if (invalid) return { ok: false, status: 400, message: invalid };
 
+  const entity = parseClaimEntity(body);
+  if (entity.ok === false) return { ok: false, status: 400, message: entity.message };
+
   const input = parseEstimateInput(body);
   const estimate = estimateLandingStr(input);
   if (estimate.cta !== "claim" || !estimate.ok) {
@@ -276,6 +292,9 @@ export async function claimTypicalHost(
       estimate,
       message: estimate.reasons[0]?.message || "This listing needs a call rather than instant onboarding.",
     };
+  }
+  if (listingsMissingAddress(estimate.listings)) {
+    return { ok: false, status: 400, message: "Add an address for each property." };
   }
 
   const host = await upsertHost(supabase, contact);
@@ -292,6 +311,8 @@ export async function claimTypicalHost(
     name: contact.name,
     email: contact.email,
     phone: contact.phone,
+    entityType: entity.entityType,
+    entityName: entity.entityName,
     estimate,
     lockedUntil,
   });
@@ -336,6 +357,7 @@ export async function claimTypicalHost(
       session_id: started.sessionId,
       listing_count: estimate.listingCount,
       claimed: estimate.claimed,
+      entity_type: entity.entityType,
       quote_locked_until: lockedUntil,
       path: STR_PATH,
     },

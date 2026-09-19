@@ -8,7 +8,11 @@
 
 import { resolveAppSecret, stripeCall, createCardPreAuth, readPaymentIntent } from "@/lib/stripe-rest";
 import { MIN_PASSWORD_LENGTH } from "./types";
-import type { PaymentOptionKey } from "./agreement";
+import {
+  requiresPersonalGuarantee,
+  validateHostSignature,
+  type PaymentOptionKey,
+} from "./agreement";
 import { parseSnapshot, portalUrl } from "./session";
 import { sendPartnershipMessage } from "@/lib/partnership-comms/server";
 import {
@@ -50,22 +54,11 @@ export function validateSignature(input: {
   acknowledgedArbitration: unknown;
   signatureDataUrl: string;
   pdfBase64?: string;
+  requiresPersonalGuarantee?: boolean;
+  acknowledgedPersonalGuarantee?: unknown;
+  guarantorName?: string;
 }): string | null {
-  if (input.signerName.length < 2) return "Please enter your full legal name to sign.";
-  if (input.agreedToTerms !== true) return "Please confirm you've read and agree to the agreement.";
-  if (input.acknowledgedNonCircumvention !== true) {
-    return "Please acknowledge the non-circumvention provision.";
-  }
-  if (input.acknowledgedChargebacks !== true) {
-    return "Please acknowledge the chargeback terms.";
-  }
-  if (input.acknowledgedArbitration !== true) {
-    return "Please acknowledge the arbitration provision.";
-  }
-  if (!/^data:image\/png;base64,/.test(input.signatureDataUrl)) {
-    return "Please draw your signature in the box above.";
-  }
-  return null;
+  return validateHostSignature(input);
 }
 
 export function requireSigned(session: Row): string | null {
@@ -82,6 +75,8 @@ export async function signHostAgreement(
     signerEmail: string;
     entityType?: string | null;
     entityName?: string | null;
+    acknowledgedPersonalGuarantee?: boolean;
+    guarantorName?: string | null;
     signatureDataUrl: string;
     pdfBase64?: string;
     ctx: RequestContext;
@@ -153,6 +148,10 @@ export async function signHostAgreement(
       entityName,
       properties,
       signatureDataUrl: input.signatureDataUrl,
+      acknowledgedPersonalGuarantee: requiresPersonalGuarantee(input.entityType),
+      guarantorName: requiresPersonalGuarantee(input.entityType)
+        ? clip(input.guarantorName, 120) || hostName
+        : null,
     });
   }
 
@@ -192,6 +191,10 @@ export async function signHostAgreement(
       acknowledged_non_circumvention: true,
       acknowledged_chargebacks: true,
       acknowledged_arbitration: true,
+      acknowledged_personal_guarantee: requiresPersonalGuarantee(input.entityType),
+      guarantor_name: requiresPersonalGuarantee(input.entityType)
+        ? clip(input.guarantorName, 120) || input.signerName
+        : null,
       ip: input.ctx.ip,
       user_agent: input.ctx.userAgent,
     })

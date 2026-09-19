@@ -36,6 +36,47 @@ export const ESTIMATE_DISCLAIMER =
   "bedroom band). The number you claim is locked for 48 hours and confirmed " +
   "on the rate-schedule page at onboarding.";
 
+/** Agreement §5.2 — the Host confirms the schedule; the Host does not set the rate. */
+export const COMPANY_SETS_RATES =
+  "Novara sets this rate from the Host Partnership Agreement Property & Rate " +
+  "Schedule (Section 5.2). You confirm the schedule at onboarding; you do not " +
+  "set, negotiate, or edit the number.";
+
+/**
+ * Agreement §5.3 — required whenever an introductory rate is shown.
+ * The calculator does not currently run an intro rate; keep this next to any
+ * intro figure so the standard-rate-after-period disclosure is never omitted.
+ */
+export const INTRO_RATE_ACTIVE = false;
+export const INTRO_RATE_DISCLOSURE =
+  "If an introductory rate is shown, the standard Part Two rate applies " +
+  "automatically after the introductory period.";
+
+export type ClaimEntityType = "individual" | "entity";
+
+export function parseClaimEntity(body: Record<string, unknown>):
+  | { ok: true; entityType: ClaimEntityType; entityName: string | null }
+  | { ok: false; message: string } {
+  const raw = String(body.entityType ?? body.entity_type ?? "")
+    .trim()
+    .toLowerCase();
+  if (raw !== "individual" && raw !== "entity") {
+    return {
+      ok: false,
+      message: "Are you signing as an individual or a business entity?",
+    };
+  }
+  const entityName = String(body.entityName ?? body.entity_name ?? "").trim().slice(0, 200);
+  if (raw === "entity" && entityName.length < 2) {
+    return { ok: false, message: "Add the business entity name." };
+  }
+  return {
+    ok: true,
+    entityType: raw,
+    entityName: raw === "entity" ? entityName : null,
+  };
+}
+
 export const VALUE_STACK = [
   {
     key: "vetted",
@@ -74,6 +115,7 @@ export type StrCta = "claim" | "book_call";
 
 export interface StrListingInput {
   label?: string | null;
+  address?: string | null;
   bedrooms: number | null;
   bathrooms: number | null;
   linen: boolean;
@@ -133,6 +175,7 @@ export function expandStrListings(input: StrEstimateInput): StrListingInput[] {
   if (input.mode === "mixed") {
     return (input.listings || []).slice(0, MAX_LANDING_LISTINGS).map((l, i) => ({
       label: String(l.label || "").trim().slice(0, 80) || `Listing ${i + 1}`,
+      address: String(l.address || "").trim().slice(0, 200) || null,
       bedrooms: bedsOrNull(l.bedrooms),
       bathrooms: bathsOrNull(l.bathrooms),
       linen: l.linen === true,
@@ -148,6 +191,7 @@ export function expandStrListings(input: StrEstimateInput): StrListingInput[] {
     const typed = (input.listings || [])[i];
     out.push({
       label: String(typed?.label || "").trim().slice(0, 80) || `Listing ${i + 1}`,
+      address: String(typed?.address || "").trim().slice(0, 200) || null,
       bedrooms: typed?.bedrooms != null ? bedsOrNull(typed.bedrooms) : bedsOrNull(avg.bedrooms),
       bathrooms: typed?.bathrooms != null ? bathsOrNull(typed.bathrooms) : bathsOrNull(avg.bathrooms),
       linen: typed?.linen ?? avg.linen,

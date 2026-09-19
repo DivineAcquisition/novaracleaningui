@@ -11,6 +11,7 @@ import { useMemo, useState } from "react";
 import {
   RiAddLine,
   RiArrowRightLine,
+  RiBuilding2Line,
   RiCalendarCheckLine,
   RiCameraLine,
   RiCheckboxCircleLine,
@@ -21,6 +22,7 @@ import {
   RiShieldCheckLine,
   RiStarLine,
   RiTimeLine,
+  RiUser3Line,
   RiUserFollowLine,
   RiUserUnfollowLine,
 } from "@remixicon/react";
@@ -42,14 +44,18 @@ import { formatPhoneNumber } from "@/lib/input-formatters";
 import { BRAND } from "@/lib/brand";
 import { cn } from "@/lib/utils";
 import {
+  COMPANY_SETS_RATES,
   ESTIMATE_DISCLAIMER,
   HOST_QUOTE_LOCK_HOURS,
+  INTRO_RATE_ACTIVE,
+  INTRO_RATE_DISCLOSURE,
   MAX_TYPICAL_LISTINGS,
   STR_URL,
   VALUE_STACK,
   estimateStrLanding,
   formatDollarRange,
   formatListingRange,
+  type ClaimEntityType,
   type StrCta,
   type StrMode,
 } from "@/lib/host-landing/landing";
@@ -89,6 +95,7 @@ const TESTIMONIALS = [
 
 type ListingDraft = {
   label: string;
+  address: string;
   bedrooms: string;
   bathrooms: string;
   linen: boolean;
@@ -97,6 +104,7 @@ type ListingDraft = {
 
 const emptyListing = (i: number): ListingDraft => ({
   label: `Listing ${i + 1}`,
+  address: "",
   bedrooms: "2",
   bathrooms: "1",
   linen: false,
@@ -119,40 +127,55 @@ export default function StrLanding() {
   const [restock, setRestock] = useState(false);
   const [flaggedAtypical, setFlaggedAtypical] = useState(false);
   const [mixed, setMixed] = useState<ListingDraft[]>([emptyListing(0)]);
+  const [addresses, setAddresses] = useState<string[]>([""]);
 
   const [panel, setPanel] = useState<"none" | "claim" | "call">("none");
   const [contactName, setContactName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [entityType, setEntityType] = useState<ClaimEntityType | "">("");
+  const [entityName, setEntityName] = useState("");
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [callDone, setCallDone] = useState<{ message: string } | null>(null);
 
   const estimateInput = useMemo(
-    () => ({
-      mode,
-      listingCount: Number(listingCount) || 0,
-      flaggedAtypical,
-      average: {
-        bedrooms: bedsValue(bedrooms),
-        bathrooms: bathrooms === "" ? null : Number(bathrooms),
-        linen,
-        restock,
-      },
-      listings:
-        mode === "mixed"
-          ? mixed.map((l) => ({
-              label: l.label,
-              bedrooms: bedsValue(l.bedrooms),
-              bathrooms: l.bathrooms === "" ? null : Number(l.bathrooms),
-              linen: l.linen,
-              restock: l.restock,
-              flaggedNonStandard: flaggedAtypical,
-            }))
-          : [],
-    }),
-    [mode, listingCount, bedrooms, bathrooms, linen, restock, flaggedAtypical, mixed],
+    () => {
+      const count = Math.max(0, Math.floor(Number(listingCount) || 0));
+      return {
+        mode,
+        listingCount: count,
+        flaggedAtypical,
+        average: {
+          bedrooms: bedsValue(bedrooms),
+          bathrooms: bathrooms === "" ? null : Number(bathrooms),
+          linen,
+          restock,
+        },
+        listings:
+          mode === "mixed"
+            ? mixed.map((l) => ({
+                label: l.label,
+                address: l.address,
+                bedrooms: bedsValue(l.bedrooms),
+                bathrooms: l.bathrooms === "" ? null : Number(l.bathrooms),
+                linen: l.linen,
+                restock: l.restock,
+                flaggedNonStandard: flaggedAtypical,
+              }))
+            : addresses.slice(0, count).map((address, i) => ({
+                label: `Listing ${i + 1}`,
+                address,
+                bedrooms: bedsValue(bedrooms),
+                bathrooms: bathrooms === "" ? null : Number(bathrooms),
+                linen,
+                restock,
+                flaggedNonStandard: flaggedAtypical,
+              })),
+      };
+    },
+    [mode, listingCount, bedrooms, bathrooms, linen, restock, flaggedAtypical, mixed, addresses],
   );
 
   const estimate = useMemo(() => estimateStrLanding(estimateInput), [estimateInput]);
@@ -181,6 +204,8 @@ export default function StrLanding() {
           name: contactName,
           email,
           phone,
+          entityType,
+          entityName: entityType === "entity" ? entityName : undefined,
         }),
       });
       const json = await res.json();
@@ -336,8 +361,9 @@ export default function StrLanding() {
                 </Badge>
                 <h2 className="font-heading text-3xl font-bold md:text-4xl">See the rate from the Host schedule</h2>
                 <p className="mx-auto mt-3 max-w-2xl text-muted-foreground">
-                  Base + linen + restock by bedroom band — the same Property &amp; Rate Schedule
-                  you confirm at onboarding. Not a separate estimate table.
+                  Address, bedrooms, bathrooms, and whether you want linen/laundry and restocking —
+                  the same inputs the Property &amp; Rate Schedule bands are built on. Novara sets
+                  the rate (Section 5.2); you confirm it at onboarding. Not a separate estimate table.
                 </p>
               </div>
 
@@ -372,7 +398,16 @@ export default function StrLanding() {
                         <Input
                           inputMode="numeric"
                           value={listingCount}
-                          onChange={(e) => setListingCount(e.target.value.replace(/\D/g, "").slice(0, 2))}
+                          onChange={(e) => {
+                            const next = e.target.value.replace(/\D/g, "").slice(0, 2);
+                            setListingCount(next);
+                            const n = Math.max(1, Math.floor(Number(next) || 1));
+                            setAddresses((prev) => {
+                              const rows = prev.slice(0, n);
+                              while (rows.length < n) rows.push("");
+                              return rows;
+                            });
+                          }}
                         />
                       </Field>
                       <Field label="Bedrooms">
@@ -385,6 +420,29 @@ export default function StrLanding() {
                           onChange={(e) => setBathrooms(e.target.value.replace(/[^\d.]/g, "").slice(0, 4))}
                         />
                       </Field>
+                      {(Math.max(1, liveCount) > 1
+                        ? addresses.slice(0, Math.max(1, liveCount))
+                        : [addresses[0] || ""]
+                      ).map((addr, i) => (
+                        <div key={`addr-${i}`} className="sm:col-span-2 lg:col-span-3">
+                          <Field
+                            label={Math.max(1, liveCount) > 1 ? `Address · listing ${i + 1}` : "Property address"}
+                          >
+                            <Input
+                              placeholder="Street, city, state"
+                              value={addr}
+                              onChange={(e) =>
+                                setAddresses((rows) => {
+                                  const next = rows.slice();
+                                  while (next.length <= i) next.push("");
+                                  next[i] = e.target.value;
+                                  return next;
+                                })
+                              }
+                            />
+                          </Field>
+                        </div>
+                      ))}
                       <ToggleField
                         label="Linen / laundry service"
                         checked={linen}
@@ -409,6 +467,16 @@ export default function StrLanding() {
                               value={listing.label}
                               onChange={(e) =>
                                 setMixed((rows) => rows.map((r, idx) => (idx === i ? { ...r, label: e.target.value } : r)))
+                              }
+                            />
+                            <Input
+                              className="sm:col-span-8"
+                              placeholder="Address"
+                              value={listing.address}
+                              onChange={(e) =>
+                                setMixed((rows) =>
+                                  rows.map((r, idx) => (idx === i ? { ...r, address: e.target.value } : r)),
+                                )
                               }
                             />
                             <div className="sm:col-span-3">
@@ -502,7 +570,9 @@ export default function StrLanding() {
                     {showQuote ? (
                       <>
                         <div className="rounded-xl bg-background/80 p-4">
-                          <p className="text-xs font-semibold text-muted-foreground">Claimed rate (midpoint of the band)</p>
+                          <p className="text-xs font-semibold text-muted-foreground">
+                            Company-set rate (Section 5.2) · midpoint of the Part Two band
+                          </p>
                           <p className="mt-1 font-heading text-3xl font-bold tabular-nums">
                             ${estimate.claimed.toLocaleString("en-US")}
                             <span className="ml-2 text-base font-medium text-muted-foreground">
@@ -511,7 +581,7 @@ export default function StrLanding() {
                           </p>
                           <p className="mt-1 text-xs text-muted-foreground">
                             Band {formatDollarRange(estimate.min, estimate.max)}. Locked for {HOST_QUOTE_LOCK_HOURS}{" "}
-                            hours when you claim.
+                            hours when you claim. Not a price you enter or negotiate.
                           </p>
                         </div>
                         {estimate.listings.length > 1 && (
@@ -535,7 +605,11 @@ export default function StrLanding() {
                       </p>
                     )}
 
+                    <p className="text-xs leading-relaxed text-muted-foreground">{COMPANY_SETS_RATES}</p>
                     <p className="text-xs leading-relaxed text-muted-foreground">{ESTIMATE_DISCLAIMER}</p>
+                    {INTRO_RATE_ACTIVE && (
+                      <p className="text-xs leading-relaxed text-amber-900">{INTRO_RATE_DISCLOSURE}</p>
+                    )}
                     {estimate.reasons.length > 0 && (
                       <ul className="space-y-1 text-xs text-amber-900">
                         {estimate.reasons.map((r) => (
@@ -577,10 +651,11 @@ export default function StrLanding() {
                       <div>
                         <h3 className="font-heading text-2xl font-bold">Claim This Rate</h3>
                         <p className="mt-1 text-sm text-muted-foreground">
-                          Name, email, and phone. The quoted rate is locked for {HOST_QUOTE_LOCK_HOURS} hours.
+                          Name, email, phone, and whether you&apos;re signing as an individual or a
+                          business entity. The quoted rate is locked for {HOST_QUOTE_LOCK_HOURS} hours.
                           You continue into onboarding in this same browser — Legal &amp; Signature, then
-                          Property &amp; Rate Schedule (already filled), then Payment. The same link is
-                          texted and emailed so you can pick up later.
+                          Property &amp; Rate Schedule (already filled from this claim), then Payment.
+                          The same link is texted and emailed so you can pick up later.
                         </p>
                       </div>
                       <ContactFields
@@ -590,6 +665,12 @@ export default function StrLanding() {
                         setEmail={setEmail}
                         phone={phone}
                         setPhone={setPhone}
+                      />
+                      <EntityFields
+                        entityType={entityType}
+                        setEntityType={setEntityType}
+                        entityName={entityName}
+                        setEntityName={setEntityName}
                       />
                       {formError && <p className="text-sm text-rose-700">{formError}</p>}
                       <Button size="lg" disabled={busy} onClick={() => void submitClaim()}>
@@ -839,6 +920,58 @@ function ContactFields({
         <Label>Phone</Label>
         <Input className="mt-1" type="tel" value={phone} onChange={(e) => setPhone(formatPhoneNumber(e.target.value))} />
       </div>
+    </div>
+  );
+}
+
+function EntityFields({
+  entityType,
+  setEntityType,
+  entityName,
+  setEntityName,
+}: {
+  entityType: ClaimEntityType | "";
+  setEntityType: (v: ClaimEntityType) => void;
+  entityName: string;
+  setEntityName: (v: string) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <Label>Are you signing as an individual or a business entity?</Label>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          {(["individual", "entity"] as ClaimEntityType[]).map((opt) => (
+            <button
+              key={opt}
+              type="button"
+              onClick={() => setEntityType(opt)}
+              className={cn(
+                "flex items-center justify-center gap-2 rounded-xl border p-3 text-sm font-medium transition",
+                entityType === opt
+                  ? "border-primary/40 bg-primary/[0.06] text-primary"
+                  : "border-border text-muted-foreground hover:border-primary/20",
+              )}
+            >
+              {opt === "individual" ? <RiUser3Line className="h-4 w-4" /> : <RiBuilding2Line className="h-4 w-4" />}
+              {opt === "individual" ? "Individual" : "Business entity"}
+            </button>
+          ))}
+        </div>
+      </div>
+      {entityType === "entity" && (
+        <div>
+          <Label>Entity / business name</Label>
+          <Input
+            className="mt-1"
+            value={entityName}
+            onChange={(e) => setEntityName(e.target.value)}
+            placeholder="Acme Stays LLC"
+          />
+          <p className="mt-1 text-xs text-muted-foreground">
+            Your agreement will include a required personal guarantee (Section 6.10).
+          </p>
+        </div>
+      )}
     </div>
   );
 }

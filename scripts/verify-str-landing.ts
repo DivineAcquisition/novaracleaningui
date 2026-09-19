@@ -15,6 +15,7 @@ import { join } from "node:path";
 
 import { computeTurnoverQuote, HOST_RATE_BANDS, HOST_QUOTE_LOCK_HOURS } from "../src/lib/host-onboarding/rates";
 import {
+  COMPANY_SETS_RATES,
   ESTIMATE_DISCLAIMER,
   MAX_TYPICAL_LISTINGS,
   STR_CAL_LINK,
@@ -22,9 +23,16 @@ import {
   expandStrListings,
   estimateStrLanding,
   formatListingRange,
+  parseClaimEntity,
   strCtaFor,
 } from "../src/lib/host-landing/landing";
 import { deriveHostOnboardingProgress } from "../src/lib/host-onboarding/progress";
+import {
+  PAYMENT_OPTIONS,
+  PERSONAL_GUARANTEE,
+  requiresPersonalGuarantee,
+  validateHostSignature,
+} from "../src/lib/host-onboarding/agreement";
 
 let failures = 0;
 function check(name: string, actual: unknown, expected: unknown): void {
@@ -141,6 +149,35 @@ const unusualEst = estimateStrLanding({
 check("5BR estimate routes to Book a Call", unusualEst.cta, "book_call");
 check("5BR estimate is not claimable", unusualEst.ok, false);
 
+const withAddress = expandStrListings({
+  mode: "mixed",
+  listings: [
+    { label: "Harbor", address: "1200 Light Street, Baltimore, MD", bedrooms: 2, bathrooms: 1, linen: false, restock: false },
+    { label: "Fells", address: "812 S Broadway, Baltimore, MD", bedrooms: 1, bathrooms: 1, linen: true, restock: false },
+  ],
+});
+check("a host may enter more than one property", withAddress.length, 2);
+check("each listing keeps its address", withAddress.map((l) => l.address), [
+  "1200 Light Street, Baltimore, MD",
+  "812 S Broadway, Baltimore, MD",
+]);
+
+console.log("\nClaim entity vs individual (Agreement §6.10):");
+check("individual is accepted", parseClaimEntity({ entityType: "individual" }).ok, true);
+check(
+  "entity without a name is rejected",
+  parseClaimEntity({ entityType: "entity" }).ok,
+  false,
+);
+check(
+  "entity with a name is accepted",
+  parseClaimEntity({ entityType: "entity", entityName: "Harbor Stays LLC" }),
+  { ok: true, entityType: "entity", entityName: "Harbor Stays LLC" },
+);
+check("the question cannot be skipped", parseClaimEntity({}).ok, false);
+check("business entity requires the personal guarantee", requiresPersonalGuarantee("entity"), true);
+check("individual does not require the personal guarantee", requiresPersonalGuarantee("individual"), false);
+
 console.log("\nOnboarding order (payment last, then confirmation):");
 const unsigned = deriveHostOnboardingProgress({
   signed: false,
@@ -190,11 +227,15 @@ const files: Record<string, string> = {
   claimApi: readFileSync(join(ROOT, "src/app/api/str/claim/route.ts"), "utf8"),
   callApi: readFileSync(join(ROOT, "src/app/api/str/call/route.ts"), "utf8"),
   landingServer: readFileSync(join(ROOT, "src/lib/host-landing/landing-server.ts"), "utf8"),
+  landing: readFileSync(join(ROOT, "src/lib/host-landing/landing.ts"), "utf8"),
   rates: readFileSync(join(ROOT, "src/lib/host-onboarding/rates.ts"), "utf8"),
   sessionView: readFileSync(join(ROOT, "src/views/partner/HostOnboardingSession.tsx"), "utf8"),
   sessionRoute: readFileSync(join(ROOT, "src/app/api/partner/host-onboarding/[token]/route.ts"), "utf8"),
   progress: readFileSync(join(ROOT, "src/lib/host-onboarding/progress.ts"), "utf8"),
   portfolioView: readFileSync(join(ROOT, "src/views/portfolio/PortfolioLanding.tsx"), "utf8"),
+  agreement: readFileSync(join(ROOT, "src/lib/host-onboarding/agreement.ts"), "utf8"),
+  preview: readFileSync(join(ROOT, "src/lib/host-onboarding/preview.ts"), "utf8"),
+  hostPortal: readFileSync(join(ROOT, "src/views/partner/HostPortalView.tsx"), "utf8"),
 };
 
 check("middleware owns /str on try.*", files.middleware.includes('["/str", "try"]'), true);
@@ -203,7 +244,13 @@ check("VSL plays with no email gate", files.vsl.includes("no email gate") && fil
 check("estimate API uses estimateLandingStr", files.estimateApi.includes("estimateLandingStr"), true);
 check("Claim calls startHostOnboardingSession", files.landingServer.includes("startHostOnboardingSession"), true);
 check("Claim prices properties from the claimed midpoint", files.landingServer.includes("turnover_price: listing.quote.claimed"), true);
-check("Claim captures name, email, phone only", files.view.includes("Name, email, and phone") && !files.view.includes("Company / owner"), true);
+check("Claim captures name, email, phone, and entity vs individual", files.view.includes("Are you signing as an individual or a business entity?"), true);
+check("Claim does not skip the entity question", files.landingServer.includes("parseClaimEntity") && !files.landingServer.includes('entity_type: "individual"'), true);
+check("landing collects a property address", files.view.includes("Property address") && files.landing.includes("address:"), true);
+check("rates are presented as Company-set (Section 5.2)", files.view.includes("COMPANY_SETS_RATES") || files.view.includes("Section 5.2"), true);
+check("§5.2 copy does not invite the visitor to set the price", COMPANY_SETS_RATES.includes("you do not set, negotiate, or edit the number"), true);
+check("§5.3 intro disclosure exists next to any intro rate", files.landing.includes("INTRO_RATE_DISCLOSURE") && files.view.includes("INTRO_RATE_ACTIVE"), true);
+check("calculator does not show an intro rate without the disclosure", !files.view.includes("introductory rate") || files.view.includes("INTRO_RATE_DISCLOSURE"), true);
 check("unusual path does not mint onboarding", files.callApi.includes("bookCallStr") && !files.callApi.includes("startHostOnboardingSession"), true);
 check("the page labels the number as an estimate", files.view.includes("not a final per-turnover rate"), true);
 check("Claim This Rate is the typical CTA", files.view.includes("Claim This Rate"), true);
@@ -225,6 +272,61 @@ check("quote lock hours live in the rate table module", files.rates.includes("HO
 check("claim path has no admin review gate", !files.landingServer.includes("routedForReview") && files.landingServer.includes('actorName: "str-landing"'), true);
 check("path is /str", STR_PATH, "/str");
 check("onboarding session auto-provisions portal after payment", files.sessionRoute.includes("provisionPortalAfterPayment"), true);
+check("signature uses the submission entity type, not the client body", files.sessionRoute.includes('entityType = sub?.entity_type === "entity" ? "entity" : "individual"'), true);
+check("entity hosts must acknowledge the personal guarantee", files.sessionRoute.includes("requiresPersonalGuarantee: needsGuarantee"), true);
+check("Legal UI has a Personal Guarantee block", files.sessionView.includes("PERSONAL_GUARANTEE") && files.sessionView.includes("needsGuarantee"), true);
+check("Page 2 names the claimed submission as the pre-fill source", files.sessionView.includes("claimed_submission") && files.sessionView.includes("from the rate you claimed"), true);
+check("Page 3 does not pre-select a payment option", files.sessionView.includes("PaymentOptionKey | null") && files.sessionView.includes("Select a payment option first"), true);
+check("first-time Claim hosts are inserted with Pay After off", files.landingServer.includes("pay_after_enabled: false"), true);
+check("Pay After is filtered unless Company enabled it", files.preview.includes('o.key !== "pay_after" || payAfter'), true);
+check("confirmation lists registered properties", files.sessionView.includes("properties.map") && files.sessionView.includes("Go to My Account"), true);
+check("confirmation mentions the guarantee when it applied", files.sessionView.includes("Section 6.10 personal guarantee"), true);
+check("agreement includes Section 6.10", files.agreement.includes("6.10 Personal Guarantee"), true);
+check("three named payment options exist", Object.keys(PAYMENT_OPTIONS).sort(), ["full", "pay_after", "split"]);
+check("personal guarantee copy cites 6.10 and 15", PERSONAL_GUARANTEE.title.includes("6.10") && PERSONAL_GUARANTEE.title.includes("15"), true);
+check("host portal view has no cleaner contact", /cleaner|crew member/i.test(files.hostPortal), false);
+check("host portal has request-a-turnover", files.hostPortal.includes("Request a turnover") || files.hostPortal.includes("request a turnover") || files.hostPortal.toLowerCase().includes("turnover"), true);
+
+const unsignedGuarantee = validateHostSignature({
+  signerName: "Jordan Hale",
+  agreedToTerms: true,
+  acknowledgedNonCircumvention: true,
+  acknowledgedChargebacks: true,
+  acknowledgedArbitration: true,
+  signatureDataUrl: "data:image/png;base64,aaa",
+  requiresPersonalGuarantee: true,
+  acknowledgedPersonalGuarantee: false,
+  guarantorName: "Jordan Hale",
+});
+check("entity signature without the guarantee is rejected", unsignedGuarantee != null, true);
+check(
+  "individual signature does not ask for the guarantee",
+  validateHostSignature({
+    signerName: "Jordan Hale",
+    agreedToTerms: true,
+    acknowledgedNonCircumvention: true,
+    acknowledgedChargebacks: true,
+    acknowledgedArbitration: true,
+    signatureDataUrl: "data:image/png;base64,aaa",
+    requiresPersonalGuarantee: false,
+  }),
+  null,
+);
+check(
+  "entity signature with the guarantee is accepted",
+  validateHostSignature({
+    signerName: "Jordan Hale",
+    agreedToTerms: true,
+    acknowledgedNonCircumvention: true,
+    acknowledgedChargebacks: true,
+    acknowledgedArbitration: true,
+    signatureDataUrl: "data:image/png;base64,aaa",
+    requiresPersonalGuarantee: true,
+    acknowledgedPersonalGuarantee: true,
+    guarantorName: "Jordan Hale",
+  }),
+  null,
+);
 
 console.log(
   failures === 0
