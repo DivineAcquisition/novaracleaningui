@@ -8,13 +8,15 @@
 //
 //   Run:  npm run host-onboarding:verify
 
-import { PAYMENT_OPTIONS, PAY_AFTER_DISCRETION } from "../src/lib/host-onboarding/agreement";
+import { AGREEMENT_CLAUSES, PAYMENT_OPTIONS, PAY_AFTER_DISCRETION, PERSONAL_GUARANTEE, requiresPersonalGuarantee, validateHostSignature } from "../src/lib/host-onboarding/agreement";
 import {
   deriveHostOnboardingProgress,
   ratesReady,
   sessionIsStalled,
 } from "../src/lib/host-onboarding/progress";
 import { buildHostValues, buildHostPropertyFields } from "../src/lib/docuseal";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 let failures = 0;
 function check(name: string, actual: unknown, expected: unknown): void {
@@ -119,6 +121,44 @@ const payAfterOff = deriveHostOnboardingProgress({
 });
 check("Pay After disabled is reported on progress", payAfterOff.pay_after_enabled, false);
 
+console.log("\nPersonal Guarantee (Section 6.10) is entity-only:");
+check("entity requires the guarantee", requiresPersonalGuarantee("entity"), true);
+check("individual does not", requiresPersonalGuarantee("individual"), false);
+check(
+  "6.10 copy is in Part One",
+  AGREEMENT_CLAUSES.some(([heading, copy]) => heading.includes("Payment") && copy.includes("6.10 Personal Guarantee")),
+  true,
+);
+check("guarantee title cites 6.10 and 15", PERSONAL_GUARANTEE.title.includes("6.10") && PERSONAL_GUARANTEE.title.includes("15"), true);
+check(
+  "entity cannot skip the guarantee checkbox",
+  validateHostSignature({
+    signerName: "Alex Chen",
+    agreedToTerms: true,
+    acknowledgedNonCircumvention: true,
+    acknowledgedChargebacks: true,
+    acknowledgedArbitration: true,
+    signatureDataUrl: "data:image/png;base64,abc",
+    requiresPersonalGuarantee: true,
+    acknowledgedPersonalGuarantee: false,
+    guarantorName: "Alex Chen",
+  }),
+  "Please acknowledge the personal guarantee (Section 6.10).",
+);
+check(
+  "individual is not asked for the guarantee",
+  validateHostSignature({
+    signerName: "Alex Chen",
+    agreedToTerms: true,
+    acknowledgedNonCircumvention: true,
+    acknowledgedChargebacks: true,
+    acknowledgedArbitration: true,
+    signatureDataUrl: "data:image/png;base64,abc",
+    requiresPersonalGuarantee: false,
+  }),
+  null,
+);
+
 const done = deriveHostOnboardingProgress({
   signed: true,
   snapshotPropertyIds: props,
@@ -197,6 +237,13 @@ check(
   false,
 );
 
+console.log("\nSession UI wiring:");
+const sessionView = readFileSync(join(process.cwd(), "src/views/partner/HostOnboardingSession.tsx"), "utf8");
+check("payment option starts null (no Section 6.2 default)", sessionView.includes("PaymentOptionKey | null"), true);
+check("first payment option is not auto-selected", sessionView.includes('data.paymentOptions[0]?.key || "full"'), false);
+check("Personal Guarantee block is gated", sessionView.includes("needsGuarantee") && sessionView.includes("PERSONAL_GUARANTEE"), true);
+check("claimed-submission copy exists on Page 2", sessionView.includes("from the rate you claimed"), true);
+
 if (failures) {
   console.error(`\n${failures} check(s) failed`);
   process.exit(1);
@@ -256,6 +303,29 @@ void (async () => {
       ],
     });
     check("PDF is a non-empty base64 document", pdf.length > 500, true);
+    const entityPdf = await buildHostAgreementBase64({
+      signerName: "Jordan Hale",
+      signerEmail: "jordan@example.com",
+      entityType: "entity",
+      entityName: "Harbor Stays LLC",
+      acknowledgedPersonalGuarantee: true,
+      guarantorName: "Jordan Hale",
+      properties: [
+        {
+          property_id: "preview-1",
+          nickname: "Harbor Loft",
+          address: "1200 Light Street, Baltimore, MD 21230",
+          bedrooms: 2,
+          bathrooms: 2,
+          sqft: 1100,
+          turnover_price: 185,
+          linen: true,
+          restock: true,
+          special_notes: null,
+        },
+      ],
+    });
+    check("entity PDF is a non-empty base64 document", entityPdf.length > 500, true);
   } catch (err) {
     failures++;
     console.error(`  ✗ PDF generate threw: ${err instanceof Error ? err.message : err}`);

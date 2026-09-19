@@ -80,6 +80,68 @@ export const PAYMENT_OPTIONS: Record<
 export const PAY_AFTER_DISCRETION =
   "Pay After is available at the Company's discretion to Hosts in good standing.";
 
+export const PAYMENT_NO_DEFAULT =
+  "Section 6.2 names three options. Choose one — nothing is pre-selected. " +
+  "Pay After is offered only when the Company has enabled it for this Host.";
+
+/** Agreement §6.10 / §15 — required for a business-entity Host, absent for an individual. */
+export const PERSONAL_GUARANTEE = {
+  title: "Personal Guarantee (Section 6.10 / Section 15)",
+  body:
+    "If the Host is a business entity, the individual who signs this Agreement personally " +
+    "and unconditionally guarantees the Host's payment and performance obligations. " +
+    "Section 6.10 makes this guarantee a condition of registering additional Properties " +
+    "for an entity Host at the Company's discretion. The guarantor waives notice of " +
+    "acceptance, presentment, and any requirement that the Company first proceed against " +
+    "the Host. This guarantee is a continuing obligation and survives termination to the " +
+    "extent amounts remain outstanding. Disputes relating to this guarantee are resolved " +
+    "under Section 15.",
+  ack:
+    "I personally guarantee the entity Host's obligations under this Agreement " +
+    "(Section 6.10). This guarantee is required and is not optional.",
+};
+
+export function requiresPersonalGuarantee(entityType: string | null | undefined): boolean {
+  return String(entityType || "").trim().toLowerCase() === "entity";
+}
+
+export function validateHostSignature(input: {
+  signerName: string;
+  agreedToTerms: unknown;
+  acknowledgedNonCircumvention: unknown;
+  acknowledgedChargebacks: unknown;
+  acknowledgedArbitration: unknown;
+  signatureDataUrl: string;
+  pdfBase64?: string;
+  requiresPersonalGuarantee?: boolean;
+  acknowledgedPersonalGuarantee?: unknown;
+  guarantorName?: string;
+}): string | null {
+  if (input.signerName.length < 2) return "Please enter your full legal name to sign.";
+  if (input.agreedToTerms !== true) return "Please confirm you've read and agree to the agreement.";
+  if (input.acknowledgedNonCircumvention !== true) {
+    return "Please acknowledge the non-circumvention provision.";
+  }
+  if (input.acknowledgedChargebacks !== true) {
+    return "Please acknowledge the chargeback terms.";
+  }
+  if (input.acknowledgedArbitration !== true) {
+    return "Please acknowledge the arbitration provision.";
+  }
+  if (input.requiresPersonalGuarantee) {
+    if (input.acknowledgedPersonalGuarantee !== true) {
+      return "Please acknowledge the personal guarantee (Section 6.10).";
+    }
+    if (!String(input.guarantorName || "").trim() || String(input.guarantorName).trim().length < 2) {
+      return "Please enter the guarantor's full legal name.";
+    }
+  }
+  if (!/^data:image\/png;base64,/.test(input.signatureDataUrl)) {
+    return "Please draw your signature in the box above.";
+  }
+  return null;
+}
+
 export const AGREEMENT_CLAUSES: Array<[string, string]> = [
   [
     "1. Parties and Appointment",
@@ -142,7 +204,15 @@ export const AGREEMENT_CLAUSES: Array<[string, string]> = [
       "per-turnover rate is charged when the cleaner completes the turnover and uploads " +
       "completion photos. If the Company has not enabled Pay After for this Host, that " +
       "option is not offered. 6.3 Failed charges may pause booking and assignment until " +
-      "the payment method is updated.",
+      "the payment method is updated. 6.10 Personal Guarantee (entity Hosts). If the " +
+      "Host is a business entity, the individual who signs this Agreement personally " +
+      "and unconditionally guarantees the Host's payment and performance obligations. " +
+      "The Company may, at its discretion, condition the registration of additional " +
+      "Properties for an entity Host on this guarantee remaining in effect. The " +
+      "guarantor waives notice of acceptance, presentment, and any requirement that the " +
+      "Company first proceed against the Host. This guarantee is a continuing " +
+      "obligation and survives termination to the extent amounts remain outstanding. " +
+      "Disputes relating to this guarantee are resolved under Section 15.",
   ],
   [
     "7. Access and Keys",

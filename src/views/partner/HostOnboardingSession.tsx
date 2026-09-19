@@ -27,8 +27,11 @@ import {
   BINDING_ACKNOWLEDGMENTS,
   IMPORTANT_NOTICE,
   PAY_AFTER_DISCRETION,
+  PAYMENT_NO_DEFAULT,
+  PERSONAL_GUARANTEE,
   bedsBathsLabel,
   formatTurnoverRate,
+  requiresPersonalGuarantee,
   type PaymentOptionKey,
 } from "@/lib/host-onboarding/agreement";
 import type { HostOnboardingProgress } from "@/lib/host-onboarding/progress";
@@ -71,6 +74,8 @@ interface Payload {
   handoffUrl?: string;
   agreementSignedAt: string | null;
   signerName: string | null;
+  requiresPersonalGuarantee?: boolean;
+  prefillSource?: "claimed_submission" | "proposal";
 }
 
 type State = { kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; data: Payload };
@@ -307,6 +312,9 @@ function LegalStep({
   const [agreed, setAgreed] = useState(false);
   const [acks, setAcks] = useState({ non_circumvention: false, chargebacks: false, arbitration: false });
   const [signature, setSignature] = useState<string | null>(null);
+  const needsGuarantee = data.requiresPersonalGuarantee ?? requiresPersonalGuarantee(data.host.entityType);
+  const [guaranteeAck, setGuaranteeAck] = useState(false);
+  const [guarantorName, setGuarantorName] = useState(data.host.name || data.session.recipientName || "");
 
   const ready =
     name.trim().length >= 2 &&
@@ -314,7 +322,8 @@ function LegalStep({
     acks.non_circumvention &&
     acks.chargebacks &&
     acks.arbitration &&
-    Boolean(signature && signature.length > 100);
+    Boolean(signature && signature.length > 100) &&
+    (!needsGuarantee || (guaranteeAck && guarantorName.trim().length >= 2));
 
   const sign = async () => {
     if (!signature) {
@@ -332,6 +341,8 @@ function LegalStep({
         acknowledgedNonCircumvention: acks.non_circumvention,
         acknowledgedChargebacks: acks.chargebacks,
         acknowledgedArbitration: acks.arbitration,
+        acknowledgedPersonalGuarantee: needsGuarantee ? guaranteeAck : undefined,
+        guarantorName: needsGuarantee ? guarantorName.trim() : undefined,
         signatureDataUrl: signature,
       });
     } catch (err) {
@@ -405,6 +416,30 @@ function LegalStep({
         </label>
       </div>
 
+      {needsGuarantee && (
+        <div className="mt-5 space-y-3 rounded-xl border border-violet-200 bg-violet-50 p-4">
+          <h3 className="text-sm font-semibold text-violet-900">{PERSONAL_GUARANTEE.title}</h3>
+          <p className="text-sm leading-relaxed text-violet-950">{PERSONAL_GUARANTEE.body}</p>
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">Guarantor&apos;s full legal name</span>
+            <input
+              className={`${inputCls} mt-1`}
+              value={guarantorName}
+              onChange={(e) => setGuarantorName(e.target.value)}
+            />
+          </label>
+          <label className="flex items-start gap-3 rounded-xl border border-violet-200 bg-white p-3">
+            <input
+              type="checkbox"
+              className="mt-1 h-4 w-4 accent-[#5500FF]"
+              checked={guaranteeAck}
+              onChange={(e) => setGuaranteeAck(e.target.checked)}
+            />
+            <span className="text-sm text-slate-700">{PERSONAL_GUARANTEE.ack}</span>
+          </label>
+        </div>
+      )}
+
       <label className="mt-5 block">
         <span className="text-sm font-medium text-slate-700">Full legal name</span>
         <input className={`${inputCls} mt-1`} value={name} onChange={(e) => setName(e.target.value)} />
@@ -452,9 +487,9 @@ function RatesStep({
           <h2 className="text-lg font-semibold text-slate-900">Property &amp; Rate Schedule</h2>
         </div>
         <p className="mt-1 text-sm text-slate-500">
-          Part Two — every property from your proposal, with the per-turnover rate already set by
-          Novara. Confirm each as shown, or flag one if a detail is wrong. Flagging notifies us and
-          does not block the rest of this session. Rates are not editable here.
+          {data.prefillSource === "claimed_submission"
+            ? "Part Two — every property from the rate you claimed, with the per-turnover rate already set by Novara under Section 5.2. Confirm each as shown, or flag one if a detail is wrong. Flagging notifies us and does not block the rest of this session. You confirm the schedule; you do not edit the rate."
+            : "Part Two — every property from your proposal, with the per-turnover rate already set by Novara. Confirm each as shown, or flag one if a detail is wrong. Flagging notifies us and does not block the rest of this session. Rates are not editable here."}
         </p>
       </Card>
 
@@ -659,8 +694,8 @@ function PaymentStep({
   busy: boolean;
   onPost: (body: Record<string, unknown>) => Promise<unknown>;
 }) {
-  const [option, setOption] = useState<PaymentOptionKey>(
-    (data.session.paymentOption as PaymentOptionKey) || data.paymentOptions[0]?.key || "full",
+  const [option, setOption] = useState<PaymentOptionKey | null>(
+    (data.session.paymentOption as PaymentOptionKey) || null,
   );
   const needsPortal = !data.host.hasPortal;
   const cardReady = data.host.cardOnFile || data.progress.payment_ready;
@@ -669,6 +704,10 @@ function PaymentStep({
   const [embedError, setEmbedError] = useState<string | null>(null);
 
   const openEmbed = async () => {
+    if (!option) {
+      setEmbedError("Choose a payment option first. Nothing is pre-selected.");
+      return;
+    }
     setEmbedError(null);
     const json = (await onPost({ action: "setup_payment", paymentOption: option })) as {
       clientSecret?: string;
@@ -695,8 +734,9 @@ function PaymentStep({
           The three options in Section 6.2. Adding a card places a Stripe Pre-Auth hold — nothing
           is captured now. The partnership is not complete until that hold is submitted.
         </p>
+        <p className="mt-3 text-xs text-slate-500">{PAYMENT_NO_DEFAULT}</p>
         {!data.session.payAfterEnabled && (
-          <p className="mt-3 text-xs text-slate-500">{PAY_AFTER_DISCRETION} It is not offered on this account.</p>
+          <p className="mt-2 text-xs text-slate-500">{PAY_AFTER_DISCRETION} It is not offered on this account.</p>
         )}
 
         <div className="mt-4 grid gap-2">
@@ -719,23 +759,27 @@ function PaymentStep({
         {!cardReady && preview && (
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || !option}
             onClick={() => void onPost({ action: "setup_payment", paymentOption: option })}
             className="mt-5 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-violet-600 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
           >
             {busy ? <RiLoader4Line className="h-4 w-4 animate-spin" /> : <RiBankCardLine className="h-4 w-4" />}
-            Place the Pre-Auth hold for {data.paymentOptions.find((o) => o.key === option)?.title || "this option"}
+            {!option
+              ? "Select a payment option first"
+              : `Place the Pre-Auth hold for ${data.paymentOptions.find((o) => o.key === option)?.title || "this option"}`}
           </button>
         )}
         {!cardReady && !preview && !embed && (
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || !option}
             onClick={() => void openEmbed()}
             className="mt-5 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-violet-600 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
           >
             {busy ? <RiLoader4Line className="h-4 w-4 animate-spin" /> : <RiBankCardLine className="h-4 w-4" />}
-            Add a card for {data.paymentOptions.find((o) => o.key === option)?.title || "this option"}
+            {!option
+              ? "Select a payment option first"
+              : `Add a card for ${data.paymentOptions.find((o) => o.key === option)?.title || "this option"}`}
           </button>
         )}
         {!cardReady && !preview && embed && (
@@ -792,6 +836,11 @@ function PaymentStep({
 }
 
 function DoneCard({ data }: { data: Payload }) {
+  const paymentTitle =
+    data.paymentOptions.find((o) => o.key === data.session.paymentOption)?.title ||
+    data.session.paymentOption ||
+    "configured";
+  const guaranteed = data.requiresPersonalGuarantee ?? requiresPersonalGuarantee(data.host.entityType);
   return (
     <Card className="text-center">
       <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500 text-white">
@@ -799,9 +848,20 @@ function DoneCard({ data }: { data: Payload }) {
       </div>
       <h2 className="mt-4 text-xl font-semibold">You&apos;re confirmed</h2>
       <p className="mt-2 text-sm leading-relaxed text-slate-600">
-        The Host Partnership Agreement is signed, your rate schedule is on file, and payment is
-        ready. Go to My Account to open the host portal and book turnovers.
+        Properties registered, the Host Partnership Agreement signed
+        {guaranteed ? " (including the Section 6.10 personal guarantee)" : ""}, and payment configured.
       </p>
+      {data.properties.length > 0 && (
+        <ul className="mx-auto mt-4 max-w-md space-y-1 text-left text-sm text-slate-600">
+          {data.properties.map((p) => (
+            <li key={p.property_id}>
+              {p.nickname || "Property"}
+              {p.address ? ` · ${p.address}` : ""} · {formatTurnoverRate(p.turnover_price)}/turnover
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="mt-3 text-sm text-slate-600">Payment: {paymentTitle}</p>
       <a
         href={data.handoffUrl || data.portalUrl}
         className="mt-5 inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-violet-600 px-5 text-sm font-semibold text-white hover:bg-violet-700"

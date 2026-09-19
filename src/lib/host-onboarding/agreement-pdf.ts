@@ -7,8 +7,10 @@ import {
   COMPANY_LEGAL_NAME,
   IMPORTANT_NOTICE,
   PAYMENT_OPTIONS,
+  PERSONAL_GUARANTEE,
   bedsBathsLabel,
   formatTurnoverRate,
+  requiresPersonalGuarantee,
   type PaymentOptionKey,
 } from "./agreement";
 import type { SnapshotProperty } from "./session";
@@ -37,6 +39,8 @@ export interface HostAgreementPdfFields {
   properties: SnapshotProperty[];
   paymentOption?: PaymentOptionKey | string | null;
   signatureDataUrl?: string | null;
+  acknowledgedPersonalGuarantee?: boolean;
+  guarantorName?: string | null;
 }
 
 export async function buildHostAgreementBase64(fields: HostAgreementPdfFields): Promise<string> {
@@ -162,7 +166,7 @@ export async function buildHostAgreementBase64(fields: HostAgreementPdfFields): 
   newPage();
   text("Section 17 — Property & Rate Schedule", { size: 15, f: bold, color: purple, dy: 20 });
   wrap(
-    "Each block below is a Property from the proposal. The per-turnover rate was set by the Company " +
+    "Each block below is a Property from the claimed submission or priced proposal. The per-turnover rate was set by the Company " +
       "under Section 5.2. The Host confirms the details; the Host does not edit the rate.",
     { size: 9, color: gray },
   );
@@ -200,6 +204,11 @@ export async function buildHostAgreementBase64(fields: HostAgreementPdfFields): 
   for (const ack of BINDING_ACKNOWLEDGMENTS) {
     wrap(`[x] ${ack.label}. ${ack.text}`, { size: 8.5 });
     y -= 4;
+  }
+  if (requiresPersonalGuarantee(fields.entityType) || fields.acknowledgedPersonalGuarantee) {
+    y -= 6;
+    wrap(`[x] ${PERSONAL_GUARANTEE.title}. ${PERSONAL_GUARANTEE.ack}`, { size: 8.5 });
+    if (fields.guarantorName) field("Guarantor", fields.guarantorName);
   }
 
   y -= 10;

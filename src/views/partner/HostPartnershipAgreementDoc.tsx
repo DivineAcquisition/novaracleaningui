@@ -5,6 +5,7 @@ import {
   COMPANY_LEGAL_NAME,
   IMPORTANT_NOTICE,
   PAYMENT_OPTIONS,
+  PERSONAL_GUARANTEE,
 } from "@/lib/host-onboarding/agreement";
 
 export default function HostPartnershipAgreementDoc() {
@@ -44,6 +45,11 @@ export default function HostPartnershipAgreementDoc() {
               </li>
             ))}
           </ul>
+        </div>
+
+        <div className="mt-8 rounded-xl border border-violet-200 bg-violet-50 p-5">
+          <h2 className="text-base font-semibold">{PERSONAL_GUARANTEE.title}</h2>
+          <p className="mt-2 text-sm leading-relaxed text-slate-600">{PERSONAL_GUARANTEE.body}</p>
         </div>
       </article>
     </div>

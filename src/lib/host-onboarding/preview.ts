@@ -22,6 +22,7 @@ export function isLocalHostRequest(req: Request): boolean {
 
 type PreviewMem = {
   signed: boolean;
+  entity: boolean;
   decisions: Array<{ propertyId: string; decision: "confirmed" | "flagged"; note?: string }>;
   extra: number;
   paymentOption: string | null;
@@ -31,6 +32,7 @@ type PreviewMem = {
 
 const previewMem: PreviewMem = {
   signed: false,
+  entity: false,
   decisions: [],
   extra: 0,
   paymentOption: null,
@@ -40,6 +42,7 @@ const previewMem: PreviewMem = {
 
 export function resetHostOnboardingPreview(): void {
   previewMem.signed = false;
+  previewMem.entity = false;
   previewMem.decisions = [];
   previewMem.extra = 0;
   previewMem.paymentOption = null;
@@ -57,6 +60,14 @@ export function applyHostOnboardingPreviewAction(action: string, body: Record<st
   portalUrl?: string;
 } {
   if (action === "sign") {
+    if (previewMem.entity) {
+      if (body.acknowledgedPersonalGuarantee !== true) {
+        return { ok: false, status: 400, message: "Please acknowledge the personal guarantee (Section 6.10)." };
+      }
+      if (String(body.guarantorName || body.signerName || "").trim().length < 2) {
+        return { ok: false, status: 400, message: "Please enter the guarantor's full legal name." };
+      }
+    }
     previewMem.signed = true;
     return { ok: true, status: 200, outcome: "signed", message: "Signed. Next: confirm each property and its Company-set rate." };
   }
@@ -110,8 +121,9 @@ export function applyHostOnboardingPreviewAction(action: string, body: Record<st
   return { ok: false, status: 400, message: `Unknown action "${action}".` };
 }
 
-export function hostOnboardingPreviewPayload(step?: string) {
+export function hostOnboardingPreviewPayload(step?: string, opts?: { entity?: boolean }) {
   if (step === "legal") resetHostOnboardingPreview();
+  if (opts?.entity) previewMem.entity = true;
   // `step` is a jump, not persistent state. The page strips it after the first
   // POST so a reload does not undo sign / rate decisions.
   if (step === "rates") {
@@ -128,6 +140,7 @@ export function hostOnboardingPreviewPayload(step?: string) {
     ];
     previewMem.card = false;
     previewMem.portal = false;
+    previewMem.paymentOption = null;
   }
   if (step === "done") {
     previewMem.signed = true;
@@ -202,8 +215,8 @@ export function hostOnboardingPreviewPayload(step?: string) {
       id: "preview-host",
       name: "Jordan Hale",
       email: "jordan@example.com",
-      entityType: "individual",
-      entityName: null,
+      entityType: previewMem.entity ? "entity" : "individual",
+      entityName: previewMem.entity ? "Harbor Stays LLC" : null,
       hasPortal: previewMem.portal,
       cardOnFile: previewMem.card,
     },
@@ -219,5 +232,7 @@ export function hostOnboardingPreviewPayload(step?: string) {
     handoffUrl: previewMem.portal ? "/partner/enter/preview-host" : undefined,
     agreementSignedAt: previewMem.signed ? new Date().toISOString() : null,
     signerName: previewMem.signed ? "Jordan Hale" : null,
+    requiresPersonalGuarantee: previewMem.entity,
+    prefillSource: "claimed_submission" as const,
   };
 }

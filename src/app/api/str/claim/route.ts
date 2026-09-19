@@ -1,9 +1,11 @@
 // ─── POST /api/str/claim ───────────────────────────────────────────────────
 //
 // Public Claim This Rate for a *typical* STR listing. Captures name, email,
-// and phone only. Prices properties from the Host rate table, locks the
-// quote for 48 hours, mints the existing tokenized host onboarding session,
-// continues in-browser, and sends the same link by SMS/email. No admin step.
+// phone, and whether the Host is signing as an individual or a business
+// entity (Agreement §6.10 personal-guarantee branch). Prices properties from
+// the Host rate table, locks the quote for 48 hours, mints the existing
+// tokenized host onboarding session, continues in-browser, and sends the
+// same link by SMS/email. No admin step.
 
 import { NextResponse } from "next/server";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
