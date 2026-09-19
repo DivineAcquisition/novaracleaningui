@@ -6,6 +6,7 @@
 //   • typical vs unusual is reviewDecisionForUnit, not a unit-count cutoff
 //   • Claim This Rate = name/email/phone, quote lock, existing onboarding
 //   • unusual units book a call instead of auto-onboarding
+//   • calendar banner invites bigger portfolios that need stable cleaners
 //   • the estimate is labeled non-final
 //
 //   Run:  npm run portfolio-landing:verify
@@ -22,6 +23,7 @@ import {
   reviewDecisionForUnit,
 } from "../src/lib/property-manager/pricing";
 import {
+  CALENDAR_BANNER,
   ESTIMATE_DISCLAIMER,
   HERO_HEADLINE,
   PM_QUOTE_LOCK_HOURS,
@@ -280,6 +282,15 @@ check("claim form is name, email, and phone", files.view.includes("Name, email, 
 check("footer restates Claim / Book a Call", files.view.includes("Claim This Rate") && files.view.includes("Book a Call") && files.view.includes("Typical units?"), true);
 check("hero copy spans one unit or fifty", files.view.includes("one unit or fifty"), true);
 check("Cal.com embed is on the Book a Call path", files.cal.includes("malik-sannie-clwphb/15min") && files.view.includes("PortfolioCalEmbed"), true);
+check(
+  "calendar banner invites bigger portfolios that need stable cleaners",
+  /bigger portfolio/i.test(CALENDAR_BANNER.title) && /stable cleaners/i.test(CALENDAR_BANNER.title),
+  true,
+);
+check("calendar banner is rendered on the Cal embed", files.cal.includes("CALENDAR_BANNER") && files.cal.includes("portfolio-cal-banner"), true);
+check("calendar section is always on the page (not only the unusual-unit panel)", files.view.includes('id="book-call"') && files.view.includes("PortfolioCalEmbed"), true);
+check("Book a Call scrolls to the calendar section", files.view.includes('"book-call"'), true);
+check("banner copy does not replace Claim for typical units", /Claim This Rate/.test(CALENDAR_BANNER.body), true);
 check("volume tier is computed live from resolveVolumeDiscount", files.view.includes("resolveVolumeDiscount"), true);
 check("confirmation button is Go to My Account", files.onboardingView.includes("Go to My Account"), true);
 check("billing auto-provisions the portal", files.onboardingApi.includes("provisionPortalAfterBilling"), true);
