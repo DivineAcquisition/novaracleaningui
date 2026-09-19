@@ -12,6 +12,12 @@ import { NextResponse } from "next/server";
 
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import {
+  applyPmOnboardingPreviewAction,
+  isLocalPreviewRequest,
+  isPmOnboardingPreviewToken,
+  pmOnboardingPreviewPayload,
+} from "@/lib/property-manager/onboarding/preview";
+import {
   addUnitDuringOnboarding,
   clip,
   configureBilling,
@@ -64,6 +70,10 @@ export async function GET(
   ctx: { params: Promise<{ token: string }> },
 ): Promise<NextResponse> {
   const { token } = await ctx.params;
+  if (isPmOnboardingPreviewToken(token) && isLocalPreviewRequest(req)) {
+    const step = new URL(req.url).searchParams.get("step") || undefined;
+    return NextResponse.json(pmOnboardingPreviewPayload(step));
+  }
   const supabase = getAdminSupabase();
   const resolved = await resolveSession(supabase, token);
   if (!resolved.ok || !resolved.session) {
@@ -94,6 +104,18 @@ export async function POST(
   ctx: { params: Promise<{ token: string }> },
 ): Promise<NextResponse> {
   const { token } = await ctx.params;
+  if (isPmOnboardingPreviewToken(token) && isLocalPreviewRequest(req)) {
+    const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+    const result = applyPmOnboardingPreviewAction(String(body.action || ""), body);
+    if (!result.ok) {
+      return NextResponse.json({ ok: false, message: result.message }, { status: result.status });
+    }
+    return NextResponse.json({
+      ok: true,
+      progress: pmOnboardingPreviewPayload().progress,
+      ...result,
+    });
+  }
   const supabase = getAdminSupabase();
   const resolved = await resolveSession(supabase, token);
   if (!resolved.ok || !resolved.session) {

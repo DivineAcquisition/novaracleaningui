@@ -294,6 +294,7 @@ check("billing collects cycle, net terms, and billing contact", files.onboarding
 check("Legal has no Personal Guarantee block", !/personal guarantee|PERSONAL_GUARANTEE/i.test(files.onboardingView), true);
 check("Legal cites Section 17, not a guarantee", files.onboardingView.includes("Section 17"), true);
 check("Page 2 recomputes rates from corrected size", files.onboardingApi.includes("update_unit") && files.onboardingView.includes("update_unit"), true);
+check("localhost preview token is wired", files.onboardingApi.includes("preview-property-manager") || files.onboardingApi.includes("isPmOnboardingPreviewToken"), true);
 check("Add Unit raises a Section 5.2 review for a count jump", files.onboardingView.includes("Section 5.2"), true);
 check("confirmation lists units, signed agreement, and billing", files.onboardingView.includes("unit") && files.onboardingView.includes("Agreement signed") && files.onboardingView.includes("Billing configured"), true);
 check("portal additional units force review rather than auto-price", readFileSync(join(ROOT, "src/lib/partner-portal/property-manager.ts"), "utf8").includes("forceReview: true"), true);

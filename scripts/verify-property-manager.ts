@@ -41,6 +41,12 @@ import {
   PM_BILLING_OPTIONS,
 } from "../src/lib/property-manager/onboarding/agreement";
 import {
+  applyPmOnboardingPreviewAction,
+  isPmOnboardingPreviewToken,
+  pmOnboardingPreviewPayload,
+  resetPmOnboardingPreview,
+} from "../src/lib/property-manager/onboarding/preview";
+import {
   dueDateFor,
   lineDescription,
   periodFor,
@@ -415,6 +421,61 @@ check(
   commsTemplate.includes("property_manager_onboarding_link"),
   true,
 );
+
+console.log("\nLocalhost onboarding preview (Legal → Registry → Billing):");
+check("preview token is preview-property-manager", isPmOnboardingPreviewToken("preview-property-manager"), true);
+check("a live-looking token is not a preview", isPmOnboardingPreviewToken("not-a-preview-token"), false);
+resetPmOnboardingPreview();
+const legalPreview = pmOnboardingPreviewPayload("legal");
+check("legal jump is unsigned", legalPreview.progress.current_step, "legal");
+check("legal has no billing method other than invoiced default", legalPreview.session.billingMethod, "invoiced");
+check("claimed units are pre-filled from the landing quote", legalPreview.units.every((u) => u.claimedFromLanding), true);
+check("Legal preview has no entityType field", "entityType" in legalPreview.account || "entityType" in legalPreview.session, false);
+
+const signed = applyPmOnboardingPreviewAction("sign", { signerName: "Jordan Hale" });
+check("sign opens the registry", signed.ok && pmOnboardingPreviewPayload().progress.current_step === "registry", true);
+
+const beforeMoveOut = pmOnboardingPreviewPayload().units[0].rates.move_out;
+const updated = applyPmOnboardingPreviewAction("update_unit", {
+  unitId: "preview-pm-u1",
+  sqft: 2200,
+  bedrooms: 2,
+  bathrooms: 1,
+});
+check("correcting sqft recomputes Standing Rates", updated.ok, true);
+check(
+  "the recomputed Move-Out rate is not the previous band",
+  (updated.rates?.move_out || 0) !== beforeMoveOut && (updated.rates?.move_out || 0) > 0,
+  true,
+);
+
+applyPmOnboardingPreviewAction("decide_unit", { unitId: "preview-pm-u1", decision: "confirmed" });
+applyPmOnboardingPreviewAction("decide_unit", { unitId: "preview-pm-u2", decision: "confirmed" });
+const billingPreview = pmOnboardingPreviewPayload();
+check("confirmed registry opens billing", billingPreview.progress.current_step, "billing");
+check("billing still defaults to invoiced", billingPreview.session.billingMethod, "invoiced");
+
+const jump = pmOnboardingPreviewPayload("billing");
+check("billing jump is invoiced and not confirmed", jump.session.billingMethod === "invoiced" && !jump.progress.billing_ready, true);
+
+const billed = applyPmOnboardingPreviewAction("configure_billing", {
+  billingMethod: "invoiced",
+  billingEmail: "ap@example.com",
+  invoiceCycle: "monthly",
+  netTerms: "net_15",
+});
+check("confirming invoiced finishes the session", billed.ok && pmOnboardingPreviewPayload().progress.complete, true);
+check("done hands off to the PM portal preview", billed.handoffUrl, "/partner?preview=property_manager");
+
+resetPmOnboardingPreview();
+pmOnboardingPreviewPayload("registry");
+applyPmOnboardingPreviewAction("sign", {});
+const unusual = applyPmOnboardingPreviewAction("add_unit", {
+  address: "900 Warehouse Ave",
+  sqft: 9000,
+  bedrooms: 2,
+});
+check("an unusual add-unit still lets the session continue", unusual.ok && unusual.autoPriced === false, true);
 
 console.log(
   failures === 0

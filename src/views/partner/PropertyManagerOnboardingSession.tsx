@@ -320,6 +320,11 @@ export default function PropertyManagerOnboardingSession({ token }: { token: str
       // under the client secret we were just handed.
       if (json.outcome === "embed") return json;
       if (json.message) setNotice(json.message as string);
+      if (typeof window !== "undefined") {
+        const next = new URL(window.location.href);
+        next.searchParams.delete("step");
+        window.history.replaceState({}, "", next.pathname + (next.search || ""));
+      }
       await load();
       noticeRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
       return json;
