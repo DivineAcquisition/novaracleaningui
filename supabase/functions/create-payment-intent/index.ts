@@ -4,6 +4,11 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getEstimatedHours } from "../_shared/payout-utils.ts";
 import { resolveSecret } from "../_shared/app-secrets.ts";
 import { isStaffCustomerEmail, STAFF_CUSTOMER_ERROR } from "../_shared/staff-customer.ts";
+import {
+  CHECKOUT_NUDGE_SKIP_COPY,
+  isPastServiceDate,
+  PAST_SERVICE_DATE_CODE,
+} from "../_shared/checkout-nudge-guard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -98,6 +103,21 @@ serve(async (req) => {
         }),
         {
           status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    if (isPastServiceDate(bookingData.serviceDate)) {
+      logStep("Rejected past service date", { serviceDate: bookingData.serviceDate });
+      return new Response(
+        JSON.stringify({
+          error: CHECKOUT_NUDGE_SKIP_COPY.past_service_date,
+          details: "Pick a new appointment date to continue.",
+          code: PAST_SERVICE_DATE_CODE,
+        }),
+        {
+          status: 409,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         },
       );

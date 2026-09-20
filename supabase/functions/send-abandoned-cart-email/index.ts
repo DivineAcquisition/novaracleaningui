@@ -4,6 +4,12 @@ import { Resend } from "https://esm.sh/resend@2.0.0";
 import * as React from "https://esm.sh/react@18.3.1";
 import { renderAsync } from "https://esm.sh/@react-email/components@0.0.22";
 import { AbandonedCartReminder } from "../_shared/email-templates/AbandonedCartReminder.tsx";
+import {
+  evaluateCheckoutNudgeGuard,
+  extractCartServiceDate,
+  loadBookedOrDoneBookings,
+  suppressLeftoverPublicCheckouts,
+} from "../_shared/checkout-nudge-guard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -114,6 +120,51 @@ const handler = async (req: Request): Promise<Response> => {
         logStep("Cart already converted, skipping email");
         return new Response(
           JSON.stringify({ success: true, message: "Cart already converted" }),
+          { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      }
+
+      const others = await loadBookedOrDoneBookings(supabase, {
+        email: cartData.email,
+        phone: cartData.phone,
+      });
+      const verdict = evaluateCheckoutNudgeGuard({
+        pendingServiceDate: extractCartServiceDate(cartData.booking_data),
+        otherBookings: others,
+      });
+      if (!verdict.send && verdict.skipReason) {
+        logStep("Skipped by checkout-nudge guard", {
+          cartId,
+          skipReason: verdict.skipReason,
+          match: verdict.match?.id,
+        });
+        if (
+          verdict.skipReason === "existing_booking" ||
+          verdict.skipReason === "completed_booking"
+        ) {
+          await suppressLeftoverPublicCheckouts(supabase, {
+            email: cartData.email,
+            phone: cartData.phone,
+            keepBookingId: verdict.match?.id || null,
+            reason: `abandoned_cart_${verdict.skipReason}`,
+          });
+        } else {
+          await supabase
+            .from("abandoned_carts")
+            .update({
+              converted_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", cartId)
+            .is("converted_at", null);
+        }
+        return new Response(
+          JSON.stringify({
+            success: true,
+            skipped: true,
+            skipReason: verdict.skipReason,
+            message: "Checkout nudge suppressed",
+          }),
           { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
         );
       }

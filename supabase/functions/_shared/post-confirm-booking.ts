@@ -39,6 +39,7 @@ import {
   getEstimatedHours,
 } from "./payout-utils.ts";
 import { publicChecklistUrl } from "./public-checklist-url.ts";
+import { suppressLeftoverPublicCheckouts } from "./checkout-nudge-guard.ts";
 
 const log = (step: string, details?: unknown) => {
   const tail = details ? ` - ${JSON.stringify(details)}` : "";
@@ -472,6 +473,19 @@ export async function runPostConfirmFanout(
 ): Promise<{ ok: true; bookingId: string; source: string }> {
   const bookingId = String(booking.id);
   log("Starting fan-out", { bookingId, source: opts.source || "customer" });
+
+  try {
+    await suppressLeftoverPublicCheckouts(supabase, {
+      email: booking.email as string | undefined,
+      phone: booking.phone as string | undefined,
+      keepBookingId: bookingId,
+      reason: "booking_confirmed",
+    });
+  } catch (err) {
+    log("checkout-nudge suppress failed (non-blocking)", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 
   await ensurePayoutFieldsStamped(supabase, booking);
   await reserveBookingSlot(supabase, booking);

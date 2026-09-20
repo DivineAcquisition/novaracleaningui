@@ -6,6 +6,15 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import {
+  abandonPublicPendingCheckout,
+  CHECKOUT_NUDGE_SKIP_COPY,
+  CHECKOUT_NUDGE_SUPPRESSED_CODE,
+  evaluateCheckoutNudgeGuard,
+  loadBookedOrDoneBookings,
+  PAST_SERVICE_DATE_CODE,
+  suppressLeftoverPublicCheckouts,
+} from "../_shared/checkout-nudge-guard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -71,6 +80,46 @@ serve(async (req) => {
         JSON.stringify({ error: "Use the deposit payment link for this booking" }),
         {
           status: 409,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    const others = await loadBookedOrDoneBookings(supabase, {
+      email: booking.email,
+      phone: booking.phone,
+      excludeBookingId: booking.id,
+    });
+    const verdict = evaluateCheckoutNudgeGuard({
+      pendingServiceDate: booking.service_date,
+      otherBookings: others,
+    });
+    if (!verdict.send && verdict.skipReason) {
+      if (
+        verdict.skipReason === "existing_booking" ||
+        verdict.skipReason === "completed_booking"
+      ) {
+        await suppressLeftoverPublicCheckouts(supabase, {
+          email: booking.email,
+          phone: booking.phone,
+          keepBookingId: verdict.match?.id || null,
+          reason: `resume_${verdict.skipReason}`,
+        });
+      } else if (verdict.skipReason === "past_service_date") {
+        await abandonPublicPendingCheckout(supabase, booking.id);
+      }
+      const code = verdict.skipReason === "past_service_date"
+        ? PAST_SERVICE_DATE_CODE
+        : CHECKOUT_NUDGE_SUPPRESSED_CODE;
+      return new Response(
+        JSON.stringify({
+          error: CHECKOUT_NUDGE_SKIP_COPY[verdict.skipReason],
+          code,
+          skipReason: verdict.skipReason,
+          status: "abandoned",
+        }),
+        {
+          status: 410,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         },
       );

@@ -69,6 +69,7 @@ import { DeepCleanPrompt, type DeepCleanChoice } from "@/components/booking/Deep
 import {
   clearCheckoutSnapshot,
   hasCheckoutPrerequisites,
+  isPastServiceDate,
   loadCheckoutSnapshot,
   saveCheckoutSnapshot,
 } from "@/lib/checkout-funnel-guard";
@@ -267,6 +268,21 @@ export default function BookingCheckout() {
             "This resume link is invalid or expired.";
           setResumeError(msg);
           toast.error(msg);
+          clearCheckoutSnapshot();
+          if (
+            data?.code === "PAST_SERVICE_DATE" ||
+            data?.skipReason === "past_service_date" ||
+            isPastServiceDate(bookingData.serviceDate)
+          ) {
+            updateBookingData({
+              serviceDate: "",
+              timeSlot: "",
+              startTime: undefined,
+              endTime: undefined,
+              isSameDay: false,
+              bookingId: undefined,
+            });
+          }
           setResumeReady(true);
           return;
         }
@@ -338,6 +354,20 @@ export default function BookingCheckout() {
 
     setCurrentStep(4);
 
+    if (isPastServiceDate(bookingData.serviceDate)) {
+      clearCheckoutSnapshot();
+      updateBookingData({
+        serviceDate: "",
+        timeSlot: "",
+        startTime: undefined,
+        endTime: undefined,
+        isSameDay: false,
+      });
+      toast.error("That appointment date has already passed. Please pick a new date.");
+      router.replace("/book/offer");
+      return;
+    }
+
     const desired = bookingData.serviceType === "focused" ? "full" : "deposit";
     if (bookingData.paymentOption !== desired) {
       updateBookingData({ paymentOption: desired });
@@ -350,8 +380,12 @@ export default function BookingCheckout() {
 
     const snap = loadCheckoutSnapshot();
     if (snap?.serviceDate && snap?.timeSlot) {
-      updateBookingData(snap);
-      return;
+      if (isPastServiceDate(snap.serviceDate)) {
+        clearCheckoutSnapshot();
+      } else {
+        updateBookingData(snap);
+        return;
+      }
     }
 
     if (resumeError) {
@@ -396,6 +430,10 @@ export default function BookingCheckout() {
     if (bookingData.serviceDate && bookingData.timeSlot) return;
     const snap = loadCheckoutSnapshot();
     if (snap?.serviceDate && snap?.timeSlot) {
+      if (isPastServiceDate(snap.serviceDate)) {
+        clearCheckoutSnapshot();
+        return;
+      }
       updateBookingData(snap);
     }
   }, [bookingData.serviceDate, bookingData.timeSlot, updateBookingData]);
@@ -633,6 +671,11 @@ export default function BookingCheckout() {
       paymentInitStarted.current = false;
       return;
     }
+    if (isPastServiceDate(bookingData.serviceDate)) {
+      console.log('[Checkout] Past service date — not minting a payment intent');
+      paymentInitStarted.current = false;
+      return;
+    }
     if (isCreatingIntent && attempt === 0) return;
     setIsCreatingIntent(true);
     if (attempt === 0) setInitError(null);
@@ -721,6 +764,9 @@ export default function BookingCheckout() {
         }
         data = await response.json();
       }
+      if (data?.code === "PAST_SERVICE_DATE") {
+        throw new Error(data.error || "PAST_SERVICE_DATE");
+      }
       if (!data?.clientSecret) {
         const errorMsg = data?.error || data?.details || "No payment intent data received";
         console.error('[Checkout] Invalid response:', data);
@@ -735,6 +781,25 @@ export default function BookingCheckout() {
       setIsCreatingIntent(false);
     } catch (error: any) {
       console.error('[Checkout] Payment init error:', error);
+
+      const blob = `${error?.message || ""} ${typeof error === "object" ? JSON.stringify(error) : ""}`;
+      const pastDate = /PAST_SERVICE_DATE|appointment date has already passed/i.test(blob);
+      if (pastDate) {
+        clearCheckoutSnapshot();
+        setInitError("That appointment date has already passed. Please pick a new date.");
+        toast.error("That appointment date has already passed. Please pick a new date.");
+        updateBookingData({
+          serviceDate: "",
+          timeSlot: "",
+          startTime: undefined,
+          endTime: undefined,
+          isSameDay: false,
+        });
+        setRetryCount(0);
+        setIsCreatingIntent(false);
+        paymentInitStarted.current = false;
+        return;
+      }
 
       // Retry with exponential backoff
       if (attempt < MAX_RETRIES) {

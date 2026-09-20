@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { isPastServiceDate } from "@/lib/checkout-funnel-guard";
 
 export interface FocusedAreaSelection {
   areaId: string;
@@ -82,7 +83,19 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
     if (typeof window === 'undefined') return initialBookingData;
     try {
       const saved = localStorage.getItem('bookingData');
-      return saved ? JSON.parse(saved) : initialBookingData;
+      if (!saved) return initialBookingData;
+      const parsed = JSON.parse(saved) as BookingData;
+      if (isPastServiceDate(parsed.serviceDate)) {
+        return {
+          ...parsed,
+          serviceDate: "",
+          timeSlot: "",
+          startTime: undefined,
+          endTime: undefined,
+          isSameDay: false,
+        };
+      }
+      return parsed;
     } catch {
       return initialBookingData;
     }

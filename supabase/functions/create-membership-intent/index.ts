@@ -4,6 +4,11 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { resolveSecret } from "../_shared/app-secrets.ts";
 import { MEMBERSHIP_PRICES } from "../_shared/pricing.ts";
 import { getEstimatedHours } from "../_shared/payout-utils.ts";
+import {
+  CHECKOUT_NUDGE_SKIP_COPY,
+  isPastServiceDate,
+  PAST_SERVICE_DATE_CODE,
+} from "../_shared/checkout-nudge-guard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -145,6 +150,16 @@ serve(async (req) => {
     }
     if (!bookingData.serviceDate || !bookingData.timeSlot) {
       return json({ error: "Please pick a first-clean date and time", code: "VALIDATION_ERROR" }, 400);
+    }
+    if (isPastServiceDate(bookingData.serviceDate)) {
+      return json(
+        {
+          error: CHECKOUT_NUDGE_SKIP_COPY.past_service_date,
+          details: "Pick a new appointment date to continue.",
+          code: PAST_SERVICE_DATE_CODE,
+        },
+        409,
+      );
     }
 
     const prices = MEMBERSHIP_PRICES[homeSizeId];

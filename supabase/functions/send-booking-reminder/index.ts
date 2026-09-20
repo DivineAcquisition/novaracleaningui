@@ -1,6 +1,16 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { sendSms } from "../_shared/sms.ts";
+import {
+  abandonPublicPendingCheckout,
+  checkoutNudgeIdentityKey,
+  evaluateCheckoutNudgeGuard,
+  isPublicCheckoutPending,
+  loadBookedOrDoneBookings,
+  suppressLeftoverPublicCheckouts,
+  type CheckoutNudgeBooking,
+  type CheckoutNudgeSkipReason,
+} from "../_shared/checkout-nudge-guard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -30,22 +40,6 @@ function mintToken(): string {
   const bytes = new Uint8Array(20);
   crypto.getRandomValues(bytes);
   return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-function isPublicCheckoutPending(booking: Record<string, unknown>): boolean {
-  const channel = String(booking.booking_channel || "").toLowerCase().trim();
-  if (
-    channel === "admin" || channel === "va" || channel === "internal" ||
-    channel === "partner"
-  ) {
-    return false;
-  }
-  const source = String(booking.booker_source || "").toLowerCase().trim();
-  if (source.startsWith("va_") || source === "va_admin" || source === "admin") {
-    return false;
-  }
-  if (booking.hosted_invoice_url || booking.stripe_invoice_id) return false;
-  return true;
 }
 
 /** Parts of "now" in America/New_York. */
@@ -242,11 +236,56 @@ serve(async (req) => {
     let skippedInternal = 0;
     let skippedAlreadySent = 0;
     let skippedOutsideWindow = 0;
+    let skippedGuard = 0;
+    const skippedByReason: Record<CheckoutNudgeSkipReason, number> = {
+      existing_booking: 0,
+      completed_booking: 0,
+      past_service_date: 0,
+    };
     const errors: Array<Record<string, unknown>> = [];
+    const bookedCache = new Map<string, CheckoutNudgeBooking[]>();
 
     for (const booking of pendingBookings) {
       if (!isPublicCheckoutPending(booking as Record<string, unknown>)) {
         skippedInternal++;
+        continue;
+      }
+
+      const identityKey = checkoutNudgeIdentityKey(booking.email, booking.phone);
+      let others = bookedCache.get(identityKey);
+      if (!others) {
+        others = await loadBookedOrDoneBookings(supabase, {
+          email: booking.email,
+          phone: booking.phone,
+        });
+        bookedCache.set(identityKey, others);
+      }
+      const verdict = evaluateCheckoutNudgeGuard({
+        pendingServiceDate: booking.service_date,
+        otherBookings: others.filter((b) => b.id !== booking.id),
+        now,
+      });
+      if (!verdict.send && verdict.skipReason) {
+        skippedGuard++;
+        skippedByReason[verdict.skipReason]++;
+        logStep("Skipped by checkout-nudge guard", {
+          bookingId: booking.id,
+          skipReason: verdict.skipReason,
+          match: verdict.match?.id,
+        });
+        if (
+          verdict.skipReason === "existing_booking" ||
+          verdict.skipReason === "completed_booking"
+        ) {
+          await suppressLeftoverPublicCheckouts(supabase, {
+            email: booking.email,
+            phone: booking.phone,
+            keepBookingId: verdict.match?.id || null,
+            reason: verdict.skipReason,
+          });
+        } else if (verdict.skipReason === "past_service_date") {
+          await abandonPublicPendingCheckout(supabase, booking.id);
+        }
         continue;
       }
 
@@ -359,6 +398,8 @@ serve(async (req) => {
         skipped_internal: skippedInternal,
         skipped_already_sent: skippedAlreadySent,
         skipped_outside_window: skippedOutsideWindow,
+        skipped_guard: skippedGuard,
+        skipped_by_reason: skippedByReason,
         errors: errors.length ? errors : undefined,
       }),
       {

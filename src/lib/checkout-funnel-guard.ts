@@ -25,6 +25,7 @@ export type CheckoutSnapshot = {
 export function saveCheckoutSnapshot(data: CheckoutSnapshot) {
   if (typeof window === "undefined") return;
   if (!data.serviceDate || !data.timeSlot || !data.homeSizeId || !data.serviceType) return;
+  if (isPastServiceDate(data.serviceDate)) return;
   try {
     sessionStorage.setItem(SNAPSHOT_KEY, JSON.stringify(data));
   } catch {
@@ -50,6 +51,29 @@ export function clearCheckoutSnapshot() {
   } catch {
     /* ignore */
   }
+}
+
+export const CHECKOUT_TZ = "America/New_York";
+
+/** Calendar date in America/New_York as YYYY-MM-DD. Mirrors the edge guard. */
+export function etYmd(d = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: CHECKOUT_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(d);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value || "0";
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+export function isPastServiceDate(
+  serviceDate: string | null | undefined,
+  now = new Date(),
+): boolean {
+  const ymd = String(serviceDate || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return false;
+  return ymd < etYmd(now);
 }
 
 export function hasCheckoutPrerequisites(data: {
