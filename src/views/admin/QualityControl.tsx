@@ -52,6 +52,8 @@ import AccountabilityActionDialog from "@/components/admin/AccountabilityActionD
 import RecleanWorkflow from "@/components/admin/RecleanWorkflow";
 import { ChecklistItemPicker } from "@/components/checklists/ChecklistItemPicker";
 import QcStatementPanel, { statementStatusLabel } from "@/components/admin/QcStatementPanel";
+import QcFactualSummary from "@/components/admin/QcFactualSummary";
+import { formatUsdCents } from "@/lib/qc-factual-summary";
 import { statementRequiredByDefault } from "@/lib/qc-statement";
 import { QcIssueMediaGrid, QcIssueMediaPicker } from "@/components/qc/QcIssueMedia";
 import { legacyResolutionHttpUrls, normalizeQcIssueMedia, type QcIssueMediaFile } from "@/lib/qc-issue-media";
@@ -108,6 +110,18 @@ interface IssueRow {
   contractor_statement?: string | null;
   client_written_communication?: string | null;
   client_followup_documents?: Array<Record<string, unknown>> | null;
+  contractor_position?: Record<string, unknown> | null;
+  client_position?: Record<string, unknown> | null;
+  medical_record_review?: Record<string, unknown> | null;
+  escalation?: Record<string, unknown> | null;
+  insurance_notification?: {
+    status?: string | null;
+    notified_at?: string | null;
+    method?: string | null;
+    carrier_response?: string | null;
+  } | null;
+  correspondence_log?: Array<Record<string, unknown>> | null;
+  generated_case_documents?: Array<Record<string, unknown>> | null;
   statement_required?: boolean | null;
   statement_status?: string | null;
   statement_due_at?: string | null;
@@ -636,6 +650,8 @@ function IssueSheet({ issue, doc, onClose, reload }: {
   const [followupUrl, setFollowupUrl] = useState("");
   const [suspensionFlag, setSuspensionFlag] = useState(issue.contractor_suspension_flag || "pending_admin");
   const [insuranceDate, setInsuranceDate] = useState(issue.insurance_notified_at ? String(issue.insurance_notified_at).slice(0, 10) : "");
+  const [insuranceMethod, setInsuranceMethod] = useState(issue.insurance_notification?.method || "");
+  const [insuranceResponse, setInsuranceResponse] = useState(issue.insurance_notification?.carrier_response || "");
   const [incidentBusy, setIncidentBusy] = useState(false);
 
   useEffect(() => {
@@ -644,7 +660,9 @@ function IssueSheet({ issue, doc, onClose, reload }: {
     setClientEmailText(issue.client_written_communication || "");
     setSuspensionFlag(issue.contractor_suspension_flag || "pending_admin");
     setInsuranceDate(issue.insurance_notified_at ? String(issue.insurance_notified_at).slice(0, 10) : "");
-  }, [issue.id, issue.updated_at, issue.manager_account, issue.contractor_statement, issue.client_written_communication, issue.contractor_suspension_flag, issue.insurance_notified_at]);
+    setInsuranceMethod(issue.insurance_notification?.method || "");
+    setInsuranceResponse(issue.insurance_notification?.carrier_response || "");
+  }, [issue.id, issue.updated_at, issue.manager_account, issue.contractor_statement, issue.client_written_communication, issue.contractor_suspension_flag, issue.insurance_notified_at, issue.insurance_notification]);
 
   useEffect(() => {
     void (async () => {
@@ -870,13 +888,92 @@ function IssueSheet({ issue, doc, onClose, reload }: {
               </Button>
 
               <Separator />
+              {(issue.contractor_position || issue.client_position || issue.escalation || issue.medical_record_review) && (
+                <div className="space-y-2 text-xs text-slate-700">
+                  <p className="text-xs font-semibold text-slate-800">Structured record</p>
+                  {issue.escalation && (
+                    <p>
+                      Escalation: {String(issue.escalation.summary || issue.escalation.forum || "logged")}
+                      {typeof issue.escalation.demand_amount_cents === "number"
+                        ? ` · demand ${formatUsdCents(issue.escalation.demand_amount_cents)}`
+                        : ""}
+                      {issue.escalation.method ? ` · ${String(issue.escalation.method)}` : ""}
+                      {issue.escalation.communicated_at ? ` · ${fmtDT(String(issue.escalation.communicated_at))}` : ""}
+                    </p>
+                  )}
+                  {issue.contractor_position && (
+                    <p>Contractor position: {String(issue.contractor_position.summary || issue.contractor_position.stance || "on file")}</p>
+                  )}
+                  {issue.client_position && (
+                    <p>Client position: {String(issue.client_position.summary || issue.client_position.stance || "on file")}</p>
+                  )}
+                  {issue.medical_record_review && (
+                    <div className="space-y-1">
+                      <p className="font-semibold text-slate-800">Medical record review</p>
+                      {["confirmed", "ruled_out", "not_established"].map((key) => {
+                        const items = Array.isArray(issue.medical_record_review?.[key])
+                          ? issue.medical_record_review?.[key] as Array<Record<string, unknown>>
+                          : [];
+                        if (!items.length) return null;
+                        const title = key === "confirmed" ? "Recorded findings" : key === "ruled_out" ? "Ruled out on the record" : "Not established";
+                        return (
+                          <div key={key}>
+                            <p className="text-slate-500">{title}</p>
+                            {items.map((item, idx) => (
+                              <p key={idx}>{String(item.finding || "")}{item.basis ? ` (${String(item.basis)})` : ""}</p>
+                            ))}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
               <p className="text-xs font-semibold text-slate-800">Client documents received later (veterinary records, invoices)</p>
-              <div className="space-y-1">
+              <div className="space-y-2">
                 {(issue.client_followup_documents || []).map((d, idx) => (
-                  <p key={idx} className="text-xs text-slate-600">
-                    {String(d.received_at || "").slice(0, 10)} · {String(d.kind || "document")} · {String(d.description || "")}
-                    {d.url ? <> · <a className="text-violet-700 underline" href={String(d.url)} target="_blank" rel="noreferrer">open</a></> : null}
-                  </p>
+                  <div key={String(d.id || idx)} className="text-xs text-slate-600">
+                    <p>
+                      {String(d.received_at || "").slice(0, 10)} · {String(d.kind || "document")}
+                      {d.source ? ` · ${String(d.source)}` : ""}
+                      {d.filename ? ` · ${String(d.filename)}` : ""}
+                    </p>
+                    <p>{String(d.objective_description || d.description || "")}</p>
+                    {d.url ? <a className="text-violet-700 underline" href={String(d.url)} target="_blank" rel="noreferrer">open link</a> : null}
+                    {d.document_id ? (
+                      <button
+                        type="button"
+                        className="ml-2 text-slate-800 underline"
+                        onClick={() => void (async () => {
+                          const { data, error } = await (supabase.from as any)("qc_issue_documents")
+                            .select("pdf_base64, mime_type, filename")
+                            .eq("id", String(d.document_id))
+                            .maybeSingle();
+                          if (error || !data?.pdf_base64) {
+                            toast.error(error?.message || "The original file is not stored on this case.");
+                            return;
+                          }
+                          const bin = atob(String(data.pdf_base64));
+                          const bytes = new Uint8Array(bin.length);
+                          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                          const url = URL.createObjectURL(new Blob([bytes], { type: String(data.mime_type || "application/pdf") }));
+                          const a = document.createElement("a");
+                          a.href = url;
+                          a.download = String(data.filename || d.filename || "document.pdf");
+                          a.click();
+                          URL.revokeObjectURL(url);
+                        })()}
+                      >
+                        Download original
+                      </button>
+                    ) : null}
+                    {d.content ? (
+                      <details className="mt-1">
+                        <summary className="cursor-pointer text-slate-700">Full text, unredacted</summary>
+                        <pre className="mt-1 whitespace-pre-wrap font-sans text-[11px] text-slate-700 max-h-80 overflow-auto">{String(d.content)}</pre>
+                      </details>
+                    ) : null}
+                  </div>
                 ))}
                 {(issue.client_followup_documents || []).length === 0 && (
                   <p className="text-xs text-slate-500">None attached yet. Attach as received — do not edit the source.</p>
@@ -888,13 +985,30 @@ function IssueSheet({ issue, doc, onClose, reload }: {
               </div>
               <Input placeholder="Description as received" value={followupDesc} onChange={(e) => setFollowupDesc(e.target.value)} />
               <Button size="sm" variant="outline" disabled={incidentBusy || !followupDesc.trim()} onClick={() => void saveIncident({
-                clientFollowupDocuments: [
-                  ...(issue.client_followup_documents || []),
-                  { received_at: new Date().toISOString(), kind: followupKind, description: followupDesc.trim(), url: followupUrl.trim() || null },
-                ],
+                appendFollowupDocument: {
+                  received_at: new Date().toISOString(),
+                  kind: followupKind,
+                  description: followupDesc.trim(),
+                  objective_description: followupDesc.trim(),
+                  source: "provided by client",
+                  url: followupUrl.trim() || null,
+                },
               }).then(() => { setFollowupDesc(""); setFollowupUrl(""); })}>
                 Attach document record
               </Button>
+              {(issue.correspondence_log || []).length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-slate-800">Correspondence log</p>
+                  {(issue.correspondence_log || []).map((c, idx) => (
+                    <details key={String(c.id || idx)} className="text-xs text-slate-600">
+                      <summary className="cursor-pointer">
+                        {c.at ? fmtDT(String(c.at)) : "time not stored"} · {String(c.direction || "logged")} {String(c.method || "")} · {String(c.subject || "no subject")}
+                      </summary>
+                      <pre className="mt-1 whitespace-pre-wrap font-sans text-[11px] text-slate-700 max-h-64 overflow-auto">{String(c.body || "Body not stored.")}</pre>
+                    </details>
+                  ))}
+                </div>
+              )}
 
               <Separator />
               <p className="text-xs font-semibold text-slate-800">Admin decision prompts (not automations)</p>
@@ -911,25 +1025,42 @@ function IssueSheet({ issue, doc, onClose, reload }: {
               <p className="text-[11px] text-amber-800">
                 Saving this flag does not change the contractor&apos;s roster status. Use Take action below only after a determination.
               </p>
-              <Label className="text-xs text-slate-700">Insurance carrier notified (date). A human notifies the carrier; this only records it.</Label>
+              <Label className="text-xs text-slate-700">Insurance carrier notification. Pending until a person records that the carrier was actually notified.</Label>
+              <p className="text-xs text-slate-600">
+                Status: {issue.insurance_notification?.status === "notified" && issue.insurance_notified_at ? "notified" : "pending"}
+              </p>
+              <Input placeholder="Method (email, phone, portal) — optional until confirmed" value={insuranceMethod} onChange={(e) => setInsuranceMethod(e.target.value)} />
+              <Textarea rows={2} placeholder="Carrier response, if one has been received" value={insuranceResponse} onChange={(e) => setInsuranceResponse(e.target.value)} />
               <Input type="date" value={insuranceDate} onChange={(e) => setInsuranceDate(e.target.value)} />
               <div className="flex flex-wrap gap-2">
                 <Button size="sm" variant="outline" disabled={incidentBusy} onClick={() => void saveIncident({ contractorSuspensionFlag: suspensionFlag })}>
                   Save suspension flag
                 </Button>
+                <Button size="sm" variant="outline" disabled={incidentBusy} onClick={() => void saveIncident({
+                  insuranceMethod, insuranceCarrierResponse: insuranceResponse,
+                })}>
+                  Save insurance notes
+                </Button>
                 <Button size="sm" variant="outline" disabled={incidentBusy || !insuranceDate} onClick={() => void saveIncident({
-                  insuranceNotified: true, insuranceNotifiedAt: insuranceDate,
+                  insuranceNotified: true,
+                  insuranceNotifiedAt: insuranceDate,
+                  insuranceMethod,
+                  insuranceCarrierResponse: insuranceResponse,
                 })}>
                   Record carrier notified
                 </Button>
               </div>
-              {issue.insurance_notified_at && (
+              {issue.insurance_notified_at ? (
                 <p className="text-xs text-slate-600">
                   Recorded notified {fmtDT(issue.insurance_notified_at)} by {issue.insurance_notified_by_name || "admin"}.
                 </p>
+              ) : (
+                <p className="text-xs text-slate-500">Not marked notified. A date is required before that can be recorded.</p>
               )}
             </div>
           )}
+
+          <QcFactualSummary issue={issue} onSaved={reload} />
 
           <ChecklistTagging issue={issue} onSaved={reload} />
 
