@@ -118,6 +118,8 @@ function BlockedScreen({ status }: { status: string }) {
           <p className="text-muted-foreground">
             {status === "suspended"
               ? "Your account has been suspended. Please contact support for more information."
+              : status === "resigned"
+              ? "Your resignation is on file. You no longer have access to this portal."
               : status === "terminated" || status === "fired"
               ? "Your contractor agreement has been terminated. You no longer have access to this portal."
               : "Your account status does not allow access to the onboarding portal."}

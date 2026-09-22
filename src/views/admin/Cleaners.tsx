@@ -41,6 +41,7 @@ import {
   RiCameraLine,
   RiLoginCircleLine,
   RiCalendarCheckLine,
+  RiLogoutBoxRLine,
 } from "@remixicon/react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -72,6 +73,7 @@ import {
   isSupplyChecklistSubmitted,
 } from "@/lib/cleaner-supplies";
 import TerminateCleanerDialog from "@/components/admin/TerminateCleanerDialog";
+import LogResignationDialog from "@/components/admin/LogResignationDialog";
 import { CleanerTourStatus } from "@/components/admin/CleanerTourStatus";
 import { TourRecordingFreshness } from "@/components/admin/TourRecordingFreshness";
 import UrgentHireLog from "@/components/admin/UrgentHireLog";
@@ -95,8 +97,21 @@ const CLEANER_STATUSES = [
   { value: "pending", label: "Pending" },
   { value: "active", label: "Active" },
   { value: "inactive", label: "Inactive" },
-  { value: "terminated", label: "Terminated" },
 ] as const;
+
+const END_FILTERS = [
+  { id: "all", label: "Any end action" },
+  { id: "terminated", label: "End: Terminated" },
+  { id: "resigned", label: "End: Resigned" },
+  { id: "no_cause", label: "No-cause 5.2" },
+  { id: "for_cause", label: "For-cause 5.3" },
+  { id: "job_abandonment", label: "Abandonment 6.4" },
+] as const;
+
+function engagementIsClosed(status: string | null | undefined): boolean {
+  const s = (status || "").toLowerCase();
+  return s === "terminated" || s === "resigned";
+}
 
 type CleanerSection = "contractors" | "applicants" | "crews" | "urgent-hire" | "pulse-check";
 
@@ -188,6 +203,18 @@ interface CleanerRow {
   rehire_status: string | null;
   termination_reason: string | null;
   terminated_at: string | null;
+  engagement_end_action: string | null;
+  engagement_ended_at: string | null;
+  termination_basis: string | null;
+  termination_ground: string | null;
+  termination_section: string | null;
+  ytd_earnings_cents_locked: number | null;
+  ytd_earnings_year: number | null;
+  ytd_earnings_source: string | null;
+  nec_1099_include: boolean | null;
+  nec_1099_batch_year: number | null;
+  w9_status: string | null;
+  w9_followup_required: boolean | null;
 }
 
 const STATUS_FILTERS = [
@@ -197,6 +224,7 @@ const STATUS_FILTERS = [
   { id: "suspended", label: "Suspended" },
   { id: "inactive", label: "Inactive" },
   { id: "terminated", label: "Terminated" },
+  { id: "resigned", label: "Resigned" },
 ] as const;
 
 const STATUS_BADGE: Record<string, string> = {
@@ -205,6 +233,7 @@ const STATUS_BADGE: Record<string, string> = {
   suspended: "bg-orange-100 text-orange-800 border-orange-200",
   inactive: "bg-slate-100 text-slate-600 border-slate-200",
   terminated: "bg-rose-100 text-rose-800 border-rose-200",
+  resigned: "bg-slate-200 text-slate-800 border-slate-300",
 };
 
 const fullName = (c: CleanerRow) =>
@@ -235,6 +264,7 @@ export default function AdminCleaners() {
   const [cleaners, setCleaners] = useState<CleanerRow[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<(typeof STATUS_FILTERS)[number]["id"]>("all");
+  const [endFilter, setEndFilter] = useState<(typeof END_FILTERS)[number]["id"]>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [actioning, setActioning] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -284,7 +314,7 @@ export default function AdminCleaners() {
     const { data, error } = await supabase
       .from("cleaners")
       .select(
-        "id,user_id,first_name,last_name,email,phone,status,approved,available_for_bookings,walkthrough_eligible,home_zip,state,pay_tier,pay_percentage,completed_bookings,total_bookings,acceptance_rate,on_time_rate,average_rating,weighted_score,workload_score,novara_score,quality_score,overall_score,scores_computed_at,constraints,jobs_assigned_last_7d,onboarding_complete,phone_verified,ob_payouts_setup,ob_agreement_signed,ob_agreement_signed_at,supply_checklist_submitted_at,ob_supplies_checklist_viewed,ob_job_day_guides_ack,ob_job_day_guides_ack_at,ob_dress_code_ack,ob_dress_code_ack_at,ob_training_complete,payouts_enabled,stripe_account_id,home_address,home_city,home_zip,service_zip_codes,max_travel_miles,preferred_work_days,skillset,ghl_synced_at,ghl_sync_error,created_at,activated_at,rehire_status,termination_reason,terminated_at",
+        "id,user_id,first_name,last_name,email,phone,status,approved,available_for_bookings,walkthrough_eligible,home_zip,state,pay_tier,pay_percentage,completed_bookings,total_bookings,acceptance_rate,on_time_rate,average_rating,weighted_score,workload_score,novara_score,quality_score,overall_score,scores_computed_at,constraints,jobs_assigned_last_7d,onboarding_complete,phone_verified,ob_payouts_setup,ob_agreement_signed,ob_agreement_signed_at,supply_checklist_submitted_at,ob_supplies_checklist_viewed,ob_job_day_guides_ack,ob_job_day_guides_ack_at,ob_dress_code_ack,ob_dress_code_ack_at,ob_training_complete,payouts_enabled,stripe_account_id,home_address,home_city,home_zip,service_zip_codes,max_travel_miles,preferred_work_days,skillset,ghl_synced_at,ghl_sync_error,created_at,activated_at,rehire_status,termination_reason,terminated_at,engagement_end_action,engagement_ended_at,termination_basis,termination_ground,termination_section,ytd_earnings_cents_locked,ytd_earnings_year,ytd_earnings_source,nec_1099_include,nec_1099_batch_year,w9_status,w9_followup_required",
       )
       .order("created_at", { ascending: false })
       .limit(500);
@@ -302,6 +332,11 @@ export default function AdminCleaners() {
       if (statusFilter !== "all" && (c.status || "pending").toLowerCase() !== statusFilter) {
         return false;
       }
+      if (endFilter === "terminated" || endFilter === "resigned") {
+        if ((c.engagement_end_action || "") !== endFilter) return false;
+      } else if (endFilter !== "all" && (c.termination_basis || "") !== endFilter) {
+        return false;
+      }
       if (!q) return true;
       const blob = [
         c.first_name,
@@ -317,7 +352,7 @@ export default function AdminCleaners() {
         .toLowerCase();
       return blob.includes(q);
     });
-  }, [cleaners, statusFilter, search]);
+  }, [cleaners, statusFilter, endFilter, search]);
 
   const counts = useMemo(() => {
     const c = { active: 0, pending: 0, suspended: 0, inactive: 0, terminated: 0 };
@@ -592,6 +627,16 @@ export default function AdminCleaners() {
                 </button>
               ))}
             </div>
+            <Select value={endFilter} onValueChange={(v) => setEndFilter(v as (typeof END_FILTERS)[number]["id"])}>
+              <SelectTrigger className="w-[180px] bg-white">
+                <SelectValue placeholder="Engagement end" />
+              </SelectTrigger>
+              <SelectContent>
+                {END_FILTERS.map((f) => (
+                  <SelectItem key={f.id} value={f.id}>{f.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Button
               variant="outline"
               className="border-slate-200 text-slate-700"
@@ -660,6 +705,16 @@ export default function AdminCleaners() {
                       </td>
                       <td className="px-4 py-3">
                         <StatusBadge status={c.status} />
+                        {c.engagement_end_action ? (
+                          <div className="text-[11px] text-slate-500 mt-1 capitalize">
+                            {c.engagement_end_action.replaceAll("_", " ")}
+                            {c.termination_basis ? ` · ${c.termination_basis.replaceAll("_", " ")}` : ""}
+                            {c.termination_section ? ` §${c.termination_section}` : ""}
+                          </div>
+                        ) : null}
+                        {c.w9_followup_required ? (
+                          <div className="text-[11px] text-amber-700 mt-0.5">W-9 follow-up</div>
+                        ) : null}
                       </td>
                       <td className="px-4 py-3 hidden lg:table-cell w-[160px]">
                         <div className="flex items-center gap-2">
@@ -1387,7 +1442,7 @@ function OnboardingChecklist({
         </li>
       </ul>
 
-      {!setupComplete && cleaner.status !== "terminated" ? (
+      {!setupComplete && !engagementIsClosed(cleaner.status) ? (
         <div className="rounded-lg border border-sky-200 bg-sky-50/80 p-3 space-y-2">
           <p className="text-sm font-medium text-sky-950">Account setup incomplete</p>
           <p className="text-xs text-sky-800">
@@ -1422,7 +1477,7 @@ function OnboardingChecklist({
         </div>
       ) : null}
 
-      {!agreementSigned && cleaner.status !== "terminated" ? (
+      {!agreementSigned && !engagementIsClosed(cleaner.status) ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50/80 p-3 space-y-2">
           <p className="text-sm font-medium text-amber-950">Agreement not signed yet</p>
           <p className="text-xs text-amber-800">
@@ -1454,7 +1509,7 @@ function OnboardingChecklist({
         </div>
       ) : null}
 
-      {cleaner.status !== "terminated" ? (
+      {!engagementIsClosed(cleaner.status) ? (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50/80 p-3 space-y-2">
           <p className="text-sm font-medium text-emerald-950">Supply checklist</p>
           <p className="text-xs text-emerald-800">
@@ -1801,6 +1856,7 @@ function ActionsBlock({
   const { isAdmin } = useAdminRole();
   const s = (cleaner.status || "pending").toLowerCase();
   const [termOpen, setTermOpen] = useState(false);
+  const [resignOpen, setResignOpen] = useState(false);
   const [statusDraft, setStatusDraft] = useState(s);
   const [statusReason, setStatusReason] = useState("");
   const [availableForBookings, setAvailableForBookings] = useState(
@@ -1824,17 +1880,12 @@ function ActionsBlock({
       toast.info("Status is already set to " + statusDraft);
       return;
     }
-    if (
-      (statusDraft === "inactive" || statusDraft === "terminated") &&
-      !statusReason.trim()
-    ) {
-      toast.error("Add a short reason for inactive or terminated status.");
+    if (statusDraft === "terminated" || statusDraft === "resigned") {
+      toast.error("Use Terminate Contractor or Log Resignation. The status dropdown cannot end an engagement.");
       return;
     }
-    if (
-      statusDraft === "terminated" &&
-      !confirm("Set status to terminated? They will lose booking eligibility.")
-    ) {
+    if (statusDraft === "inactive" && !statusReason.trim()) {
+      toast.error("Add a short reason for inactive status.");
       return;
     }
     onAction("set_status", {
@@ -1873,7 +1924,7 @@ function ActionsBlock({
           </div>
           <Button
             type="button"
-            disabled={actioning || !nextTier || s === "terminated"}
+            disabled={actioning || !nextTier || engagementIsClosed(s)}
             onClick={() => {
               if (!nextTier) return;
               if (
@@ -1917,6 +1968,16 @@ function ActionsBlock({
                     Suspended (accountability)
                   </SelectItem>
                 )}
+                {s === "terminated" && (
+                  <SelectItem value="terminated" disabled>
+                    Terminated
+                  </SelectItem>
+                )}
+                {s === "resigned" && (
+                  <SelectItem value="resigned" disabled>
+                    Resigned
+                  </SelectItem>
+                )}
                 {CLEANER_STATUSES.map((opt) => (
                   <SelectItem key={opt.value} value={opt.value}>
                     {opt.label}
@@ -1926,7 +1987,7 @@ function ActionsBlock({
             </Select>
           </div>
           <div>
-            <Label className="text-xs text-slate-600">Reason (inactive / terminated)</Label>
+            <Label className="text-xs text-slate-600">Reason (inactive)</Label>
             <Input
               className="bg-white mt-1"
               value={statusReason}
@@ -2031,18 +2092,29 @@ function ActionsBlock({
             Pause / deactivate
           </Button>
         ) : null}
-        {s !== "terminated" ? (
-          <Button
-            variant="outline"
-            disabled={actioning}
-            onClick={() => setTermOpen(true)}
-            className="border-rose-200 text-rose-800 bg-rose-50 hover:bg-rose-100"
-          >
-            <RiCloseCircleLine className="w-4 h-4 mr-1.5" />
-            Terminate
-          </Button>
+        {!engagementIsClosed(s) ? (
+          <>
+            <Button
+              variant="outline"
+              disabled={actioning}
+              onClick={() => setTermOpen(true)}
+              className="border-rose-200 text-rose-800 bg-rose-50 hover:bg-rose-100"
+            >
+              <RiCloseCircleLine className="w-4 h-4 mr-1.5" />
+              Terminate contractor
+            </Button>
+            <Button
+              variant="outline"
+              disabled={actioning}
+              onClick={() => setResignOpen(true)}
+              className="border-slate-300 text-slate-800 bg-white hover:bg-slate-50"
+            >
+              <RiLogoutBoxRLine className="w-4 h-4 mr-1.5" />
+              Log resignation
+            </Button>
+          </>
         ) : null}
-        {(s === "inactive" || s === "terminated") ? (
+        {(s === "inactive" || s === "resigned") ? (
           <Button
             variant="outline"
             disabled={actioning}
@@ -2119,6 +2191,29 @@ function ActionsBlock({
           ) : null}
         </div>
       ) : null}
+      {cleaner.engagement_end_action ? (
+        <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-600 space-y-1">
+          <p>
+            <span className="font-semibold text-slate-800 capitalize">{cleaner.engagement_end_action}</span>
+            {cleaner.termination_basis ? ` · ${cleaner.termination_basis.replaceAll("_", " ")}` : ""}
+            {cleaner.termination_section ? ` · Section ${cleaner.termination_section}` : ""}
+            {cleaner.termination_ground ? ` · ${cleaner.termination_ground.replaceAll("_", " ")}` : ""}
+          </p>
+          <p>
+            {cleaner.nec_1099_include
+              ? `Flagged for the ${cleaner.nec_1099_batch_year || cleaner.ytd_earnings_year || ""} year-end 1099 batch. No 1099 was sent.`
+              : "Not flagged for a 1099 batch."}
+            {cleaner.ytd_earnings_cents_locked != null
+              ? ` Locked YTD ${((cleaner.ytd_earnings_cents_locked || 0) / 100).toLocaleString("en-US", { style: "currency", currency: "USD" })} (${cleaner.ytd_earnings_source || "unknown"}).`
+              : ""}
+          </p>
+          {cleaner.w9_followup_required ? (
+            <p className="text-amber-800">W-9 is {cleaner.w9_status || "incomplete"} — follow up before the batch.</p>
+          ) : cleaner.w9_status ? (
+            <p>W-9 status: {cleaner.w9_status}.</p>
+          ) : null}
+        </div>
+      ) : null}
 
       {actioning ? (
         <p className="text-xs text-slate-500 inline-flex items-center gap-1.5">
@@ -2129,6 +2224,14 @@ function ActionsBlock({
       <TerminateCleanerDialog
         open={termOpen}
         onOpenChange={setTermOpen}
+        cleanerId={cleaner.id}
+        cleanerName={`${cleaner.first_name || ""} ${cleaner.last_name || ""}`.trim() || "this contractor"}
+        cleanerEmail={cleaner.email}
+        onDone={onRefresh}
+      />
+      <LogResignationDialog
+        open={resignOpen}
+        onOpenChange={setResignOpen}
         cleanerId={cleaner.id}
         cleanerName={`${cleaner.first_name || ""} ${cleaner.last_name || ""}`.trim() || "this contractor"}
         cleanerEmail={cleaner.email}

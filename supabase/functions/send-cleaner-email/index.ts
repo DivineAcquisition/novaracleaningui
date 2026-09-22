@@ -8,6 +8,7 @@ import { BookingCompletion } from "../_shared/email-templates/BookingCompletion.
 import { PayoutConfirmation } from "../_shared/email-templates/PayoutConfirmation.tsx";
 import { CleanerCredentials } from "../_shared/email-templates/CleanerCredentials.tsx";
 import { CleanerTierPromotion } from "../_shared/email-templates/CleanerTierPromotion.tsx";
+import { CONTRACTOR_OPS_FROM, CONTRACTOR_OPS_REPLY_TO } from "../_shared/contractor-comms.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -438,7 +439,8 @@ serve(async (req) => {
     }
 
     const emailResponse = await resend.emails.send({
-      from: "Novara Cleaning <hello@novaracleaning.com>",
+      from: CONTRACTOR_OPS_FROM,
+      reply_to: CONTRACTOR_OPS_REPLY_TO,
       to: toList,
       ...(ccList.length ? { cc: ccList } : {}),
       subject,

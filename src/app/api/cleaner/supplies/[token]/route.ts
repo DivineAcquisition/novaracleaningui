@@ -45,9 +45,9 @@ export async function GET(_req: Request, ctx: Ctx): Promise<NextResponse> {
       { status: 404 },
     );
   }
-  if (String(cleaner.status) === "terminated") {
+  if (String(cleaner.status) === "terminated" || String(cleaner.status) === "resigned") {
     return NextResponse.json(
-      { error: "This account is no longer active.", reason: "terminated" },
+      { error: "This account is no longer active.", reason: String(cleaner.status) },
       { status: 409 },
     );
   }
@@ -105,9 +105,9 @@ export async function POST(req: Request, ctx: Ctx): Promise<NextResponse> {
       { status: 404 },
     );
   }
-  if (String(cleaner.status) === "terminated") {
+  if (String(cleaner.status) === "terminated" || String(cleaner.status) === "resigned") {
     return NextResponse.json(
-      { error: "This account is no longer active.", reason: "terminated" },
+      { error: "This account is no longer active.", reason: String(cleaner.status) },
       { status: 409 },
     );
   }

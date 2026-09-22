@@ -160,6 +160,7 @@ function buildContractorTags(cleaner: any): string[] {
   // of "can they be dispatched".
   let stage = "applicant";
   if (status === "terminated") stage = "terminated";
+  else if (status === "resigned") stage = "resigned";
   else if (status === "suspended") stage = "suspended";
   else if (status === "inactive") stage = "inactive";
   else if (cleaner.approved !== true) stage = "pending approval";
@@ -190,7 +191,7 @@ async function upsertContractorOpportunity(
   if (!pipelineId) return null;
   let stageId = "";
   const status = String(cleaner.status || "").toLowerCase();
-  if (status === "inactive" || status === "terminated") stageId = stageMap.inactive;
+  if (status === "inactive" || status === "terminated" || status === "resigned") stageId = stageMap.inactive;
   else if (cleaner.payouts_enabled && cleaner.onboarding_complete) stageId = stageMap.active;
   else if (cleaner.onboarding_complete) stageId = stageMap.onboarding;
   else stageId = stageMap.applicant;
@@ -207,7 +208,7 @@ async function upsertContractorOpportunity(
         method: "PUT", body: JSON.stringify({
           pipelineId, pipelineStageId: stageId,
           name: `${cleaner.first_name || "Contractor"} ${cleaner.last_name || ""}`.trim(),
-          status: status === "terminated" ? "lost" : status === "inactive" ? "abandoned" : "open",
+          status: status === "terminated" || status === "resigned" ? "lost" : status === "inactive" ? "abandoned" : "open",
           monetaryValue: 0,
         }),
       }, token, locationId).catch((e) => console.warn("[sync-cleaner-to-ghl] opp update failed", e));
@@ -218,7 +219,7 @@ async function upsertContractorOpportunity(
   }
 
   // Departed contractors: never open a brand-new opportunity for them.
-  if (status === "terminated" || status === "inactive" || status === "suspended") {
+  if (status === "terminated" || status === "resigned" || status === "inactive" || status === "suspended") {
     return null;
   }
 
@@ -268,7 +269,7 @@ serve(async (req) => {
 
   try {
     const status = String(cleaner.status || "").toLowerCase();
-    const departed = status === "terminated" || status === "inactive" || status === "suspended";
+    const departed = status === "terminated" || status === "resigned" || status === "inactive" || status === "suspended";
     const alreadyInGhl = !!(cleaner.ghl_user_id || cleaner.ghl_synced_at);
 
     // Termination / deactivation must NEVER create a new GHL contact. That

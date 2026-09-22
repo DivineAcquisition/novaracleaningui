@@ -95,8 +95,12 @@ export function latestIntervalStartedAt(
 }
 
 export function pulseSendBlockedReason(status: string | null | undefined): string | null {
-  if (String(status || "").toLowerCase() === "terminated") {
+  const normalized = String(status || "").toLowerCase();
+  if (normalized === "terminated") {
     return "Cannot send a pulse check to a terminated contractor.";
+  }
+  if (normalized === "resigned") {
+    return "Cannot send a pulse check to a contractor who resigned.";
   }
   return null;
 }

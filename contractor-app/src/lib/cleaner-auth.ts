@@ -37,6 +37,7 @@ export interface CleanerAuthResolution {
 // their pay.
 export const BLOCKED_CLEANER_STATUSES = [
   "terminated",
+  "resigned",
   "fired",
   "inactive",
   "deactivated",
