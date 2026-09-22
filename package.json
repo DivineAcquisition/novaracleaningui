@@ -63,6 +63,7 @@
     "recurring-pause:verify": "tsx scripts/verify-recurring-pause.ts",
     "bookings-checklist:verify": "node --experimental-strip-types --no-warnings scripts/verify-bookings-checklist.ts",
     "checkout-nudge:verify": "node --experimental-strip-types --no-warnings scripts/verify-checkout-nudge-guard.ts",
+    "engagement-end:verify": "node --experimental-strip-types --no-warnings scripts/verify-engagement-end.ts",
     "eas:supabase:connect": "npm --prefix contractor-app run eas:supabase:connect"
   },
   "dependencies": {

@@ -4,6 +4,7 @@ import { Resend } from 'https://esm.sh/resend@4.0.0';
 import { renderAsync } from 'https://esm.sh/@react-email/components@0.0.22?deps=react@18.3.1,react-dom@18.3.1';
 import * as React from 'https://esm.sh/react@18.3.1';
 import { CleanerVerificationCode } from "../_shared/email-templates/CleanerVerificationCode.tsx";
+import { CONTRACTOR_OPS_FROM, CONTRACTOR_OPS_REPLY_TO } from "../_shared/contractor-comms.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -101,7 +102,8 @@ serve(async (req) => {
     }
 
     const { error: emailError } = await resend.emails.send({
-      from: "Novara Cleaning <hello@novaracleaning.com>",
+      from: CONTRACTOR_OPS_FROM,
+      reply_to: CONTRACTOR_OPS_REPLY_TO,
       to: [email],
       subject: "Your Cleaner Verification Code",
       html,

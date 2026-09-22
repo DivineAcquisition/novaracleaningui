@@ -13,15 +13,14 @@
 //    then mark all OPEN future job_assignments as 'needs_reassignment'
 //    (a NEW status value that the existing dispatch loop ignores
 //    because it filters for 'assigned' / 'accepted').
-//  * Termination requires a stronger reason set and persists
-//    terminated_at + termination_reason.
+//  * Ending an engagement is not done here. Terminate Contractor and
+//    Log Resignation live on terminate-cleaner. This function rejects
+//    action=terminate and set_status=terminated.
 //  * Every action writes an event to public.events and a job_status_
 //    history row when relevant, so the activity feed lights up.
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-import { notifyContractorTerminated } from "../_shared/termination-sms.ts";
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -31,11 +30,6 @@ const corsHeaders = {
 const DEACTIVATION_REASONS = new Set([
   "personal_request", "performance_issue", "no_show_pattern",
   "compliance_failure", "low_rating", "customer_complaint", "other",
-]);
-
-const TERMINATION_REASONS = new Set([
-  "misconduct", "compliance_failure", "persistent_no_show",
-  "contract_violation", "abandoned_role", "other",
 ]);
 
 const FLAG_ISSUE_TYPES = new Set([
@@ -177,8 +171,8 @@ serve(async (req) => {
         if (!DEACTIVATION_REASONS.has(reason)) {
           return json({ error: `reason must be one of: ${[...DEACTIVATION_REASONS].join(", ")}` }, 400);
         }
-        if (cleaner.status === "terminated") {
-          return json({ error: "cannot deactivate a terminated cleaner" }, 409);
+        if (cleaner.status === "terminated" || cleaner.status === "resigned") {
+          return json({ error: "cannot deactivate a cleaner whose engagement has ended" }, 409);
         }
         const { data: updated } = await adminClient
           .from("cleaners")
@@ -200,39 +194,21 @@ serve(async (req) => {
       }
 
       case "terminate": {
-        const reason = String(body.reason || "").trim();
-        if (!TERMINATION_REASONS.has(reason)) {
-          return json({ error: `reason must be one of: ${[...TERMINATION_REASONS].join(", ")}` }, 400);
-        }
-        const { data: updated } = await adminClient
-          .from("cleaners")
-          .update({
-            status: "terminated",
-            terminated_at: new Date().toISOString(), termination_reason: reason,
-            deactivated_at: cleaner.deactivated_at ?? new Date().toISOString(),
-            deactivation_reason: cleaner.deactivation_reason ?? reason,
-            available_for_bookings: false, approved: false,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", cleanerId).select().maybeSingle();
-        const reassigned = await markFutureAssignmentsForReassignment(adminClient, cleanerId, callerId, `cleaner_terminated:${reason}`);
-        let smsSent = false;
-        if (String(cleaner.status || "").toLowerCase() !== "terminated") {
-          smsSent = await notifyContractorTerminated(adminClient, cleaner);
-        }
-        await adminClient.from("events").insert({
-          event_type: "cleaner.terminated", cleaner_id: cleanerId, source: "cleaner-admin-action",
-          summary: `Cleaner ${cleaner.first_name || ""} ${cleaner.last_name || ""} terminated — ${reason}`,
-          data: { reason, by: callerId, reassigned_jobs: reassigned.length, sms_sent: smsSent },
-        });
-        adminClient.functions.invoke("sync-cleaner-to-ghl", { body: { cleanerId } })
-          .catch((e: any) => console.warn("[cleaner-admin-action] GHL sync failed", e?.message || e));
-        return json({ ok: true, cleaner: updated, reassignedJobs: reassigned, smsSent });
+        return json({
+          error: "Use Terminate Contractor or Log Resignation. This shortcut cannot end an engagement.",
+          code: "USE_ENGAGEMENT_END",
+        }, 409);
       }
 
       case "set_status": {
-        const ALLOWED = new Set(["pending", "active", "inactive", "terminated"]);
         const newStatus = String(body.status || "").trim().toLowerCase();
+        if (newStatus === "terminated" || newStatus === "resigned") {
+          return json({
+            error: "End an engagement with Terminate Contractor or Log Resignation. The status dropdown cannot do that.",
+            code: "USE_ENGAGEMENT_END",
+          }, 409);
+        }
+        const ALLOWED = new Set(["pending", "active", "inactive"]);
         if (!ALLOWED.has(newStatus)) {
           return json({ error: `status must be one of: ${[...ALLOWED].join(", ")}` }, 400);
         }
@@ -298,13 +274,6 @@ serve(async (req) => {
           patch.available_for_bookings = false;
           patch.deactivated_at = new Date().toISOString();
           patch.deactivation_reason = reason;
-        } else if (newStatus === "terminated") {
-          patch.available_for_bookings = false;
-          patch.approved = false;
-          patch.terminated_at = new Date().toISOString();
-          patch.termination_reason = reason;
-          patch.deactivated_at = cleaner.deactivated_at ?? new Date().toISOString();
-          patch.deactivation_reason = cleaner.deactivation_reason ?? reason;
         }
 
         const { data: updated, error: upErr } = await adminClient
@@ -316,16 +285,13 @@ serve(async (req) => {
         if (upErr) throw upErr;
 
         let reassigned: unknown[] = [];
-        if (newStatus === "inactive" || newStatus === "terminated") {
+        if (newStatus === "inactive") {
           reassigned = await markFutureAssignmentsForReassignment(
             adminClient, cleanerId, callerId, `cleaner_status_${newStatus}:${reason}`,
           );
         }
 
-        let smsSent = false;
-        if (newStatus === "terminated" && prevStatus !== "terminated") {
-          smsSent = await notifyContractorTerminated(adminClient, cleaner);
-        }
+        const smsSent = false;
 
         await adminClient.from("events").insert({
           event_type: "cleaner.status_changed",
@@ -353,6 +319,7 @@ serve(async (req) => {
         if (cleaner.status === "terminated") {
           return json({ error: "cannot reactivate a terminated cleaner; create a new record instead", code: "TERMINATED" }, 409);
         }
+        const reactivatingResignation = String(cleaner.status || "").toLowerCase() === "resigned";
         const today = new Date().toISOString().slice(0, 10);
         const blockers: string[] = [];
         if (!cleaner.background_check_expires_at) blockers.push("background_check_not_on_file");
@@ -362,14 +329,27 @@ serve(async (req) => {
         if (blockers.length > 0) {
           return json({ error: "compliance blockers prevent reactivation", blockers }, 409);
         }
+        const reactivatePatch: Record<string, unknown> = {
+          status: "active", available_for_bookings: true,
+          deactivated_at: null, deactivation_reason: null,
+          suspended_at: null, suspended_until: null, suspension_reason: null,
+          updated_at: new Date().toISOString(),
+        };
+        if (reactivatingResignation) {
+          reactivatePatch.engagement_end_action = null;
+          reactivatePatch.engagement_ended_at = null;
+          reactivatePatch.termination_basis = null;
+          reactivatePatch.termination_ground = null;
+          reactivatePatch.termination_section = null;
+          reactivatePatch.termination_reason = null;
+          reactivatePatch.terminated_at = null;
+          reactivatePatch.termination_effective_date = null;
+          reactivatePatch.terminated_by = null;
+          reactivatePatch.rehire_status = null;
+        }
         const { data: updated } = await adminClient
           .from("cleaners")
-          .update({
-            status: "active", available_for_bookings: true,
-            deactivated_at: null, deactivation_reason: null,
-            suspended_at: null, suspended_until: null, suspension_reason: null,
-            updated_at: new Date().toISOString(),
-          })
+          .update(reactivatePatch)
           .eq("id", cleanerId).select().maybeSingle();
         await adminClient.from("events").insert({
           event_type: "cleaner.reactivated", cleaner_id: cleanerId, source: "cleaner-admin-action",
@@ -776,8 +756,8 @@ serve(async (req) => {
           }, 409);
         }
         const force = Boolean(body.force);
-        if (cleaner.status === "terminated" && !force) {
-          return json({ error: "Cannot send agreement to a terminated cleaner." }, 409);
+        if ((cleaner.status === "terminated" || cleaner.status === "resigned") && !force) {
+          return json({ error: "Cannot send agreement after the engagement has ended." }, 409);
         }
 
         const firstName = String(cleaner.first_name || "").trim() || "there";
@@ -935,8 +915,8 @@ serve(async (req) => {
           }, 409);
         }
         const force = Boolean(body.force);
-        if (cleaner.status === "terminated" && !force) {
-          return json({ error: "Cannot send setup link to a terminated cleaner." }, 409);
+        if ((cleaner.status === "terminated" || cleaner.status === "resigned") && !force) {
+          return json({ error: "Cannot send a setup link after the engagement has ended." }, 409);
         }
 
         const firstName = String(cleaner.first_name || "").trim() || "there";
@@ -1083,8 +1063,8 @@ serve(async (req) => {
       // marks what they own. Readiness % is computed in the app.
       case "send_supplies": {
         const force = Boolean(body.force);
-        if (cleaner.status === "terminated" && !force) {
-          return json({ error: "Cannot send supply checklist to a terminated cleaner." }, 409);
+        if ((cleaner.status === "terminated" || cleaner.status === "resigned") && !force) {
+          return json({ error: "Cannot send a supply checklist after the engagement has ended." }, 409);
         }
 
         const firstName = String(cleaner.first_name || "").trim() || "there";

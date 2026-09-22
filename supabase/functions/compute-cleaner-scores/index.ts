@@ -92,6 +92,7 @@ serve(async (req) => {
       .from("cleaners")
       .select("id, first_name, last_name, status, acceptance_rate, workload_score, completed_bookings, average_rating, total_offers_received, total_offers_accepted")
       .neq("status", "terminated")
+      .neq("status", "resigned")
       .limit(1000);
     if (!cleaners || cleaners.length === 0) return json({ ok: true, computed: 0 });
 

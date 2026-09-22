@@ -70,6 +70,7 @@ export interface CleanerAuthResolution {
 // with the end date instead (see SuspensionBanner in the dashboards).
 export const BLOCKED_CLEANER_STATUSES = [
   "terminated",
+  "resigned",
   "fired",
   "inactive",
   "deactivated",

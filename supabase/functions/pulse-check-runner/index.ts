@@ -229,7 +229,7 @@ async function terminateForSilence(
 
   const iso = now.toISOString();
   const eligible = new Date(now.getTime() + PULSE_REAPPLY_DAYS * 86_400_000).toISOString();
-  const alreadyTerminated = String(cleaner.status || "").toLowerCase() === "terminated";
+  const alreadyTerminated = ["terminated", "resigned"].includes(String(cleaner.status || "").toLowerCase());
   const name = `${cleaner.first_name || ""} ${cleaner.last_name || ""}`.trim() || "Contractor";
   const reasonLabel =
     `Terminated — no pulse-check response in ${silentDays} day${silentDays === 1 ? "" : "s"} ` +
@@ -457,7 +457,7 @@ serve(async (req) => {
         .select("id, first_name, last_name, email, phone, sms_notifications_enabled, status")
         .eq("id", entry.cleaner_id)
         .maybeSingle();
-      if (!cleaner || String(cleaner.status) === "terminated") continue;
+      if (!cleaner || ["terminated", "resigned"].includes(String(cleaner.status || "").toLowerCase())) continue;
 
       const link = pulseLink(entry.token);
       const sent = await sendPulse(admin, cleaner, link, "followup", {

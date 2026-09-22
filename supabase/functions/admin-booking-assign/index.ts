@@ -321,6 +321,7 @@ serve(async (req) => {
           `id, first_name, last_name, phone, status, approved, available_for_bookings, pay_tier, pay_percentage, home_city, home_zip, state, ${FIRST_JOB_READY_COLUMNS}`,
         )
         .neq("status", "terminated")
+        .neq("status", "resigned")
         .order("last_name", { ascending: true })
         .order("first_name", { ascending: true });
       if (dirErr) return json({ error: dirErr.message }, 500);
@@ -444,8 +445,8 @@ serve(async (req) => {
       return json({ error: "One or more cleaners not found in directory" }, 404);
     }
     for (const c of cleaners) {
-      if (c.status === "terminated") {
-        return json({ error: `Cannot assign terminated cleaner: ${c.first_name} ${c.last_name}` }, 400);
+      if (c.status === "terminated" || c.status === "resigned") {
+        return json({ error: `Cannot assign a cleaner whose engagement has ended: ${c.first_name} ${c.last_name}` }, 400);
       }
       if (c.status && c.status !== "active") {
         return json({ error: `Cleaner is not active: ${c.first_name} ${c.last_name}` }, 400);

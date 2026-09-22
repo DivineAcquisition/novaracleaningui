@@ -128,8 +128,8 @@ export async function GET(_req: Request, ctx: Ctx): Promise<NextResponse> {
     return NextResponse.json({ error: "This link isn't valid.", reason: "invalid" }, { status: 404 });
   }
   const alreadySubmitted = Boolean(entry.submitted_at);
-  if (String(cleaner.status) === "terminated" && !alreadySubmitted) {
-    return NextResponse.json({ error: "This account is no longer active.", reason: "terminated" }, { status: 409 });
+  if ((String(cleaner.status) === "terminated" || String(cleaner.status) === "resigned") && !alreadySubmitted) {
+    return NextResponse.json({ error: "This account is no longer active.", reason: String(cleaner.status) }, { status: 409 });
   }
 
   await markOpened(supabase, entry);
@@ -254,7 +254,7 @@ export async function POST(req: Request, ctx: Ctx): Promise<NextResponse> {
 
   if (action === "claim") {
     const status = String(cleaner.status || "").toLowerCase();
-    if (status === "terminated" || status === "inactive") {
+    if (status === "terminated" || status === "resigned" || status === "inactive") {
       return NextResponse.json(
         { ok: false, message: "This account isn't taking new jobs right now." },
         { status: 409 },

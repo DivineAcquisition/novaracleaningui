@@ -181,7 +181,11 @@ export async function applyPulseRosterChange(args: {
     .select("status, phone")
     .eq("id", args.cleanerId)
     .maybeSingle();
-  const alreadyTerminated = String(before?.status || "").toLowerCase() === "terminated";
+  const priorStatus = String(before?.status || "").toLowerCase();
+  if (priorStatus === "resigned") {
+    return { action: "none", inactiveUntil: null, reapplyEligibleAt: null, reassignedJobs: 0 };
+  }
+  const alreadyTerminated = priorStatus === "terminated";
 
   const { error } = await args.supabase.from("cleaners").update(patch).eq("id", args.cleanerId);
   if (error) throw new Error(error.message);

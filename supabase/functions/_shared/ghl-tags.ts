@@ -108,7 +108,7 @@ export const ROLE_TAGS = [
 const STATUS_VALUES: Record<string, ReadonlySet<string>> = {
   lead: new Set(LEAD_STAGES as readonly string[]),
   member: new Set(["active", "paused", "resumed", "cancelled", "weekly", "biweekly", "monthly", "quarterly"]),
-  contractor: new Set(["applicant", "onboarding", "pending approval", "approved", "active", "inactive", "suspended", "terminated"]),
+  contractor: new Set(["applicant", "onboarding", "pending approval", "approved", "active", "inactive", "suspended", "terminated", "resigned"]),
   booking: new Set(["confirmed", "cancelled", "rescheduled", "completed", "no show"]),
   partner: new Set(["host", "commercial", "office"]),
 };
@@ -219,6 +219,7 @@ const TAG_REMAP: Record<string, string> = {
   "contractor-active": "contractor - active",
   "contractor-inactive": "contractor - inactive",
   "contractor-terminated": "contractor - terminated",
+  "contractor-resigned": "contractor - resigned",
   "contractor-pending-approval": "contractor - pending approval",
   "contractor-approved": "contractor - approved",
   "onboarding-complete": "contractor - active",

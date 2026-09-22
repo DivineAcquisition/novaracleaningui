@@ -790,6 +790,7 @@ function BookingAssignBlock({
           .from("cleaners")
           .select("id, first_name, last_name, phone, status, approved, available_for_bookings, pay_tier, pay_percentage, home_zip, state")
           .neq("status", "terminated")
+          .neq("status", "resigned")
           .order("last_name");
         setCleaners((fallback.data || []) as CleanerOption[]);
       }

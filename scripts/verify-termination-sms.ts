@@ -36,10 +36,8 @@ check(
   sms,
 );
 
-console.log("\nEvery terminate path texts:");
+console.log("\nAccountability and pulse still text the shared close notice:");
 const wired: Array<[string, string]> = [
-  ["supabase/functions/terminate-cleaner/index.ts", "notifyContractorTerminated"],
-  ["supabase/functions/cleaner-admin-action/index.ts", "notifyContractorTerminated"],
   ["supabase/functions/cleaner-accountability/index.ts", "notifyContractorTerminated"],
   ["supabase/functions/pulse-check-runner/index.ts", "notifyContractorTerminated"],
   ["src/lib/pulse-check/roster.ts", "notifyContractorTerminated"],
@@ -47,6 +45,16 @@ const wired: Array<[string, string]> = [
 for (const [file, needle] of wired) {
   const src = readFileSync(resolve(file), "utf8");
   check(`${file} calls ${needle}`, src.includes(needle), true);
+}
+
+console.log("\nAdmin engagement-end does not reuse that SMS:");
+const unwired: Array<[string, string]> = [
+  ["supabase/functions/terminate-cleaner/index.ts", "notifyContractorTerminated"],
+  ["supabase/functions/cleaner-admin-action/index.ts", "notifyContractorTerminated"],
+];
+for (const [file, needle] of unwired) {
+  const src = readFileSync(resolve(file), "utf8");
+  check(`${file} does not call ${needle}`, src.includes(needle), false);
 }
 
 if (failures) {

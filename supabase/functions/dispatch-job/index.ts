@@ -399,7 +399,7 @@ serve(async (req) => {
       const byId = new Map((picked ?? []).map((c: any) => [c.id, c]));
       cleaners = requestedCleanerIds
         .map((id) => byId.get(id))
-        .filter((c: any) => c && c.status !== "terminated");
+        .filter((c: any) => c && c.status !== "terminated" && c.status !== "resigned");
       slotsToFill = cleaners.length;
       logStep(`Exact selection: ${cleaners.length} of ${requestedCleanerIds.length} usable`);
     } else {

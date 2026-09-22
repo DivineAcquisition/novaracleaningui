@@ -13,7 +13,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { RiAlertLine, RiShieldCheckLine, RiCalendarLine, RiTrophyLine, RiCloseCircleLine, RiUserUnfollowLine, RiUserFollowLine } from "@remixicon/react";
+import { RiAlertLine, RiShieldCheckLine, RiCalendarLine, RiTrophyLine, RiCloseCircleLine, RiUserUnfollowLine, RiUserFollowLine, RiLogoutBoxRLine } from "@remixicon/react";
+import TerminateCleanerDialog from "@/components/admin/TerminateCleanerDialog";
+import LogResignationDialog from "@/components/admin/LogResignationDialog";
 
 interface Scorecard {
   cleaner_id: string;
@@ -78,7 +80,6 @@ interface Props {
 }
 
 const DEACTIVATION_REASONS = ["personal_request", "performance_issue", "no_show_pattern", "compliance_failure", "low_rating", "customer_complaint", "other"];
-const TERMINATION_REASONS = ["misconduct", "compliance_failure", "persistent_no_show", "contract_violation", "abandoned_role", "other"];
 const FLAG_TYPES = ["background_check_expiring", "insurance_expiring", "low_rating", "attendance_problem", "customer_complaint", "quality_issue", "policy_violation", "no_show", "other"];
 
 export default function CleanerScorecard({ cleanerId, onClose, onChanged }: Props) {
@@ -89,7 +90,9 @@ export default function CleanerScorecard({ cleanerId, onClose, onChanged }: Prop
   const [calendar, setCalendar] = useState<CalendarDay[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const [actionDialog, setActionDialog] = useState<null | "deactivate" | "terminate" | "reactivate" | "flag" | "compliance" | "exception">(null);
+  const [actionDialog, setActionDialog] = useState<null | "deactivate" | "reactivate" | "flag" | "compliance" | "exception">(null);
+  const [termOpen, setTermOpen] = useState(false);
+  const [resignOpen, setResignOpen] = useState(false);
   const [reasonValue, setReasonValue] = useState("");
   const [detailsValue, setDetailsValue] = useState("");
   const [issueType, setIssueType] = useState(FLAG_TYPES[0]);
@@ -137,9 +140,6 @@ export default function CleanerScorecard({ cleanerId, onClose, onChanged }: Prop
       switch (actionDialog) {
         case "deactivate":
           body.action = "deactivate"; body.reason = reasonValue;
-          break;
-        case "terminate":
-          body.action = "terminate"; body.reason = reasonValue;
           break;
         case "reactivate":
           body.action = "reactivate";
@@ -199,6 +199,7 @@ export default function CleanerScorecard({ cleanerId, onClose, onChanged }: Prop
   if (!cleanerId) return null;
 
   return (
+    <>
     <Dialog open onOpenChange={(v) => { if (!v) onClose(); }}>
       <DialogContent className="max-w-5xl bg-slate-900 border-white/10 text-white max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -345,17 +346,29 @@ export default function CleanerScorecard({ cleanerId, onClose, onChanged }: Prop
                   <Button variant="outline" size="sm" className="border-amber-500/40 text-amber-300" onClick={() => setActionDialog("deactivate")}>
                     <RiUserUnfollowLine className="w-4 h-4 mr-1" /> Deactivate
                   </Button>
-                  <Button variant="outline" size="sm" className="border-red-500/40 text-red-300" onClick={() => setActionDialog("terminate")}>
-                    <RiCloseCircleLine className="w-4 h-4 mr-1" /> Terminate
-                  </Button>
                 </>
-              ) : scorecard.status === "inactive" ? (
+              ) : null}
+              {scorecard.status === "inactive" || scorecard.status === "resigned" ? (
                 <Button variant="outline" size="sm" className="border-violet-500/40 text-violet-300" onClick={() => setActionDialog("reactivate")}>
                   <RiUserFollowLine className="w-4 h-4 mr-1" /> Reactivate
                 </Button>
-              ) : (
+              ) : null}
+              {scorecard.status !== "terminated" && scorecard.status !== "resigned" ? (
+                <>
+                  <Button variant="outline" size="sm" className="border-red-500/40 text-red-300" onClick={() => setTermOpen(true)}>
+                    <RiCloseCircleLine className="w-4 h-4 mr-1" /> Terminate contractor
+                  </Button>
+                  <Button variant="outline" size="sm" className="border-white/20 text-slate-200" onClick={() => setResignOpen(true)}>
+                    <RiLogoutBoxRLine className="w-4 h-4 mr-1" /> Log resignation
+                  </Button>
+                </>
+              ) : null}
+              {scorecard.status === "terminated" ? (
                 <Badge variant="destructive">Terminated — record retained for history</Badge>
-              )}
+              ) : null}
+              {scorecard.status === "resigned" ? (
+                <Badge variant="outline" className="border-white/20 text-slate-200">Resigned — record retained for history</Badge>
+              ) : null}
             </div>
           </div>
         )}
@@ -365,20 +378,17 @@ export default function CleanerScorecard({ cleanerId, onClose, onChanged }: Prop
             <DialogHeader>
               <DialogTitle className="capitalize">{actionDialog?.replace(/_/g, " ")}</DialogTitle>
             </DialogHeader>
-            {actionDialog === "deactivate" || actionDialog === "terminate" ? (
+            {actionDialog === "deactivate" ? (
               <div className="space-y-3">
                 <Label>Reason</Label>
                 <Select value={reasonValue} onValueChange={setReasonValue}>
                   <SelectTrigger className="bg-slate-800 border-white/10"><SelectValue placeholder="Select reason" /></SelectTrigger>
                   <SelectContent>
-                    {(actionDialog === "deactivate" ? DEACTIVATION_REASONS : TERMINATION_REASONS).map((r) => (
+                    {DEACTIVATION_REASONS.map((r) => (
                       <SelectItem key={r} value={r}>{r.replace(/_/g, " ")}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                {actionDialog === "terminate" && (
-                  <p className="text-xs text-red-300">⚠ Termination is permanent. The cleaner cannot be reactivated. Future jobs will be marked for reassignment.</p>
-                )}
               </div>
             ) : actionDialog === "reactivate" ? (
               <p className="text-sm text-slate-300">Reactivation requires current background check + verified insurance. The system will block if either is expired.</p>
@@ -436,5 +446,26 @@ export default function CleanerScorecard({ cleanerId, onClose, onChanged }: Prop
         </Dialog>
       </DialogContent>
     </Dialog>
+    {cleanerId ? (
+      <>
+        <TerminateCleanerDialog
+          open={termOpen}
+          onOpenChange={setTermOpen}
+          cleanerId={cleanerId}
+          cleanerName={scorecard?.name || "this contractor"}
+          cleanerEmail={null}
+          onDone={() => { void fetchAll(); onChanged?.(); }}
+        />
+        <LogResignationDialog
+          open={resignOpen}
+          onOpenChange={setResignOpen}
+          cleanerId={cleanerId}
+          cleanerName={scorecard?.name || "this contractor"}
+          cleanerEmail={null}
+          onDone={() => { void fetchAll(); onChanged?.(); }}
+        />
+      </>
+    ) : null}
+    </>
   );
 }
