@@ -139,7 +139,7 @@ export default function SetupContinue() {
             <div>
               <p className="text-sm font-semibold text-slate-900">You&apos;re all set, {first}</p>
               <p className="mt-1 text-sm text-slate-600">
-                The agreement, supplies, Day To Day Job Operations, dress code, phone,
+                The agreement, phone, supplies, Day To Day Job Operations, dress code,
                 training videos, and Stripe payout setup are all done. Sign in anytime to see jobs.
               </p>
               <Button asChild className="mt-4 bg-violet-700 hover:bg-violet-800">

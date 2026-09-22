@@ -376,7 +376,7 @@ export default function CleanerOnboarding() {
         console.warn("[Onboarding] agreement send failed (non-blocking):", agreementErr);
       }
 
-      toast.success("Agreement signed. Next: supplies and Day To Day Job Operations.");
+      toast.success("Agreement signed. Next: verify your phone.");
 
       // Sync the new contractor profile to GHL: create/upsert contact,
       // stamp custom fields (status, tier, location, preferred days,
@@ -399,8 +399,8 @@ export default function CleanerOnboarding() {
         console.warn("[Onboarding] sync-cleaner-to-ghl lookup failed", ghlErr);
       }
 
-      // Supplies and Day To Day Job Operations are next. Stripe payout
-      // setup is the last card on the portal.
+      // Phone verification is next. Supplies and Day To Day Job Operations
+      // follow. Stripe payout setup is the last card on the portal.
       router.replace("/cleaner/ob-portal");
 
     } catch (error: any) {
@@ -834,7 +834,7 @@ export default function CleanerOnboarding() {
 
                   <div className="bg-blue-500/10 rounded-xl p-4 border border-blue-500/20">
                     <p className="text-sm text-blue-700 dark:text-blue-300">
-                      <strong>Next step:</strong> Supplies and Day To Day Job Operations. Stripe payout setup is the last step.
+                      <strong>Next step:</strong> Verify your phone. Supplies and Day To Day Job Operations come after that. Stripe payout setup is the last step.
                     </p>
                   </div>
                 </div>

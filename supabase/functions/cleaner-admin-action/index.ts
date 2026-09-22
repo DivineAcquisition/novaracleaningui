@@ -894,7 +894,7 @@ serve(async (req) => {
       }
 
       // ─── SEND ACCOUNT SETUP LINK ─────────────────────────────────────
-      // Agreement → supplies → job-day → dress code → phone → training → Stripe.
+      // Agreement → phone → supplies → job-day → dress code → training → Stripe.
       // Same sequence cleanerSetupSteps() defines for the portal. Tokenized
       // link lands on a short setup page, then auth → onboarding portal.
       case "send_setup": {
@@ -994,10 +994,10 @@ serve(async (req) => {
           // Listed in the order the portal will ask for them.
           const outstanding = [
             !agreementOk ? "sign the agreement" : null,
+            !phoneOk ? "verify your phone" : null,
             !suppliesOk ? "check off your supplies" : null,
             !jobDayOk ? "read Day To Day Job Operations" : null,
             !dressOk ? "agree to the dress code" : null,
-            !phoneOk ? "verify your phone" : null,
             !trainingOk ? "watch the training videos" : null,
             !stripeOk ? "set up Stripe payouts" : null,
           ].filter(Boolean) as string[];

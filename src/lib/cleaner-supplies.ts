@@ -301,9 +301,9 @@ export function isPayoutSetupStarted(c: CleanerSetupState): boolean {
 /**
  * Onboarding in the order everything presents it.
  *
- * Agreement first. Supplies and Day To Day Job Operations are next, so a
- * contractor who just signed goes straight into the kit and the job-day
- * page. Stripe payout setup is last.
+ * Agreement first. Phone verification is second, so dispatch can reach them
+ * before the kit and job-day pages. Supplies and Day To Day Job Operations
+ * come next. Stripe payout setup is last.
  *
  * First-job eligibility is every step except payouts. Pay setup is how
  * earnings are deposited, and it stays the last card on the portal.
@@ -314,6 +314,11 @@ export function cleanerSetupSteps(c: CleanerSetupState): CleanerSetupStep[] {
       id: "agreement",
       title: "Sign the contractor agreement",
       done: isAgreementSigned(c),
+    },
+    {
+      id: "phone",
+      title: "Verify your phone number",
+      done: Boolean(c.phone_verified),
     },
     {
       id: "supplies",
@@ -329,11 +334,6 @@ export function cleanerSetupSteps(c: CleanerSetupState): CleanerSetupStep[] {
       id: "dress_code",
       title: "Agree to the dress code",
       done: isDressCodeAgreed(c),
-    },
-    {
-      id: "phone",
-      title: "Verify your phone number",
-      done: Boolean(c.phone_verified),
     },
     {
       id: "training",

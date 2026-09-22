@@ -1,12 +1,12 @@
 # Contractor account setup
 
-Six steps, in this order:
+Seven steps, in this order:
 
 1. **Sign the contractor agreement** — the Independent Contractor Agreement, with a signature.
-2. **Check off your supplies** — what kit do they already own? This is the next page after signing.
-3. **Read Day To Day Job Operations** — what a job looks like from offer to payout. Same stretch of the portal, right after supplies.
-4. **Agree to the dress code** — the graphic, with an explicit agree tick. Viewing is not enough.
-5. **Verify your phone number** — dispatch has to be able to reach them.
+2. **Verify your phone number** — second, right after signing, so dispatch can reach them.
+3. **Check off your supplies** — what kit do they already own? This page opens once the phone is verified.
+4. **Read Day To Day Job Operations** — what a job looks like from offer to payout. Same stretch of the portal, right after supplies.
+5. **Agree to the dress code** — the graphic, with an explicit agree tick. Viewing is not enough.
 6. **Watch the training videos** — all seven walkthroughs on the training hub. Skipping does not count.
 7. **Set up Stripe payouts** — last. This is how completed-job pay is deposited.
 
@@ -122,7 +122,7 @@ a yes/no eligibility fact for a first job.
 mint_cleaner_setup_token
   → https://contractor.novaracleaning.com/cleaner/setup/<token>   (email + SMS)
   → /cleaner/auth?setup=<token>                                    (sign in / create login)
-  → /cleaner/ob-portal                                             (supplies and Day To Day next, Stripe last)
+  → /cleaner/ob-portal                                             (phone next, then supplies and Day To Day, Stripe last)
 ```
 
 The email and the SMS both list what is outstanding in portal order, so the
@@ -144,7 +144,7 @@ npm run onboarding:verify
 
 `scripts/verify-onboarding-sequence.ts` checks the shared definition by
 calling it, then opens the real pages in a browser and reads what a
-contractor would see: seven steps in order, agreement first, supplies and Day To Day next, Stripe last, dress-code agree
+contractor would see: seven steps in order, agreement first, phone second, supplies and Day To Day next, Stripe last, dress-code agree
 required, the two public PDF landing
 pages, and the training hub requiring the seven videos. Every Supabase call is
 answered from an invented fixture in the script, so no real contractor is

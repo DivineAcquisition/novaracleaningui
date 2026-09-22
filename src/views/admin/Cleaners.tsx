@@ -241,7 +241,7 @@ const STATUS_BADGE: Record<string, string> = {
 const fullName = (c: CleanerRow) =>
   [c.first_name, c.last_name].filter(Boolean).join(" ") || c.email || "—";
 
-// Mirrors cleanerSetupSteps(): agreement → supplies → job-day → dress → phone → training → Stripe.
+// Mirrors cleanerSetupSteps(): agreement → phone → supplies → job-day → dress → training → Stripe.
 const onboardingProgress = (c: CleanerRow): number => {
   const steps = cleanerSetupSteps(c);
   if (steps.length === 0) return 0;
@@ -1348,6 +1348,7 @@ const OB_STEPS: Array<{ done: (c: CleanerRow) => boolean; label: string; detail?
         ? `Signed ${new Date(c.ob_agreement_signed_at).toLocaleDateString()}`
         : null,
   },
+  { done: (c) => Boolean(c.phone_verified), label: "Phone verified" },
   {
     done: isSupplyChecklistSubmitted,
     label: "Supply checklist submitted",
@@ -1372,7 +1373,6 @@ const OB_STEPS: Array<{ done: (c: CleanerRow) => boolean; label: string; detail?
         ? `Agreed ${new Date(c.ob_dress_code_ack_at).toLocaleDateString()}`
         : null,
   },
-  { done: (c) => Boolean(c.phone_verified), label: "Phone verified" },
   { done: isRequiredTrainingComplete, label: "Training videos watched" },
   { done: isPayoutSetupStarted, label: "Stripe payouts connected" },
 ];
@@ -1439,8 +1439,8 @@ function OnboardingChecklist({
           <p className="text-sm font-medium text-sky-950">Account setup incomplete</p>
           <p className="text-xs text-sky-800">
             Sends email + SMS with one link that walks them through whatever is
-            left — agreement, supplies, Day To Day Job Operations, dress code,
-            phone, training videos, then Stripe payout setup. A first job waits
+            left — agreement, phone, supplies, Day To Day Job Operations, dress code,
+            training videos, then Stripe payout setup. A first job waits
             on the videos. Stripe is the last step.
           </p>
           <Button

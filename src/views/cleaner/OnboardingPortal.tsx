@@ -65,10 +65,10 @@ const logo = "/novara-logo.png";
 //
 // The portal walks the sequence defined by cleanerSetupSteps():
 //   1. Independent Contractor Agreement
-//   2. Supply checkoff
-//   3. Day To Day Job Operations
-//   4. Dress code — must agree, not merely view
-//   5. Phone number verification
+//   2. Phone number verification
+//   3. Supply checkoff
+//   4. Day To Day Job Operations
+//   5. Dress code — must agree, not merely view
 //   6. Training hub
 //   7. Stripe payout setup — last
 //
@@ -457,10 +457,10 @@ export default function OnboardingPortal() {
                   Welcome, {profile.first_name}!
                 </CardTitle>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Sign the agreement, then check off supplies and read Day To Day
-                  Job Operations. Dress code, phone, and training videos come
-                  next. Stripe payout setup is last. You won&apos;t be offered
-                  a job until the training videos are done.
+                  Sign the agreement, then verify your phone. Check off supplies
+                  and read Day To Day Job Operations next. Dress code and the
+                  training videos come after that. Stripe payout setup is last.
+                  You won&apos;t be offered a job until the training videos are done.
                 </p>
               </div>
             </div>
@@ -512,9 +512,61 @@ export default function OnboardingPortal() {
           )}
         </StepCard>
 
-        {/* Step 2 — Supplies, right after the agreement */}
+        {/* Step 2 — Phone verification, right after the agreement */}
         <StepCard
           number={2}
+          title="Verify your phone number"
+          description="We'll text you a 6-digit code so dispatch can reach you for job offers."
+          icon={RiPhoneLine}
+          done={phoneStepDone}
+          started={false}
+          locked={!phoneUnlocked}
+        >
+          {!phoneUnlocked ? (
+            lockMsg(lockFor("phone"))
+          ) : phoneStepDone ? (
+            <p className="text-sm text-muted-foreground">
+              Verified ·{" "}
+              <span className="font-medium text-foreground">
+                {profile.phone || "(no phone on file)"}
+              </span>
+            </p>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground">
+                Phone on file:{" "}
+                <span className="font-medium text-foreground">
+                  {profile.phone || "—"}
+                </span>
+                {!profile.phone && (
+                  <>
+                    {" "}—{" "}
+                    <a
+                      href="/cleaner/profile"
+                      className="text-primary underline-offset-2 hover:underline"
+                    >
+                      add a phone number first
+                    </a>
+                  </>
+                )}
+              </p>
+              <Button
+                size="lg"
+                onClick={() => setPhoneDialogOpen(true)}
+                disabled={!profile.phone}
+                className="bg-primary hover:bg-primary/90 text-primary-foreground"
+              >
+                <RiPhoneLine className="w-4 h-4 mr-1.5" />
+                Send verification code
+                <RiArrowRightLine className="w-4 h-4 ml-1.5" />
+              </Button>
+            </>
+          )}
+        </StepCard>
+
+        {/* Step 3 — Supplies, after the phone is verified */}
+        <StepCard
+          number={3}
           title="Check off your supplies"
           description="Tell us what kit you already own so dispatch knows which jobs you're equipped for."
           icon={RiListCheck2}
@@ -565,9 +617,9 @@ export default function OnboardingPortal() {
           )}
         </StepCard>
 
-        {/* Step 3 — Day To Day Job Operations */}
+        {/* Step 4 — Day To Day Job Operations */}
         <StepCard
-          number={3}
+          number={4}
           title="Read Day To Day Job Operations"
           description="What a job looks like from the offer through to getting paid."
           icon={RiRoadMapLine}
@@ -609,9 +661,9 @@ export default function OnboardingPortal() {
           )}
         </StepCard>
 
-        {/* Step 4 — Dress code */}
+        {/* Step 5 — Dress code */}
         <StepCard
-          number={4}
+          number={5}
           title="Agree to the dress code"
           description="What to wear on every job. You have to agree — viewing isn't enough."
           icon={RiTShirtLine}
@@ -649,58 +701,6 @@ export default function OnboardingPortal() {
                   Hide this
                 </Button>
               )}
-            </>
-          )}
-        </StepCard>
-
-        {/* Step 5 — Phone verification */}
-        <StepCard
-          number={5}
-          title="Verify your phone number"
-          description="We'll text you a 6-digit code so dispatch can reach you for job offers."
-          icon={RiPhoneLine}
-          done={phoneStepDone}
-          started={false}
-          locked={!phoneUnlocked}
-        >
-          {!phoneUnlocked ? (
-            lockMsg(lockFor("phone"))
-          ) : phoneStepDone ? (
-            <p className="text-sm text-muted-foreground">
-              Verified ·{" "}
-              <span className="font-medium text-foreground">
-                {profile.phone || "(no phone on file)"}
-              </span>
-            </p>
-          ) : (
-            <>
-              <p className="text-sm text-muted-foreground">
-                Phone on file:{" "}
-                <span className="font-medium text-foreground">
-                  {profile.phone || "—"}
-                </span>
-                {!profile.phone && (
-                  <>
-                    {" "}—{" "}
-                    <a
-                      href="/cleaner/profile"
-                      className="text-primary underline-offset-2 hover:underline"
-                    >
-                      add a phone number first
-                    </a>
-                  </>
-                )}
-              </p>
-              <Button
-                size="lg"
-                onClick={() => setPhoneDialogOpen(true)}
-                disabled={!profile.phone}
-                className="bg-primary hover:bg-primary/90 text-primary-foreground"
-              >
-                <RiPhoneLine className="w-4 h-4 mr-1.5" />
-                Send verification code
-                <RiArrowRightLine className="w-4 h-4 ml-1.5" />
-              </Button>
             </>
           )}
         </StepCard>

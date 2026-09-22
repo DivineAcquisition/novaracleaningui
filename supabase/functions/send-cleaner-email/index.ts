@@ -222,13 +222,13 @@ serve(async (req) => {
       case "setup_request": {
         const first = data.firstName || "there";
         const setupUrl = data.setupUrl || "https://contractor.novaracleaning.com/cleaner/auth";
-        // Listed in the order the portal asks for them — training last.
+        // Listed in the order the portal asks for them — phone second, Stripe last.
         const needs: string[] = [];
         if (data.needsAgreement !== false) needs.push("Sign the contractor agreement");
+        if (data.needsPhone !== false) needs.push("Verify your phone number");
         if (data.needsSupplies !== false) needs.push("Check off the supplies you already own");
         if (data.needsJobDay !== false) needs.push("Read Day To Day Job Operations");
         if (data.needsDressCode !== false) needs.push("Agree to the dress code");
-        if (data.needsPhone !== false) needs.push("Verify your phone number");
         if (data.needsTraining !== false) needs.push("Watch the training videos");
         if (data.needsStripe !== false) needs.push("Set up Stripe payouts");
         const stepsList = needs.length

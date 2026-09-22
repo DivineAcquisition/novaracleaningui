@@ -1,7 +1,7 @@
 // ─── Verification of the contractor onboarding sequence ─────────────────────
 //
-// Onboarding is agreement → supplies → Day To Day Job Operations →
-// dress code (agree) → phone → training videos → Stripe payouts, and four
+// Onboarding is agreement → phone → supplies → Day To Day Job Operations →
+// dress code (agree) → training videos → Stripe payouts, and four
 // things have to agree on that:
 // the shared definition in src/lib/cleaner-supplies.ts, the portal a
 // contractor works through, the page a mailed setup link lands on, and the
@@ -72,7 +72,7 @@ function check(name: string, actual: unknown, expected: unknown): void {
 function checkSequence(): void {
   console.log("\nThe onboarding sequence");
 
-  const expectedIds = ["agreement", "supplies", "job_day", "dress_code", "phone", "training", "payouts"];
+  const expectedIds = ["agreement", "phone", "supplies", "job_day", "dress_code", "training", "payouts"];
   const fresh: CleanerSetupState = {};
   check("seven steps, agreement first, Stripe last", cleanerSetupSteps(fresh).map((s) => s.id), expectedIds);
   check("a brand-new contractor has nothing done", cleanerSetupSteps(fresh).map((s) => s.done), [
@@ -97,7 +97,11 @@ function checkSequence(): void {
     cleanerSetupSteps(phoneAndStripe).filter((s) => !s.done).map((s) => s.id),
     ["agreement", "supplies", "job_day", "dress_code", "training"],
   );
-  check("supplies are unlocked only after the agreement", isSetupStepUnlocked(fresh, "supplies"), false);
+  check("phone stays locked until the agreement is signed", isSetupStepUnlocked(fresh, "phone"), false);
+  check("supplies stay locked until the phone is verified", isSetupStepUnlocked(fresh, "supplies"), false);
+  const signedOnly: CleanerSetupState = { ob_agreement_signed: true };
+  check("phone unlocks as soon as the agreement is signed", isSetupStepUnlocked(signedOnly, "phone"), true);
+  check("supplies stay locked when only the agreement is signed", isSetupStepUnlocked(signedOnly, "supplies"), false);
   check("and training is locked until everything above it is done", isSetupStepUnlocked(phoneAndStripe, "training"), false);
 
   const allDone: CleanerSetupState = {
@@ -461,10 +465,10 @@ async function checkPortal(browser: Browser): Promise<void> {
   const headings = await page.locator("main h3, main [class*='CardTitle'], main div.text-base").allInnerTexts();
   const expectedOrder = [
     "Sign the contractor agreement",
+    "Verify your phone number",
     "Check off your supplies",
     "Read Day To Day Job Operations",
     "Agree to the dress code",
-    "Verify your phone number",
     "Watch the training videos",
     "Set up Stripe payouts",
   ];
@@ -501,15 +505,25 @@ async function checkPortal(browser: Browser): Promise<void> {
 
   check("agreement counts", (await body()).includes("1 of 7 complete"), true);
   check(
-    "supplies unlock right after the agreement",
-    await page.getByText("Download full PDF checklist").isVisible(),
+    "phone unlocks right after the agreement",
+    await page.getByRole("button", { name: "Send verification code" }).isVisible(),
     true,
   );
   check(
-    "phone stays locked until supplies and the pages above it are done",
-    await page.getByRole("button", { name: "Send verification code" }).isVisible().catch(() => false),
+    "supplies stay locked until the phone is verified",
+    await page.getByText("Download full PDF checklist").isVisible().catch(() => false),
     false,
   );
+  check(
+    "the lock names the phone step",
+    (await body()).includes("Verify your phone first."),
+    true,
+  );
+
+  row.phone_verified = true;
+  await page.reload({ waitUntil: "networkidle" });
+  await page.getByText("Welcome, Imani!").waitFor({ timeout: 20_000 });
+  check("phone counts", (await body()).includes("2 of 7 complete"), true);
 
   check(
     "the supply checklist is now on the page",
@@ -544,7 +558,7 @@ async function checkPortal(browser: Browser): Promise<void> {
     Boolean(row.supply_checklist_submitted_at),
     true,
   );
-  check("two of seven steps done", (await body()).includes("2 of 7 complete"), true);
+  check("three of seven steps done", (await body()).includes("3 of 7 complete"), true);
   check(
     "Day To Day Job Operations unlocks as soon as supplies are in",
     (await body()).includes("Read Day To Day Job Operations"),
@@ -562,7 +576,7 @@ async function checkPortal(browser: Browser): Promise<void> {
   await page.getByRole("button", { name: jobDay.actionLabel }).click();
   await page.getByText("Read — thanks.").waitFor({ timeout: 20_000 });
   check("the Day To Day Job Operations ack is recorded", row.ob_job_day_guides_ack, true);
-  check("three of seven steps done", (await body()).includes("3 of 7 complete"), true);
+  check("four of seven steps done", (await body()).includes("4 of 7 complete"), true);
 
   // ── Dress code: must tick agree ──
   const dress = ONBOARDING_GUIDES.find((g) => g.id === "dress_code")!;
@@ -602,16 +616,6 @@ async function checkPortal(browser: Browser): Promise<void> {
   await page.getByRole("button", { name: dress.actionLabel }).click();
   await page.getByText("Agreed — thanks.").waitFor({ timeout: 20_000 });
   check("the dress-code agree is recorded", row.ob_dress_code_ack, true);
-  check("four of seven steps done", (await body()).includes("4 of 7 complete"), true);
-
-  check(
-    "phone unlocks after the pages above it",
-    await page.getByRole("button", { name: "Send verification code" }).isVisible(),
-    true,
-  );
-  row.phone_verified = true;
-  await page.reload({ waitUntil: "networkidle" });
-  await page.getByText("Welcome, Imani!").waitFor({ timeout: 20_000 });
   check("five of seven steps done", (await body()).includes("5 of 7 complete"), true);
 
   const trainingBtn = page.getByRole("button", { name: "Open training hub" });
@@ -712,10 +716,10 @@ async function checkSetupLanding(browser: Browser): Promise<void> {
     listed.slice(0, 7),
     [
       "Sign the contractor agreement",
+      "Verify your phone number",
       "Check off your supplies",
       "Read Day To Day Job Operations",
       "Agree to the dress code",
-      "Verify your phone number",
       "Watch the training videos",
       "Set up Stripe payouts",
     ],
