@@ -361,7 +361,7 @@ export function assignNecAmounts(input: {
   const jobPayCents = nonNegative(input.jobPayCents);
   const tipCents = nonNegative(input.tipCents);
   const ttoc = ttocForTips(input.ttoc, tipCents);
-  if (!ttoc.ok) return ttoc;
+  if (ttoc.ok === false) return { ok: false, reason: ttoc.reason };
   const combinedCents = jobPayCents + tipCents;
   return {
     ok: true,
@@ -399,13 +399,13 @@ export function assembleNecForm(input: {
   const year = Math.round(Number(input.taxYear));
   if (!Number.isFinite(year) || year < 2026) return { ok: false, reason: "not_this_revision" };
   const payer = validatePayer(input.payer);
-  if (!payer.ok) return { ok: false, reason: "payer_incomplete", missing: payer.missing };
+  if (payer.ok === false) return { ok: false, reason: "payer_incomplete", missing: payer.missing };
   const recipient = validateRecipient(input.recipient);
-  if (!recipient.ok) return { ok: false, reason: recipient.reason };
+  if (recipient.ok === false) return { ok: false, reason: recipient.reason };
   const accountNumber = clean(input.accountNumber);
   if (!accountNumber) return { ok: false, reason: "w9_required" };
   const amounts = assignNecAmounts(input);
-  if (!amounts.ok) return amounts;
+  if (amounts.ok === false) return amounts;
   if (!input.allowBelowThreshold && amounts.amounts.combinedCents < NEC_ELIGIBILITY_THRESHOLD_CENTS) {
     return { ok: false, reason: "below_threshold" };
   }
