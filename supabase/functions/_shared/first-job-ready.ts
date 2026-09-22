@@ -2,8 +2,9 @@
 // (isCleanerReadyForFirstJob) and public.cleaner_ready_for_first_job().
 //
 // A contractor who has already completed a job is past the gate. Everyone
-// else must finish agreement → phone → supplies → dress code → job-day →
-// training videos before dispatch will offer them work.
+// else must finish agreement → supplies → job-day → dress code → phone →
+// training videos before dispatch will offer them work. Stripe payout
+// setup is the last portal card and is not part of this gate.
 
 export interface FirstJobReadyRow {
   completed_bookings?: number | null;

@@ -1,8 +1,8 @@
 // ─── Verification of the contractor onboarding sequence ─────────────────────
 //
-// Onboarding is agreement → phone → supplies → dress code (agree) →
-// Day To Day Job Operations → training videos, and four things have to agree
-// on that:
+// Onboarding is agreement → supplies → Day To Day Job Operations →
+// dress code (agree) → phone → training videos → Stripe payouts, and four
+// things have to agree on that:
 // the shared definition in src/lib/cleaner-supplies.ts, the portal a
 // contractor works through, the page a mailed setup link lands on, and the
 // admin view that decides whether anything is outstanding. When they drift,
@@ -12,8 +12,8 @@
 //
 // The first half of this script checks the shared definition by calling it.
 // The second half opens the real pages in a browser and reads what a
-// contractor would actually see, because "the function returns six steps"
-// and "the portal shows six steps, with training last" are different claims
+// contractor would actually see, because "the function returns seven steps"
+// and "the portal shows seven steps, with Stripe last" are different claims
 // and only the second one is the product.
 //
 // No real data is touched: every Supabase call is answered from an invented
@@ -72,10 +72,11 @@ function check(name: string, actual: unknown, expected: unknown): void {
 function checkSequence(): void {
   console.log("\nThe onboarding sequence");
 
-  const expectedIds = ["agreement", "phone", "supplies", "dress_code", "job_day", "training"];
+  const expectedIds = ["agreement", "supplies", "job_day", "dress_code", "phone", "training", "payouts"];
   const fresh: CleanerSetupState = {};
-  check("six steps, agreement first, training last", cleanerSetupSteps(fresh).map((s) => s.id), expectedIds);
+  check("seven steps, agreement first, Stripe last", cleanerSetupSteps(fresh).map((s) => s.id), expectedIds);
   check("a brand-new contractor has nothing done", cleanerSetupSteps(fresh).map((s) => s.done), [
+    false,
     false,
     false,
     false,
@@ -94,9 +95,9 @@ function checkSequence(): void {
   check(
     "the outstanding steps start with the agreement",
     cleanerSetupSteps(phoneAndStripe).filter((s) => !s.done).map((s) => s.id),
-    ["agreement", "supplies", "dress_code", "job_day", "training"],
+    ["agreement", "supplies", "job_day", "dress_code", "training"],
   );
-  check("phone is unlocked only after the agreement", isSetupStepUnlocked(fresh, "phone"), false);
+  check("supplies are unlocked only after the agreement", isSetupStepUnlocked(fresh, "supplies"), false);
   check("and training is locked until everything above it is done", isSetupStepUnlocked(phoneAndStripe, "training"), false);
 
   const allDone: CleanerSetupState = {
@@ -107,16 +108,21 @@ function checkSequence(): void {
     ob_job_day_guides_ack: true,
     ob_training_complete: true,
   };
-  check("all six done is complete", isCleanerSetupComplete(allDone), true);
+  check("training done without Stripe is not complete", isCleanerSetupComplete(allDone), false);
   check("and that is enough for a first job", isCleanerReadyForFirstJob(allDone), true);
   check(
-    "payouts are not part of this sequence",
-    cleanerSetupSteps(allDone).some((s) => s.id === "payouts" || /stripe|payout/i.test(s.title)),
-    false,
+    "Stripe is the last step",
+    cleanerSetupSteps(allDone).filter((s) => !s.done).map((s) => s.id),
+    ["payouts"],
+  );
+  check(
+    "Stripe connected finishes the sequence",
+    isCleanerSetupComplete({ ...allDone, stripe_account_id: "acct_123" }),
+    true,
   );
   check(
     "a contractor who skipped only training is still outstanding",
-    cleanerSetupSteps({ ...allDone, ob_training_complete: false })
+    cleanerSetupSteps({ ...allDone, ob_training_complete: false, stripe_account_id: "acct_123" })
       .filter((s) => !s.done)
       .map((s) => s.id),
     ["training"],
@@ -445,7 +451,7 @@ async function checkPortal(browser: Browser): Promise<void> {
 
   const body = () => page.locator("main").innerText();
 
-  check("the portal counts six steps", (await body()).includes("0 of 6 complete"), true);
+  check("the portal counts seven steps", (await body()).includes("0 of 7 complete"), true);
   check(
     "and says they will not be offered a job until that is done",
     (await body()).includes("won't be offered a job") || (await body()).includes("won’t be offered a job"),
@@ -455,14 +461,15 @@ async function checkPortal(browser: Browser): Promise<void> {
   const headings = await page.locator("main h3, main [class*='CardTitle'], main div.text-base").allInnerTexts();
   const expectedOrder = [
     "Sign the contractor agreement",
-    "Verify your phone number",
     "Check off your supplies",
-    "Agree to the dress code",
     "Read Day To Day Job Operations",
+    "Agree to the dress code",
+    "Verify your phone number",
     "Watch the training videos",
+    "Set up Stripe payouts",
   ];
   check(
-    "in order, agreement first and training last",
+    "in order, agreement first and Stripe last",
     expectedOrder.filter((t) => headings.some((h) => h.includes(t))),
     expectedOrder,
   );
@@ -473,8 +480,8 @@ async function checkPortal(browser: Browser): Promise<void> {
     true,
   );
   check(
-    "payouts are not a portal step",
-    await page.getByRole("button", { name: /Set up payouts/i }).isVisible().catch(() => false),
+    "Stripe stays locked until the steps above it are done",
+    await page.getByRole("button", { name: "Set up Stripe payouts" }).isVisible().catch(() => false),
     false,
   );
   check(
@@ -492,24 +499,18 @@ async function checkPortal(browser: Browser): Promise<void> {
   await page.reload({ waitUntil: "networkidle" });
   await page.getByText("Welcome, Imani!").waitFor({ timeout: 20_000 });
 
-  check("agreement counts", (await body()).includes("1 of 6 complete"), true);
+  check("agreement counts", (await body()).includes("1 of 7 complete"), true);
   check(
-    "phone is unlocked",
-    await page.getByRole("button", { name: "Send verification code" }).isVisible(),
+    "supplies unlock right after the agreement",
+    await page.getByText("Download full PDF checklist").isVisible(),
     true,
   );
   check(
-    "supplies stay locked until the phone is verified",
-    (await body()).includes("Verify your phone first."),
-    true,
+    "phone stays locked until supplies and the pages above it are done",
+    await page.getByRole("button", { name: "Send verification code" }).isVisible().catch(() => false),
+    false,
   );
 
-  // ── Phone verified: supplies unlock ──
-  row.phone_verified = true;
-  await page.reload({ waitUntil: "networkidle" });
-  await page.getByText("Welcome, Imani!").waitFor({ timeout: 20_000 });
-
-  check("phone verified counts", (await body()).includes("2 of 6 complete"), true);
   check(
     "the supply checklist is now on the page",
     await page.getByText("Download full PDF checklist").isVisible(),
@@ -543,14 +544,32 @@ async function checkPortal(browser: Browser): Promise<void> {
     Boolean(row.supply_checklist_submitted_at),
     true,
   );
-  check("three of six steps done", (await body()).includes("3 of 6 complete"), true);
+  check("two of seven steps done", (await body()).includes("2 of 7 complete"), true);
+  check(
+    "Day To Day Job Operations unlocks as soon as supplies are in",
+    (await body()).includes("Read Day To Day Job Operations"),
+    true,
+  );
+
+  // ── Day To Day, immediately after supplies ──
+  const jobDay = ONBOARDING_GUIDES.find((g) => g.id === "job_day")!;
+  await page.getByRole("button", { name: jobDay.actionLabel }).waitFor({ timeout: 20_000 });
+  check(
+    "the Day To Day Job Operations graphic is on the page after supplies",
+    await page.locator(`main img[alt="${jobDay.alt}"]`).isVisible(),
+    true,
+  );
+  await page.getByRole("button", { name: jobDay.actionLabel }).click();
+  await page.getByText("Read — thanks.").waitFor({ timeout: 20_000 });
+  check("the Day To Day Job Operations ack is recorded", row.ob_job_day_guides_ack, true);
+  check("three of seven steps done", (await body()).includes("3 of 7 complete"), true);
 
   // ── Dress code: must tick agree ──
   const dress = ONBOARDING_GUIDES.find((g) => g.id === "dress_code")!;
   const dressImg = page.locator(`main img[alt="${dress.alt}"]`);
   await dressImg.scrollIntoViewIfNeeded();
   check(
-    "the dress code graphic is on the page",
+    "the dress code graphic is on the page after Day To Day",
     await dressImg.isVisible(),
     true,
   );
@@ -583,26 +602,23 @@ async function checkPortal(browser: Browser): Promise<void> {
   await page.getByRole("button", { name: dress.actionLabel }).click();
   await page.getByText("Agreed — thanks.").waitFor({ timeout: 20_000 });
   check("the dress-code agree is recorded", row.ob_dress_code_ack, true);
-  check("four of six steps done", (await body()).includes("4 of 6 complete"), true);
+  check("four of seven steps done", (await body()).includes("4 of 7 complete"), true);
 
-  // ── Day To Day Job Operations ──
-  const jobDay = ONBOARDING_GUIDES.find((g) => g.id === "job_day")!;
-  await page.getByRole("button", { name: jobDay.actionLabel }).waitFor({ timeout: 20_000 });
   check(
-    "the Day To Day Job Operations graphic is on the page after dress code",
-    await page.locator(`main img[alt="${jobDay.alt}"]`).isVisible(),
+    "phone unlocks after the pages above it",
+    await page.getByRole("button", { name: "Send verification code" }).isVisible(),
     true,
   );
-  await page.getByRole("button", { name: jobDay.actionLabel }).click();
-  await page.getByText("Read — thanks.").waitFor({ timeout: 20_000 });
-  check("the Day To Day Job Operations ack is recorded", row.ob_job_day_guides_ack, true);
-  check("five of six steps done", (await body()).includes("5 of 6 complete"), true);
+  row.phone_verified = true;
+  await page.reload({ waitUntil: "networkidle" });
+  await page.getByText("Welcome, Imani!").waitFor({ timeout: 20_000 });
+  check("five of seven steps done", (await body()).includes("5 of 7 complete"), true);
 
   const trainingBtn = page.getByRole("button", { name: "Open training hub" });
   await trainingBtn.waitFor({ timeout: 20_000 });
   check(
-    "payouts still are not asked here",
-    await page.getByRole("button", { name: /Set up payouts/i }).isVisible().catch(() => false),
+    "Stripe stays locked until the training videos are finished",
+    await page.getByRole("button", { name: "Set up Stripe payouts" }).isVisible().catch(() => false),
     false,
   );
 
@@ -693,14 +709,15 @@ async function checkSetupLanding(browser: Browser): Promise<void> {
   const listed = rows.map((r) => r.trim()).filter(Boolean);
   check(
     "the link page lists the same sequence the portal will walk",
-    listed.slice(0, 6),
+    listed.slice(0, 7),
     [
       "Sign the contractor agreement",
-      "Verify your phone number",
       "Check off your supplies",
-      "Agree to the dress code",
       "Read Day To Day Job Operations",
+      "Agree to the dress code",
+      "Verify your phone number",
       "Watch the training videos",
+      "Set up Stripe payouts",
     ],
   );
   check(

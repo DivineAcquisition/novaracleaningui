@@ -49,13 +49,16 @@ export const CleanerInvitation = ({
         </Text>
 
         <Text style={styles.listItem}>
-          1. Click the button below to create your account
+          1. Click the button below to create your account and sign the agreement
         </Text>
         <Text style={styles.listItem}>
-          2. Complete your Stripe Connect onboarding to receive payouts
+          2. Check off your supplies and read Day To Day Job Operations
         </Text>
         <Text style={styles.listItem}>
-          3. Start receiving booking assignments
+          3. Finish dress code, phone verification, and the training videos
+        </Text>
+        <Text style={styles.listItem}>
+          4. Set up Stripe payouts last, so we can pay you
         </Text>
 
         <Section style={styles.buttonSection}>

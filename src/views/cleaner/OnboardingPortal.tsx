@@ -2,6 +2,7 @@
 
 import {
   RiArrowRightLine,
+  RiBankCardLine,
   RiCheckboxCircleFill,
   RiFileTextLine,
   RiGraduationCapLine,
@@ -46,6 +47,7 @@ import {
   isAgreementSigned,
   isDressCodeAgreed,
   isJobDayAcknowledged,
+  isPayoutSetupStarted,
   isRequiredTrainingComplete,
   isSetupStepUnlocked,
   isSupplyChecklistSubmitted,
@@ -63,14 +65,16 @@ const logo = "/novara-logo.png";
 //
 // The portal walks the sequence defined by cleanerSetupSteps():
 //   1. Independent Contractor Agreement
-//   2. Phone number verification
-//   3. Supply checkoff
-//   4. Dress code graphic — must agree, not merely view
-//   5. Day To Day Job Operations graphic
-//   6. Training hub (videos they must watch) — last card routes there
+//   2. Supply checkoff
+//   3. Day To Day Job Operations
+//   4. Dress code — must agree, not merely view
+//   5. Phone number verification
+//   6. Training hub
+//   7. Stripe payout setup — last
 //
 // A contractor with zero completed jobs cannot be offered work until every
-// step, including the videos, is done. See isCleanerReadyForFirstJob().
+// step through the videos is done. Stripe is last and is not part of that
+// gate. See isCleanerReadyForFirstJob().
 // Legacy fields
 // (ob_agreement_signed, ob_google_chat_joined, ob_training_accessed) stay on
 // the cleaners row for back-compat but are not surfaced here.
@@ -154,6 +158,7 @@ export default function OnboardingPortal() {
   const [suppliesOpen, setSuppliesOpen] = useState(false);
   const [dressOpen, setDressOpen] = useState(false);
   const [jobDayOpen, setJobDayOpen] = useState(false);
+  const [stripeLoading, setStripeLoading] = useState(false);
 
   useEffect(() => {
     void checkAuthAndLoad();
@@ -358,6 +363,7 @@ export default function OnboardingPortal() {
   const dressDone = isDressCodeAgreed(profile);
   const jobDayDone = isJobDayAcknowledged(profile);
   const trainingDone = isRequiredTrainingComplete(profile);
+  const payoutsDone = isPayoutSetupStarted(profile);
 
   const supplyInventory = (profile.supply_inventory || {}) as SupplyInventory;
   const supplyScore = scoreSupplyInventory(supplyInventory);
@@ -382,6 +388,7 @@ export default function OnboardingPortal() {
     dress_code: "Agree to the dress code first.",
     job_day: "Read Day To Day Job Operations first.",
     training: "Watch the training videos first.",
+    payouts: "Set up Stripe payouts first.",
   };
   const lockFor = (id: CleanerSetupStepId) => {
     const idx = steps.findIndex((s) => s.id === id);
@@ -393,6 +400,24 @@ export default function OnboardingPortal() {
   const dressUnlocked = isSetupStepUnlocked(profile, "dress_code");
   const jobDayUnlocked = isSetupStepUnlocked(profile, "job_day");
   const trainingUnlocked = isSetupStepUnlocked(profile, "training");
+  const payoutsUnlocked = isSetupStepUnlocked(profile, "payouts");
+
+  const openStripe = async () => {
+    setStripeLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("initiate-cleaner-stripe-connect");
+      const url = (data as { url?: string } | null)?.url;
+      if (error || !url) {
+        toast.error("Couldn't open Stripe setup. Try again in a moment.");
+        return;
+      }
+      window.location.href = url;
+    } catch {
+      toast.error("Couldn't open Stripe setup. Try again in a moment.");
+    } finally {
+      setStripeLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/10">
@@ -432,10 +457,10 @@ export default function OnboardingPortal() {
                   Welcome, {profile.first_name}!
                 </CardTitle>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Sign the agreement, verify your phone, check off supplies,
-                  agree to the dress code, read Day To Day Job Operations, then watch
-                  the training videos. You won&apos;t be offered a job until
-                  that&apos;s done.
+                  Sign the agreement, then check off supplies and read Day To Day
+                  Job Operations. Dress code, phone, and training videos come
+                  next. Stripe payout setup is last. You won&apos;t be offered
+                  a job until the training videos are done.
                 </p>
               </div>
             </div>
@@ -487,61 +512,9 @@ export default function OnboardingPortal() {
           )}
         </StepCard>
 
-        {/* Step 2 — Phone verification */}
+        {/* Step 2 — Supplies, right after the agreement */}
         <StepCard
           number={2}
-          title="Verify your phone number"
-          description="We'll text you a 6-digit code so dispatch can reach you for job offers."
-          icon={RiPhoneLine}
-          done={phoneStepDone}
-          started={false}
-          locked={!phoneUnlocked}
-        >
-          {!phoneUnlocked ? (
-            lockMsg(lockFor("phone"))
-          ) : phoneStepDone ? (
-            <p className="text-sm text-muted-foreground">
-              Verified ·{" "}
-              <span className="font-medium text-foreground">
-                {profile.phone || "(no phone on file)"}
-              </span>
-            </p>
-          ) : (
-            <>
-              <p className="text-sm text-muted-foreground">
-                Phone on file:{" "}
-                <span className="font-medium text-foreground">
-                  {profile.phone || "—"}
-                </span>
-                {!profile.phone && (
-                  <>
-                    {" "}—{" "}
-                    <a
-                      href="/cleaner/profile"
-                      className="text-primary underline-offset-2 hover:underline"
-                    >
-                      add a phone number first
-                    </a>
-                  </>
-                )}
-              </p>
-              <Button
-                size="lg"
-                onClick={() => setPhoneDialogOpen(true)}
-                disabled={!profile.phone}
-                className="bg-primary hover:bg-primary/90 text-primary-foreground"
-              >
-                <RiPhoneLine className="w-4 h-4 mr-1.5" />
-                Send verification code
-                <RiArrowRightLine className="w-4 h-4 ml-1.5" />
-              </Button>
-            </>
-          )}
-        </StepCard>
-
-        {/* Step 3 — Supply checkoff */}
-        <StepCard
-          number={3}
           title="Check off your supplies"
           description="Tell us what kit you already own so dispatch knows which jobs you're equipped for."
           icon={RiListCheck2}
@@ -592,6 +565,50 @@ export default function OnboardingPortal() {
           )}
         </StepCard>
 
+        {/* Step 3 — Day To Day Job Operations */}
+        <StepCard
+          number={3}
+          title="Read Day To Day Job Operations"
+          description="What a job looks like from the offer through to getting paid."
+          icon={RiRoadMapLine}
+          done={jobDayDone}
+          started={false}
+          locked={!jobDayUnlocked}
+        >
+          {!jobDayUnlocked ? (
+            lockMsg(lockFor("job_day"))
+          ) : jobDayDone && !jobDayOpen ? (
+            <>
+              <p className="text-sm text-muted-foreground">
+                Read · <span className="font-medium text-foreground">Day To Day Job Operations</span>
+              </p>
+              <Button variant="outline" onClick={() => setJobDayOpen(true)}>
+                <RiRoadMapLine className="w-4 h-4 mr-1.5" />
+                Look again
+              </Button>
+            </>
+          ) : (
+            <>
+              <JobDayGuides
+                guide={onboardingGuide("job_day")}
+                acknowledgedAt={profile.ob_job_day_guides_ack_at}
+                onAcknowledge={handleAcknowledgeJobDay}
+                variant="plain"
+              />
+              {jobDayDone && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full text-muted-foreground"
+                  onClick={() => setJobDayOpen(false)}
+                >
+                  Hide this
+                </Button>
+              )}
+            </>
+          )}
+        </StepCard>
+
         {/* Step 4 — Dress code */}
         <StepCard
           number={4}
@@ -636,46 +653,54 @@ export default function OnboardingPortal() {
           )}
         </StepCard>
 
-        {/* Step 5 — Day To Day Job Operations */}
+        {/* Step 5 — Phone verification */}
         <StepCard
           number={5}
-          title="Read Day To Day Job Operations"
-          description="What a job looks like from the offer through to getting paid."
-          icon={RiRoadMapLine}
-          done={jobDayDone}
+          title="Verify your phone number"
+          description="We'll text you a 6-digit code so dispatch can reach you for job offers."
+          icon={RiPhoneLine}
+          done={phoneStepDone}
           started={false}
-          locked={!jobDayUnlocked}
+          locked={!phoneUnlocked}
         >
-          {!jobDayUnlocked ? (
-            lockMsg(lockFor("job_day"))
-          ) : jobDayDone && !jobDayOpen ? (
-            <>
-              <p className="text-sm text-muted-foreground">
-                Read · <span className="font-medium text-foreground">Day To Day Job Operations</span>
-              </p>
-              <Button variant="outline" onClick={() => setJobDayOpen(true)}>
-                <RiRoadMapLine className="w-4 h-4 mr-1.5" />
-                Look again
-              </Button>
-            </>
+          {!phoneUnlocked ? (
+            lockMsg(lockFor("phone"))
+          ) : phoneStepDone ? (
+            <p className="text-sm text-muted-foreground">
+              Verified ·{" "}
+              <span className="font-medium text-foreground">
+                {profile.phone || "(no phone on file)"}
+              </span>
+            </p>
           ) : (
             <>
-              <JobDayGuides
-                guide={onboardingGuide("job_day")}
-                acknowledgedAt={profile.ob_job_day_guides_ack_at}
-                onAcknowledge={handleAcknowledgeJobDay}
-                variant="plain"
-              />
-              {jobDayDone && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="w-full text-muted-foreground"
-                  onClick={() => setJobDayOpen(false)}
-                >
-                  Hide this
-                </Button>
-              )}
+              <p className="text-sm text-muted-foreground">
+                Phone on file:{" "}
+                <span className="font-medium text-foreground">
+                  {profile.phone || "—"}
+                </span>
+                {!profile.phone && (
+                  <>
+                    {" "}—{" "}
+                    <a
+                      href="/cleaner/profile"
+                      className="text-primary underline-offset-2 hover:underline"
+                    >
+                      add a phone number first
+                    </a>
+                  </>
+                )}
+              </p>
+              <Button
+                size="lg"
+                onClick={() => setPhoneDialogOpen(true)}
+                disabled={!profile.phone}
+                className="bg-primary hover:bg-primary/90 text-primary-foreground"
+              >
+                <RiPhoneLine className="w-4 h-4 mr-1.5" />
+                Send verification code
+                <RiArrowRightLine className="w-4 h-4 ml-1.5" />
+              </Button>
             </>
           )}
         </StepCard>
@@ -721,6 +746,46 @@ export default function OnboardingPortal() {
           )}
         </StepCard>
 
+        {/* Step 7 — Stripe payouts, last */}
+        <StepCard
+          number={7}
+          title="Set up Stripe payouts"
+          description="Connect the account we pay. This is the last step."
+          icon={RiBankCardLine}
+          done={payoutsDone}
+          started={false}
+          locked={!payoutsUnlocked}
+        >
+          {!payoutsUnlocked ? (
+            lockMsg(lockFor("payouts"))
+          ) : payoutsDone ? (
+            <p className="text-sm text-muted-foreground">
+              Stripe account connected. Completed-job pay deposits there.
+            </p>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground">
+                Supplies, Day To Day Job Operations, and the videos come first.
+                Stripe opens in a new flow and brings you back here.
+              </p>
+              <Button
+                size="lg"
+                onClick={() => void openStripe()}
+                disabled={stripeLoading}
+                className="bg-primary hover:bg-primary/90 text-primary-foreground"
+              >
+                {stripeLoading ? (
+                  <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" />
+                ) : (
+                  <RiBankCardLine className="w-4 h-4 mr-1.5" />
+                )}
+                Set up Stripe payouts
+                <RiArrowRightLine className="w-4 h-4 ml-1.5" />
+              </Button>
+            </>
+          )}
+        </StepCard>
+
         {/* Done banner */}
         {allComplete && (
           <Card className="border-emerald-300 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-950/20 shadow-sm">
@@ -732,9 +797,9 @@ export default function OnboardingPortal() {
                 You're all set, {profile.first_name}!
               </h2>
               <p className="text-sm text-muted-foreground">
-                Training is done. Job offers can start coming through SMS and
-                your dashboard. Earnings deposit 1–2 business days after each
-                completed clean.
+                Training is done and Stripe is connected. Job offers can start
+                coming through SMS and your dashboard. Earnings deposit 1–2
+                business days after each completed clean.
               </p>
               <Button
                 onClick={() => router.push("/cleaner/dashboard")}

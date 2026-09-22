@@ -894,7 +894,7 @@ serve(async (req) => {
       }
 
       // ─── SEND ACCOUNT SETUP LINK ─────────────────────────────────────
-      // Agreement → phone → supplies → dress code → job-day → training.
+      // Agreement → supplies → job-day → dress code → phone → training → Stripe.
       // Same sequence cleanerSetupSteps() defines for the portal. Tokenized
       // link lands on a short setup page, then auth → onboarding portal.
       case "send_setup": {
@@ -908,9 +908,12 @@ serve(async (req) => {
           cleaner.ob_job_day_guides_ack === true;
         const jobDayOk = cleaner.ob_job_day_guides_ack === true;
         const trainingOk = cleaner.ob_training_complete === true;
-        if (agreementOk && phoneOk && suppliesOk && dressOk && jobDayOk && trainingOk) {
+        const stripeOk = Boolean(
+          cleaner.payouts_enabled || cleaner.ob_payouts_setup || cleaner.stripe_account_id,
+        );
+        if (agreementOk && phoneOk && suppliesOk && dressOk && jobDayOk && trainingOk && stripeOk) {
           return json({
-            error: "Account setup is already complete (agreement through training).",
+            error: "Account setup is already complete (agreement through Stripe).",
             code: "ALREADY_COMPLETE",
           }, 409);
         }
@@ -968,6 +971,7 @@ serve(async (req) => {
                     needsDressCode: !dressOk,
                     needsJobDay: !jobDayOk,
                     needsTraining: !trainingOk,
+                    needsStripe: !stripeOk,
                   },
                 },
               },
@@ -990,11 +994,12 @@ serve(async (req) => {
           // Listed in the order the portal will ask for them.
           const outstanding = [
             !agreementOk ? "sign the agreement" : null,
-            !phoneOk ? "verify your phone" : null,
             !suppliesOk ? "check off your supplies" : null,
-            !dressOk ? "agree to the dress code" : null,
             !jobDayOk ? "read Day To Day Job Operations" : null,
+            !dressOk ? "agree to the dress code" : null,
+            !phoneOk ? "verify your phone" : null,
             !trainingOk ? "watch the training videos" : null,
+            !stripeOk ? "set up Stripe payouts" : null,
           ].filter(Boolean) as string[];
           const missing = outstanding.length > 1
             ? `${outstanding.slice(0, -1).join(", ")} and ${outstanding[outstanding.length - 1]}`

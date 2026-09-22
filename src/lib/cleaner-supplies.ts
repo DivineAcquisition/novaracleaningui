@@ -229,11 +229,12 @@ export interface CleanerSetupState {
 
 export type CleanerSetupStepId =
   | "agreement"
-  | "phone"
   | "supplies"
-  | "dress_code"
   | "job_day"
-  | "training";
+  | "dress_code"
+  | "phone"
+  | "training"
+  | "payouts";
 
 export interface CleanerSetupStep {
   id: CleanerSetupStepId;
@@ -300,11 +301,12 @@ export function isPayoutSetupStarted(c: CleanerSetupState): boolean {
 /**
  * Onboarding in the order everything presents it.
  *
- * Agreement first: nothing else is asked until the contractor is actually
- * engaged. Training last: the videos only make sense once they have seen
- * the dress code, the kit, and what a job day looks like. Payouts stay on
- * the dashboard — they are how we pay, not how someone becomes eligible
- * for a first job.
+ * Agreement first. Supplies and Day To Day Job Operations are next, so a
+ * contractor who just signed goes straight into the kit and the job-day
+ * page. Stripe payout setup is last.
+ *
+ * First-job eligibility is every step except payouts. Pay setup is how
+ * earnings are deposited, and it stays the last card on the portal.
  */
 export function cleanerSetupSteps(c: CleanerSetupState): CleanerSetupStep[] {
   return [
@@ -314,19 +316,9 @@ export function cleanerSetupSteps(c: CleanerSetupState): CleanerSetupStep[] {
       done: isAgreementSigned(c),
     },
     {
-      id: "phone",
-      title: "Verify your phone number",
-      done: Boolean(c.phone_verified),
-    },
-    {
       id: "supplies",
       title: "Check off your supplies",
       done: isSupplyChecklistSubmitted(c),
-    },
-    {
-      id: "dress_code",
-      title: "Agree to the dress code",
-      done: isDressCodeAgreed(c),
     },
     {
       id: "job_day",
@@ -334,9 +326,24 @@ export function cleanerSetupSteps(c: CleanerSetupState): CleanerSetupStep[] {
       done: isJobDayAcknowledged(c),
     },
     {
+      id: "dress_code",
+      title: "Agree to the dress code",
+      done: isDressCodeAgreed(c),
+    },
+    {
+      id: "phone",
+      title: "Verify your phone number",
+      done: Boolean(c.phone_verified),
+    },
+    {
       id: "training",
       title: "Watch the training videos",
       done: isRequiredTrainingComplete(c),
+    },
+    {
+      id: "payouts",
+      title: "Set up Stripe payouts",
+      done: isPayoutSetupStarted(c),
     },
   ];
 }
@@ -366,5 +373,7 @@ export function isSetupStepUnlocked(
  */
 export function isCleanerReadyForFirstJob(c: CleanerSetupState): boolean {
   if (Number(c.completed_bookings || 0) > 0) return true;
-  return isCleanerSetupComplete(c);
+  return cleanerSetupSteps(c)
+    .filter((s) => s.id !== "payouts")
+    .every((s) => s.done);
 }

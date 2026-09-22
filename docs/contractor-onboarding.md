@@ -3,15 +3,16 @@
 Six steps, in this order:
 
 1. **Sign the contractor agreement** — the Independent Contractor Agreement, with a signature.
-2. **Verify your phone number** — dispatch has to be able to reach them.
-3. **Check off your supplies** — what kit do they already own?
+2. **Check off your supplies** — what kit do they already own? This is the next page after signing.
+3. **Read Day To Day Job Operations** — what a job looks like from offer to payout. Same stretch of the portal, right after supplies.
 4. **Agree to the dress code** — the graphic, with an explicit agree tick. Viewing is not enough.
-5. **Read Day To Day Job Operations** — what a job looks like from offer to payout.
+5. **Verify your phone number** — dispatch has to be able to reach them.
 6. **Watch the training videos** — all seven walkthroughs on the training hub. Skipping does not count.
+7. **Set up Stripe payouts** — last. This is how completed-job pay is deposited.
 
-A contractor with zero completed jobs **cannot be offered a first job** until every step is done, including the videos. People who have already completed a job are past this gate — we do not yank offers from the roster.
+A contractor with zero completed jobs **cannot be offered a first job** until the steps through the videos are done. People who have already completed a job are past this gate — we do not yank offers from the roster.
 
-Payouts (Stripe) stay on the dashboard. They are how we pay, not how someone becomes eligible for work.
+Stripe is the last card they work through. It is not part of the first-job gate.
 
 ## One definition, four readers
 
@@ -34,7 +35,7 @@ specific contractor can still assign them.
 
 The database agrees too. `mint_cleaner_setup_token` returns `NULL` to mean
 "nothing left to send", and `cleaner_setup_status_v1.setup_complete` reports
-standing; both count all six steps
+standing; both count the walkthrough through Stripe payout setup
 (`supabase/migrations/20260911220636_onboarding_agreement_first_training_gate.sql`).
 
 ## The two graphics
@@ -121,7 +122,7 @@ a yes/no eligibility fact for a first job.
 mint_cleaner_setup_token
   → https://contractor.novaracleaning.com/cleaner/setup/<token>   (email + SMS)
   → /cleaner/auth?setup=<token>                                    (sign in / create login)
-  → /cleaner/ob-portal                                             (the six steps)
+  → /cleaner/ob-portal                                             (supplies and Day To Day next, Stripe last)
 ```
 
 The email and the SMS both list what is outstanding in portal order, so the
@@ -143,8 +144,8 @@ npm run onboarding:verify
 
 `scripts/verify-onboarding-sequence.ts` checks the shared definition by
 calling it, then opens the real pages in a browser and reads what a
-contractor would see: six steps in order, agreement first, dress-code agree
-required, training last, payouts not in the portal, the two public PDF landing
+contractor would see: seven steps in order, agreement first, supplies and Day To Day next, Stripe last, dress-code agree
+required, the two public PDF landing
 pages, and the training hub requiring the seven videos. Every Supabase call is
 answered from an invented fixture in the script, so no real contractor is
 touched. Screenshots land in

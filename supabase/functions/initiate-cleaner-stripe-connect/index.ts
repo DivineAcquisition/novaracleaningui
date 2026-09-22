@@ -149,9 +149,9 @@ serve(async (req) => {
     const accountLink = await stripe.accountLinks.create({
       account: accountId,
       refresh_url:
-        "https://contractor.novaracleaning.com/cleaner/dashboard?stripe=refresh",
+        "https://contractor.novaracleaning.com/cleaner/ob-portal?stripe=refresh",
       return_url:
-        "https://contractor.novaracleaning.com/cleaner/dashboard?stripe=complete",
+        "https://contractor.novaracleaning.com/cleaner/ob-portal?stripe=complete",
       type: "account_onboarding",
     });
 

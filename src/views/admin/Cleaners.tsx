@@ -66,9 +66,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { cn } from "@/lib/utils";
 import { describeEdgeError } from "@/lib/edge-invoke";
 import {
+  cleanerSetupSteps,
   isAgreementSigned,
   isDressCodeAgreed,
   isJobDayAcknowledged,
+  isPayoutSetupStarted,
   isRequiredTrainingComplete,
   isSupplyChecklistSubmitted,
 } from "@/lib/cleaner-supplies";
@@ -239,21 +241,11 @@ const STATUS_BADGE: Record<string, string> = {
 const fullName = (c: CleanerRow) =>
   [c.first_name, c.last_name].filter(Boolean).join(" ") || c.email || "—";
 
-const stripeOnboardingDone = (c: CleanerRow): boolean =>
-  Boolean(c.payouts_enabled || c.ob_payouts_setup || c.stripe_account_id);
-
-// Mirrors cleanerSetupSteps(): agreement → phone → supplies → dress → job-day → training.
+// Mirrors cleanerSetupSteps(): agreement → supplies → job-day → dress → phone → training → Stripe.
 const onboardingProgress = (c: CleanerRow): number => {
-  const flags = [
-    isAgreementSigned(c),
-    c.phone_verified,
-    isSupplyChecklistSubmitted(c),
-    isDressCodeAgreed(c),
-    isJobDayAcknowledged(c),
-    isRequiredTrainingComplete(c),
-  ];
-  const done = flags.filter(Boolean).length;
-  return Math.round((done / flags.length) * 100);
+  const steps = cleanerSetupSteps(c);
+  if (steps.length === 0) return 0;
+  return Math.round((steps.filter((s) => s.done).length / steps.length) * 100);
 };
 
 export default function AdminCleaners() {
@@ -1356,21 +1348,12 @@ const OB_STEPS: Array<{ done: (c: CleanerRow) => boolean; label: string; detail?
         ? `Signed ${new Date(c.ob_agreement_signed_at).toLocaleDateString()}`
         : null,
   },
-  { done: (c) => Boolean(c.phone_verified), label: "Phone verified" },
   {
     done: isSupplyChecklistSubmitted,
     label: "Supply checklist submitted",
     detail: (c) =>
       c.supply_checklist_submitted_at
         ? `Submitted ${new Date(c.supply_checklist_submitted_at).toLocaleDateString()}`
-        : null,
-  },
-  {
-    done: isDressCodeAgreed,
-    label: "Dress code agreed",
-    detail: (c) =>
-      c.ob_dress_code_ack_at
-        ? `Agreed ${new Date(c.ob_dress_code_ack_at).toLocaleDateString()}`
         : null,
   },
   {
@@ -1381,8 +1364,17 @@ const OB_STEPS: Array<{ done: (c: CleanerRow) => boolean; label: string; detail?
         ? `Read ${new Date(c.ob_job_day_guides_ack_at).toLocaleDateString()}`
         : null,
   },
+  {
+    done: isDressCodeAgreed,
+    label: "Dress code agreed",
+    detail: (c) =>
+      c.ob_dress_code_ack_at
+        ? `Agreed ${new Date(c.ob_dress_code_ack_at).toLocaleDateString()}`
+        : null,
+  },
+  { done: (c) => Boolean(c.phone_verified), label: "Phone verified" },
   { done: isRequiredTrainingComplete, label: "Training videos watched" },
-  { done: stripeOnboardingDone, label: "Stripe payouts connected" },
+  { done: isPayoutSetupStarted, label: "Stripe payouts connected" },
 ];
 
 function OnboardingChecklist({
@@ -1406,7 +1398,7 @@ function OnboardingChecklist({
     isJobDayAcknowledged(cleaner) &&
     isRequiredTrainingComplete(cleaner);
   const agreementSigned = Boolean(cleaner.ob_agreement_signed);
-  const setupComplete = introReady;
+  const setupComplete = introReady && isPayoutSetupStarted(cleaner);
 
   return (
     <div className="space-y-4">
@@ -1447,9 +1439,9 @@ function OnboardingChecklist({
           <p className="text-sm font-medium text-sky-950">Account setup incomplete</p>
           <p className="text-xs text-sky-800">
             Sends email + SMS with one link that walks them through whatever is
-            left — agreement, phone, supplies, dress code, Day To Day Job Operations, then
-            the training videos. They cannot be offered a first job until that
-            sequence is done.
+            left — agreement, supplies, Day To Day Job Operations, dress code,
+            phone, training videos, then Stripe payout setup. A first job waits
+            on the videos. Stripe is the last step.
           </p>
           <Button
             type="button"

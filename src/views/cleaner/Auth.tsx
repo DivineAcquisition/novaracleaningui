@@ -393,7 +393,7 @@ export default function CleanerAuth() {
                 </Button>
                 <p className="text-center text-xs text-slate-500">
                   {inviteToken
-                    ? "After signing up you'll go straight into onboarding (agreement & payouts)."
+                    ? "After signing up you'll sign the agreement, then supplies and Day To Day Job Operations. Stripe payout setup is last."
                     : "You'll complete your profile after signing up."}
                 </p>
               </form>

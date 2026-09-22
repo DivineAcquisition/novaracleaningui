@@ -376,8 +376,7 @@ export default function CleanerOnboarding() {
         console.warn("[Onboarding] agreement send failed (non-blocking):", agreementErr);
       }
 
-      // Initiate Stripe Connect
-      toast.success("Profile created! Setting up payments...");
+      toast.success("Agreement signed. Next: supplies and Day To Day Job Operations.");
 
       // Sync the new contractor profile to GHL: create/upsert contact,
       // stamp custom fields (status, tier, location, preferred days,
@@ -400,18 +399,9 @@ export default function CleanerOnboarding() {
         console.warn("[Onboarding] sync-cleaner-to-ghl lookup failed", ghlErr);
       }
 
-      const { data: stripeData, error: stripeError } = await supabase.functions.invoke(
-        "initiate-cleaner-stripe-connect"
-      );
-
-      if (stripeError || !stripeData?.url) {
-        toast.info("Profile saved! You can set up payments later.");
-        router.replace("/cleaner/dashboard");
-        return;
-      }
-
-      // Redirect to Stripe Connect onboarding
-      window.location.href = stripeData.url;
+      // Supplies and Day To Day Job Operations are next. Stripe payout
+      // setup is the last card on the portal.
+      router.replace("/cleaner/ob-portal");
 
     } catch (error: any) {
       console.error("Onboarding error:", error);
@@ -844,7 +834,7 @@ export default function CleanerOnboarding() {
 
                   <div className="bg-blue-500/10 rounded-xl p-4 border border-blue-500/20">
                     <p className="text-sm text-blue-700 dark:text-blue-300">
-                      <strong>Next step:</strong> After submitting, you'll be redirected to Stripe to set up your payment account for receiving payouts.
+                      <strong>Next step:</strong> Supplies and Day To Day Job Operations. Stripe payout setup is the last step.
                     </p>
                   </div>
                 </div>
@@ -889,7 +879,7 @@ export default function CleanerOnboarding() {
                     ) : (
                       <>
                         <RiCheckboxCircleLine className="w-4 h-4 mr-2" />
-                        Sign & Setup Payments
+                        Sign & continue
                       </>
                     )}
                   </Button>
