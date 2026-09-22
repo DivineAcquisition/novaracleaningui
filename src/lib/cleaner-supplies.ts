@@ -301,12 +301,12 @@ export function isPayoutSetupStarted(c: CleanerSetupState): boolean {
 /**
  * Onboarding in the order everything presents it.
  *
- * Agreement first. Phone verification is second, so dispatch can reach them
- * before the kit and job-day pages. Supplies and Day To Day Job Operations
- * come next. Stripe payout setup is last.
+ * Agreement first. Phone verification is second. Supplies and Day To Day
+ * Job Operations come next, then the dress code. Stripe payout setup is
+ * sixth. Training videos are last. Finishing Stripe opens the training hub.
  *
- * First-job eligibility is every step except payouts. Pay setup is how
- * earnings are deposited, and it stays the last card on the portal.
+ * First-job eligibility is every step except payouts. A first job still
+ * waits on the videos. The training card stays locked until Stripe is started.
  */
 export function cleanerSetupSteps(c: CleanerSetupState): CleanerSetupStep[] {
   return [
@@ -336,14 +336,14 @@ export function cleanerSetupSteps(c: CleanerSetupState): CleanerSetupStep[] {
       done: isDressCodeAgreed(c),
     },
     {
-      id: "training",
-      title: "Watch the training videos",
-      done: isRequiredTrainingComplete(c),
-    },
-    {
       id: "payouts",
       title: "Set up Stripe payouts",
       done: isPayoutSetupStarted(c),
+    },
+    {
+      id: "training",
+      title: "Watch the training videos",
+      done: isRequiredTrainingComplete(c),
     },
   ];
 }

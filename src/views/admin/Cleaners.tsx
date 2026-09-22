@@ -241,7 +241,7 @@ const STATUS_BADGE: Record<string, string> = {
 const fullName = (c: CleanerRow) =>
   [c.first_name, c.last_name].filter(Boolean).join(" ") || c.email || "—";
 
-// Mirrors cleanerSetupSteps(): agreement → phone → supplies → job-day → dress → training → Stripe.
+// Mirrors cleanerSetupSteps(): agreement → phone → supplies → job-day → dress → Stripe → training.
 const onboardingProgress = (c: CleanerRow): number => {
   const steps = cleanerSetupSteps(c);
   if (steps.length === 0) return 0;
@@ -1373,8 +1373,8 @@ const OB_STEPS: Array<{ done: (c: CleanerRow) => boolean; label: string; detail?
         ? `Agreed ${new Date(c.ob_dress_code_ack_at).toLocaleDateString()}`
         : null,
   },
-  { done: isRequiredTrainingComplete, label: "Training videos watched" },
   { done: isPayoutSetupStarted, label: "Stripe payouts connected" },
+  { done: isRequiredTrainingComplete, label: "Training videos watched" },
 ];
 
 function OnboardingChecklist({
@@ -1440,7 +1440,7 @@ function OnboardingChecklist({
           <p className="text-xs text-sky-800">
             Sends email + SMS with one link that walks them through whatever is
             left — agreement, phone, supplies, Day To Day Job Operations, dress code,
-            training videos, then Stripe payout setup. A first job waits
+            Stripe payout setup, then the training videos. A first job waits
             on the videos. Stripe is the last step.
           </p>
           <Button

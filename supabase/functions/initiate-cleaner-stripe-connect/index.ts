@@ -151,7 +151,7 @@ serve(async (req) => {
       refresh_url:
         "https://contractor.novaracleaning.com/cleaner/ob-portal?stripe=refresh",
       return_url:
-        "https://contractor.novaracleaning.com/cleaner/ob-portal?stripe=complete",
+        "https://contractor.novaracleaning.com/cleaner/training",
       type: "account_onboarding",
     });
 

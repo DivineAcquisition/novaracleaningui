@@ -69,12 +69,12 @@ const logo = "/novara-logo.png";
 //   3. Supply checkoff
 //   4. Day To Day Job Operations
 //   5. Dress code — must agree, not merely view
-//   6. Training hub
-//   7. Stripe payout setup — last
+//   6. Stripe payout setup — finishing it opens the training hub
+//   7. Training hub — last
 //
 // A contractor with zero completed jobs cannot be offered work until every
-// step through the videos is done. Stripe is last and is not part of that
-// gate. See isCleanerReadyForFirstJob().
+// step through the videos is done. Stripe is the step before training and
+// is not itself part of that gate. See isCleanerReadyForFirstJob().
 // Legacy fields
 // (ob_agreement_signed, ob_google_chat_joined, ob_training_accessed) stay on
 // the cleaners row for back-compat but are not surfaced here.
@@ -163,6 +163,14 @@ export default function OnboardingPortal() {
   useEffect(() => {
     void checkAuthAndLoad();
   }, []);
+
+  // Stripe's account link returns here with ?stripe=complete. Training is
+  // the next step, so leave the portal and open the hub.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stripe = new URLSearchParams(window.location.search).get("stripe");
+    if (stripe === "complete") router.replace("/cleaner/training");
+  }, [router]);
 
   const checkAuthAndLoad = async () => {
     try {
@@ -458,9 +466,10 @@ export default function OnboardingPortal() {
                 </CardTitle>
                 <p className="text-sm text-muted-foreground mt-1">
                   Sign the agreement, then verify your phone. Check off supplies
-                  and read Day To Day Job Operations next. Dress code and the
-                  training videos come after that. Stripe payout setup is last.
-                  You won&apos;t be offered a job until the training videos are done.
+                  and read Day To Day Job Operations next. Dress code comes
+                  after that, then Stripe payout setup. Training videos are
+                  last. You won&apos;t be offered a job until the training
+                  videos are done.
                 </p>
               </div>
             </div>
@@ -705,11 +714,58 @@ export default function OnboardingPortal() {
           )}
         </StepCard>
 
-        {/* Step 6 — Training hub */}
+        {/* Step 6 — Stripe payouts. Finishing this opens training. */}
         <StepCard
           number={6}
+          title="Set up Stripe payouts"
+          description="Connect the account we pay. When Stripe finishes, you go to the training videos."
+          icon={RiBankCardLine}
+          done={payoutsDone}
+          started={false}
+          locked={!payoutsUnlocked}
+        >
+          {!payoutsUnlocked ? (
+            lockMsg(lockFor("payouts"))
+          ) : payoutsDone ? (
+            <>
+              <p className="text-sm text-muted-foreground">
+                Stripe account connected. Completed-job pay deposits there.
+                Training videos are next.
+              </p>
+              <Button variant="outline" onClick={() => router.push("/cleaner/training")}>
+                <RiGraduationCapLine className="w-4 h-4 mr-1.5" />
+                Continue to training
+              </Button>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground">
+                Dress code comes first. When Stripe finishes, you go straight
+                to the training videos.
+              </p>
+              <Button
+                size="lg"
+                onClick={() => void openStripe()}
+                disabled={stripeLoading}
+                className="bg-primary hover:bg-primary/90 text-primary-foreground"
+              >
+                {stripeLoading ? (
+                  <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" />
+                ) : (
+                  <RiBankCardLine className="w-4 h-4 mr-1.5" />
+                )}
+                Set up Stripe payouts
+                <RiArrowRightLine className="w-4 h-4 ml-1.5" />
+              </Button>
+            </>
+          )}
+        </StepCard>
+
+        {/* Step 7 — Training hub, last */}
+        <StepCard
+          number={7}
           title="Watch the training videos"
-          description="Seven walkthroughs of the real app. You must finish them before your first job."
+          description="Last step. Seven walkthroughs of the real app. You must finish them before your first job."
           icon={RiGraduationCapLine}
           done={trainingDone}
           started={false}
@@ -740,46 +796,6 @@ export default function OnboardingPortal() {
               >
                 <RiGraduationCapLine className="w-4 h-4 mr-1.5" />
                 Open training hub
-                <RiArrowRightLine className="w-4 h-4 ml-1.5" />
-              </Button>
-            </>
-          )}
-        </StepCard>
-
-        {/* Step 7 — Stripe payouts, last */}
-        <StepCard
-          number={7}
-          title="Set up Stripe payouts"
-          description="Connect the account we pay. This is the last step."
-          icon={RiBankCardLine}
-          done={payoutsDone}
-          started={false}
-          locked={!payoutsUnlocked}
-        >
-          {!payoutsUnlocked ? (
-            lockMsg(lockFor("payouts"))
-          ) : payoutsDone ? (
-            <p className="text-sm text-muted-foreground">
-              Stripe account connected. Completed-job pay deposits there.
-            </p>
-          ) : (
-            <>
-              <p className="text-sm text-muted-foreground">
-                Supplies, Day To Day Job Operations, and the videos come first.
-                Stripe opens in a new flow and brings you back here.
-              </p>
-              <Button
-                size="lg"
-                onClick={() => void openStripe()}
-                disabled={stripeLoading}
-                className="bg-primary hover:bg-primary/90 text-primary-foreground"
-              >
-                {stripeLoading ? (
-                  <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" />
-                ) : (
-                  <RiBankCardLine className="w-4 h-4 mr-1.5" />
-                )}
-                Set up Stripe payouts
                 <RiArrowRightLine className="w-4 h-4 ml-1.5" />
               </Button>
             </>

@@ -3,7 +3,8 @@
 // ─── Cleaner Training Portal ───────────────────────────────────────────
 //
 // The landing page contractors reach from:
-//   1. The "Open training hub" CTA on /cleaner/ob-portal (step 6)
+//   1. The "Open training hub" CTA on /cleaner/ob-portal (step 7), and the
+//      return from Stripe payout setup
 //   2. The training link in the contractor nav
 //
 // Auth-gated for cleaners. Visiting this page stamps

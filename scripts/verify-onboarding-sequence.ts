@@ -1,7 +1,7 @@
 // ─── Verification of the contractor onboarding sequence ─────────────────────
 //
 // Onboarding is agreement → phone → supplies → Day To Day Job Operations →
-// dress code (agree) → training videos → Stripe payouts, and four
+// dress code (agree) → Stripe payouts → training videos, and four
 // things have to agree on that:
 // the shared definition in src/lib/cleaner-supplies.ts, the portal a
 // contractor works through, the page a mailed setup link lands on, and the
@@ -13,7 +13,7 @@
 // The first half of this script checks the shared definition by calling it.
 // The second half opens the real pages in a browser and reads what a
 // contractor would actually see, because "the function returns seven steps"
-// and "the portal shows seven steps, with Stripe last" are different claims
+// and "the portal shows seven steps, with training last" are different claims
 // and only the second one is the product.
 //
 // No real data is touched: every Supabase call is answered from an invented
@@ -72,9 +72,9 @@ function check(name: string, actual: unknown, expected: unknown): void {
 function checkSequence(): void {
   console.log("\nThe onboarding sequence");
 
-  const expectedIds = ["agreement", "phone", "supplies", "job_day", "dress_code", "training", "payouts"];
+  const expectedIds = ["agreement", "phone", "supplies", "job_day", "dress_code", "payouts", "training"];
   const fresh: CleanerSetupState = {};
-  check("seven steps, agreement first, Stripe last", cleanerSetupSteps(fresh).map((s) => s.id), expectedIds);
+  check("seven steps, agreement first, training last", cleanerSetupSteps(fresh).map((s) => s.id), expectedIds);
   check("a brand-new contractor has nothing done", cleanerSetupSteps(fresh).map((s) => s.done), [
     false,
     false,
@@ -114,10 +114,24 @@ function checkSequence(): void {
   };
   check("training done without Stripe is not complete", isCleanerSetupComplete(allDone), false);
   check("and that is enough for a first job", isCleanerReadyForFirstJob(allDone), true);
+  const throughDress: CleanerSetupState = {
+    ob_agreement_signed: true,
+    phone_verified: true,
+    supply_checklist_submitted_at: "2026-09-01T00:00:00Z",
+    ob_dress_code_ack: true,
+    ob_job_day_guides_ack: true,
+  };
   check(
-    "Stripe is the last step",
-    cleanerSetupSteps(allDone).filter((s) => !s.done).map((s) => s.id),
-    ["payouts"],
+    "after the dress code, Stripe comes before training",
+    cleanerSetupSteps(throughDress).filter((s) => !s.done).map((s) => s.id),
+    ["payouts", "training"],
+  );
+  check("training stays locked until Stripe is started", isSetupStepUnlocked(throughDress, "training"), false);
+  check("Stripe unlocks once the dress code is done", isSetupStepUnlocked(throughDress, "payouts"), true);
+  check(
+    "training unlocks once Stripe is started",
+    isSetupStepUnlocked({ ...throughDress, stripe_account_id: "acct_123" }, "training"),
+    true,
   );
   check(
     "Stripe connected finishes the sequence",
@@ -469,11 +483,11 @@ async function checkPortal(browser: Browser): Promise<void> {
     "Check off your supplies",
     "Read Day To Day Job Operations",
     "Agree to the dress code",
-    "Watch the training videos",
     "Set up Stripe payouts",
+    "Watch the training videos",
   ];
   check(
-    "in order, agreement first and Stripe last",
+    "in order, agreement first and training last",
     expectedOrder.filter((t) => headings.some((h) => h.includes(t))),
     expectedOrder,
   );
@@ -618,13 +632,21 @@ async function checkPortal(browser: Browser): Promise<void> {
   check("the dress-code agree is recorded", row.ob_dress_code_ack, true);
   check("five of seven steps done", (await body()).includes("5 of 7 complete"), true);
 
-  const trainingBtn = page.getByRole("button", { name: "Open training hub" });
-  await trainingBtn.waitFor({ timeout: 20_000 });
   check(
-    "Stripe stays locked until the training videos are finished",
-    await page.getByRole("button", { name: "Set up Stripe payouts" }).isVisible().catch(() => false),
+    "Stripe unlocks after the dress code",
+    await page.getByRole("button", { name: "Set up Stripe payouts" }).isVisible(),
+    true,
+  );
+  check(
+    "training stays locked until Stripe is started",
+    await page.getByRole("button", { name: "Open training hub" }).isVisible().catch(() => false),
     false,
   );
+  row.stripe_account_id = "acct_test";
+  await page.reload({ waitUntil: "networkidle" });
+  await page.getByText("Welcome, Imani!").waitFor({ timeout: 20_000 });
+  const trainingBtn = page.getByRole("button", { name: "Open training hub" });
+  await trainingBtn.waitFor({ timeout: 20_000 });
 
   await page.screenshot({ path: resolve(SHOTS_DIR, "portal-training-unlocked.png"), fullPage: true });
 
@@ -720,8 +742,8 @@ async function checkSetupLanding(browser: Browser): Promise<void> {
       "Check off your supplies",
       "Read Day To Day Job Operations",
       "Agree to the dress code",
-      "Watch the training videos",
       "Set up Stripe payouts",
+      "Watch the training videos",
     ],
   );
   check(

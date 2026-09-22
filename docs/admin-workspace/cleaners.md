@@ -76,8 +76,9 @@ Pending offers with **Accept for them** and **Decline**, then assigned jobs with
 
 Seven items, in portal order: **Contractor agreement signed**, **Phone verified**,
 **Supply checklist submitted**, **Day To Day Job Operations read**, **Dress code
-agreed**, **Training videos watched**, **Stripe payouts connected**. Underneath,
-whether their portal is ready. A first job waits on the videos. Stripe is last.
+agreed**, **Stripe payouts connected**, **Training videos watched**. Underneath,
+whether their portal is ready. A first job waits on the videos. Stripe is the
+step before training, and finishing it opens the training hub.
 
 Action cards appear for whatever is missing — **Send setup link**, **Send agreement link**,
 **Send supply checklist**. These are disabled if the contractor has neither an email nor a

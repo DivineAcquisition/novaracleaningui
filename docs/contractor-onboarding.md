@@ -7,12 +7,12 @@ Seven steps, in this order:
 3. **Check off your supplies** — what kit do they already own? This page opens once the phone is verified.
 4. **Read Day To Day Job Operations** — what a job looks like from offer to payout. Same stretch of the portal, right after supplies.
 5. **Agree to the dress code** — the graphic, with an explicit agree tick. Viewing is not enough.
-6. **Watch the training videos** — all seven walkthroughs on the training hub. Skipping does not count.
-7. **Set up Stripe payouts** — last. This is how completed-job pay is deposited.
+6. **Set up Stripe payouts** — how completed-job pay is deposited. Finishing this opens the training hub.
+7. **Watch the training videos** — last. All seven walkthroughs on the training hub. Skipping does not count.
 
-A contractor with zero completed jobs **cannot be offered a first job** until the steps through the videos are done. People who have already completed a job are past this gate — we do not yank offers from the roster.
+A contractor with zero completed jobs **cannot be offered a first job** until the videos are done. People who have already completed a job are past this gate — we do not yank offers from the roster.
 
-Stripe is the last card they work through. It is not part of the first-job gate.
+Stripe is the step before training. Finishing it routes to the training hub. It is not itself part of the first-job gate.
 
 ## One definition, four readers
 
@@ -122,7 +122,7 @@ a yes/no eligibility fact for a first job.
 mint_cleaner_setup_token
   → https://contractor.novaracleaning.com/cleaner/setup/<token>   (email + SMS)
   → /cleaner/auth?setup=<token>                                    (sign in / create login)
-  → /cleaner/ob-portal                                             (phone next, then supplies and Day To Day, Stripe last)
+  → /cleaner/ob-portal                                             (phone next, then supplies and Day To Day; Stripe opens training)
 ```
 
 The email and the SMS both list what is outstanding in portal order, so the
@@ -144,7 +144,7 @@ npm run onboarding:verify
 
 `scripts/verify-onboarding-sequence.ts` checks the shared definition by
 calling it, then opens the real pages in a browser and reads what a
-contractor would see: seven steps in order, agreement first, phone second, supplies and Day To Day next, Stripe last, dress-code agree
+contractor would see: seven steps in order, agreement first, phone second, supplies and Day To Day next, Stripe sixth, training last, dress-code agree
 required, the two public PDF landing
 pages, and the training hub requiring the seven videos. Every Supabase call is
 answered from an invented fixture in the script, so no real contractor is

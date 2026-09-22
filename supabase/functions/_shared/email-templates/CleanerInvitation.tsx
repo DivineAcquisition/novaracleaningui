@@ -58,10 +58,10 @@ export const CleanerInvitation = ({
           3. Check off your supplies and read Day To Day Job Operations
         </Text>
         <Text style={styles.listItem}>
-          4. Finish dress code and the training videos
+          4. Agree to the dress code, then set up Stripe payouts
         </Text>
         <Text style={styles.listItem}>
-          5. Set up Stripe payouts last, so we can pay you
+          5. Watch the training videos last — Stripe brings you there when it finishes
         </Text>
 
         <Section style={styles.buttonSection}>
