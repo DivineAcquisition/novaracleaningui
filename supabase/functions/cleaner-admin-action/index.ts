@@ -1049,6 +1049,7 @@ serve(async (req) => {
             needs_supplies: !suppliesOk,
             needs_dress_code: !dressOk,
             needs_job_day: !jobDayOk,
+            needs_stripe: !stripeOk,
             needs_training: !trainingOk,
           },
         }).then(() => undefined, () => undefined);
