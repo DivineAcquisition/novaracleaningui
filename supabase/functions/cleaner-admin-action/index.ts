@@ -1044,8 +1044,12 @@ serve(async (req) => {
             sms_sent: smsSent,
             email_error: emailError,
             sms_error: smsError,
+            needs_agreement: !agreementOk,
             needs_phone: !phoneOk,
-            needs_stripe: !stripeOk,
+            needs_supplies: !suppliesOk,
+            needs_dress_code: !dressOk,
+            needs_job_day: !jobDayOk,
+            needs_training: !trainingOk,
           },
         }).then(() => undefined, () => undefined);
 

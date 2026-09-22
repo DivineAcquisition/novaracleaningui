@@ -48,6 +48,16 @@ import {
   removeQcIssueMedia,
   type QcIssueMediaFile,
 } from "../_shared/qc-issue-media.ts";
+import {
+  FACTUAL_SUMMARY_DISCLAIMER,
+  assembleFactualSummary,
+  factualSummaryAvailable,
+  normalizeCorrespondence,
+  normalizeFollowupDocument,
+  normalizeInsurance,
+  preserveCaseEntries,
+} from "../_shared/qc-factual-summary.ts";
+import { buildFactualSummaryPdf } from "../_shared/qc-factual-summary-pdf.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -587,17 +597,23 @@ serve(async (req) => {
         patch.client_written_communication = String(body.clientWrittenCommunication || "").slice(0, 50000) || null;
         notes.push("client written communication");
       }
-      if (body?.clientFollowupDocuments !== undefined) {
-        const docs = Array.isArray(body.clientFollowupDocuments) ? body.clientFollowupDocuments : [];
-        patch.client_followup_documents = docs.slice(0, 40).map((d: Record<string, unknown>) => ({
-          received_at: String(d?.received_at || nowIso),
-          kind: String(d?.kind || "document").slice(0, 80),
-          description: String(d?.description || "").slice(0, 500),
-          url: d?.url ? String(d.url).slice(0, 2000) : null,
-          filename: d?.filename ? String(d.filename).slice(0, 200) : null,
-          entered_by: actor.name,
-        }));
+      if (body?.appendFollowupDocument !== undefined || body?.clientFollowupDocuments !== undefined) {
+        const incoming = body?.appendFollowupDocument !== undefined
+          ? [body.appendFollowupDocument]
+          : (Array.isArray(body.clientFollowupDocuments) ? body.clientFollowupDocuments : []);
+        const normalized = incoming
+          .map((d: unknown) => normalizeFollowupDocument(d, actor.name, nowIso))
+          .filter((d): d is Record<string, unknown> => Boolean(d))
+          .slice(0, 40);
+        if (!normalized.length) return json({ ok: false, error: "Nothing to attach." }, 400);
+        patch.client_followup_documents = preserveCaseEntries(issue.client_followup_documents, normalized);
         notes.push("client follow-up documents");
+      }
+      if (body?.appendCorrespondence !== undefined) {
+        const row = normalizeCorrespondence(body.appendCorrespondence);
+        if (!row) return json({ ok: false, error: "Correspondence needs a subject or body." }, 400);
+        patch.correspondence_log = preserveCaseEntries(issue.correspondence_log, [row]);
+        notes.push("correspondence");
       }
       if (body?.contractorSuspensionFlag !== undefined) {
         const flag = String(body.contractorSuspensionFlag);
@@ -607,17 +623,43 @@ serve(async (req) => {
         patch.contractor_suspension_flag = flag;
         notes.push(`suspension flag → ${flag} (does not change contractor status)`);
       }
-      if (body?.insuranceNotified === true) {
-        patch.insurance_notified_at = body?.insuranceNotifiedAt
-          ? new Date(String(body.insuranceNotifiedAt)).toISOString()
-          : nowIso;
-        patch.insurance_notified_by_name = actor.name;
-        notes.push("insurance notification recorded (prompt only; carrier is not contacted by the system)");
-      }
-      if (body?.insuranceNotified === false) {
-        patch.insurance_notified_at = null;
-        patch.insurance_notified_by_name = null;
-        notes.push("insurance notification cleared");
+      if (
+        body?.insuranceNotified === true
+        || body?.insuranceNotified === false
+        || body?.insuranceMethod !== undefined
+        || body?.insuranceCarrierResponse !== undefined
+      ) {
+        if (body?.insuranceNotified === true) {
+          const at = body?.insuranceNotifiedAt ? new Date(String(body.insuranceNotifiedAt)) : null;
+          if (!at || Number.isNaN(at.getTime())) {
+            return json({ ok: false, error: "A notification date is required before insurance can be marked notified." }, 400);
+          }
+        }
+        const existing = issue.insurance_notification && typeof issue.insurance_notification === "object"
+          ? issue.insurance_notification
+          : { status: "pending", notified_at: issue.insurance_notified_at || null, method: null, carrier_response: null };
+        const next = normalizeInsurance({
+          status: body?.insuranceNotified === true
+            ? "notified"
+            : body?.insuranceNotified === false
+              ? "pending"
+              : existing.status,
+          notified_at: body?.insuranceNotified === true
+            ? body.insuranceNotifiedAt
+            : body?.insuranceNotified === false
+              ? null
+              : existing.notified_at,
+          method: body?.insuranceMethod !== undefined ? body.insuranceMethod : existing.method,
+          carrier_response: body?.insuranceCarrierResponse !== undefined
+            ? body.insuranceCarrierResponse
+            : existing.carrier_response,
+        }, existing);
+        patch.insurance_notification = next;
+        patch.insurance_notified_at = next.status === "notified" ? next.notified_at : null;
+        patch.insurance_notified_by_name = next.status === "notified" ? actor.name : null;
+        notes.push(next.status === "notified"
+          ? "insurance notification recorded (carrier is not contacted by the system)"
+          : "insurance notification left pending");
       }
       if (Object.keys(patch).length <= 1) {
         return json({ ok: false, error: "No incident fields to update." }, 400);
@@ -934,6 +976,137 @@ serve(async (req) => {
       });
       const { data: fresh } = await admin.from("qc_issues").select("*").eq("id", issueId).maybeSingle();
       return json({ ok: true, issue: fresh || { ...issue, evidence_files: result.files } });
+    }
+
+    if (action === "generate_factual_summary" || action === "open_factual_summary") {
+      if (!factualSummaryAvailable({
+        status: issue.status,
+        escalation: issue.escalation && typeof issue.escalation === "object" ? issue.escalation : null,
+      })) {
+        return json({ ok: false, error: "Factual summary is available only on escalated cases." }, 400);
+      }
+    }
+
+    if (action === "open_factual_summary") {
+      const docId = String(body?.documentId || "");
+      const docs = Array.isArray(issue.generated_case_documents) ? issue.generated_case_documents : [];
+      const found = docs.find((d: { id?: string }) => d && d.id === docId) as { pdf_path?: string } | undefined;
+      const path = String(found?.pdf_path || "");
+      if (!path.startsWith(`evidence/issue/${issueId}/`)) {
+        return json({ ok: false, error: "That summary is not stored on this case." }, 404);
+      }
+      const signed = await admin.storage.from(QC_ISSUE_MEDIA_BUCKET).createSignedUrl(path, 60 * 60);
+      if (signed.error || !signed.data?.signedUrl) {
+        return json({ ok: false, error: signed.error?.message || "Could not open the stored summary." }, 400);
+      }
+      return json({ ok: true, signedUrl: signed.data.signedUrl });
+    }
+
+    if (action === "generate_factual_summary") {
+      const { data: events } = await admin
+        .from("qc_issue_events")
+        .select("created_at, action, note, actor_name, from_status, to_status")
+        .eq("issue_id", issueId)
+        .order("created_at", { ascending: true });
+      const { data: statements } = await admin
+        .from("qc_statement_submissions")
+        .select("submitted_at, sequence, kind, account_text, report_response")
+        .eq("issue_id", issueId)
+        .order("submitted_at", { ascending: true });
+      const prior = Array.isArray(issue.generated_case_documents) ? issue.generated_case_documents : [];
+      const summary = assembleFactualSummary({
+        issueNumber: issue.issue_number,
+        bookingRef: issue.booking_ref,
+        title: issue.title,
+        status: issue.status,
+        issueType: issue.issue_type,
+        createdAt: issue.created_at,
+        managerAccount: issue.manager_account,
+        contractorStatement: issue.contractor_statement,
+        clientWrittenCommunication: issue.client_written_communication,
+        events: events || [],
+        correspondence: Array.isArray(issue.correspondence_log) ? issue.correspondence_log : [],
+        documents: Array.isArray(issue.client_followup_documents) ? issue.client_followup_documents : [],
+        evidenceFiles: normalizeQcIssueMedia(issue.evidence_files).map((file) => ({
+          kind: file.kind,
+          filename: file.filename,
+          source: file.uploadedVia,
+          received_at: file.uploadedAt,
+        })),
+        statements: (statements || []).map((row: {
+          submitted_at?: string | null;
+          sequence?: number | null;
+          kind?: string | null;
+          account_text?: string | null;
+          report_response?: string | null;
+        }) => ({
+          submitted_at: row.submitted_at,
+          sequence: row.sequence,
+          kind: row.kind,
+          text: [row.account_text, row.report_response].map((part) => String(part || "").trim()).filter(Boolean).join("\n\n") || null,
+        })),
+        priorSummaries: prior.map((row: { id?: string; generated_at?: string }) => ({
+          id: row.id,
+          generated_at: row.generated_at,
+        })),
+        contractorPosition: issue.contractor_position || null,
+        clientPosition: issue.client_position || null,
+        medicalRecordReview: issue.medical_record_review || null,
+        escalation: issue.escalation || null,
+        insurance: issue.insurance_notification || null,
+        generatedAt: nowIso,
+      });
+      if (summary.disclaimer !== FACTUAL_SUMMARY_DISCLAIMER) {
+        return json({ ok: false, error: "Refusing to generate a summary without the standing disclaimer." }, 500);
+      }
+      const id = crypto.randomUUID();
+      const path = `evidence/issue/${issueId}/factual-summary-${id}.pdf`;
+      let pdfStatus: "generated" | "failed" = "generated";
+      let pdfError: string | null = null;
+      try {
+        const bytes = await buildFactualSummaryPdf(summary);
+        const upload = await admin.storage.from(QC_ISSUE_MEDIA_BUCKET).upload(path, bytes, {
+          contentType: "application/pdf",
+          upsert: false,
+        });
+        if (upload.error) throw upload.error;
+      } catch (err) {
+        pdfStatus = "failed";
+        pdfError = err instanceof Error ? err.message : String(err);
+      }
+      const record = {
+        id,
+        kind: "factual_summary",
+        generated_at: nowIso,
+        generated_by: actor.name,
+        disclaimer: FACTUAL_SUMMARY_DISCLAIMER,
+        pdf_path: pdfStatus === "generated" ? path : null,
+        pdf_status: pdfStatus,
+        pdf_error: pdfError,
+        summary,
+      };
+      const nextDocs = preserveCaseEntries(prior, [record]);
+      const { error: upErr } = await admin.from("qc_issues").update({
+        generated_case_documents: nextDocs,
+        updated_at: nowIso,
+      }).eq("id", issueId);
+      if (upErr) throw upErr;
+      await admin.from("qc_issue_events").insert({
+        issue_id: issueId,
+        action: "note",
+        note: pdfStatus === "generated"
+          ? "Factual summary and evidence index generated and saved on this case."
+          : "Factual summary saved on this case. PDF storage failed and can be generated again.",
+        actor_id: actor.id,
+        actor_name: actor.name,
+        data: { factual_summary_id: id, pdf_status: pdfStatus },
+      });
+      let signedUrl: string | null = null;
+      if (pdfStatus === "generated") {
+        const signed = await admin.storage.from(QC_ISSUE_MEDIA_BUCKET).createSignedUrl(path, 60 * 60);
+        signedUrl = signed.data?.signedUrl || null;
+      }
+      return json({ ok: true, document: record, signedUrl, pdfStatus, pdfError });
     }
 
     return json({ ok: false, error: `Unknown action '${action}'.` }, 400);

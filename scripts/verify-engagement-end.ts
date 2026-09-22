@@ -199,6 +199,8 @@ check("resignation clears a live termination reason", terminateFn.includes("patc
 const adminAction = readFileSync(resolve("supabase/functions/cleaner-admin-action/index.ts"), "utf8");
 check("directory shortcut cannot terminate", adminAction.includes("USE_ENGAGEMENT_END"), true);
 check("directory shortcut does not text the shared SMS", adminAction.includes("notifyContractorTerminated"), false);
+check("setup link does not read stripeOk", adminAction.includes("stripeOk"), false);
+check("setup event records the agreement step", adminAction.includes("needs_agreement: !agreementOk"), true);
 
 const accountability = readFileSync(resolve("supabase/functions/cleaner-accountability/index.ts"), "utf8");
 check("accountability still texts the shared SMS", accountability.includes("notifyContractorTerminated"), true);
