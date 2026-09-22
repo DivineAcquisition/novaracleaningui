@@ -765,3 +765,7 @@ verify_jwt = false
 # Per-case Drive folder for contractor statement uploads + branded PDF.
 [functions.qc-statement-drive]
 verify_jwt = false
+
+# Form 1099-NEC Copy B and Copy C. Admin JWT is checked again inside the function.
+[functions.nec-1099]
+verify_jwt = true

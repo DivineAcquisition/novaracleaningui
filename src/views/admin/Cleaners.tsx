@@ -65,6 +65,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { describeEdgeError } from "@/lib/edge-invoke";
+import { Nec1099Panel } from "@/components/admin/Nec1099Panel";
 import {
   isAgreementSigned,
   isDressCodeAgreed,
@@ -2214,6 +2215,7 @@ function ActionsBlock({
           ) : null}
         </div>
       ) : null}
+      {isAdmin ? <Nec1099Panel cleanerId={cleaner.id} /> : null}
 
       {actioning ? (
         <p className="text-xs text-slate-500 inline-flex items-center gap-1.5">

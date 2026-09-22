@@ -65,6 +65,7 @@
     "bookings-checklist:verify": "node --experimental-strip-types --no-warnings scripts/verify-bookings-checklist.ts",
     "checkout-nudge:verify": "node --experimental-strip-types --no-warnings scripts/verify-checkout-nudge-guard.ts",
     "engagement-end:verify": "node --experimental-strip-types --no-warnings scripts/verify-engagement-end.ts",
+    "nec-1099:verify": "tsx scripts/verify-nec-1099.ts",
     "eas:supabase:connect": "npm --prefix contractor-app run eas:supabase:connect"
   },
   "dependencies": {
