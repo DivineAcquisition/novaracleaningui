@@ -20,6 +20,7 @@ import {
   blockerMessage,
   correctionOf,
   efileRecord,
+  crewBreakdownContains,
   jobPayFromLedgers,
   meetsNecThreshold,
   parseTtocSetting,
@@ -84,49 +85,59 @@ async function readSetting(admin: DB, key: string): Promise<unknown> {
   return data?.value ?? null;
 }
 
+const LEDGER_PAGE = 1000;
+const LEDGER_CAP = 20000;
+
+async function readPages(label: string, build: () => DB): Promise<Record<string, unknown>[]> {
+  const rows: Record<string, unknown>[] = [];
+  for (let from = 0; rows.length < LEDGER_CAP; from += LEDGER_PAGE) {
+    const { data, error } = await build().range(from, from + LEDGER_PAGE - 1);
+    if (error) throw new Error(error.message || `Could not read ${label}.`);
+    const batch = (data || []) as Record<string, unknown>[];
+    rows.push(...batch);
+    if (batch.length < LEDGER_PAGE) return rows;
+  }
+  throw new Error("A pay ledger read hit its limit. Refusing to file a partial 1099.");
+}
+
 async function loadLedgers(admin: DB, cleanerId: string, year: number) {
-  const [{ data: payoutsByCleaner, error: payoutErr }, { data: payoutsByCrew, error: crewErr }, { data: extras, error: extraErr }, { data: tips, error: tipErr }] =
-    await Promise.all([
+  const payoutSelect = "id, cleaner_id, amount_cents, status, service_date, paid_at, created_at, cleaner_breakdown";
+  const [payoutsByCleaner, payoutsByCrew, extras, tips] = await Promise.all([
+    readPages("the pay ledger", () =>
+      admin.from("manual_payouts").select(payoutSelect).eq("status", "paid").eq("cleaner_id", cleanerId).order("id"),
+    ),
+    readPages("crew payouts", () =>
       admin
         .from("manual_payouts")
-        .select("id, cleaner_id, amount_cents, status, service_date, paid_at, created_at, cleaner_breakdown")
+        .select(payoutSelect)
         .eq("status", "paid")
-        .eq("cleaner_id", cleanerId)
-        .limit(10000),
-      admin
-        .from("manual_payouts")
-        .select("id, cleaner_id, amount_cents, status, service_date, paid_at, created_at, cleaner_breakdown")
-        .eq("status", "paid")
-        .contains("cleaner_breakdown", [{ cleanerId }])
-        .limit(10000),
+        .contains("cleaner_breakdown", crewBreakdownContains(cleanerId))
+        .order("id"),
+    ),
+    readPages("extra pay", () =>
       admin
         .from("job_extra_pay")
-        .select("cleaner_id, status, paid_at, created_at, surge_cents, job_value_cents, overtime_cents, supply_cents, mileage_cents")
+        .select("id, cleaner_id, status, paid_at, created_at, surge_cents, job_value_cents, overtime_cents, supply_cents, mileage_cents")
         .eq("cleaner_id", cleanerId)
         .eq("status", "paid")
-        .limit(10000),
+        .order("id"),
+    ),
+    readPages("tips", () =>
       admin
         .from("cleaner_tips")
-        .select("cleaner_id, amount_cents, status, created_at, paid_out_at")
+        .select("id, cleaner_id, amount_cents, status, created_at, paid_out_at")
         .eq("cleaner_id", cleanerId)
-        .limit(10000),
-    ]);
-  if (payoutErr) throw new Error(payoutErr.message || "Could not read the pay ledger.");
-  if (crewErr) throw new Error(crewErr.message || "Could not read crew payouts.");
-  if (extraErr) throw new Error(extraErr.message || "Could not read extra pay.");
-  if (tipErr) throw new Error(tipErr.message || "Could not read tips.");
+        .order("id"),
+    ),
+  ]);
   const payouts: Record<string, unknown>[] = [];
   const seen = new Set<string>();
-  for (const row of [...(payoutsByCleaner || []), ...(payoutsByCrew || [])]) {
+  for (const row of [...payoutsByCleaner, ...payoutsByCrew]) {
     const id = String((row as { id?: string }).id || "");
     if (!id || seen.has(id)) continue;
     seen.add(id);
     payouts.push(row as Record<string, unknown>);
   }
-  if ((payoutsByCleaner || []).length >= 10000 || (payoutsByCrew || []).length >= 10000 || (extras || []).length >= 10000 || (tips || []).length >= 10000) {
-    throw new Error("A pay ledger read hit its limit. Refusing to file a partial 1099.");
-  }
-
   const payoutRows: LedgerPayout[] = payouts.map((row: Record<string, unknown>) => ({
     cleanerId: row.cleaner_id as string | null,
     amountCents: row.amount_cents as number | null,
@@ -136,7 +147,7 @@ async function loadLedgers(admin: DB, cleanerId: string, year: number) {
     createdAt: row.created_at as string | null,
     breakdown: row.cleaner_breakdown,
   }));
-  const extraRows: ExtraPayRow[] = (extras || []).map((row: Record<string, unknown>) => ({
+  const extraRows: ExtraPayRow[] = extras.map((row: Record<string, unknown>) => ({
     status: row.status as string | null,
     paidAt: row.paid_at as string | null,
     createdAt: row.created_at as string | null,
@@ -146,7 +157,7 @@ async function loadLedgers(admin: DB, cleanerId: string, year: number) {
     supplyCents: row.supply_cents as number | null,
     mileageCents: row.mileage_cents as number | null,
   }));
-  const tipRows: TipRow[] = (tips || []).map((row: Record<string, unknown>) => ({
+  const tipRows: TipRow[] = tips.map((row: Record<string, unknown>) => ({
     amountCents: row.amount_cents as number | null,
     status: row.status as string | null,
     createdAt: row.created_at as string | null,
@@ -169,6 +180,20 @@ async function loadW9(admin: DB, cleanerId: string) {
     city: data.city,
     state: data.state,
     zip: data.zip,
+  };
+}
+
+function payerDraft(value: unknown) {
+  const src = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  const text = (key: string) => String(src[key] ?? "").replace(/\s+/g, " ").trim();
+  return {
+    name: text("name") || "NovaraCleaning LLC",
+    tin: text("tin"),
+    street: text("street"),
+    city: text("city"),
+    state: text("state"),
+    zip: text("zip"),
+    phone: text("phone"),
   };
 }
 
@@ -376,6 +401,7 @@ serve(async (req) => {
         overtimeTrackedCents: ledgers.overtimeTrackedCents,
         w9: recipient.ok ? { validated: true, legalName: recipient.recipient.name, tinMasked: maskTin(recipient.recipient.tin) } : { validated: false },
         payerReady: payer.ok,
+        payer: payerDraft(payerValue),
         ttoc: { codes: ttoc.codes, confirmed: ttoc.confirmed },
         blockers,
         original: filed.original,

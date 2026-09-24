@@ -21,6 +21,15 @@ type Preview = {
   box3Cents: null;
   w9: { validated: boolean; legalName?: string; tinMasked?: string };
   payerReady: boolean;
+  payer?: {
+    name: string;
+    tin: string;
+    street: string;
+    city: string;
+    state: string;
+    zip: string;
+    phone: string;
+  };
   ttoc: { codes: string[]; confirmed: boolean };
   blockers: string[];
   original: { id: string; created_at: string } | null;
@@ -102,6 +111,13 @@ export function Nec1099Panel({ cleanerId }: { cleanerId: string }) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!preview?.payer) return;
+    setPayer(preview.payer);
+    setTtoc((preview.ttoc?.codes || []).join(", "));
+    setTtocConfirmed(preview.ttoc?.confirmed === true);
+  }, [preview]);
 
   const openCopy = async (formId: string, copy: "B" | "C") => {
     setBusy(true);
@@ -224,6 +240,7 @@ export function Nec1099Panel({ cleanerId }: { cleanerId: string }) {
           <Input placeholder="Payer city" value={payer.city} onChange={(event) => setPayer({ ...payer, city: event.target.value })} />
           <Input placeholder="Payer state" value={payer.state} onChange={(event) => setPayer({ ...payer, state: event.target.value })} />
           <Input placeholder="Payer ZIP" value={payer.zip} onChange={(event) => setPayer({ ...payer, zip: event.target.value })} />
+          <Input placeholder="Payer phone" value={payer.phone} onChange={(event) => setPayer({ ...payer, phone: event.target.value })} />
           <Input placeholder="Occupation code" value={ttoc} onChange={(event) => setTtoc(event.target.value)} />
           <label className="flex items-center gap-2">
             <input type="checkbox" checked={ttocConfirmed} onChange={(event) => setTtocConfirmed(event.target.checked)} />

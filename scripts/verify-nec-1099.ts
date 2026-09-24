@@ -12,6 +12,7 @@ import {
   box3Cents,
   combinedCompensationCents,
   copyAIsPrintable,
+  crewBreakdownContains,
   correctionOf,
   efileRecord,
   jobPayFromLedgers,
@@ -243,6 +244,12 @@ assert(migration.includes("BEFORE UPDATE OR DELETE"), "update and delete are rej
 assert(migration.includes("box_1a_cents = job_pay_cents + tip_cents"), "stored box 1a includes tips once");
 assert(!migration.includes("copy_a"), "the table has no printable Copy A");
 assert(migration.includes("'confirmed', false"), "the occupation code is unconfirmed until an admin saves one");
+const crewFilter = crewBreakdownContains(CLEANER);
+assert(crewFilter.startsWith("[{") && crewFilter.includes(`"cleanerId":"${CLEANER}"`), "crew payout filter is json containment");
+assert(!crewFilter.includes("[object Object]"), "crew payout filter is not a postgres array of objects");
+assert(edge.includes("crewBreakdownContains(cleanerId)"), "the preview uses the json crew filter");
+assert(!edge.includes('.contains("cleaner_breakdown", [{ cleanerId }])'), "the preview does not send an object array to contains");
+assert(edge.includes("readPages"), "ledger reads page instead of one capped request");
 
 async function main() {
   let threw = false;

@@ -150,6 +150,18 @@ export function printableCopy(copy: string): NecCopy | null {
   return null;
 }
 
+/**
+ * Containment value for `manual_payouts.cleaner_breakdown`.
+ *
+ * supabase-js turns a JavaScript array into a Postgres array literal. An
+ * array of objects becomes `{[object Object]}`, which is invalid json for
+ * this jsonb column and the preview fails for every contractor. A JSON
+ * string is passed through as `cs.<json>` and matches with `@>`.
+ */
+export function crewBreakdownContains(cleanerId: string): string {
+  return JSON.stringify([{ cleanerId }]);
+}
+
 export function copyAIsPrintable(): false {
   return false;
 }
