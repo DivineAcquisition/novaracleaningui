@@ -241,11 +241,11 @@ def main() -> None:
                 convo_id = str(convo.get("id") or "")
                 if not convo_id:
                     continue
-                _, body = ghl_get(ghl_token, f"/conversations/{urllib.parse.quote(convo_id)}/messages?limit=50")
+                _, body = ghl_get(ghl_token, f"/conversations/{urllib.parse.quote(convo_id)}/messages?limit=100")
                 for message in message_list(body):
                     if isinstance(message, dict) and is_call(message):
                         call_messages.append(message)
-            for message in call_messages[:3]:
+            for message in call_messages[:8]:
                 message_id = str(message.get("id") or "")
                 text = ""
                 if message_id:
