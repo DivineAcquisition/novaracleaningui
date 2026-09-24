@@ -1,0 +1,45 @@
+name: Apply 1099 W-9 schema
+
+# The 1099 migration is in the repo, but production only auto-deploys edge
+# functions. This applies cleaner_w9 and nec_1099_forms on the live database.
+# pull_calls is off unless a run asks for the booked-job transcript export.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - supabase/migrations/20260922203000_nec_1099_copy_b_c.sql
+      - scripts/apply-nec-1099-schema.py
+      - .github/workflows/apply-nec-1099-schema.yml
+  workflow_dispatch:
+    inputs:
+      pull_calls:
+        description: Pull redacted booked-job call transcripts
+        type: boolean
+        default: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      PROJECT_REF: sxdraeptzuamsgjcvfeg
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Apply cleaner_w9 and nec_1099_forms
+        run: python3 scripts/apply-nec-1099-schema.py
+
+      - name: Pull booked-job call transcripts
+        if: github.event_name == 'push' || inputs.pull_calls == true || inputs.pull_calls == 'true'
+        run: python3 scripts/pull-booked-job-calls.py
+
+      - name: Upload call notes
+        if: always() && (github.event_name == 'push' || inputs.pull_calls == true || inputs.pull_calls == 'true')
+        uses: actions/upload-artifact@v4
+        with:
+          name: booked-job-calls
+          path: tmp/booked-job-calls.json
+          retention-days: 1
+          if-no-files-found: warn

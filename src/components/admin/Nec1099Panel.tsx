@@ -78,14 +78,22 @@ export function Nec1099Panel({ cleanerId }: { cleanerId: string }) {
   const [ttocConfirmed, setTtocConfirmed] = useState(false);
   const [showW9, setShowW9] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const data = (await invoke({ action: "preview", cleanerId, taxYear: year })) as unknown as Preview;
       setPreview(data);
+      setLoadError(null);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not preview the 1099.");
+      const message = err instanceof Error ? err.message : "Could not preview the 1099.";
+      setPreview(null);
+      setLoadError(
+        /cleaner_w9|schema cache/i.test(message)
+          ? "The W-9 table is not on this database yet, so the 1099 section cannot load. The rest of this contractor record is unaffected."
+          : message,
+      );
     } finally {
       setLoading(false);
     }
@@ -171,6 +179,7 @@ export function Nec1099Panel({ cleanerId }: { cleanerId: string }) {
       </div>
 
       {loading && !preview ? <p className="text-slate-500">Reading the pay ledger and tips…</p> : null}
+      {loadError ? <p className="text-amber-800">{loadError}</p> : null}
 
       {preview ? (
         <div className="space-y-1">
