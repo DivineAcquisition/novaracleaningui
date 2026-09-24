@@ -3,6 +3,7 @@ name: Apply 1099 W-9 schema
 # The 1099 migration is in the repo, but production only auto-deploys edge
 # functions. This applies cleaner_w9 and nec_1099_forms on the live database.
 # pull_calls is off unless a run asks for the booked-job transcript export.
+# A push of this workflow also exports one redacted sample for the sales script.
 
 on:
   push:

@@ -43,6 +43,13 @@ def db_query(token: str, sql: str) -> list:
     return data if isinstance(data, list) else []
 
 
+def redact(text: str) -> str:
+    import re
+    text = re.sub(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", "[email]", text, flags=re.I)
+    text = re.sub(r"\+?\d[\d\s().-]{7,}\d", "[phone]", text)
+    return text[:240]
+
+
 def ghl_get(token: str, path: str) -> tuple[int, object]:
     req = urllib.request.Request(
         f"{GHL}{path}",
@@ -167,20 +174,49 @@ def main() -> None:
     if not ghl_token or not location_id:
         report["notes"].append("GoHighLevel token or location id is not stored in app_secrets.")
     else:
+        location_status, location_body = ghl_get(ghl_token, f"/locations/{urllib.parse.quote(location_id)}")
+        report["ghl_location_status"] = location_status
+        if location_status >= 400:
+            report["notes"].append(redact(str(location_body)[:240]))
         for row in jobs:
             email = str(row.get("email") or "").strip()
-            phone = str(row.get("phone") or "").strip()
-            params = urllib.parse.urlencode({"locationId": location_id, **({"email": email} if email else {}), **({"phone": phone} if phone else {})})
-            status, looked = ghl_get(ghl_token, f"/contacts/lookup?{params}")
+            digits = "".join(ch for ch in str(row.get("phone") or "") if ch.isdigit())
+            phone = f"+1{digits[-10:]}" if len(digits) >= 10 else ""
+            attempts = []
+            if email:
+                attempts.append(("email", {"locationId": location_id, "email": email}))
+            if phone:
+                attempts.append(("phone", {"locationId": location_id, "phone": phone}))
+            status = 0
+            looked: object = {}
             contact = {}
-            if isinstance(looked, dict):
-                if isinstance(looked.get("contact"), dict):
-                    contact = looked["contact"]
-                elif isinstance(looked.get("contacts"), list) and looked["contacts"] and isinstance(looked["contacts"][0], dict):
-                    contact = looked["contacts"][0]
-                elif looked.get("id"):
-                    contact = looked
+            for label, params in attempts:
+                status, looked = ghl_get(ghl_token, f"/contacts/lookup?{urllib.parse.urlencode(params)}")
+                found = {}
+                if isinstance(looked, dict):
+                    if isinstance(looked.get("contact"), dict):
+                        found = looked["contact"]
+                    elif isinstance(looked.get("contacts"), list) and looked["contacts"] and isinstance(looked["contacts"][0], dict):
+                        found = looked["contacts"][0]
+                    elif looked.get("id"):
+                        found = looked
+                if found.get("id"):
+                    contact = found
+                    break
+                query = email if label == "email" else phone
+                status, looked = ghl_get(
+                    ghl_token,
+                    f"/contacts/?locationId={urllib.parse.quote(location_id)}&query={urllib.parse.quote(query)}",
+                )
+                if isinstance(looked, dict) and isinstance(looked.get("contacts"), list) and looked["contacts"]:
+                    first = looked["contacts"][0]
+                    if isinstance(first, dict) and first.get("id"):
+                        contact = first
+                        break
             contact_id = str((contact or {}).get("id") or "").strip()
+            lookup_error = None
+            if not contact_id and isinstance(looked, dict):
+                lookup_error = redact(str(looked.get("error") or looked.get("message") or looked) )
             entry = {
                 "first_name": row.get("first_name"),
                 "service_type": row.get("service_type"),
@@ -188,10 +224,11 @@ def main() -> None:
                 "status": row.get("status"),
                 "city": row.get("city"),
                 "lookup_status": status,
+                "lookup_error": lookup_error,
                 "calls": [],
             }
             if not contact_id:
-                entry["calls"].append({"note": "no GoHighLevel contact"})
+                entry["calls"].append({"note": "no GoHighLevel contact", "error": lookup_error})
                 report["transcripts"].append(entry)
                 continue
             status, convos = ghl_get(
