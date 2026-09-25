@@ -127,35 +127,24 @@ def main() -> None:
         cleaner_id = inserted[0]["id"]
         created = True
 
-    minted = rows(query(
+    current = rows(query(
         token,
-        f"select public.mint_cleaner_setup_token('{cleaner_id}'::uuid, 14) as token",
+        f"select setup_token from public.cleaners where id = '{cleaner_id}'",
     ))
-    setup_token = str((minted[0] if minted else {}).get("token") or "")
+    setup_token = str((current[0] if current else {}).get("setup_token") or "")
+    if len(setup_token) < 16:
+        minted = rows(query(
+            token,
+            f"select public.mint_cleaner_setup_token('{cleaner_id}'::uuid, 14) as token",
+        ))
+        setup_token = str((minted[0] if minted else {}).get("token") or "")
     if len(setup_token) < 16:
         raise SystemExit("setup token was not minted")
     setup_url = f"https://contractor.novaracleaning.com/cleaner/setup/{setup_token}"
 
     anon = anon_key(token)
-    email_status, email_body = post_function("send-cleaner-email", anon, {
-        "type": "setup_request",
-        "email": EMAIL,
-        "data": {
-            "firstName": "Malik",
-            "lastName": "Sannie",
-            "email": EMAIL,
-            "setupUrl": setup_url,
-            "loginUrl": setup_url,
-            "needsAgreement": True,
-            "needsPhone": True,
-            "needsSupplies": True,
-            "needsDressCode": True,
-            "needsJobDay": True,
-            "needsW9": True,
-            "needsTraining": True,
-            "needsStripe": True,
-        },
-    })
+    # The setup email already went out with this token. Do not send it again.
+    email_status, email_body = 200, {"success": True, "skipped": True}
     sms_text = (
         "Hi Malik! Novara Cleaning — finish account setup "
         "(sign the agreement, verify your phone, check off your supplies, "
@@ -170,6 +159,20 @@ def main() -> None:
         "message": sms_text,
         "type": "confirmation",
     })
+    if sms_status >= 300 or sms_body.get("error"):
+        telnyx_status, telnyx_body = post_function("send-sms-notification", anon, {
+            "toPhone": PHONE,
+            "message": sms_text,
+            "type": "confirmation",
+        })
+        if telnyx_status < 300 and not telnyx_body.get("error"):
+            sms_status, sms_body = telnyx_status, telnyx_body
+        else:
+            sms_body = {
+                "error": "send failed",
+                "ghl": str(sms_body.get("body") or sms_body.get("error") or "")[:240],
+                "telnyx": str(telnyx_body.get("error") or telnyx_body)[:240],
+            }
 
     emailed = email_status < 300 and not email_body.get("error")
     sms_sent = sms_status < 300 and not sms_body.get("error")
