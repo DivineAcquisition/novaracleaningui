@@ -647,6 +647,8 @@ export type Database = {
           user_id: string | null
           weighted_score: number | null
           workload_score: number | null
+          w9_followup_required: boolean
+          w9_status: string | null
         }
         Insert: {
           acceptance_rate?: number | null
@@ -718,6 +720,8 @@ export type Database = {
           user_id?: string | null
           weighted_score?: number | null
           workload_score?: number | null
+          w9_followup_required?: boolean
+          w9_status?: string | null
         }
         Update: {
           acceptance_rate?: number | null
@@ -789,6 +793,8 @@ export type Database = {
           user_id?: string | null
           weighted_score?: number | null
           workload_score?: number | null
+          w9_followup_required?: boolean
+          w9_status?: string | null
         }
         Relationships: []
       }
