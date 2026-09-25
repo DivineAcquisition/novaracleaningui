@@ -37,6 +37,7 @@
     "str-claim:verify": "tsx scripts/verify-str-claim.ts",
     "partnership-comms:verify": "tsx scripts/verify-partnership-comms.ts",
     "partner-portal:verify": "tsx scripts/verify-partner-portal.ts",
+    "accounts-hub:verify": "tsx scripts/verify-accounts-hub.ts",
     "property-manager:verify": "tsx scripts/verify-property-manager.ts",
     "portfolio-landing:verify": "tsx scripts/verify-portfolio-landing.ts",
     "flow-divergence:verify": "tsx scripts/verify-flow-divergence.ts",

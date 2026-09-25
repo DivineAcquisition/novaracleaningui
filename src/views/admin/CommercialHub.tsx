@@ -1,13 +1,15 @@
 "use client";
 
-// ─── /admin/accounts — management hub (was Commercial) ─────────────────────
+// ─── /admin/accounts — management hub ──────────────────────────────────────
 //
-// Offers, payment, and agreement mail live on Proposals. This hub is the
-// ongoing account: clients, jobs, book-a-site, recurring, COI, STR hosts,
-// property-manager portfolios, published checklists, and comms.
+// Three tabs. Account-scoped tools that used to be sibling tabs (STR list,
+// portfolio, certificates, checklists, comms, book-a-site) now live on
+// Accounts or Jobs so the bar matches how people actually work: pick the
+// relationship, then open the tool.
 
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
+  RiArrowLeftLine,
   RiBuilding2Line,
   RiCalendarCheckLine,
   RiFileList3Line,
@@ -15,11 +17,15 @@ import {
   RiMailLine,
   RiRepeatLine,
   RiShieldCheckLine,
-  RiUserStarLine,
 } from "@remixicon/react";
 import { cn } from "@/lib/utils";
+import {
+  accountsHubHref,
+  resolveAccountsHubLocation,
+  type AccountsHubPanel,
+  type AccountsHubTab,
+} from "@/lib/accounts-hub";
 import AdminBookings from "@/views/admin/Bookings";
-import CommercialBooking from "@/views/admin/CommercialBooking";
 import PartnerAdmin from "@/views/admin/PartnerAdmin";
 import PropertyManagerAdmin from "@/views/admin/PropertyManagerAdmin";
 import PartnershipAccounts from "@/views/admin/PartnershipAccounts";
@@ -29,30 +35,32 @@ import CoiCompliance from "@/views/admin/CoiCompliance";
 import CommercialChecklists from "@/views/admin/CommercialChecklists";
 import PartnershipComms from "@/views/admin/PartnershipComms";
 
-const TABS = [
+const TABS: Array<{ id: AccountsHubTab; label: string; icon: typeof RiBuilding2Line }> = [
   { id: "accounts", label: "Accounts", icon: RiBuilding2Line },
   { id: "jobs", label: "Jobs", icon: RiCalendarCheckLine },
-  { id: "book", label: "Book", icon: RiCalendarCheckLine },
   { id: "recurring", label: "Recurring", icon: RiRepeatLine },
-  { id: "compliance", label: "Compliance", icon: RiShieldCheckLine },
-  { id: "str", label: "STR", icon: RiHotelLine },
-  { id: "portfolio", label: "Portfolio", icon: RiUserStarLine },
+];
+
+const ACCOUNT_TOOLS: Array<{ id: AccountsHubPanel; label: string; icon: typeof RiShieldCheckLine }> = [
+  { id: "compliance", label: "Certificates", icon: RiShieldCheckLine },
+  { id: "turnovers", label: "STR ops", icon: RiHotelLine },
   { id: "checklists", label: "Checklists", icon: RiFileList3Line },
   { id: "comms", label: "Comms", icon: RiMailLine },
-] as const;
-type Tab = (typeof TABS)[number]["id"];
+];
 
 export default function CommercialHub() {
   const router = useRouter();
-  const pathname = usePathname();
   const searchParams = useSearchParams();
-  const raw = searchParams?.get("tab") || "accounts";
-  const tab: Tab = TABS.some((t) => t.id === raw) ? (raw as Tab) : "accounts";
+  const extras = {
+    panel: searchParams?.get("panel") || undefined,
+    kind: searchParams?.get("kind") || undefined,
+    type: searchParams?.get("type") || undefined,
+    create: searchParams?.get("create") || undefined,
+  };
+  const loc = resolveAccountsHubLocation(searchParams?.get("tab"), extras);
 
-  const setTab = (next: Tab) => {
-    const params = new URLSearchParams(searchParams?.toString() || "");
-    params.set("tab", next);
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  const pushLoc = (next: Partial<typeof loc>, extra?: Record<string, string>) => {
+    router.replace(accountsHubHref({ ...loc, ...next }, extra), { scroll: false });
   };
 
   return (
@@ -67,19 +75,19 @@ export default function CommercialHub() {
           </span>
         </div>
         <p className="text-sm text-muted-foreground">
-          Business accounts, commercial jobs, STR hosts, property-manager portfolios, certificates, and recurring schedules. Sending an offer lives on Proposals.
+          One list for commercial, office, STR, and portfolio accounts. Book and manage jobs here; sending an offer still lives on Proposals.
         </p>
       </div>
 
       <div className="flex flex-wrap gap-1 rounded-xl border border-slate-200 bg-white p-1">
         {TABS.map((t) => {
           const Icon = t.icon;
-          const on = tab === t.id;
+          const on = loc.tab === t.id;
           return (
             <button
               key={t.id}
               type="button"
-              onClick={() => setTab(t.id)}
+              onClick={() => pushLoc({ tab: t.id, panel: "list", create: false, kind: t.id === "accounts" ? loc.kind : null })}
               className={cn(
                 "flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium",
                 on ? "bg-violet-600 text-white" : "text-slate-600 hover:bg-slate-50",
@@ -92,31 +100,72 @@ export default function CommercialHub() {
         })}
       </div>
 
-      {tab === "accounts" ? (
-        <PartnershipAccounts />
-      ) : tab === "jobs" ? (
+      {loc.tab === "accounts" ? (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 px-1">On this account</span>
+            {ACCOUNT_TOOLS.map((tool) => {
+              const Icon = tool.icon;
+              const on = loc.panel === tool.id;
+              return (
+                <button
+                  key={tool.id}
+                  type="button"
+                  onClick={() => pushLoc({ panel: on ? "list" : tool.id })}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold",
+                    on
+                      ? "border-violet-300 bg-violet-50 text-violet-800"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-violet-200 hover:text-violet-700",
+                  )}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  {tool.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {(loc.panel !== "list" || loc.kind === "portfolio") && (
+            <button
+              type="button"
+              onClick={() => pushLoc({ panel: "list", kind: null })}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-violet-700 hover:underline"
+            >
+              <RiArrowLeftLine className="w-3.5 h-3.5" />
+              Back to accounts
+            </button>
+          )}
+
+          {loc.panel === "compliance" ? (
+            <CoiCompliance />
+          ) : loc.panel === "turnovers" ? (
+            <PartnerAdmin />
+          ) : loc.panel === "checklists" ? (
+            <CommercialChecklists />
+          ) : loc.panel === "comms" ? (
+            <PartnershipComms />
+          ) : loc.kind === "portfolio" ? (
+            <PropertyManagerAdmin initialAccountId={searchParams?.get("account") || undefined} />
+          ) : (
+            <PartnershipAccounts
+              kindFilter={loc.kind}
+              onKindFilterChange={(kind) => pushLoc({ kind })}
+            />
+          )}
+        </div>
+      ) : loc.tab === "jobs" ? (
         <AdminBookings
           scope="commercial"
           title="Jobs"
+          initialCreating={loc.create}
           newJob={{
-            label: "New commercial job",
-            render: () => <CommercialBooking />,
+            label: "Book a site",
+            render: () => <PartnershipBooking />,
           }}
         />
-      ) : tab === "book" ? (
-        <PartnershipBooking />
-      ) : tab === "recurring" ? (
-        <PartnerRecurringSchedules />
-      ) : tab === "compliance" ? (
-        <CoiCompliance />
-      ) : tab === "str" ? (
-        <PartnerAdmin />
-      ) : tab === "portfolio" ? (
-        <PropertyManagerAdmin />
-      ) : tab === "checklists" ? (
-        <CommercialChecklists />
       ) : (
-        <PartnershipComms />
+        <PartnerRecurringSchedules />
       )}
     </div>
   );
