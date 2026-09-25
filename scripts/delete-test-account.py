@@ -246,7 +246,12 @@ begin
     end loop;
 
     delete from public.user_roles where user_id = any(v_user_ids);
-    delete from storage.objects where owner = any(v_user_ids);
+    begin
+      delete from storage.objects where owner = any(v_user_ids);
+    exception when others then
+      -- Storage blocks direct deletes. The contractor files live on cleaner rows.
+      null;
+    end;
   end if;
 
   delete from auth.users where lower(email) = v_email;
