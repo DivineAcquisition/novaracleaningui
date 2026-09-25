@@ -56,19 +56,16 @@ def main() -> None:
     if EMAIL == "contact@novaracleaning.com":
         raise SystemExit("refusing to delete the admin login")
 
-    found = rows(query(
+    users = rows(query(
         token,
-        f"""
-        select u.id as user_id, c.id as cleaner_id
-        from auth.users u
-        full join public.cleaners c
-          on c.user_id = u.id or lower(c.email) = lower(u.email)
-        where lower(u.email) = '{EMAIL}'
-           or lower(c.email) = '{EMAIL}'
-        """,
+        f"select id as user_id from auth.users where lower(email) = '{EMAIL}'",
     ))
-    user_ids = sorted({row["user_id"] for row in found if row.get("user_id")})
-    cleaner_ids = sorted({row["cleaner_id"] for row in found if row.get("cleaner_id")})
+    cleaners = rows(query(
+        token,
+        f"select id as cleaner_id, user_id from public.cleaners where lower(email) = '{EMAIL}'",
+    ))
+    user_ids = sorted({row["user_id"] for row in users + cleaners if row.get("user_id")})
+    cleaner_ids = sorted({row["cleaner_id"] for row in cleaners if row.get("cleaner_id")})
     print(f"matched users={len(user_ids)} cleaners={len(cleaner_ids)}")
     if len(user_ids) > 1 or len(cleaner_ids) > 1:
         raise SystemExit("refusing to delete more than one sample account")
