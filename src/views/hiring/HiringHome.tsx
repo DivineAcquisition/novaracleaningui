@@ -193,7 +193,7 @@ export default function HiringHome() {
                 <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#5C0FFE]/10 text-xs font-bold text-[#5C0FFE]">
                   2
                 </span>
-                <span>Our team screens for reliability, zone fit, and experience.</span>
+                <span>If you are selected, expect a phone call or text to set up a phone screen.</span>
               </li>
               <li className="flex gap-3">
                 <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#5C0FFE]/10 text-xs font-bold text-[#5C0FFE]">
