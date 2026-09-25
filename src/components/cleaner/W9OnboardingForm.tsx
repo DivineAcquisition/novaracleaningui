@@ -109,7 +109,7 @@ export function W9OnboardingForm({
       state,
       zip,
     });
-    if (!checked.ok) {
+    if (checked.ok === false) {
       setError(blockerMessage(checked.reason));
       return;
     }
