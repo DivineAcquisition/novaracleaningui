@@ -5,7 +5,11 @@ name: Delete sample onboarding contractor
 # plus-address used for that sample.
 
 on:
-  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - scripts/delete-sample-onboarding.py
+      - .github/workflows/delete-sample-onboarding.yml
 
 jobs:
   delete:
