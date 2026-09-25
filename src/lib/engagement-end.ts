@@ -131,14 +131,20 @@ export function abandonmentInstancesInWindow(
   };
 }
 
+/**
+ * A filed W-9, not a Stripe account. Departure used to mark this complete
+ * when payouts were enabled, which let a contractor look ready for a 1099
+ * with no TIN on file. A stored `complete` stays complete. Anything else
+ * is incomplete or missing, including a connected Stripe account.
+ */
 export function evaluateW9Status(cleaner: {
+  w9_status?: string | null;
   payouts_enabled?: boolean | null;
   stripe_account_id?: string | null;
   ob_payouts_setup?: boolean | null;
 }): W9Status {
-  const stripe = Boolean(String(cleaner.stripe_account_id || "").trim());
-  if (cleaner.payouts_enabled === true && stripe) return "complete";
-  if (stripe || cleaner.ob_payouts_setup === true) return "incomplete";
+  if (cleaner.w9_status === "complete") return "complete";
+  if (cleaner.w9_status === "incomplete") return "incomplete";
   return "missing";
 }
 

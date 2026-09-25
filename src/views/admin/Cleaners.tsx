@@ -74,6 +74,7 @@ import {
   isPayoutSetupStarted,
   isRequiredTrainingComplete,
   isSupplyChecklistSubmitted,
+  isW9OnFile,
 } from "@/lib/cleaner-supplies";
 import TerminateCleanerDialog from "@/components/admin/TerminateCleanerDialog";
 import LogResignationDialog from "@/components/admin/LogResignationDialog";
@@ -242,7 +243,7 @@ const STATUS_BADGE: Record<string, string> = {
 const fullName = (c: CleanerRow) =>
   [c.first_name, c.last_name].filter(Boolean).join(" ") || c.email || "—";
 
-// Mirrors cleanerSetupSteps(): agreement → phone → supplies → job-day → dress → Stripe → training.
+// Mirrors cleanerSetupSteps(): agreement → phone → supplies → job-day → dress → W-9 → Stripe → training.
 const onboardingProgress = (c: CleanerRow): number => {
   const steps = cleanerSetupSteps(c);
   if (steps.length === 0) return 0;
@@ -1374,6 +1375,7 @@ const OB_STEPS: Array<{ done: (c: CleanerRow) => boolean; label: string; detail?
         ? `Agreed ${new Date(c.ob_dress_code_ack_at).toLocaleDateString()}`
         : null,
   },
+  { done: isW9OnFile, label: "W-9 on file" },
   { done: isPayoutSetupStarted, label: "Stripe payouts connected" },
   { done: isRequiredTrainingComplete, label: "Training videos watched" },
 ];
@@ -1397,6 +1399,7 @@ function OnboardingChecklist({
     isSupplyChecklistSubmitted(cleaner) &&
     isDressCodeAgreed(cleaner) &&
     isJobDayAcknowledged(cleaner) &&
+    isW9OnFile(cleaner) &&
     isRequiredTrainingComplete(cleaner);
   const agreementSigned = Boolean(cleaner.ob_agreement_signed);
   const setupComplete = introReady && isPayoutSetupStarted(cleaner);
@@ -1441,8 +1444,8 @@ function OnboardingChecklist({
           <p className="text-xs text-sky-800">
             Sends email + SMS with one link that walks them through whatever is
             left — agreement, phone, supplies, Day To Day Job Operations, dress code,
-            Stripe payout setup, then the training videos. A first job waits
-            on the videos. Stripe is the last step.
+            W-9, Stripe payout setup, then the training videos. A first job waits
+            on the W-9 and the videos. Stripe opens the training hub.
           </p>
           <Button
             type="button"

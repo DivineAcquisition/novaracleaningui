@@ -145,7 +145,7 @@ export function OnboardingChecklist({ cleaner, onRefresh }: OnboardingChecklistP
                 ? "You're ready to receive job offers"
                 : firstJobReady
                 ? `${completedCount} of ${checklist.length} steps complete`
-                : "Finish onboarding and the training videos before your first job"}
+                : "Finish onboarding, including your W-9 and the training videos, before your first job"}
             </p>
           </div>
           {allComplete && (

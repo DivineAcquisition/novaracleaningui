@@ -225,6 +225,8 @@ export interface CleanerSetupState {
   payouts_enabled?: boolean | null;
   ob_payouts_setup?: boolean | null;
   stripe_account_id?: string | null;
+  /** 'complete' only after a validated W-9 is stored. Stripe does not set this. */
+  w9_status?: string | null;
 }
 
 export type CleanerSetupStepId =
@@ -233,6 +235,7 @@ export type CleanerSetupStepId =
   | "job_day"
   | "dress_code"
   | "phone"
+  | "w9"
   | "training"
   | "payouts";
 
@@ -299,14 +302,24 @@ export function isPayoutSetupStarted(c: CleanerSetupState): boolean {
 }
 
 /**
+ * A validated W-9 is on file. This is the recipient block a 1099 reads
+ * (legal name, TIN, street, city, state, ZIP). A Stripe account is not a W-9.
+ */
+export function isW9OnFile(c: CleanerSetupState): boolean {
+  return c.w9_status === "complete";
+}
+
+/**
  * Onboarding in the order everything presents it.
  *
  * Agreement first. Phone verification is second. Supplies and Day To Day
- * Job Operations come next, then the dress code. Stripe payout setup is
- * sixth. Training videos are last. Finishing Stripe opens the training hub.
+ * Job Operations come next, then the dress code. The W-9 is sixth. Stripe
+ * payout setup is seventh. Training videos are last. Finishing Stripe opens
+ * the training hub.
  *
- * First-job eligibility is every step except payouts. A first job still
- * waits on the videos. The training card stays locked until Stripe is started.
+ * First-job eligibility is every step except payouts. A first job waits on
+ * the W-9 and the videos. Stripe stays locked until the W-9 is in, and the
+ * training card stays locked until Stripe is started.
  */
 export function cleanerSetupSteps(c: CleanerSetupState): CleanerSetupStep[] {
   return [
@@ -334,6 +347,11 @@ export function cleanerSetupSteps(c: CleanerSetupState): CleanerSetupStep[] {
       id: "dress_code",
       title: "Agree to the dress code",
       done: isDressCodeAgreed(c),
+    },
+    {
+      id: "w9",
+      title: "Submit your W-9",
+      done: isW9OnFile(c),
     },
     {
       id: "payouts",
@@ -368,8 +386,8 @@ export function isSetupStepUnlocked(
  *
  * Someone who has already completed a job is past this gate — we do not
  * yank offers from people already on the roster. Everyone else has to
- * finish the sequence, including the training videos, before dispatch
- * will offer them work.
+ * finish the sequence, including the W-9 and the training videos, before
+ * dispatch will offer them work. Stripe is the one step this gate skips.
  */
 export function isCleanerReadyForFirstJob(c: CleanerSetupState): boolean {
   if (Number(c.completed_bookings || 0) > 0) return true;

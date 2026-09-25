@@ -174,11 +174,14 @@ const badResign = noticeWordingProblems("resignation", mergeNoticeTemplate(DEFAU
 }), {});
 check("resignation template cannot say terminated", badResign.includes("resignation_says_terminat"), true);
 
-check("complete W-9", evaluateW9Status({ payouts_enabled: true, stripe_account_id: "acct_1", ob_payouts_setup: true }), "complete");
-check("incomplete W-9", evaluateW9Status({ payouts_enabled: false, stripe_account_id: "acct_1", ob_payouts_setup: false }), "incomplete");
-check("setup without payouts is incomplete", evaluateW9Status({ payouts_enabled: false, stripe_account_id: null, ob_payouts_setup: true }), "incomplete");
-check("missing W-9", evaluateW9Status({ payouts_enabled: false, stripe_account_id: null, ob_payouts_setup: false }), "missing");
-check("deno W-9 matches", denoW9({ payouts_enabled: true, stripe_account_id: "acct_1" }), "complete");
+check("complete W-9", evaluateW9Status({ w9_status: "complete", payouts_enabled: false, stripe_account_id: null }), "complete");
+check("stored W-9 stays complete with Stripe", evaluateW9Status({ w9_status: "complete", payouts_enabled: true, stripe_account_id: "acct_1", ob_payouts_setup: true }), "complete");
+check("Stripe alone is not a W-9", evaluateW9Status({ payouts_enabled: true, stripe_account_id: "acct_1", ob_payouts_setup: true }), "missing");
+check("incomplete W-9 stays incomplete", evaluateW9Status({ w9_status: "incomplete", payouts_enabled: true, stripe_account_id: "acct_1" }), "incomplete");
+check("missing W-9", evaluateW9Status({ w9_status: "missing" }), "missing");
+check("a blank status is missing", evaluateW9Status({ payouts_enabled: false, stripe_account_id: null, ob_payouts_setup: false }), "missing");
+check("deno W-9 matches", denoW9({ w9_status: "complete" }), "complete");
+check("deno does not treat Stripe as a W-9", denoW9({ payouts_enabled: true, stripe_account_id: "acct_1" }), "missing");
 
 const migration = readFileSync(resolve("supabase/migrations/20260922150000_engagement_end_and_1099_prep.sql"), "utf8");
 check("migration seeds the termination subject", migration.includes(DEFAULT_NOTICES.termination.subject), true);

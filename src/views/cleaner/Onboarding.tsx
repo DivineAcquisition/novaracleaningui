@@ -400,7 +400,7 @@ export default function CleanerOnboarding() {
       }
 
       // Phone verification is next. Supplies and Day To Day Job Operations
-      // follow. Stripe payout setup is step 6 and opens the training videos.
+      // follow. The W-9 comes before Stripe, which opens the training videos.
       router.replace("/cleaner/ob-portal");
 
     } catch (error: any) {
@@ -834,7 +834,7 @@ export default function CleanerOnboarding() {
 
                   <div className="bg-blue-500/10 rounded-xl p-4 border border-blue-500/20">
                     <p className="text-sm text-blue-700 dark:text-blue-300">
-                      <strong>Next step:</strong> Verify your phone. Supplies and Day To Day Job Operations come after that. Stripe payout setup comes before the training videos, which are last.
+                      <strong>Next step:</strong> Verify your phone. Supplies and Day To Day Job Operations come after that. Your W-9 comes before Stripe payout setup, and the training videos are last.
                     </p>
                   </div>
                 </div>

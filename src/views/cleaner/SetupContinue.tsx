@@ -140,7 +140,7 @@ export default function SetupContinue() {
               <p className="text-sm font-semibold text-slate-900">You&apos;re all set, {first}</p>
               <p className="mt-1 text-sm text-slate-600">
                 The agreement, phone, supplies, Day To Day Job Operations, dress code,
-                Stripe payout setup, and training videos are all done. Sign in anytime to see jobs.
+                W-9, Stripe payout setup, and training videos are all done. Sign in anytime to see jobs.
               </p>
               <Button asChild className="mt-4 bg-violet-700 hover:bg-violet-800">
                 <Link href="/cleaner/auth">Open contractor portal</Link>

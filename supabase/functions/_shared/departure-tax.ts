@@ -35,6 +35,7 @@ export async function prepareDepartureTax(
   admin: Admin,
   cleaner: {
     id: string;
+    w9_status?: string | null;
     payouts_enabled?: boolean | null;
     stripe_account_id?: string | null;
     ob_payouts_setup?: boolean | null;

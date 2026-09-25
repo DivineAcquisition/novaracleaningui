@@ -894,7 +894,7 @@ serve(async (req) => {
       }
 
       // ─── SEND ACCOUNT SETUP LINK ─────────────────────────────────────
-      // Agreement → phone → supplies → job-day → dress code → Stripe → training.
+      // Agreement → phone → supplies → job-day → dress → W-9 → Stripe → training.
       // Same sequence cleanerSetupSteps() defines for the portal. Tokenized
       // link lands on a short setup page, then auth → onboarding portal.
       case "send_setup": {
@@ -907,13 +907,14 @@ serve(async (req) => {
           cleaner.ob_dress_code_ack === true ||
           cleaner.ob_job_day_guides_ack === true;
         const jobDayOk = cleaner.ob_job_day_guides_ack === true;
+        const w9Ok = cleaner.w9_status === "complete";
         const trainingOk = cleaner.ob_training_complete === true;
         const stripeOk = Boolean(
           cleaner.payouts_enabled || cleaner.ob_payouts_setup || cleaner.stripe_account_id,
         );
-        if (agreementOk && phoneOk && suppliesOk && dressOk && jobDayOk && trainingOk && stripeOk) {
+        if (agreementOk && phoneOk && suppliesOk && dressOk && jobDayOk && w9Ok && trainingOk && stripeOk) {
           return json({
-            error: "Account setup is already complete (agreement through Stripe).",
+            error: "Account setup is already complete (agreement through training).",
             code: "ALREADY_COMPLETE",
           }, 409);
         }
@@ -970,6 +971,7 @@ serve(async (req) => {
                     needsSupplies: !suppliesOk,
                     needsDressCode: !dressOk,
                     needsJobDay: !jobDayOk,
+                    needsW9: !w9Ok,
                     needsTraining: !trainingOk,
                     needsStripe: !stripeOk,
                   },
@@ -998,6 +1000,7 @@ serve(async (req) => {
             !suppliesOk ? "check off your supplies" : null,
             !jobDayOk ? "read Day To Day Job Operations" : null,
             !dressOk ? "agree to the dress code" : null,
+            !w9Ok ? "submit your W-9" : null,
             !stripeOk ? "set up Stripe payouts" : null,
             !trainingOk ? "watch the training videos" : null,
           ].filter(Boolean) as string[];
@@ -1049,6 +1052,7 @@ serve(async (req) => {
             needs_supplies: !suppliesOk,
             needs_dress_code: !dressOk,
             needs_job_day: !jobDayOk,
+            needs_w9: !w9Ok,
             needs_stripe: !stripeOk,
             needs_training: !trainingOk,
           },

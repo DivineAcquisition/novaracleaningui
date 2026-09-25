@@ -15,7 +15,11 @@ import urllib.error
 import urllib.request
 
 PROJECT_REF = os.environ.get("PROJECT_REF", "sxdraeptzuamsgjcvfeg")
-SQL_PATH = pathlib.Path(__file__).resolve().parents[1] / "supabase/migrations/20260922203000_nec_1099_copy_b_c.sql"
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+DEFAULT_SQL = [
+    ROOT / "supabase/migrations/20260922203000_nec_1099_copy_b_c.sql",
+    ROOT / "supabase/migrations/20260925010000_onboarding_w9.sql",
+]
 
 
 def split_sql(sql: str) -> list[str]:
@@ -120,14 +124,20 @@ def query(token: str, sql: str) -> object:
     return json.loads(raw) if raw else None
 
 
-def main() -> None:
-    token = os.environ.get("SUPABASE_ACCESS_TOKEN", "").strip()
-    if not token:
-        raise SystemExit("SUPABASE_ACCESS_TOKEN is empty")
-    statements = split_sql(SQL_PATH.read_text())
-    if len(statements) < 8:
+def sql_paths() -> list[pathlib.Path]:
+    raw = os.environ.get("SQL_PATH", "").strip()
+    if raw:
+        return [pathlib.Path(part.strip()) for part in raw.split(",") if part.strip()]
+    return DEFAULT_SQL
+
+
+def apply_file(token: str, path: pathlib.Path) -> None:
+    statements = split_sql(path.read_text())
+    if "nec_1099_copy_b_c" in path.name and len(statements) < 8:
         raise SystemExit(f"expected the 1099 migration to split into several statements, got {len(statements)}")
-    print(f"applying {len(statements)} statements")
+    if "onboarding_w9" in path.name and "w9_status" not in path.read_text():
+        raise SystemExit("the onboarding migration does not mention w9_status")
+    print(f"applying {len(statements)} statements from {path.name}")
     for index, statement in enumerate(statements, start=1):
         first = " ".join(statement.split()[:6])
         try:
@@ -136,8 +146,21 @@ def main() -> None:
             if statement.upper().startswith("NOTIFY"):
                 print(f"skip notify: {err}")
                 continue
-            raise SystemExit(f"statement {index} failed ({first}): {err}") from err
-        print(f"ok {index}: {first}")
+            raise SystemExit(f"{path.name} statement {index} failed ({first}): {err}") from err
+        print(f"ok {path.name} {index}: {first}")
+
+
+def main() -> None:
+    token = os.environ.get("SUPABASE_ACCESS_TOKEN", "").strip()
+    if not token:
+        raise SystemExit("SUPABASE_ACCESS_TOKEN is empty")
+    paths = sql_paths()
+    if not paths:
+        raise SystemExit("no SQL files to apply")
+    for path in paths:
+        if not path.is_file():
+            raise SystemExit(f"missing SQL file: {path}")
+        apply_file(token, path)
     rows = query(
         token,
         "select to_regclass('public.cleaner_w9') as w9, to_regclass('public.nec_1099_forms') as forms",
@@ -146,6 +169,21 @@ def main() -> None:
     encoded = json.dumps(rows)
     if "cleaner_w9" not in encoded or "nec_1099_forms" not in encoded:
         raise SystemExit("tables were not created")
+    if any("onboarding_w9" in path.name for path in paths):
+        defs = query(
+            token,
+            """
+            select p.proname as name, pg_get_functiondef(p.oid) as def
+            from pg_proc p
+            join pg_namespace n on n.oid = p.pronamespace
+            where n.nspname = 'public'
+              and p.proname in ('cleaner_ready_for_first_job', 'mint_cleaner_setup_token')
+            """,
+        )
+        encoded_defs = json.dumps(defs)
+        print("functions mention w9_status:", "w9_status" in encoded_defs)
+        if encoded_defs.count("w9_status") < 2:
+            raise SystemExit("mint or the first-job gate is still missing w9_status")
 
 
 if __name__ == "__main__":

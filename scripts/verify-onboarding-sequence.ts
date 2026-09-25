@@ -1,7 +1,7 @@
 // ─── Verification of the contractor onboarding sequence ─────────────────────
 //
 // Onboarding is agreement → phone → supplies → Day To Day Job Operations →
-// dress code (agree) → Stripe payouts → training videos, and four
+// dress code (agree) → W-9 → Stripe payouts → training videos, and four
 // things have to agree on that:
 // the shared definition in src/lib/cleaner-supplies.ts, the portal a
 // contractor works through, the page a mailed setup link lands on, and the
@@ -12,8 +12,8 @@
 //
 // The first half of this script checks the shared definition by calling it.
 // The second half opens the real pages in a browser and reads what a
-// contractor would actually see, because "the function returns seven steps"
-// and "the portal shows seven steps, with training last" are different claims
+// contractor would actually see, because "the function returns eight steps"
+// and "the portal shows eight steps, with training last" are different claims
 // and only the second one is the product.
 //
 // No real data is touched: every Supabase call is answered from an invented
@@ -24,7 +24,7 @@
 
 import { existsSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
-import { chromium, type Browser, type Page, type Route } from "playwright";
+import type { Browser, Page, Route } from "playwright";
 
 import {
   SUPPLY_ITEMS,
@@ -72,10 +72,11 @@ function check(name: string, actual: unknown, expected: unknown): void {
 function checkSequence(): void {
   console.log("\nThe onboarding sequence");
 
-  const expectedIds = ["agreement", "phone", "supplies", "job_day", "dress_code", "payouts", "training"];
+  const expectedIds = ["agreement", "phone", "supplies", "job_day", "dress_code", "w9", "payouts", "training"];
   const fresh: CleanerSetupState = {};
-  check("seven steps, agreement first, training last", cleanerSetupSteps(fresh).map((s) => s.id), expectedIds);
+  check("eight steps, agreement first, training last", cleanerSetupSteps(fresh).map((s) => s.id), expectedIds);
   check("a brand-new contractor has nothing done", cleanerSetupSteps(fresh).map((s) => s.done), [
+    false,
     false,
     false,
     false,
@@ -95,7 +96,7 @@ function checkSequence(): void {
   check(
     "the outstanding steps start with the agreement",
     cleanerSetupSteps(phoneAndStripe).filter((s) => !s.done).map((s) => s.id),
-    ["agreement", "supplies", "job_day", "dress_code", "training"],
+    ["agreement", "supplies", "job_day", "dress_code", "w9", "training"],
   );
   check("phone stays locked until the agreement is signed", isSetupStepUnlocked(fresh, "phone"), false);
   check("supplies stay locked until the phone is verified", isSetupStepUnlocked(fresh, "supplies"), false);
@@ -110,10 +111,17 @@ function checkSequence(): void {
     supply_checklist_submitted_at: "2026-09-01T00:00:00Z",
     ob_dress_code_ack: true,
     ob_job_day_guides_ack: true,
+    w9_status: "complete",
     ob_training_complete: true,
   };
   check("training done without Stripe is not complete", isCleanerSetupComplete(allDone), false);
   check("and that is enough for a first job", isCleanerReadyForFirstJob(allDone), true);
+  check(
+    "training without a W-9 is not a first job",
+    isCleanerReadyForFirstJob({ ...allDone, w9_status: null }),
+    false,
+  );
+  check("Stripe alone is not a W-9", cleanerSetupSteps({ ...allDone, w9_status: null, stripe_account_id: "acct_123" }).find((s) => s.id === "w9")?.done, false);
   const throughDress: CleanerSetupState = {
     ob_agreement_signed: true,
     phone_verified: true,
@@ -122,15 +130,23 @@ function checkSequence(): void {
     ob_job_day_guides_ack: true,
   };
   check(
-    "after the dress code, Stripe comes before training",
+    "after the dress code, the W-9 comes before Stripe and training",
     cleanerSetupSteps(throughDress).filter((s) => !s.done).map((s) => s.id),
-    ["payouts", "training"],
+    ["w9", "payouts", "training"],
   );
   check("training stays locked until Stripe is started", isSetupStepUnlocked(throughDress, "training"), false);
-  check("Stripe unlocks once the dress code is done", isSetupStepUnlocked(throughDress, "payouts"), true);
+  check("the W-9 unlocks once the dress code is done", isSetupStepUnlocked(throughDress, "w9"), true);
+  check("Stripe stays locked until the W-9 is in", isSetupStepUnlocked(throughDress, "payouts"), false);
+  const throughW9: CleanerSetupState = { ...throughDress, w9_status: "complete" };
+  check("Stripe unlocks once the W-9 is in", isSetupStepUnlocked(throughW9, "payouts"), true);
+  check(
+    "training stays locked when the W-9 is in but Stripe is not",
+    isSetupStepUnlocked(throughW9, "training"),
+    false,
+  );
   check(
     "training unlocks once Stripe is started",
-    isSetupStepUnlocked({ ...throughDress, stripe_account_id: "acct_123" }, "training"),
+    isSetupStepUnlocked({ ...throughW9, stripe_account_id: "acct_123" }, "training"),
     true,
   );
   check(
@@ -294,6 +310,11 @@ function freshCleaner(): Record<string, unknown> {
     supply_inventory: {},
     pay_tier: "foundation",
     pay_percentage: 35,
+    w9_status: null,
+    home_address: null,
+    home_city: null,
+    state: null,
+    home_zip: null,
   };
 }
 
@@ -402,6 +423,38 @@ async function mountHarness(page: Page, row: Record<string, unknown>): Promise<v
       return json(route, []);
     }
     if (path.startsWith("/functions/v1/")) {
+      const fn = path.split("/").filter(Boolean).pop() || "";
+      let payload: Record<string, unknown> = {};
+      if (request.method() !== "GET") {
+        try {
+          payload = (request.postDataJSON() as Record<string, unknown>) || {};
+        } catch {
+          payload = {};
+        }
+      }
+      const action = String(payload.action || "");
+      if (fn === "nec-1099" && action === "submit_w9") {
+        Object.assign(row, { w9_status: "complete", w9_followup_required: false });
+        const tin = String(payload.tin || "").replace(/\D/g, "");
+        return json(route, {
+          ok: true,
+          legalName: payload.legalName,
+          tinLast4: tin.slice(-4),
+        });
+      }
+      if (fn === "nec-1099" && action === "w9_summary") {
+        const onFile = row.w9_status === "complete";
+        return json(route, {
+          ok: true,
+          onFile,
+          legalName: onFile ? `${row.first_name || ""} ${row.last_name || ""}`.trim() : "",
+          tinLast4: onFile ? "6789" : "",
+          street: onFile ? "100 Main Street" : "",
+          city: onFile ? "Bethesda" : "",
+          state: onFile ? "MD" : "",
+          zip: onFile ? "20814" : "",
+        });
+      }
       return json(route, { ok: true });
     }
     return json(route, {});
@@ -469,7 +522,7 @@ async function checkPortal(browser: Browser): Promise<void> {
 
   const body = () => page.locator("main").innerText();
 
-  check("the portal counts seven steps", (await body()).includes("0 of 7 complete"), true);
+  check("the portal counts eight steps", (await body()).includes("0 of 8 complete"), true);
   check(
     "and says they will not be offered a job until that is done",
     (await body()).includes("won't be offered a job") || (await body()).includes("won’t be offered a job"),
@@ -483,6 +536,7 @@ async function checkPortal(browser: Browser): Promise<void> {
     "Check off your supplies",
     "Read Day To Day Job Operations",
     "Agree to the dress code",
+    "Submit your W-9",
     "Set up Stripe payouts",
     "Watch the training videos",
   ];
@@ -517,7 +571,7 @@ async function checkPortal(browser: Browser): Promise<void> {
   await page.reload({ waitUntil: "networkidle" });
   await page.getByText("Welcome, Imani!").waitFor({ timeout: 20_000 });
 
-  check("agreement counts", (await body()).includes("1 of 7 complete"), true);
+  check("agreement counts", (await body()).includes("1 of 8 complete"), true);
   check(
     "phone unlocks right after the agreement",
     await page.getByRole("button", { name: "Send verification code" }).isVisible(),
@@ -537,7 +591,7 @@ async function checkPortal(browser: Browser): Promise<void> {
   row.phone_verified = true;
   await page.reload({ waitUntil: "networkidle" });
   await page.getByText("Welcome, Imani!").waitFor({ timeout: 20_000 });
-  check("phone counts", (await body()).includes("2 of 7 complete"), true);
+  check("phone counts", (await body()).includes("2 of 8 complete"), true);
 
   check(
     "the supply checklist is now on the page",
@@ -572,7 +626,7 @@ async function checkPortal(browser: Browser): Promise<void> {
     Boolean(row.supply_checklist_submitted_at),
     true,
   );
-  check("three of seven steps done", (await body()).includes("3 of 7 complete"), true);
+  check("three of eight steps done", (await body()).includes("3 of 8 complete"), true);
   check(
     "Day To Day Job Operations unlocks as soon as supplies are in",
     (await body()).includes("Read Day To Day Job Operations"),
@@ -590,7 +644,7 @@ async function checkPortal(browser: Browser): Promise<void> {
   await page.getByRole("button", { name: jobDay.actionLabel }).click();
   await page.getByText("Read — thanks.").waitFor({ timeout: 20_000 });
   check("the Day To Day Job Operations ack is recorded", row.ob_job_day_guides_ack, true);
-  check("four of seven steps done", (await body()).includes("4 of 7 complete"), true);
+  check("four of eight steps done", (await body()).includes("4 of 8 complete"), true);
 
   // ── Dress code: must tick agree ──
   const dress = ONBOARDING_GUIDES.find((g) => g.id === "dress_code")!;
@@ -630,10 +684,30 @@ async function checkPortal(browser: Browser): Promise<void> {
   await page.getByRole("button", { name: dress.actionLabel }).click();
   await page.getByText("Agreed — thanks.").waitFor({ timeout: 20_000 });
   check("the dress-code agree is recorded", row.ob_dress_code_ack, true);
-  check("five of seven steps done", (await body()).includes("5 of 7 complete"), true);
+  check("five of eight steps done", (await body()).includes("5 of 8 complete"), true);
+  check(
+    "Stripe stays locked until the W-9 is submitted",
+    await page.getByRole("button", { name: "Set up Stripe payouts" }).isVisible().catch(() => false),
+    false,
+  );
+  check(
+    "the W-9 form is on the page",
+    await page.getByLabel("Name on your tax return").isVisible(),
+    true,
+  );
+  await page.getByLabel("Taxpayer identification number").fill("123456789");
+  await page.getByLabel("Street").fill("100 Main Street");
+  await page.getByLabel("City").fill("Bethesda");
+  await page.getByLabel("State").fill("MD");
+  await page.getByLabel("ZIP").fill("20814");
+  await page.getByText("I certify this name, address, and taxpayer identification number are correct.").click();
+  await page.getByRole("button", { name: "Submit W-9" }).click();
+  await page.getByText("W-9 on file").waitFor({ timeout: 20_000 });
+  check("the W-9 is recorded on the contractor's row", row.w9_status, "complete");
+  check("six of eight steps done", (await body()).includes("6 of 8 complete"), true);
 
   check(
-    "Stripe unlocks after the dress code",
+    "Stripe unlocks after the W-9",
     await page.getByRole("button", { name: "Set up Stripe payouts" }).isVisible(),
     true,
   );
@@ -735,13 +809,14 @@ async function checkSetupLanding(browser: Browser): Promise<void> {
   const listed = rows.map((r) => r.trim()).filter(Boolean);
   check(
     "the link page lists the same sequence the portal will walk",
-    listed.slice(0, 7),
+    listed.slice(0, 8),
     [
       "Sign the contractor agreement",
       "Verify your phone number",
       "Check off your supplies",
       "Read Day To Day Job Operations",
       "Agree to the dress code",
+      "Submit your W-9",
       "Set up Stripe payouts",
       "Watch the training videos",
     ],
@@ -930,6 +1005,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  const { chromium } = await import("playwright");
   const browser = await chromium.launch();
   try {
     await checkGuideLandings(browser);

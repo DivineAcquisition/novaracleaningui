@@ -229,6 +229,7 @@ serve(async (req) => {
         if (data.needsSupplies !== false) needs.push("Check off the supplies you already own");
         if (data.needsJobDay !== false) needs.push("Read Day To Day Job Operations");
         if (data.needsDressCode !== false) needs.push("Agree to the dress code");
+        if (data.needsW9 !== false) needs.push("Submit your W-9");
         if (data.needsStripe !== false) needs.push("Set up Stripe payouts");
         if (data.needsTraining !== false) needs.push("Watch the training videos");
         const stepsList = needs.length

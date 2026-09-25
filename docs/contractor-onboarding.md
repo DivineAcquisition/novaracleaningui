@@ -1,18 +1,21 @@
 # Contractor account setup
 
-Seven steps, in this order:
+Eight steps, in this order:
 
 1. **Sign the contractor agreement** — the Independent Contractor Agreement, with a signature.
 2. **Verify your phone number** — second, right after signing, so dispatch can reach them.
 3. **Check off your supplies** — what kit do they already own? This page opens once the phone is verified.
 4. **Read Day To Day Job Operations** — what a job looks like from offer to payout. Same stretch of the portal, right after supplies.
 5. **Agree to the dress code** — the graphic, with an explicit agree tick. Viewing is not enough.
-6. **Set up Stripe payouts** — how completed-job pay is deposited. Finishing this opens the training hub.
-7. **Watch the training videos** — last. All seven walkthroughs on the training hub. Skipping does not count.
+6. **Submit your W-9** — legal name, TIN type (SSN, EIN, or ITIN), TIN, and street address. This is the recipient block a 1099-NEC is filed with.
+7. **Set up Stripe payouts** — how completed-job pay is deposited. Finishing this opens the training hub.
+8. **Watch the training videos** — last. All seven walkthroughs on the training hub. Skipping does not count.
 
-A contractor with zero completed jobs **cannot be offered a first job** until the videos are done. People who have already completed a job are past this gate — we do not yank offers from the roster.
+A contractor with zero completed jobs **cannot be offered a first job** until the W-9 and the videos are done. People who have already completed a job are past this gate — we do not yank offers from the roster.
 
-Stripe is the step before training. Finishing it routes to the training hub. It is not itself part of the first-job gate.
+Stripe is the step before training. Finishing it routes to the training hub. It is not itself part of the first-job gate. The W-9 is.
+
+Payer name, EIN, address, and the Treasury Tipped Occupation Code stay on admin filing settings. They are not collected from the contractor. The form does not use a federal tax classification, exemption codes, or a separate business-name line, so onboarding does not ask for those.
 
 ## One definition, four readers
 
@@ -35,8 +38,10 @@ specific contractor can still assign them.
 
 The database agrees too. `mint_cleaner_setup_token` returns `NULL` to mean
 "nothing left to send", and `cleaner_setup_status_v1.setup_complete` reports
-standing; both count the walkthrough through Stripe payout setup
-(`supabase/migrations/20260911220636_onboarding_agreement_first_training_gate.sql`).
+standing; both count the walkthrough through the W-9, Stripe, and the training
+videos
+(`supabase/migrations/20260925010000_onboarding_w9.sql`).
+`public.cleaner_ready_for_first_job()` includes the W-9 and still skips Stripe.
 
 ## The two graphics
 
@@ -122,7 +127,7 @@ a yes/no eligibility fact for a first job.
 mint_cleaner_setup_token
   → https://contractor.novaracleaning.com/cleaner/setup/<token>   (email + SMS)
   → /cleaner/auth?setup=<token>                                    (sign in / create login)
-  → /cleaner/ob-portal                                             (phone next, then supplies and Day To Day; Stripe opens training)
+  → /cleaner/ob-portal                                             (phone next, then supplies and Day To Day; W-9 before Stripe; Stripe opens training)
 ```
 
 The email and the SMS both list what is outstanding in portal order, so the
@@ -144,13 +149,26 @@ npm run onboarding:verify
 
 `scripts/verify-onboarding-sequence.ts` checks the shared definition by
 calling it, then opens the real pages in a browser and reads what a
-contractor would see: seven steps in order, agreement first, phone second, supplies and Day To Day next, Stripe sixth, training last, dress-code agree
+contractor would see: eight steps in order, agreement first, phone second, supplies and Day To Day next, W-9 before Stripe, training last, dress-code agree
 required, the two public PDF landing
 pages, and the training hub requiring the seven videos. Every Supabase call is
 answered from an invented fixture in the script, so no real contractor is
 touched. Screenshots land in
 `docs/contractor-onboarding/` (gitignored — evidence of a run, not a source of
 truth).
+
+## The W-9 is the 1099 recipient
+
+The portal step calls `nec-1099` with `submit_w9`. That action is the
+contractor's own row (the signed-in user, not an id in the request). It
+validates legal name, a 9-digit SSN, EIN, or ITIN, and a street, city,
+two-letter state, and ZIP, then upserts `cleaner_w9` with `validated_at`
+set and marks `cleaners.w9_status = 'complete'`. The response is the legal
+name and the last four digits of the TIN.
+
+Home address on the cleaner profile is only a prefill. Submitting the W-9
+does not overwrite it. A Stripe account is not treated as a W-9, including
+at departure.
 
 ## Deliberately not built
 

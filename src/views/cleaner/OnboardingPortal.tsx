@@ -41,6 +41,7 @@ import { PortalAgreementForm } from "@/components/cleaner/PortalAgreementForm";
 import { SupplyChecklistForm } from "@/components/cleaner/SupplyChecklistForm";
 import { JobDayGuides } from "@/components/cleaner/JobDayGuides";
 import { onboardingGuide } from "@/lib/cleaner-onboarding-guides";
+import { W9OnboardingForm } from "@/components/cleaner/W9OnboardingForm";
 import {
   SUPPLY_ITEMS,
   cleanerSetupSteps,
@@ -51,6 +52,7 @@ import {
   isRequiredTrainingComplete,
   isSetupStepUnlocked,
   isSupplyChecklistSubmitted,
+  isW9OnFile,
   sanitizeSupplyInventory,
   scoreSupplyInventory,
   supplySubmissionEvent,
@@ -69,12 +71,13 @@ const logo = "/novara-logo.png";
 //   3. Supply checkoff
 //   4. Day To Day Job Operations
 //   5. Dress code — must agree, not merely view
-//   6. Stripe payout setup — finishing it opens the training hub
-//   7. Training hub — last
+//   6. W-9 — legal name, TIN, and address for a 1099
+//   7. Stripe payout setup — finishing it opens the training hub
+//   8. Training hub — last
 //
-// A contractor with zero completed jobs cannot be offered work until every
-// step through the videos is done. Stripe is the step before training and
-// is not itself part of that gate. See isCleanerReadyForFirstJob().
+// A contractor with zero completed jobs cannot be offered work until the
+// W-9 and the videos are done. Stripe is the step before training and is
+// not itself part of that gate. See isCleanerReadyForFirstJob().
 // Legacy fields
 // (ob_agreement_signed, ob_google_chat_joined, ob_training_accessed) stay on
 // the cleaners row for back-compat but are not surfaced here.
@@ -107,6 +110,7 @@ interface CleanerProfile {
   home_city: string | null;
   state: string | null;
   home_zip: string | null;
+  w9_status: string | null;
 }
 
 // ─── Blocked Status Screen ──────────────────────────────
@@ -372,6 +376,7 @@ export default function OnboardingPortal() {
   const jobDayDone = isJobDayAcknowledged(profile);
   const trainingDone = isRequiredTrainingComplete(profile);
   const payoutsDone = isPayoutSetupStarted(profile);
+  const w9Done = isW9OnFile(profile);
 
   const supplyInventory = (profile.supply_inventory || {}) as SupplyInventory;
   const supplyScore = scoreSupplyInventory(supplyInventory);
@@ -395,6 +400,7 @@ export default function OnboardingPortal() {
     supplies: "Check off your supplies first.",
     dress_code: "Agree to the dress code first.",
     job_day: "Read Day To Day Job Operations first.",
+    w9: "Submit your W-9 first.",
     training: "Watch the training videos first.",
     payouts: "Set up Stripe payouts first.",
   };
@@ -408,6 +414,7 @@ export default function OnboardingPortal() {
   const dressUnlocked = isSetupStepUnlocked(profile, "dress_code");
   const jobDayUnlocked = isSetupStepUnlocked(profile, "job_day");
   const trainingUnlocked = isSetupStepUnlocked(profile, "training");
+  const w9Unlocked = isSetupStepUnlocked(profile, "w9");
   const payoutsUnlocked = isSetupStepUnlocked(profile, "payouts");
 
   const openStripe = async () => {
@@ -467,9 +474,9 @@ export default function OnboardingPortal() {
                 <p className="text-sm text-muted-foreground mt-1">
                   Sign the agreement, then verify your phone. Check off supplies
                   and read Day To Day Job Operations next. Dress code comes
-                  after that, then Stripe payout setup. Training videos are
-                  last. You won&apos;t be offered a job until the training
-                  videos are done.
+                  after that, then your W-9, then Stripe payout setup.
+                  Training videos are last. You won&apos;t be offered a job
+                  until the W-9 and the training videos are done.
                 </p>
               </div>
             </div>
@@ -714,9 +721,35 @@ export default function OnboardingPortal() {
           )}
         </StepCard>
 
-        {/* Step 6 — Stripe payouts. Finishing this opens training. */}
+        {/* Step 6 — W-9. The 1099 recipient block. Stripe stays locked until this is in. */}
         <StepCard
           number={6}
+          title="Submit your W-9"
+          description="Legal name, taxpayer identification number, and mailing address. This is what a 1099 is filed with."
+          icon={RiFileTextLine}
+          done={w9Done}
+          started={false}
+          locked={!w9Unlocked}
+        >
+          {!w9Unlocked ? (
+            lockMsg(lockFor("w9"))
+          ) : (
+            <W9OnboardingForm
+              firstName={profile.first_name}
+              lastName={profile.last_name}
+              street={profile.home_address || ""}
+              city={profile.home_city || ""}
+              state={profile.state || ""}
+              zip={profile.home_zip || ""}
+              done={w9Done}
+              onSubmitted={refreshProfile}
+            />
+          )}
+        </StepCard>
+
+        {/* Step 7 — Stripe payouts. Finishing this opens training. */}
+        <StepCard
+          number={7}
           title="Set up Stripe payouts"
           description="Connect the account we pay. When Stripe finishes, you go to the training videos."
           icon={RiBankCardLine}
@@ -740,7 +773,7 @@ export default function OnboardingPortal() {
           ) : (
             <>
               <p className="text-sm text-muted-foreground">
-                Dress code comes first. When Stripe finishes, you go straight
+                Connect the account we pay. When Stripe finishes, you go straight
                 to the training videos.
               </p>
               <Button
@@ -761,9 +794,9 @@ export default function OnboardingPortal() {
           )}
         </StepCard>
 
-        {/* Step 7 — Training hub, last */}
+        {/* Step 8 — Training hub, last */}
         <StepCard
-          number={7}
+          number={8}
           title="Watch the training videos"
           description="Last step. Seven walkthroughs of the real app. You must finish them before your first job."
           icon={RiGraduationCapLine}

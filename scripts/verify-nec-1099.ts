@@ -250,6 +250,12 @@ assert(!crewFilter.includes("[object Object]"), "crew payout filter is not a pos
 assert(edge.includes("crewBreakdownContains(cleanerId)"), "the preview uses the json crew filter");
 assert(!edge.includes('.contains("cleaner_breakdown", [{ cleanerId }])'), "the preview does not send an object array to contains");
 assert(edge.includes("readPages"), "ledger reads page instead of one capped request");
+const submitAt = edge.indexOf('action === "submit_w9"');
+const adminAt = edge.indexOf("const actor = await ensureAdmin");
+assert(submitAt > 0 && adminAt > submitAt, "a contractor submits a W-9 before the admin check");
+assert(edge.includes('action === "w9_summary"'), "a contractor can read a W-9 summary");
+assert(edge.includes('w9_status: "complete"'), "a saved W-9 marks the contractor complete");
+assert(edge.includes("tinLast4"), "the W-9 response uses the last four digits");
 
 async function main() {
   let threw = false;

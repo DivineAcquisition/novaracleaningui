@@ -197,6 +197,89 @@ function payerDraft(value: unknown) {
   };
 }
 
+function recipientFromBody(body: unknown) {
+  const src = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  return validateRecipient({
+    name: src.legalName ?? src.legal_name ?? src.name,
+    tin: src.tin,
+    tinType: src.tinType ?? src.tin_type,
+    street: src.street,
+    city: src.city,
+    state: src.state,
+    zip: src.zip,
+  });
+}
+
+async function signedInUser(req: Request): Promise<{ id: string; email: string }> {
+  const jwt = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+  if (!jwt) throw new Error("Not signed in.");
+  const userClient = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+    { global: { headers: { Authorization: `Bearer ${jwt}` } } },
+  );
+  const { data } = await userClient.auth.getUser();
+  const user = data?.user;
+  if (!user?.id) throw new Error("Not signed in.");
+  return { id: user.id, email: String(user.email || "").toLowerCase() };
+}
+
+async function cleanerForContractor(admin: DB, user: { id: string; email: string }): Promise<{ id: string }> {
+  const { data, error } = await admin.from("cleaners").select("id").eq("user_id", user.id).maybeSingle();
+  if (error) throw new Error(error.message || "Could not find your contractor profile.");
+  if (data?.id) return { id: data.id };
+  if (!user.email) throw new Error("Contractor profile not found.");
+  const { data: byEmail, error: emailErr } = await admin
+    .from("cleaners")
+    .select("id")
+    .ilike("email", user.email)
+    .is("user_id", null)
+    .maybeSingle();
+  if (emailErr) throw new Error(emailErr.message || "Could not find your contractor profile.");
+  if (!byEmail?.id) throw new Error("Contractor profile not found.");
+  const now = new Date().toISOString();
+  const { data: linked, error: linkErr } = await admin
+    .from("cleaners")
+    .update({ user_id: user.id, updated_at: now })
+    .eq("id", byEmail.id)
+    .select("id")
+    .single();
+  if (linkErr || !linked?.id) throw new Error(linkErr?.message || "Contractor profile not found.");
+  return { id: linked.id };
+}
+
+async function saveValidatedW9(
+  admin: DB,
+  cleanerId: string,
+  recipient: { name: string; tin: string; tinType: string; street: string; city: string; state: string; zip: string },
+  validatedBy: string,
+) {
+  const now = new Date().toISOString();
+  const { error } = await admin.from("cleaner_w9").upsert({
+    cleaner_id: cleanerId,
+    legal_name: recipient.name,
+    tin: recipient.tin,
+    tin_type: recipient.tinType,
+    street: recipient.street,
+    city: recipient.city,
+    state: recipient.state,
+    zip: recipient.zip,
+    validated_at: now,
+    validated_by: validatedBy,
+    updated_at: now,
+  });
+  if (error) throw new Error(error.message || "Could not save the W-9.");
+  const { error: flagErr } = await admin
+    .from("cleaners")
+    .update({
+      w9_status: "complete",
+      w9_followup_required: false,
+      updated_at: now,
+    })
+    .eq("id", cleanerId);
+  if (flagErr) throw new Error(flagErr.message || "Could not mark the W-9 complete.");
+}
+
 function maskTin(tin: string): string {
   const digits = String(tin || "").replace(/\D/g, "");
   if (digits.length < 4) return "";
@@ -302,9 +385,42 @@ serve(async (req) => {
   );
 
   try {
-    const actor = await ensureAdmin(admin, req);
-    const body = await req.json().catch(() => ({}));
+    const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
     const action = String(body?.action || "preview").toLowerCase();
+
+    // Contractor onboarding. Resolved from the signed-in user, never from a
+    // cleaner id in the body, and answered before the admin check.
+    if (action === "submit_w9" || action === "w9_summary") {
+      const user = await signedInUser(req);
+      const cleaner = await cleanerForContractor(admin, user);
+      if (action === "w9_summary") {
+        const w9 = await loadW9(admin, cleaner.id);
+        if (!w9) return json({ ok: true, onFile: false });
+        return json({
+          ok: true,
+          onFile: true,
+          legalName: w9.name,
+          tinLast4: String(w9.tin).replace(/\D/g, "").slice(-4),
+          street: w9.street,
+          city: w9.city,
+          state: w9.state,
+          zip: w9.zip,
+        });
+      }
+      if (body.certified !== true) {
+        return json({ error: "Confirm that the name, address, and taxpayer identification number are correct." }, 400);
+      }
+      const submitted = recipientFromBody(body);
+      if (!submitted.ok) return json({ error: blockerMessage(submitted.reason) }, 400);
+      await saveValidatedW9(admin, cleaner.id, submitted.recipient, user.id);
+      return json({
+        ok: true,
+        legalName: submitted.recipient.name,
+        tinLast4: submitted.recipient.tin.replace(/\D/g, "").slice(-4),
+      });
+    }
+
+    const actor = await ensureAdmin(admin, req);
     const cleanerId = String(body?.cleanerId || body?.cleaner_id || "").trim();
     const year = Math.round(Number(body?.taxYear || body?.tax_year) || 2026);
 
@@ -339,32 +455,10 @@ serve(async (req) => {
     if (!cleanerId) return json({ error: "A contractor is required." }, 400);
 
     if (action === "save_w9") {
-      const recipient = validateRecipient({
-        name: body?.legalName ?? body?.legal_name,
-        tin: body?.tin,
-        tinType: body?.tinType ?? body?.tin_type,
-        street: body?.street,
-        city: body?.city,
-        state: body?.state,
-        zip: body?.zip,
-      });
+      const recipient = recipientFromBody(body);
       if (!recipient.ok) return json({ error: blockerMessage(recipient.reason) }, 400);
-      const now = new Date().toISOString();
-      const { error } = await admin.from("cleaner_w9").upsert({
-        cleaner_id: cleanerId,
-        legal_name: recipient.recipient.name,
-        tin: recipient.recipient.tin,
-        tin_type: recipient.recipient.tinType,
-        street: recipient.recipient.street,
-        city: recipient.recipient.city,
-        state: recipient.recipient.state,
-        zip: recipient.recipient.zip,
-        validated_at: now,
-        validated_by: actor,
-        updated_at: now,
-      });
-      if (error) throw new Error(error.message || "Could not save the W-9.");
-      return json({ ok: true, tinLast4: recipient.recipient.tin.slice(-4) });
+      await saveValidatedW9(admin, cleanerId, recipient.recipient, actor);
+      return json({ ok: true, tinLast4: recipient.recipient.tin.replace(/\D/g, "").slice(-4) });
     }
 
     if (action === "preview") {
@@ -471,7 +565,13 @@ serve(async (req) => {
     return json({ error: "Unknown action." }, 400);
   } catch (err) {
     const message = err instanceof Error ? err.message : "The 1099 could not be prepared.";
-    const status = /not signed in/i.test(message) ? 401 : /admins only/i.test(message) ? 403 : 500;
+    const status = /not signed in/i.test(message)
+      ? 401
+      : /admins only/i.test(message)
+      ? 403
+      : /contractor profile not found/i.test(message)
+      ? 404
+      : 500;
     return json({ error: message }, status);
   }
 });

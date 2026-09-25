@@ -1,14 +1,16 @@
 name: Apply 1099 W-9 schema
 
 # The 1099 migration is in the repo, but production only auto-deploys edge
-# functions. This applies cleaner_w9 and nec_1099_forms on the live database.
-# Call export stays off unless a manual run asks for it.
+# functions. This applies cleaner_w9, nec_1099_forms, and the onboarding
+# W-9 gate (setup token, setup status, first-job eligibility) on the live
+# database. Call export stays off unless a manual run asks for it.
 
 on:
   push:
     branches: [main]
     paths:
       - supabase/migrations/20260922203000_nec_1099_copy_b_c.sql
+      - supabase/migrations/20260925010000_onboarding_w9.sql
       - scripts/apply-nec-1099-schema.py
       - .github/workflows/apply-nec-1099-schema.yml
   workflow_dispatch:
@@ -28,7 +30,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Apply cleaner_w9 and nec_1099_forms
+      - name: Apply cleaner_w9, nec_1099_forms, and the onboarding W-9 gate
         run: python3 scripts/apply-nec-1099-schema.py
 
       - name: Pull booked-job call transcripts

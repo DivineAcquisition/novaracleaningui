@@ -58,7 +58,8 @@ export function useAvailableCleaners(options: UseAvailableCleanersOptions = {}) 
             ob_supplies_checklist_viewed,
             ob_dress_code_ack,
             ob_job_day_guides_ack,
-            ob_training_complete
+            ob_training_complete,
+            w9_status
           `)
           .eq('approved', true)
           .eq('available_for_bookings', true)
