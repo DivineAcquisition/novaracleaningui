@@ -28,6 +28,7 @@ import {
   type TalentApplicant,
 } from "@/lib/airtable/talent";
 import { logSyncRun } from "@/lib/airtable/telemetry";
+import { sendApplicantReceivedEmail } from "@/lib/talent/received-email";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -185,11 +186,17 @@ export async function POST(req: Request): Promise<NextResponse> {
       if (stage !== "applicant") continue;
       const appliedAt = a.appliedAt ? new Date(a.appliedAt).getTime() : now;
       if (now - appliedAt > NOTIFY_WINDOW_MS) continue;
+      const receivedMail = await sendApplicantReceivedEmail({
+        email: a.email,
+        firstName: a.firstName,
+        fullName: a.fullName,
+      });
       await supabase.from("events").insert({
         event_type: "applicant.created",
         source: "talent-sync",
         zone: a.zone,
-        summary: `New cleaner applicant: ${a.fullName || a.email || "Unknown"}${a.state ? ` — ${a.state}` : ""}${a.zipCode ? ` ${a.zipCode}` : ""}`,
+        summary: `New cleaner applicant: ${a.fullName || a.email || "Unknown"}${a.state ? ` — ${a.state}` : ""}${a.zipCode ? ` ${a.zipCode}` : ""}` +
+          (receivedMail.sent ? "" : ` (confirmation email not sent: ${receivedMail.error})`),
         data: {
           applicant_email: a.email,
           applicant_phone: a.phone,
@@ -197,6 +204,8 @@ export async function POST(req: Request): Promise<NextResponse> {
           experience: a.experience,
           availability: a.availability,
           transportation: a.transportation,
+          received_email_sent: receivedMail.sent,
+          received_email_error: receivedMail.error,
         },
       });
     }
