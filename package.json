@@ -66,6 +66,7 @@
     "checkout-nudge:verify": "node --experimental-strip-types --no-warnings scripts/verify-checkout-nudge-guard.ts",
     "engagement-end:verify": "node --experimental-strip-types --no-warnings scripts/verify-engagement-end.ts",
     "nec-1099:verify": "tsx scripts/verify-nec-1099.ts",
+    "w9-onboarding:verify": "tsx scripts/verify-w9-onboarding.ts",
     "eas:supabase:connect": "npm --prefix contractor-app run eas:supabase:connect"
   },
   "dependencies": {

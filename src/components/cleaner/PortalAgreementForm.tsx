@@ -115,16 +115,19 @@ export function PortalAgreementForm({
         <Label className="text-xs">Signature</Label>
         <SignaturePad onChange={setSignature} />
       </div>
-      <label className="flex items-start gap-2.5 text-sm text-foreground cursor-pointer">
+      <div className="flex items-start gap-2.5">
         <Checkbox
+          id="portal-agreement-agree"
           checked={agreed}
           onCheckedChange={(v) => setAgreed(v === true)}
           className="mt-0.5"
         />
-        <span>I have read the Independent Contractor Agreement and I agree to it.</span>
-      </label>
+        <label htmlFor="portal-agreement-agree" className="cursor-pointer text-sm text-foreground">
+          I have read the Independent Contractor Agreement and I agree to it.
+        </label>
+      </div>
       {error ? <p className="text-sm text-rose-600">{error}</p> : null}
-      <Button className="w-full" disabled={!canSubmit} onClick={() => void submit()}>
+      <Button type="button" className="w-full" disabled={!canSubmit} onClick={() => void submit()}>
         {saving ? (
           <>
             <RiLoader4Line className="mr-2 h-4 w-4 animate-spin" />

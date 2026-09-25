@@ -141,17 +141,20 @@ export function JobDayGuides({
         ) : (
           <div className="space-y-3">
             {needsTick ? (
-              <label className="flex items-start gap-2.5 text-sm text-foreground cursor-pointer">
+              <div className="flex items-start gap-2.5">
                 <Checkbox
+                  id={`guide-agree-${guide.id}`}
                   checked={agreed}
                   onCheckedChange={(v) => setAgreed(v === true)}
                   className="mt-0.5"
                 />
-                <span>{guide.agreeLabel}</span>
-              </label>
+                <label htmlFor={`guide-agree-${guide.id}`} className="cursor-pointer text-sm text-foreground">
+                  {guide.agreeLabel}
+                </label>
+              </div>
             ) : null}
             {error ? <p className="text-sm text-rose-600">{error}</p> : null}
-            <Button className="w-full" disabled={!canSubmit} onClick={() => void acknowledge()}>
+            <Button type="button" className="w-full" disabled={!canSubmit} onClick={() => void acknowledge()}>
               {saving ? (
                 <>
                   <RiLoader4Line className="mr-2 h-4 w-4 animate-spin" />

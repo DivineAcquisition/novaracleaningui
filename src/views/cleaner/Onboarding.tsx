@@ -36,14 +36,7 @@ import { PhoneVerificationDialog } from "@/components/cleaner/PhoneVerificationD
 import { SignaturePad } from "@/components/booking/SignaturePad";
 import { AgreementPdfPreview } from "@/components/cleaner/AgreementPdfPreview";
 import { resolveCleanerAuth } from "@/lib/cleaner-auth";
-
-const US_STATES = [
-  "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
-  "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD",
-  "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ",
-  "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC",
-  "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY"
-];
+import { US_STATES, postalStateCode } from "@/lib/us-states";
 
 const DAYS_OF_WEEK = [
   { id: "Mon", label: "M" },
@@ -193,7 +186,7 @@ export default function CleanerOnboarding() {
         return true;
 
       case 3:
-        if (!formData.state) {
+        if (!postalStateCode(formData.state)) {
           toast.error("Please select your state");
           return false;
         }
@@ -288,7 +281,7 @@ export default function CleanerOnboarding() {
         last_name: formData.lastName,
         phone: formData.phone,
         email: userEmail,
-        state: formData.state,
+        state: postalStateCode(formData.state),
         home_zip: formData.homeZip,
         max_travel_miles: formData.maxTravelMiles,
         preferred_work_days: formData.preferredWorkDays,
@@ -614,7 +607,7 @@ export default function CleanerOnboarding() {
                         ...prev,
                         homeAddress: addr.street,
                         homeCity: addr.city,
-                        state: addr.state,
+                        state: postalStateCode(addr.state),
                         homeZip: addr.zipCode,
                         homeLat: addr.lat,
                         homeLng: addr.lng,
@@ -626,13 +619,13 @@ export default function CleanerOnboarding() {
                     <div className="space-y-2">
                       <Label className="text-sm font-medium">State</Label>
                       <select
-                        value={formData.state}
+                        value={postalStateCode(formData.state)}
                         onChange={(e) => setFormData(prev => ({ ...prev, state: e.target.value }))}
                         className="w-full h-11 rounded-xl border border-input bg-background px-3 text-sm"
                       >
                         <option value="">Select</option>
-                        {US_STATES.map(state => (
-                          <option key={state} value={state}>{state}</option>
+                        {US_STATES.map((state) => (
+                          <option key={state.value} value={state.value}>{state.value}</option>
                         ))}
                       </select>
                     </div>

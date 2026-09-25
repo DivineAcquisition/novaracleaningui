@@ -51,3 +51,33 @@ export const US_STATES = [
   { value: 'WI', label: 'Wisconsin' },
   { value: 'WY', label: 'Wyoming' },
 ];
+
+const POSTAL_CODE = new Set(US_STATES.map((state) => state.value));
+
+const POSTAL_NAME = new Map(
+  US_STATES.map((state) => [state.label.toLowerCase(), state.value]),
+);
+
+// Names people type that are not the USPS label.
+const POSTAL_ALIAS: Record<string, string> = {
+  "washington dc": "DC",
+  "washington d c": "DC",
+  "d c": "DC",
+};
+
+/**
+ * USPS 2-letter code. Full names map to the real code (Maryland → MD).
+ * An unrecognized name stays blank so it is not shortened to the wrong state.
+ */
+export function postalStateCode(raw: unknown): string {
+  const text = String(raw ?? "")
+    .replace(/\./g, " ")
+    .replace(/,/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!text) return "";
+  const upper = text.toUpperCase();
+  if (/^[A-Z]{2}$/.test(upper) && POSTAL_CODE.has(upper)) return upper;
+  const key = text.toLowerCase();
+  return POSTAL_ALIAS[key] || POSTAL_NAME.get(key) || "";
+}

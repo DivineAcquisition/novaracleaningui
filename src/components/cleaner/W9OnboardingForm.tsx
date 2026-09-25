@@ -13,7 +13,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { describeEdgeError } from "@/lib/edge-invoke";
-import { blockerMessage, validateRecipient } from "@/lib/nec-1099";
+import { validateRecipient } from "@/lib/nec-1099";
+import { US_STATES, postalStateCode } from "@/lib/us-states";
+import { w9FieldErrors } from "@/lib/w9-onboarding";
 
 type TinType = "ssn" | "ein" | "itin";
 
@@ -56,11 +58,11 @@ export function W9OnboardingForm({
   const [tin, setTin] = useState("");
   const [street, setStreet] = useState(streetDefault);
   const [city, setCity] = useState(cityDefault);
-  const [state, setState] = useState(stateDefault);
+  const [state, setState] = useState(() => postalStateCode(stateDefault));
   const [zip, setZip] = useState(zipDefault);
   const [certified, setCertified] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [errors, setErrors] = useState<string[]>([]);
   const [editing, setEditing] = useState(!done);
   const [summary, setSummary] = useState<Summary | null>(null);
 
@@ -91,31 +93,45 @@ export function W9OnboardingForm({
     if (summary?.legalName) setLegalName(summary.legalName);
     if (summary?.street) setStreet(summary.street);
     if (summary?.city) setCity(summary.city);
-    if (summary?.state) setState(summary.state);
+    if (summary?.state) setState(postalStateCode(summary.state));
     if (summary?.zip) setZip(summary.zip);
     setTin("");
     setCertified(false);
-    setError(null);
+    setErrors([]);
     setEditing(true);
   };
 
   const submit = async () => {
+    const stateCode = postalStateCode(state);
+    const fieldErrors = w9FieldErrors({
+      legalName,
+      tinType,
+      tin,
+      street,
+      city,
+      state: stateCode,
+      zip,
+    });
+    if (fieldErrors.length > 0) {
+      setErrors(fieldErrors);
+      return;
+    }
     const checked = validateRecipient({
       name: legalName,
       tinType,
       tin,
       street,
       city,
-      state,
+      state: stateCode,
       zip,
     });
     if (checked.ok === false) {
-      setError(blockerMessage(checked.reason));
+      setErrors(["Check the name, address, and taxpayer identification number, then try again."]);
       return;
     }
     if (!certified) return;
     setSaving(true);
-    setError(null);
+    setErrors([]);
     try {
       const { data, error: invokeError } = await supabase.functions.invoke("nec-1099", {
         body: {
@@ -147,7 +163,7 @@ export function W9OnboardingForm({
       setCertified(false);
       setEditing(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't save the W-9.");
+      setErrors([err instanceof Error ? err.message : "Couldn't save the W-9."]);
     } finally {
       setSaving(false);
     }
@@ -167,7 +183,7 @@ export function W9OnboardingForm({
           ) : null}
           {last4 ? <span> · TIN {last4}</span> : "."}
         </p>
-        <Button variant="outline" onClick={beginUpdate}>
+        <Button type="button" variant="outline" onClick={beginUpdate}>
           Update W-9
         </Button>
       </div>
@@ -226,30 +242,45 @@ export function W9OnboardingForm({
         </div>
         <div>
           <Label htmlFor="w9-state" className="text-xs">State</Label>
-          <Input
+          <select
             id="w9-state"
             value={state}
-            onChange={(e) => setState(e.target.value.toUpperCase().slice(0, 2))}
+            onChange={(e) => setState(e.target.value)}
             autoComplete="address-level1"
-            maxLength={2}
-            placeholder="MD"
-          />
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+          >
+            <option value="">Select</option>
+            {US_STATES.map((entry) => (
+              <option key={entry.value} value={entry.value}>
+                {entry.value} — {entry.label}
+              </option>
+            ))}
+          </select>
         </div>
         <div>
           <Label htmlFor="w9-zip" className="text-xs">ZIP</Label>
           <Input id="w9-zip" value={zip} onChange={(e) => setZip(e.target.value)} autoComplete="postal-code" inputMode="numeric" placeholder="20814" />
         </div>
       </div>
-      <label className="flex items-start gap-2.5 text-sm text-foreground cursor-pointer">
+      <div className="flex items-start gap-2.5">
         <Checkbox
+          id="w9-certify"
           checked={certified}
           onCheckedChange={(v) => setCertified(v === true)}
           className="mt-0.5"
         />
-        <span>I certify this name, address, and taxpayer identification number are correct.</span>
-      </label>
-      {error ? <p className="text-sm text-rose-600">{error}</p> : null}
-      <Button className="w-full" disabled={!canSubmit} onClick={() => void submit()}>
+        <label htmlFor="w9-certify" className="cursor-pointer text-sm text-foreground">
+          I certify this name, address, and taxpayer identification number are correct.
+        </label>
+      </div>
+      {errors.length > 0 ? (
+        <ul className="space-y-1 text-sm text-rose-600">
+          {errors.map((message) => (
+            <li key={message}>{message}</li>
+          ))}
+        </ul>
+      ) : null}
+      <Button type="button" className="w-full" disabled={!canSubmit} onClick={() => void submit()}>
         {saving ? (
           <>
             <RiLoader4Line className="mr-2 h-4 w-4 animate-spin" />

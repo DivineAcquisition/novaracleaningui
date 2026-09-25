@@ -2,6 +2,8 @@
  * Address formatting utilities for consistent address standardization
  */
 
+import { postalStateCode } from "./us-states";
+
 export interface FormattedAddress {
   street: string;
   city: string;
@@ -68,8 +70,7 @@ export function formatCity(city: string): string {
  * Format state - ensure uppercase 2-letter code
  */
 export function formatState(state: string): string {
-  if (!state) return "";
-  return state.trim().toUpperCase().slice(0, 2);
+  return postalStateCode(state);
 }
 
 /**
