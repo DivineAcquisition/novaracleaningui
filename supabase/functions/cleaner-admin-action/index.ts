@@ -1196,6 +1196,131 @@ serve(async (req) => {
         return json({ ok: true, emailed, smsSent, emailError, smsError, supplyUrl: SUPPLY_URL });
       }
 
+      // ─── SEND W-9 LINK ───────────────────────────────────────────────
+      // No-login page for the 1099 recipient block. Admin and VA both reach
+      // this action through ensureCallerCanAdminister.
+      case "send_w9": {
+        const force = Boolean(body.force);
+        if ((cleaner.status === "terminated" || cleaner.status === "resigned") && !force) {
+          return json({ error: "Cannot send a W-9 link after the engagement has ended." }, 409);
+        }
+
+        const firstName = String(cleaner.first_name || "").trim() || "there";
+        const email = String(cleaner.email || "").trim();
+        const phone = String(cleaner.phone || "").trim();
+        if (!email && !phone) {
+          return json({ error: "Cleaner has no email or phone on file." }, 400);
+        }
+
+        const { data: mintedToken, error: mintErr } = await adminClient.rpc(
+          "mint_cleaner_w9_token",
+          { p_cleaner_id: cleanerId, p_ttl_days: 14 },
+        );
+        if (mintErr) {
+          return json({ error: `Could not create a W-9 link: ${mintErr.message}` }, 500);
+        }
+        if (!mintedToken) {
+          return json({ error: "Cleaner not found." }, 404);
+        }
+
+        const W9_URL =
+          `https://contractor.novaracleaning.com/cleaner/w9/${mintedToken}`;
+
+        let emailed = false;
+        let smsSent = false;
+        let emailError: string | null = null;
+        let smsError: string | null = null;
+
+        if (email && !email.endsWith("@pending.novara")) {
+          try {
+            const { data: mailRes, error: mailErr } = await adminClient.functions.invoke(
+              "send-cleaner-email",
+              {
+                body: {
+                  type: "w9_request",
+                  email,
+                  data: {
+                    firstName,
+                    lastName: cleaner.last_name || "",
+                    email,
+                    w9Url: W9_URL,
+                  },
+                },
+              },
+            );
+            const failed = mailErr || (mailRes as { error?: string } | null)?.error;
+            emailed = !failed;
+            if (failed) {
+              emailError = await describeInvokeFailure(mailErr, mailRes);
+              console.warn("[cleaner-admin-action] W-9 email failed", emailError);
+            }
+          } catch (mailCatch) {
+            emailError = mailCatch instanceof Error ? mailCatch.message : String(mailCatch);
+            console.warn("[cleaner-admin-action] W-9 email failed", emailError);
+          }
+        } else {
+          emailError = email ? "Placeholder email address on file." : "No email on file.";
+        }
+
+        if (phone) {
+          const message =
+            `Hi ${firstName}! Novara Cleaning — submit your W-9 here: ${W9_URL} ` +
+            `No login needed. Questions? Just reply.`;
+          try {
+            const { data: smsRes, error: smsErr } = await adminClient.functions.invoke("send-ghl-sms", {
+              body: {
+                phone,
+                email: email || undefined,
+                firstName,
+                message,
+                type: "confirmation",
+              },
+            });
+            const ghlFailed = smsErr || (smsRes as { error?: string } | null)?.error;
+            smsSent = !ghlFailed;
+            if (ghlFailed) {
+              smsError = await describeInvokeFailure(smsErr, smsRes);
+              console.warn("[cleaner-admin-action] W-9 SMS via GHL failed", smsError);
+            }
+          } catch (smsCatch) {
+            smsError = smsCatch instanceof Error ? smsCatch.message : String(smsCatch);
+            console.warn("[cleaner-admin-action] W-9 SMS via GHL failed", smsError);
+          }
+        } else {
+          smsError = "No phone on file.";
+        }
+
+        await adminClient.from("events").insert({
+          event_type: "cleaner.w9_link_sent",
+          cleaner_id: cleanerId,
+          source: "cleaner-admin-action",
+          summary:
+            `W-9 link sent to ${`${cleaner.first_name || ""} ${cleaner.last_name || ""}`.trim()} ` +
+            `(email: ${emailed ? "sent" : `failed — ${emailError}`}, SMS: ${smsSent ? "sent" : `failed — ${smsError}`})`,
+          data: {
+            by: callerId,
+            emailed,
+            sms_sent: smsSent,
+            email_error: emailError,
+            sms_error: smsError,
+            already_on_file: cleaner.w9_status === "complete",
+          },
+        }).then(() => undefined, () => undefined);
+
+        if (!emailed && !smsSent) {
+          return json({
+            error:
+              `Couldn't reach them. Email: ${emailError || "not attempted"}. SMS: ${smsError || "not attempted"}. ` +
+              `The W-9 link below is valid for 14 days if you want to send it yourself.`,
+            emailError,
+            smsError,
+            w9Url: W9_URL,
+          }, 502);
+        }
+
+        return json({ ok: true, emailed, smsSent, emailError, smsError, w9Url: W9_URL });
+      }
+
       default:
         return json({ error: `unknown action: ${action}` }, 400);
     }

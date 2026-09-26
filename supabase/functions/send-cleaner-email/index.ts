@@ -287,6 +287,33 @@ serve(async (req) => {
         break;
       }
 
+      case "w9_request": {
+        const first = String(data.firstName || "there")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+        const w9Url = data.w9Url || "https://contractor.novaracleaning.com/cleaner/auth";
+        subject = "Submit your Novara Cleaning W-9";
+        html = `
+          <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#0f172a">
+            <h2 style="margin:0 0 8px;font-size:20px">Submit your W-9</h2>
+            <p style="margin:0 0 16px;color:#475569">Hi ${first},</p>
+            <p style="margin:0 0 16px;color:#475569">
+              We need the name, taxpayer identification number, and address that go on a 1099.
+              Use the name on your tax return. The link opens the form directly — no login.
+            </p>
+            <p style="margin:24px 0;text-align:center">
+              <a href="${w9Url}"
+                 style="display:inline-block;background:#7c3aed;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600">
+                Submit W-9
+              </a>
+            </p>
+            <p style="margin:0 0 8px;color:#64748b;font-size:14px">This link is just for you. It expires in 14 days.</p>
+            <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">Novara Cleaning</p>
+          </div>`;
+        break;
+      }
+
       case "pulse_check": {
         const first = data.firstName || "there";
         const pulseUrl = data.pulseUrl || "https://contractor.novaracleaning.com/cleaner/auth";

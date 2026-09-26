@@ -140,6 +140,13 @@ everything else. Both routes write the same columns
 (`supplySubmissionPatch()`), so someone who starts on the emailed link and
 finishes in the portal is never asked twice.
 
+There is a W-9-only link too (`send_w9` → `/cleaner/w9/<token>`, no login).
+Admin and VA send it from the cleaner sheet. It collects the same recipient
+block as the portal step and writes `cleaner_w9` plus `w9_status = complete`.
+The page returns the legal name and the last four digits of the TIN. The
+link lasts 14 days and can be sent again, including when a W-9 is already
+on file and needs an update.
+
 ## Verifying it
 
 ```bash

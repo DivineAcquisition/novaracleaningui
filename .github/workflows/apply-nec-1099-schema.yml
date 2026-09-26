@@ -11,6 +11,7 @@ on:
     paths:
       - supabase/migrations/20260922203000_nec_1099_copy_b_c.sql
       - supabase/migrations/20260925010000_onboarding_w9.sql
+      - supabase/migrations/20260926190000_cleaner_w9_token.sql
       - scripts/apply-nec-1099-schema.py
       - .github/workflows/apply-nec-1099-schema.yml
   workflow_dispatch:

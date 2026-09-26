@@ -19,6 +19,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 DEFAULT_SQL = [
     ROOT / "supabase/migrations/20260922203000_nec_1099_copy_b_c.sql",
     ROOT / "supabase/migrations/20260925010000_onboarding_w9.sql",
+    ROOT / "supabase/migrations/20260926190000_cleaner_w9_token.sql",
 ]
 
 

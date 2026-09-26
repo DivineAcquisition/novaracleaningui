@@ -43,6 +43,8 @@ export function W9OnboardingForm({
   zip: zipDefault,
   done,
   onSubmitted,
+  onFile = null,
+  saveW9,
 }: {
   firstName: string;
   lastName: string;
@@ -52,6 +54,21 @@ export function W9OnboardingForm({
   zip: string;
   done: boolean;
   onSubmitted: () => Promise<void>;
+  /** Already-filed summary for a page that does not call the signed-in function. */
+  onFile?: Summary | null;
+  /**
+   * When set, this page saves here instead of nec-1099. Used by the
+   * tokenized link, which has no contractor login.
+   */
+  saveW9?: (input: {
+    legalName: string;
+    tinType: TinType;
+    tin: string;
+    street: string;
+    city: string;
+    state: string;
+    zip: string;
+  }) => Promise<Summary>;
 }) {
   const [legalName, setLegalName] = useState(`${firstName} ${lastName}`.trim());
   const [tinType, setTinType] = useState<TinType>("ssn");
@@ -64,10 +81,10 @@ export function W9OnboardingForm({
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
   const [editing, setEditing] = useState(!done);
-  const [summary, setSummary] = useState<Summary | null>(null);
+  const [summary, setSummary] = useState<Summary | null>(onFile);
 
   useEffect(() => {
-    if (!done) return;
+    if (saveW9 || !done) return;
     let cancelled = false;
     void (async () => {
       const { data } = await supabase.functions.invoke("nec-1099", {
@@ -87,7 +104,7 @@ export function W9OnboardingForm({
     return () => {
       cancelled = true;
     };
-  }, [done]);
+  }, [done, saveW9]);
 
   const beginUpdate = () => {
     if (summary?.legalName) setLegalName(summary.legalName);
@@ -133,6 +150,23 @@ export function W9OnboardingForm({
     setSaving(true);
     setErrors([]);
     try {
+      if (saveW9) {
+        const saved = await saveW9({
+          legalName: checked.recipient.name,
+          tinType: checked.recipient.tinType,
+          tin: checked.recipient.tin,
+          street: checked.recipient.street,
+          city: checked.recipient.city,
+          state: checked.recipient.state,
+          zip: checked.recipient.zip,
+        });
+        await onSubmitted();
+        setSummary(saved);
+        setTin("");
+        setCertified(false);
+        setEditing(false);
+        return;
+      }
       const { data, error: invokeError } = await supabase.functions.invoke("nec-1099", {
         body: {
           action: "submit_w9",

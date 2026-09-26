@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { formatState } from "../src/lib/address-formatter.ts";
 import { validateRecipient } from "../src/lib/nec-1099.ts";
 import { postalStateCode } from "../src/lib/us-states.ts";
-import { w9FieldErrors } from "../src/lib/w9-onboarding.ts";
+import { w9FieldErrors, w9LinkSummary } from "../src/lib/w9-onboarding.ts";
 
 let failed = 0;
 function assert(cond: unknown, msg: string) {
@@ -84,6 +84,39 @@ assert(!/<label[^>]*>\s*<Checkbox/.test(agreement), "the agreement box is not ne
 assert(agreement.includes('htmlFor="portal-agreement-agree"'), "the agreement box has its own label");
 assert(form.includes("postalStateCode(stateDefault)"), "a stored state name is converted before the field renders");
 assert(form.includes("{entry.value} — {entry.label}"), "the state menu shows the postal code and the name");
+
+const fullTin = "123-45-6789";
+const summary = w9LinkSummary({
+  legal_name: "Ada Lovelace",
+  tin: fullTin,
+  street: "1 Main St",
+  city: "Rockville",
+  state: "Maryland",
+  zip: "20814",
+});
+assert(summary?.tinLast4 === "6789" && summary.state === "MD", "the link summary keeps the last four and the postal code");
+assert(summary && !JSON.stringify(summary).includes(fullTin) && !("tin" in summary), "the link summary omits the full TIN");
+assert(w9LinkSummary(null) === null, "a missing W-9 has no summary");
+
+const page = readFileSync("src/app/cleaner/w9/[token]/page.tsx", "utf8");
+const view = readFileSync("src/views/cleaner/W9Link.tsx", "utf8");
+const api = readFileSync("src/app/api/cleaner/w9/[token]/route.ts", "utf8");
+const admin = readFileSync("supabase/functions/cleaner-admin-action/index.ts", "utf8");
+const mail = readFileSync("supabase/functions/send-cleaner-email/index.ts", "utf8");
+const sheet = readFileSync("src/views/admin/Cleaners.tsx", "utf8");
+const migration = readFileSync("supabase/migrations/20260926190000_cleaner_w9_token.sql", "utf8");
+assert(page.includes("W9Link"), "a dedicated W-9 page exists");
+assert(view.includes("/api/cleaner/w9/") && view.includes("saveW9"), "the page saves through the token");
+const getPayload = api.slice(api.indexOf("prefill:"), api.indexOf("export async function POST"));
+const postPayload = api.slice(api.lastIndexOf("return NextResponse.json"));
+assert(!/\btin:/.test(getPayload) && !/\btin:/.test(postPayload) && postPayload.includes("tinLast4"), "the token API does not return a TIN field");
+assert(api.includes('validated_by: null'), "a token submission is not attributed to a staff user");
+assert(admin.includes('case "send_w9"') && admin.includes("mint_cleaner_w9_token"), "admin and VA can mint a W-9 link");
+assert(admin.includes("/cleaner/w9/"), "the mailed link opens the W-9 page");
+assert(admin.includes('["admin", "va"]'), "the send action stays on the admin or VA check");
+assert(mail.includes('case "w9_request"'), "the W-9 email exists");
+assert(sheet.includes("Send W-9 link") && sheet.includes('onAction("send_w9")'), "the cleaner sheet sends the W-9 link");
+assert(migration.includes("mint_cleaner_w9_token") && migration.includes("GRANT EXECUTE"), "the token mint is service-role only");
 
 if (failed) {
   console.error(`\n${failed} check(s) failed`);

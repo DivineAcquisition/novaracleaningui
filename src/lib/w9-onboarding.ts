@@ -34,3 +34,34 @@ export function w9FieldErrors(draft: W9Draft): string[] {
 
   return errors;
 }
+
+export type W9LinkSummary = {
+  legalName: string;
+  tinLast4: string;
+  street: string;
+  city: string;
+  state: string;
+  zip: string;
+};
+
+/** What a tokenized W-9 page may show. The full TIN stays off this object. */
+export function w9LinkSummary(row: {
+  legal_name?: string | null;
+  tin?: string | null;
+  street?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip?: string | null;
+} | null): W9LinkSummary | null {
+  const legalName = String(row?.legal_name || "").trim();
+  if (!legalName) return null;
+  const digits = String(row?.tin || "").replace(/\D/g, "");
+  return {
+    legalName,
+    tinLast4: digits.slice(-4),
+    street: String(row?.street || ""),
+    city: String(row?.city || ""),
+    state: postalStateCode(row?.state) || String(row?.state || "").trim(),
+    zip: String(row?.zip || ""),
+  };
+}

@@ -400,7 +400,8 @@ export default function AdminCleaners() {
       | "advance_pay_tier"
       | "send_agreement"
       | "send_setup"
-      | "send_supplies",
+      | "send_supplies"
+      | "send_w9",
     extra: Record<string, unknown> = {},
   ) => {
     if (!selected) return;
@@ -427,7 +428,7 @@ export default function AdminCleaners() {
           `Promoted to ${tier} · ${d.toPercentage ?? "—"}%` +
             (d.emailSent ? " — email sent" : " — email not sent (no address)"),
         );
-      } else if (action === "send_agreement" || action === "send_setup" || action === "send_supplies") {
+      } else if (action === "send_agreement" || action === "send_setup" || action === "send_supplies" || action === "send_w9") {
         const d = data as {
           emailed?: boolean;
           smsSent?: boolean;
@@ -436,15 +437,18 @@ export default function AdminCleaners() {
           agreementUrl?: string;
           setupUrl?: string;
           supplyUrl?: string;
+          w9Url?: string;
         };
         const parts = [d.emailed ? "email" : null, d.smsSent ? "SMS" : null].filter(Boolean);
-        const url = d.agreementUrl || d.setupUrl || d.supplyUrl;
+        const url = d.agreementUrl || d.setupUrl || d.supplyUrl || d.w9Url;
         const label =
           action === "send_agreement"
             ? "Signing link"
             : action === "send_setup"
               ? "Setup link"
-              : "Supply checklist link";
+              : action === "send_w9"
+                ? "W-9 link"
+                : "Supply checklist link";
         toast.success(
           parts.length
             ? `${label} sent via ${parts.join(" + ")}`
@@ -814,7 +818,8 @@ function CleanerSheet({
       | "advance_pay_tier"
       | "send_agreement"
       | "send_setup"
-      | "send_supplies",
+      | "send_supplies"
+      | "send_w9",
     extra?: Record<string, unknown>,
   ) => void;
   onDelete: () => void;
@@ -873,6 +878,7 @@ function CleanerSheet({
                     onSendAgreement={() => onAction("send_agreement")}
                     onSendSetup={() => onAction("send_setup")}
                     onSendSupplies={() => onAction("send_supplies")}
+                    onSendW9={() => onAction("send_w9")}
                     actioning={actioning}
                   />
                   <Separator />
@@ -1385,12 +1391,14 @@ function OnboardingChecklist({
   onSendAgreement,
   onSendSetup,
   onSendSupplies,
+  onSendW9,
   actioning,
 }: {
   cleaner: CleanerRow;
   onSendAgreement: () => void;
   onSendSetup: () => void;
   onSendSupplies: () => void;
+  onSendW9: () => void;
   actioning: boolean;
 }) {
   const introReady =
@@ -1533,6 +1541,42 @@ function OnboardingChecklist({
               <RiSendPlaneLine className="w-4 h-4 mr-1.5" />
             )}
             Send supply checklist
+          </Button>
+        </div>
+      ) : null}
+
+      {!engagementIsClosed(cleaner.status) ? (
+        <div className="rounded-lg border border-indigo-200 bg-indigo-50/80 p-3 space-y-2">
+          <p className="text-sm font-medium text-indigo-950">
+            {isW9OnFile(cleaner) ? "W-9 on file" : "W-9 not submitted"}
+          </p>
+          <p className="text-xs text-indigo-800">
+            {isW9OnFile(cleaner)
+              ? "Sends a no-login link if they need to update the name, taxpayer identification number, or address on their W-9."
+              : "Sends a no-login link so they can submit the name, taxpayer identification number, and address for a 1099."}
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            disabled={actioning || (!cleaner.email && !cleaner.phone)}
+            onClick={() => {
+              if (
+                !confirm(
+                  `Send the W-9 link to ${cleaner.first_name || "this cleaner"} via email/SMS?`,
+                )
+              ) {
+                return;
+              }
+              onSendW9();
+            }}
+            className="bg-indigo-700 hover:bg-indigo-800 text-white"
+          >
+            {actioning ? (
+              <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" />
+            ) : (
+              <RiSendPlaneLine className="w-4 h-4 mr-1.5" />
+            )}
+            Send W-9 link
           </Button>
         </div>
       ) : null}
@@ -1842,7 +1886,8 @@ function ActionsBlock({
       | "advance_pay_tier"
       | "send_agreement"
       | "send_setup"
-      | "send_supplies",
+      | "send_supplies"
+      | "send_w9",
     extra?: Record<string, unknown>,
   ) => void;
   onDelete: () => void;
