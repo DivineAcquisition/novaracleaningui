@@ -8,7 +8,9 @@
 // imports the admin client.
 //
 // Typical units Claim This Rate into existing onboarding. Unusual ones
-// Book a Call. Final standing rates are confirmed at onboarding. Everything
+// Book a Call. Larger portfolios that need stable cleaners can also book
+// from the calendar banner — that is an invitation, not a unit-count
+// cutoff. Final standing rates are confirmed at onboarding. Everything
 // shown here is labeled as an estimate.
 
 import {
@@ -44,6 +46,16 @@ export const LANDING_UNIT_TAG = "portfolio-landing";
 export const PORTFOLIO_CAL_LINK = "malik-sannie-clwphb/15min";
 export const PORTFOLIO_CAL_ORIGIN = "https://app.cal.com";
 export const PORTFOLIO_CAL_NAMESPACE = "portfolio-15min";
+
+/**
+ * Banner on the calendar. Invitation for larger portfolios that need a
+ * stable crew — not a unit-count cutoff. Typical units still Claim This Rate.
+ */
+export const CALENDAR_BANNER = {
+  eyebrow: "Bigger portfolio?",
+  title: "Book a call if you have a bigger portfolio of units you need stable cleaners for.",
+  body: "Typical apartments still Claim This Rate at any count. If you need a crew you can count on week after week, pick a time and we'll staff it.",
+} as const;
 
 export const HERO_HEADLINE =
   "Reliable move-in, move-out, and standard cleaning for your rental properties — whether it's one unit or fifty.";
