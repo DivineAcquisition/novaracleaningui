@@ -841,6 +841,32 @@ const API_ROUTES_STATIC: Record<string, unknown> = {
   })(),
 };
 
+// ─── Per-series overlay ────────────────────────────────────────────────────
+//
+// A capture series that tells one story across many screens (the Day To Day
+// training set follows a single job from dashboard to payout) needs the SAME
+// job to be in a different state from shot to shot. The shared fixtures above
+// can't do that without changing what the admin and New Hire shots show, so a
+// series installs an overlay instead: anything it answers wins, anything it
+// leaves out falls through to the shared data. Cleared with null.
+
+export interface CaptureOverlay {
+  /** Replacement rows for a PostgREST table. */
+  tables?: Record<string, unknown[]>;
+  /** Edge function handlers, keyed by function name. */
+  functions?: Record<string, (body: any) => unknown>;
+  /** Next.js API routes, matched by path prefix. */
+  api?: Record<string, (body: any) => unknown>;
+  /** Storage objects (e.g. demo photos): return null to fall through. */
+  storage?: (path: string) => { contentType: string; body: string | Buffer } | null;
+}
+
+let overlay: CaptureOverlay | null = null;
+
+export function setCaptureOverlay(next: CaptureOverlay | null): void {
+  overlay = next;
+}
+
 // ─── Route handler ─────────────────────────────────────────────────────────
 
 function json(route: Route, body: unknown, extraHeaders: Record<string, string> = {}) {
@@ -941,6 +967,15 @@ export async function handleSupabase(route: Route, request: PWRequest): Promise<
 
   // ── storage (avatars, photos) ──
   if (path.startsWith("/storage/")) {
+    const object = overlay?.storage?.(path) ?? null;
+    if (object) {
+      return route.fulfill({
+        status: 200,
+        contentType: object.contentType,
+        headers: { "access-control-allow-origin": "*" },
+        body: object.body,
+      });
+    }
     return route.fulfill({ status: 404, body: "" });
   }
 
@@ -953,7 +988,7 @@ export async function handleSupabase(route: Route, request: PWRequest): Promise<
   // ── edge functions ──
   if (path.startsWith("/functions/v1/")) {
     const name = path.split("/functions/v1/")[1].split("?")[0];
-    const handler = FUNCTIONS[name];
+    const handler = overlay?.functions?.[name] ?? FUNCTIONS[name];
     const body = handler ? handler(parseBody(request)) : { ok: true };
     return json(route, body);
   }
@@ -961,7 +996,7 @@ export async function handleSupabase(route: Route, request: PWRequest): Promise<
   // ── PostgREST tables ──
   if (path.startsWith("/rest/v1/")) {
     const table = path.split("/rest/v1/")[1].split("?")[0];
-    const all = TABLES[table] ?? [];
+    const all = overlay?.tables?.[table] ?? TABLES[table] ?? [];
     const rows = applyQuery(all as any[], url);
 
     if (request.method() !== "GET" && request.method() !== "HEAD") {
@@ -982,6 +1017,10 @@ export async function handleSupabase(route: Route, request: PWRequest): Promise<
 
 export async function handleApiRoute(route: Route, request: PWRequest): Promise<void> {
   const url = new URL(request.url());
+  const overlaid = Object.keys(overlay?.api ?? {}).find(
+    (p) => url.pathname === p || url.pathname.startsWith(`${p}/`),
+  );
+  if (overlaid) return json(route, overlay!.api![overlaid](parseBody(request)));
   const dynamic = Object.keys(API_ROUTES).find(
     (p) => url.pathname === p || url.pathname.startsWith(`${p}/`),
   );
