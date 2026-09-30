@@ -32,7 +32,7 @@ export function ContractorLayout({ children }: { children: React.ReactNode }) {
     { title: "Job lookup", url: "/contractor/jobs", icon: RiBriefcaseLine, description: "Check in · complete", tourAnchor: TOUR.navJobLookup },
     { title: "Turnovers", url: "/cleaner/turnovers", icon: RiHome4Line, description: "Airbnb · STR" },
     { title: "Profile", url: "/cleaner/profile", icon: RiUserLine, description: "Payouts · notifications", tourAnchor: TOUR.navProfile },
-    { title: "Training", url: "/cleaner/training", icon: RiGraduationCapLine, description: "Playbooks · checklists", tourAnchor: TOUR.navTraining },
+    { title: "Training", url: "/cleaner/training/app", icon: RiGraduationCapLine, description: "App walkthroughs", tourAnchor: TOUR.navTraining },
   ];
 
   return (

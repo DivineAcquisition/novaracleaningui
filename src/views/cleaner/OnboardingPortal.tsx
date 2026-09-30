@@ -475,8 +475,9 @@ export default function OnboardingPortal() {
                   Sign the agreement, then verify your phone. Check off supplies
                   and read Day To Day Job Operations next. Dress code comes
                   after that, then your W-9, then Stripe payout setup.
-                  Training videos are last. You won&apos;t be offered a job
-                  until the W-9 and the training videos are done.
+                  Last is a video on what to expect, then the app walkthroughs.
+                  You won&apos;t be offered a job until the W-9 and those
+                  walkthroughs are done.
                 </p>
               </div>
             </div>
@@ -751,7 +752,7 @@ export default function OnboardingPortal() {
         <StepCard
           number={7}
           title="Set up Stripe payouts"
-          description="Connect the account we pay. When Stripe finishes, you go to the training videos."
+          description="Connect the account we pay. When Stripe finishes, you watch what to expect on a job."
           icon={RiBankCardLine}
           done={payoutsDone}
           started={false}
@@ -763,7 +764,7 @@ export default function OnboardingPortal() {
             <>
               <p className="text-sm text-muted-foreground">
                 Stripe account connected. Completed-job pay deposits there.
-                Training videos are next.
+                Next, watch the video on what a job looks like.
               </p>
               <Button variant="outline" onClick={() => router.push("/cleaner/training")}>
                 <RiGraduationCapLine className="w-4 h-4 mr-1.5" />
@@ -774,7 +775,7 @@ export default function OnboardingPortal() {
             <>
               <p className="text-sm text-muted-foreground">
                 Connect the account we pay. When Stripe finishes, you go straight
-                to the training videos.
+                to the video on what a job looks like.
               </p>
               <Button
                 size="lg"
@@ -798,7 +799,7 @@ export default function OnboardingPortal() {
         <StepCard
           number={8}
           title="Watch the training videos"
-          description="Last step. Seven walkthroughs of the real app. You must finish them before your first job."
+          description="Last step. Watch the full video on what to expect, then the app walkthroughs. You must finish the walkthroughs before your first job."
           icon={RiGraduationCapLine}
           done={trainingDone}
           started={false}
@@ -811,16 +812,17 @@ export default function OnboardingPortal() {
               <p className="text-sm text-muted-foreground">
                 All required walkthroughs finished. You can rewatch them anytime.
               </p>
-              <Button variant="outline" onClick={() => router.push("/cleaner/training")}>
+              <Button variant="outline" onClick={() => router.push("/cleaner/training/app")}>
                 <RiGraduationCapLine className="w-4 h-4 mr-1.5" />
-                Open training hub
+                Open app training
               </Button>
             </>
           ) : (
             <>
               <p className="text-sm text-muted-foreground">
-                Watch each clip (or run the live walkthrough) on the training
-                hub. Skipping does not count.
+                Watch the full video first so you know what a job looks like.
+                The app walkthroughs open after it ends. Skipping those does
+                not count.
               </p>
               <Button
                 size="lg"
@@ -828,7 +830,7 @@ export default function OnboardingPortal() {
                 className="bg-primary hover:bg-primary/90 text-primary-foreground"
               >
                 <RiGraduationCapLine className="w-4 h-4 mr-1.5" />
-                Open training hub
+                Watch what to expect
                 <RiArrowRightLine className="w-4 h-4 ml-1.5" />
               </Button>
             </>

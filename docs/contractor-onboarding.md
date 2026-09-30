@@ -104,8 +104,10 @@ counts as a submission, so contractors who did this before
 
 ## Training videos must be watched
 
-The last portal card routes to `/cleaner/training`. Required content is the
-seven catalog walkthroughs (`TOURS` in `src/lib/tours/catalog.ts`):
+The last portal card routes to `/cleaner/training`. That page is one video
+about what a job looks like. The button under it stays off until the video
+ends, then opens `/cleaner/training/app`. Required content for a first job is
+still the seven catalog walkthroughs (`TOURS` in `src/lib/tours/catalog.ts`):
 
 - Watch the recorded clip through to the end, **or**
 - Run the live "Guide me" walkthrough and finish it.

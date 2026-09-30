@@ -53,7 +53,7 @@ export const TOUR_SCREENS: Record<TourScreenId, TourScreen> = {
   offerDecision: { id: "offerDecision", label: "a job offer", path: null, tokenScoped: true },
   jobLookup: { id: "jobLookup", label: "Job lookup", path: "/contractor/jobs", tokenScoped: false },
   profile: { id: "profile", label: "your Profile", path: "/cleaner/profile", tokenScoped: false },
-  training: { id: "training", label: "Training", path: "/cleaner/training", tokenScoped: false },
+  training: { id: "training", label: "Training", path: "/cleaner/training/app", tokenScoped: false },
   jobChecklist: { id: "jobChecklist", label: "the job checklist", path: null, tokenScoped: true },
   jobPhotos: { id: "jobPhotos", label: "the job photo page", path: null, tokenScoped: true },
 };

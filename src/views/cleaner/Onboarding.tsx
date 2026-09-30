@@ -827,7 +827,7 @@ export default function CleanerOnboarding() {
 
                   <div className="bg-blue-500/10 rounded-xl p-4 border border-blue-500/20">
                     <p className="text-sm text-blue-700 dark:text-blue-300">
-                      <strong>Next step:</strong> Verify your phone. Supplies and Day To Day Job Operations come after that. Your W-9 comes before Stripe payout setup, and the training videos are last.
+                      <strong>Next step:</strong> Verify your phone. Supplies and Day To Day Job Operations come after that. Your W-9 comes before Stripe payout setup. Last is a video on what to expect, then the app walkthroughs.
                     </p>
                   </div>
                 </div>

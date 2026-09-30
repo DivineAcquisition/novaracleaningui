@@ -9,7 +9,7 @@
 // the non-standard tag. Safe to mount multiple times — script injection
 // is idempotent (keyed by src).
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 interface WistiaPlayerProps {
   mediaId: string;
@@ -19,6 +19,12 @@ interface WistiaPlayerProps {
   className?: string;
   autoPlay?: boolean;
   muted?: boolean;
+  /**
+   * Fires when playback reaches the end. If Wistia reports how much was
+   * actually watched and that share is under 90%, this waits — seeking to
+   * the end does not count as finishing the video.
+   */
+  onEnded?: () => void;
 }
 
 function ensureScript(src: string, asModule = false) {
@@ -38,16 +44,52 @@ export function WistiaPlayer({
   className,
   autoPlay = false,
   muted = false,
+  onEnded,
 }: WistiaPlayerProps) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const onEndedRef = useRef(onEnded);
+  onEndedRef.current = onEnded;
+
   useEffect(() => {
     ensureScript("https://fast.wistia.com/player.js");
     ensureScript(`https://fast.wistia.com/embed/${mediaId}.js`, true);
   }, [mediaId]);
 
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root || !onEnded) return;
+    let player: Element | null = null;
+
+    const finishIfWatched = () => {
+      const watched = (player as { percentWatched?: number } | null)?.percentWatched;
+      if (typeof watched === "number" && watched > 0 && watched < 0.9) return;
+      onEndedRef.current?.();
+    };
+
+    const bind = () => {
+      const next = root.querySelector("wistia-player");
+      if (!next || next === player) return;
+      player?.removeEventListener("end", finishIfWatched);
+      player?.removeEventListener("ended", finishIfWatched);
+      player = next;
+      player.addEventListener("end", finishIfWatched);
+      player.addEventListener("ended", finishIfWatched);
+    };
+
+    bind();
+    const observer = new MutationObserver(bind);
+    observer.observe(root, { childList: true, subtree: true });
+    return () => {
+      observer.disconnect();
+      player?.removeEventListener("end", finishIfWatched);
+      player?.removeEventListener("ended", finishIfWatched);
+    };
+  }, [mediaId, onEnded]);
+
   const placeholderStyle = `wistia-player[media-id='${mediaId}']:not(:defined) { background: center / contain no-repeat url('https://fast.wistia.com/embed/medias/${mediaId}/swatch'); display: block; filter: blur(5px); padding-top:${placeholderPaddingTop}; }`;
 
   return (
-    <div className={className}>
+    <div ref={rootRef} className={className}>
       <style dangerouslySetInnerHTML={{ __html: placeholderStyle }} />
       <div
         dangerouslySetInnerHTML={{

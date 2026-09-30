@@ -24,6 +24,7 @@ const Onboarding = lazy(() => import("@/views/cleaner/Onboarding"));
 const OnboardingPortal = lazy(() => import("@/views/cleaner/OnboardingPortal"));
 const RoleIntro = lazy(() => import("@/views/cleaner/RoleIntro"));
 const Training = lazy(() => import("@/views/cleaner/Training"));
+const TrainingExpectation = lazy(() => import("@/views/cleaner/TrainingExpectation"));
 const ResetPassword = lazy(() => import("@/views/cleaner/ResetPassword"));
 
 const queryClient = new QueryClient({
@@ -142,7 +143,8 @@ export function App() {
               <Route path="/cleaner/onboarding" element={<Onboarding />} />
               <Route path="/cleaner/ob-portal" element={<OnboardingPortal />} />
               <Route path="/cleaner/role" element={<RoleIntro />} />
-              <Route path="/cleaner/training" element={<Training />} />
+              <Route path="/cleaner/training" element={<TrainingExpectation />} />
+              <Route path="/cleaner/training/app" element={<Training />} />
               <Route path="*" element={<Navigate to="/cleaner/mobile-dashboard" replace />} />
             </Routes>
           </Suspense>

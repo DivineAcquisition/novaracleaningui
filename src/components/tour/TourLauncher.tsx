@@ -168,7 +168,7 @@ export function TourLauncher({
               so you can watch with the sound off.
             </p>
             <Link
-              href="/cleaner/training#recordings"
+              href="/cleaner/training/app#recordings"
               className="text-[11px] font-semibold text-primary hover:underline"
               onClick={() => setOpen(false)}
             >

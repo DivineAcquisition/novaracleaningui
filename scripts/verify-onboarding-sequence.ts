@@ -396,7 +396,12 @@ async function mountHarness(page: Page, row: Record<string, unknown>): Promise<v
   const json = (route: Route, body: unknown, extra: Record<string, string> = {}) =>
     route.fulfill({
       status: 200,
-      headers: { "content-type": "application/json", ...CORS, ...extra },
+      headers: {
+        "content-type": "application/json",
+        "cache-control": "no-store",
+        ...CORS,
+        ...extra,
+      },
       body: JSON.stringify(body),
     });
 
@@ -644,10 +649,17 @@ async function checkPortal(browser: Browser): Promise<void> {
   await page.getByRole("button", { name: jobDay.actionLabel }).click();
   await page.getByText("Read — thanks.").waitFor({ timeout: 20_000 });
   check("the Day To Day Job Operations ack is recorded", row.ob_job_day_guides_ack, true);
-  check("four of eight steps done", (await body()).includes("4 of 8 complete"), true);
+  check(
+    "reading Day To Day also satisfies the dress-code step",
+    isDressCodeAgreed(row as unknown as CleanerSetupState),
+    true,
+  );
+  check("five of eight steps done", (await body()).includes("5 of 8 complete"), true);
 
-  // ── Dress code: must tick agree ──
+  // Dress code is already satisfied by that read, so the card is collapsed.
+  // Open it to confirm the graphic, then the fallback when the file 404s.
   const dress = ONBOARDING_GUIDES.find((g) => g.id === "dress_code")!;
+  await page.getByRole("button", { name: "Look again" }).click();
   const dressImg = page.locator(`main img[alt="${dress.alt}"]`);
   await dressImg.scrollIntoViewIfNeeded();
   check(
@@ -655,19 +667,17 @@ async function checkPortal(browser: Browser): Promise<void> {
     await dressImg.isVisible(),
     true,
   );
-  const agreeBtn = page.getByRole("button", { name: dress.actionLabel });
-  check("the dress-code agree button starts disabled", await agreeBtn.isDisabled(), true);
-  await page.getByText(dress.agreeLabel!).click();
-  check("and enables after the tick", await agreeBtn.isDisabled(), false);
 
   await page.screenshot({ path: resolve(SHOTS_DIR, "portal-guides.png"), fullPage: true });
 
   guideImagesBroken = true;
   await page.reload({ waitUntil: "networkidle" });
   await page.getByText("Welcome, Imani!").waitFor({ timeout: 20_000 });
+  await page.getByRole("button", { name: "Look again" }).nth(1).click();
+  await page.getByText(/graphic didn.t load/).waitFor({ timeout: 10_000 });
   check(
     "a graphic that won't load says so rather than showing a broken box",
-    (await body()).includes("The graphic didn't load."),
+    /graphic didn.t load/.test(await body()),
     true,
   );
   check(
@@ -680,11 +690,6 @@ async function checkPortal(browser: Browser): Promise<void> {
   guideImagesBroken = false;
   await page.reload({ waitUntil: "networkidle" });
   await page.getByText("Welcome, Imani!").waitFor({ timeout: 20_000 });
-  await page.getByText(dress.agreeLabel!).click();
-  await page.getByRole("button", { name: dress.actionLabel }).click();
-  await page.getByText("Agreed — thanks.").waitFor({ timeout: 20_000 });
-  check("the dress-code agree is recorded", row.ob_dress_code_ack, true);
-  check("five of eight steps done", (await body()).includes("5 of 8 complete"), true);
   check(
     "Stripe stays locked until the W-9 is submitted",
     await page.getByRole("button", { name: "Set up Stripe payouts" }).isVisible().catch(() => false),
@@ -695,7 +700,7 @@ async function checkPortal(browser: Browser): Promise<void> {
     await page.getByLabel("Name on your tax return").isVisible(),
     true,
   );
-  await page.getByLabel("Taxpayer identification number").fill("123456789");
+  await page.locator("#w9-tin").fill("123456789");
   await page.getByLabel("Street").fill("100 Main Street");
   await page.getByLabel("City").fill("Bethesda");
   await page.getByLabel("State").fill("MD");
@@ -713,18 +718,29 @@ async function checkPortal(browser: Browser): Promise<void> {
   );
   check(
     "training stays locked until Stripe is started",
-    await page.getByRole("button", { name: "Open training hub" }).isVisible().catch(() => false),
+    await page.getByRole("button", { name: "Watch what to expect" }).isVisible().catch(() => false),
     false,
   );
   row.stripe_account_id = "acct_test";
   await page.reload({ waitUntil: "networkidle" });
   await page.getByText("Welcome, Imani!").waitFor({ timeout: 20_000 });
-  const trainingBtn = page.getByRole("button", { name: "Open training hub" });
+  const trainingBtn = page.getByRole("button", { name: "Watch what to expect" });
   await trainingBtn.waitFor({ timeout: 20_000 });
 
   await page.screenshot({ path: resolve(SHOTS_DIR, "portal-training-unlocked.png"), fullPage: true });
 
-  await page.getByRole("button", { name: "Open training hub" }).click();
+  await page.getByRole("button", { name: "Watch what to expect" }).click();
+  await page.getByText("Watch this video all the way through.").waitFor({ timeout: 20_000 });
+  check(
+    "the expectation video has to finish before app training opens",
+    await page.getByRole("button", { name: "Watch the full video to continue" }).isDisabled(),
+    true,
+  );
+  await page.screenshot({ path: resolve(SHOTS_DIR, "training-expectation.png"), fullPage: true });
+  await page.evaluate((id) => {
+    window.localStorage.setItem(`novara.training.expectation.nvdljdxmls.${id}`, "1");
+  }, CLEANER_ID);
+  await page.goto(`${BASE_URL}/cleaner/training/app`, { waitUntil: "networkidle" });
   await page.getByText("Required videos").waitFor({ timeout: 20_000 });
   const hub = await page.locator("body").innerText();
   check(

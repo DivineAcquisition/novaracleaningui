@@ -2,10 +2,10 @@
 
 // ─── Cleaner Training Portal ───────────────────────────────────────────
 //
-// The landing page contractors reach from:
-//   1. The "Open training hub" CTA on /cleaner/ob-portal (step 7), and the
-//      return from Stripe payout setup
-//   2. The training link in the contractor nav
+// App walkthroughs. Onboarding opens the expectation video first
+// (/cleaner/training). The button under that video lands here. Someone who
+// has not finished that video, and has not already completed training, is
+// sent back to it.
 //
 // Auth-gated for cleaners. Visiting this page stamps
 // `cleaners.ob_training_accessed` so we know they opened it — visiting is
@@ -53,6 +53,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { resolveCleanerAuth, isBlockedCleanerStatus } from "@/lib/cleaner-auth";
+import { hasWatchedExpectationVideo } from "@/lib/training-expectation";
 import { TOURS } from "@/lib/tours/catalog";
 
 interface TrainingConfig {
@@ -274,6 +275,11 @@ export default function CleanerTrainingPage() {
       if (!cleanerRow) {
         toast.info("Please complete your profile first");
         router.replace("/cleaner/onboarding");
+        return;
+      }
+
+      if (!cleanerRow.ob_training_complete && !hasWatchedExpectationVideo(cleanerRow.id)) {
+        router.replace("/cleaner/training");
         return;
       }
 
