@@ -24,6 +24,8 @@ import {
   RiHomeSmile2Line,
   RiLoader4Line,
   RiMailSendLine,
+  RiAddLine,
+  RiUserStarLine,
   RiPauseCircleLine,
   RiPlayCircleLine,
   RiRefreshLine,
@@ -39,15 +41,16 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { sendCalendarLink } from "@/lib/partner-admin-api";
+import { fetchPmAdmin, sendCalendarLink, type PmAdminAccount } from "@/lib/partner-admin-api";
 import { AccountSheet, attentionFlags, type AccountRow } from "@/views/admin/CommercialAccountsAdmin";
+import CommercialBooking from "@/views/admin/CommercialBooking";
 import { cn } from "@/lib/utils";
 
 // ─── Unified row model ───────────────────────────────────────────────────────
 
 interface UnifiedAccount {
-  key: string;                       // "biz:<id>" | "host:<id>"
-  kind: "commercial" | "office" | "str";
+  key: string;                       // "biz:<id>" | "host:<id>" | "pm:<id>"
+  kind: "commercial" | "office" | "str" | "portfolio";
   id: string;
   name: string;
   contact: string;
@@ -96,6 +99,7 @@ const KIND_STYLE: Record<string, string> = {
   commercial: "bg-blue-100 text-blue-700",
   office: "bg-cyan-100 text-cyan-700",
   str: "bg-fuchsia-100 text-fuchsia-700",
+  portfolio: "bg-amber-100 text-amber-800",
 };
 const STATUS_STYLE: Record<string, string> = {
   prospect: "bg-blue-100 text-blue-700",
@@ -108,12 +112,20 @@ const STATUS_STYLE: Record<string, string> = {
 const money = (c: number) => `$${(c / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 const fmtD = (iso?: string | null) => (iso ? format(new Date(`${String(iso).slice(0, 10)}T12:00:00`), "MMM d") : "—");
 
-export default function PartnershipAccounts() {
+export default function PartnershipAccounts({
+  kindFilter = "all",
+  onKindFilterChange,
+}: {
+  kindFilter?: string | null;
+  onKindFilterChange?: (kind: string | null) => void;
+} = {}) {
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<UnifiedAccount[]>([]);
-  const [typeFilter, setTypeFilter] = useState("core");
+  const typeFilter = kindFilter && kindFilter !== "core" ? kindFilter : "all";
+  const setTypeFilter = (next: string) => onKindFilterChange?.(next === "all" ? null : next);
   const [statusFilter, setStatusFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const [creating, setCreating] = useState(false);
   const [openBiz, setOpenBiz] = useState<AccountRow | null>(null);
   const [openHost, setOpenHost] = useState<HostAccount | null>(null);
 
@@ -125,7 +137,7 @@ export default function PartnershipAccounts() {
       const monthStartYmd = monthStart.toISOString().slice(0, 10);
       const todayYmd = new Date().toISOString().slice(0, 10);
 
-      const [bizRes, hostRes, propRes, turnRes, sessRes] = await Promise.all([
+      const [bizRes, hostRes, propRes, turnRes, sessRes, pmSnap] = await Promise.all([
         (supabase.from as any)("business_accounts").select("*").order("last_activity_at", { ascending: false }).limit(500),
         (supabase.from as any)("hosts").select("id, name, email, phone, status, stripe_customer_id, default_payment_method_id, created_at").order("created_at", { ascending: false }).limit(500),
         (supabase.from as any)("properties").select("id, nickname, address, turnover_price, host_id").limit(2000),
@@ -138,6 +150,7 @@ export default function PartnershipAccounts() {
           .select("host_id, stalled, pending_items, current_step, idle_hours")
           .eq("status", "active")
           .limit(500),
+        fetchPmAdmin().catch(() => ({ accounts: [] as PmAdminAccount[] })),
       ]);
 
       const biz = (bizRes.data || []) as AccountRow[];
@@ -173,6 +186,25 @@ export default function PartnershipAccounts() {
           lastActivity: a.last_activity_at,
           flags,
           raw: a,
+        });
+      }
+
+      const pms = (pmSnap.accounts || []) as PmAdminAccount[];
+      for (const pm of pms) {
+        unified.push({
+          key: `pm:${pm.id}`,
+          kind: "portfolio",
+          id: pm.id,
+          name: pm.company_name,
+          contact: pm.contact_name || "—",
+          email: pm.email,
+          status: pm.status,
+          valueCents: 0,
+          valueLabel: pm.volume_discount_label || pm.billing_method.replace(/_/g, " "),
+          meta: `${pm.unitCount} unit${pm.unitCount === 1 ? "" : "s"}${pm.pendingReview ? ` · ${pm.pendingReview} in review` : ""}`,
+          lastActivity: pm.created_at,
+          flags: pm.pendingReview > 0 ? [`${pm.pendingReview} unit${pm.pendingReview === 1 ? "" : "s"} pending review`] : [],
+          raw: { id: pm.id } as AccountRow,
         });
       }
 
@@ -239,7 +271,7 @@ export default function PartnershipAccounts() {
 
   const filtered = useMemo(() => rows.filter((r) => {
     if (typeFilter === "core") {
-      if (r.kind === "str") return false;
+      if (r.kind === "str" || r.kind === "portfolio") return false;
     } else if (typeFilter !== "all" && r.kind !== typeFilter) return false;
     if (statusFilter === "attention" && r.flags.length === 0) return false;
     if (statusFilter !== "all" && statusFilter !== "attention" && r.status !== statusFilter) return false;
@@ -255,6 +287,17 @@ export default function PartnershipAccounts() {
     str: rows.filter((r) => r.kind === "str").reduce((s, r) => s + r.valueCents, 0),
     attention: rows.filter((r) => r.flags.length > 0).length,
   }), [rows]);
+
+  if (creating) {
+    return (
+      <div className="space-y-3">
+        <Button type="button" variant="outline" size="sm" onClick={() => setCreating(false)}>
+          Back to accounts
+        </Button>
+        <CommercialBooking />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">
@@ -279,15 +322,18 @@ export default function PartnershipAccounts() {
           <Input placeholder="Search account, contact, email…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
         <Select value={typeFilter} onValueChange={setTypeFilter}>
-          <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="w-[170px]"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="core">Commercial &amp; Office</SelectItem>
             <SelectItem value="all">All types</SelectItem>
             <SelectItem value="commercial">Commercial</SelectItem>
             <SelectItem value="office">Office</SelectItem>
             <SelectItem value="str">STR / Airbnb</SelectItem>
+            <SelectItem value="portfolio">Portfolio</SelectItem>
           </SelectContent>
         </Select>
+        <Button size="sm" onClick={() => setCreating(true)}>
+          <RiAddLine className="w-4 h-4 mr-1" /> New account
+        </Button>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-[170px]"><SelectValue /></SelectTrigger>
           <SelectContent>
@@ -312,7 +358,11 @@ export default function PartnershipAccounts() {
           {filtered.map((r) => (
             <button
               key={r.key}
-              onClick={() => r.kind === "str" ? setOpenHost(r.raw as HostAccount) : setOpenBiz(r.raw as AccountRow)}
+              onClick={() => {
+                if (r.kind === "str") setOpenHost(r.raw as HostAccount);
+                else if (r.kind === "portfolio") onKindFilterChange?.("portfolio");
+                else setOpenBiz(r.raw as AccountRow);
+              }}
               className={cn(
                 "w-full text-left rounded-xl border bg-white px-4 py-3 hover:border-violet-300 hover:shadow-sm transition-all",
                 r.flags.length > 0 ? "border-amber-300" : "border-slate-200",
@@ -321,9 +371,12 @@ export default function PartnershipAccounts() {
               <div className="flex flex-wrap items-center gap-2">
                 {r.kind === "str" ? <RiHomeSmile2Line className="w-4 h-4 text-fuchsia-600" />
                   : r.kind === "office" ? <RiBuilding4Line className="w-4 h-4 text-cyan-600" />
+                  : r.kind === "portfolio" ? <RiUserStarLine className="w-4 h-4 text-amber-600" />
                   : <RiBuilding2Line className="w-4 h-4 text-blue-600" />}
                 <span className="font-semibold text-slate-900">{r.name}</span>
-                <Badge className={cn("border-0 capitalize", KIND_STYLE[r.kind])}>{r.kind === "str" ? "STR / Airbnb" : r.kind}</Badge>
+                <Badge className={cn("border-0 capitalize", KIND_STYLE[r.kind])}>
+                  {r.kind === "str" ? "STR / Airbnb" : r.kind === "portfolio" ? "Portfolio" : r.kind}
+                </Badge>
                 <Badge className={cn("border-0 capitalize", STATUS_STYLE[r.status] || "bg-slate-100 text-slate-600")}>{r.status}</Badge>
                 <span className="ml-auto text-sm font-semibold text-slate-700">{r.valueLabel}</span>
               </div>
@@ -506,7 +559,7 @@ function HostSheet({ host, onClose, reload }: { host: HostAccount; onClose: () =
           </div>
 
           <p className="text-[11px] text-slate-400">
-            Crew pinning, assignments, and batch payments live in the Ops tab. Turnovers booked through Book Job flow through the standard dispatch + QC pipeline.
+            Crew pinning, assignments, and batch payments live under STR ops on this page. Turnovers booked through Jobs flow through the standard dispatch + QC pipeline.
           </p>
         </div>
       </SheetContent>

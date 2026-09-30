@@ -64,7 +64,11 @@ function Stat({ label, value }: { label: string; value: string | number }) {
   );
 }
 
-export default function PropertyManagerAdmin() {
+export default function PropertyManagerAdmin({
+  initialAccountId,
+}: {
+  initialAccountId?: string;
+} = {}) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<PmAdminAccount[]>([]);
@@ -74,7 +78,7 @@ export default function PropertyManagerAdmin() {
   const [discountEnabled, setDiscountEnabled] = useState(true);
   const [tiers, setTiers] = useState<PmVolumeDiscountTier[]>([]);
   const [defaultTiers, setDefaultTiers] = useState<PmVolumeDiscountTier[]>([]);
-  const [selectedId, setSelectedId] = useState<string>("");
+  const [selectedId, setSelectedId] = useState<string>(initialAccountId || "");
   const [lastLink, setLastLink] = useState<string>("");
   const [expandedReview, setExpandedReview] = useState<string>("");
 

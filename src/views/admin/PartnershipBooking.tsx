@@ -499,8 +499,8 @@ export default function PartnershipBooking() {
                 {!compliance.ok && (
                   <p className="text-rose-600">
                     This applies to every site under the account, not just this one.{" "}
-                    <a href="/admin/accounts?tab=compliance" className="font-semibold underline">
-                      Upload a current certificate in Compliance
+                    <a href="/admin/accounts?tab=accounts&panel=compliance" className="font-semibold underline">
+                      Upload a current certificate
                     </a>{" "}
                     and the block lifts immediately — no separate unblock step.
                   </p>

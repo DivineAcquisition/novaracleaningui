@@ -10,6 +10,7 @@
 // the client accepted today.
 
 import { buildExhibitA, type ExhibitASite } from "@/lib/docuseal";
+import { ACCOUNTS_HUB_PATH, accountsHubHref, resolveAccountsHubLocation } from "@/lib/accounts-hub";
 
 export type BillingMethod = "auto_pay" | "invoiced";
 export type InvoiceCycle = "per_visit" | "weekly" | "biweekly" | "monthly";
@@ -165,8 +166,16 @@ export const TERM_OPTIONS: Array<{ id: "month_to_month" | "annual"; label: strin
   { id: "annual", label: "12-month term", sub: "Locked rate for the year" },
 ];
 
+export {
+  ACCOUNTS_HUB_PATH,
+  accountsHubHref,
+  resolveAccountsHubLocation,
+  type AccountsHubLocation,
+  type AccountsHubPanel,
+  type AccountsHubTab,
+} from "@/lib/accounts-hub";
+
 /** Canonical Accounts hub — old /admin/commercial and /admin/partner bookmarks redirect here. */
-export const ACCOUNTS_HUB_PATH = "/admin/accounts";
 export const COMMERCIAL_HUB_PATH = ACCOUNTS_HUB_PATH;
 
 /** Dedicated Proposals tab — intake, onsite docs, send, and pipeline. */
@@ -186,8 +195,7 @@ export function commercialTab(tab: string, extra?: Record<string, string>): stri
   if (tab === "walkthroughs") {
     return proposalsHubTab("price", extra);
   }
-  const params = new URLSearchParams({ tab, ...(extra || {}) });
-  return `${COMMERCIAL_HUB_PATH}?${params.toString()}`;
+  return accountsHubHref(resolveAccountsHubLocation(tab, extra), extra);
 }
 
 export const PROPOSAL_STATUS_LABELS: Record<ProposalStatus, string> = {

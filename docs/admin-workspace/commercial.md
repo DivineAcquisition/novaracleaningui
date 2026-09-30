@@ -2,10 +2,10 @@
 title: Accounts
 area: Accounts
 category: How the Tool Works
-summary: Business accounts, commercial jobs, insurance certificates, STR hosts, and property-manager portfolios.
+summary: Business accounts, commercial jobs, insurance certificates, STR hosts, and property-manager portfolios — one list, not nine tabs.
 whoCanSee: Full admins only
 where: /admin/accounts
-lastVerified: 2026-09-11
+lastVerified: 2026-09-13
 order: 12
 ---
 
@@ -21,23 +21,28 @@ The sidebar item used to say **Commercial**. It is now **Accounts**. Old
 pipeline still live on [Proposals](/docs/proposals). Old `?tab=send`, `?tab=pipeline`, and
 `?tab=walkthroughs` links still redirect there.
 
-The tabs are management, not offer-sending:
+The hub used to have nine sibling tabs (Accounts, Jobs, Book, Recurring, Compliance,
+STR, Portfolio, Checklists, Comms). Most of those were the same account opened a
+second time. There are three tabs now:
 
 | Tab | What happens here |
 |---|---|
-| **Accounts** | Business accounts — prospect through offboarded. |
-| **Jobs** | Commercial and office jobs: search, open, cancel / reschedule / refund. |
-| **Book** | Book a site on an existing account. |
+| **Accounts** | Every relationship — commercial, office, STR host, property-manager portfolio. Type filter, needs-attention, and **New account**. Certificates, STR ops, checklists, and comms open as tools on this tab, not as extra sidebar-style tabs. |
+| **Jobs** | Commercial and office jobs: search, open, cancel / reschedule / refund. **Book a site** is the old Book tab — pick an existing account and site. |
 | **Recurring** | Repeating commercial and partner schedules. |
-| **Compliance** | Client certificates of insurance, and the block they cause. |
-| **STR** | Hosts, properties, and turnovers. |
-| **Portfolio** | Property-manager companies and unit registry. |
-| **Checklists** | Published crew lists for commercial jobs. |
-| **Comms** | Partnership templates and the send log. |
+
+Old links keep working: `?tab=book` opens Jobs with the book form, `?tab=compliance`
+opens certificates on Accounts, `?tab=str` filters to STR hosts, `?tab=portfolio`
+opens the property-manager console.
 
 ## Accounts
 
 Accounts run through **prospect → onboarding → active → paused → offboarded**.
+
+The list is all types by default. Filter to Commercial, Office, STR / Airbnb, or
+Portfolio when you only want one line. Click a row for the type-appropriate
+sheet: sites and go-live gates on a commercial account, properties and turnovers
+on an STR host. Portfolio rows open the property-manager unit registry.
 
 :::gate An account can't be set Active until three things are true
 > Can't set Active — signed agreement + payment method + at least one site are required
@@ -46,6 +51,18 @@ Accounts run through **prospect → onboarding → active → paused → offboar
 All three, no override. An "active" account with no signed agreement is work we can't invoice
 for.
 :::
+
+### Tools on this tab
+
+The four pills under the tab bar stay on Accounts so you do not leave the
+relationship to do the next step:
+
+| Tool | What it was |
+|---|---|
+| **Certificates** | The old Compliance tab — client COIs and the block they cause. |
+| **STR ops** | The old STR tab — host turnovers, crew, batches. Host *accounts* stay in the list. |
+| **Checklists** | Published crew lists for commercial jobs. |
+| **Comms** | Partnership templates and the send log. |
 
 ## Insurance certificates
 
@@ -98,31 +115,35 @@ Remember the fourth dispatch requirement from [Proposals](/docs/proposals): *our
 must have been sent to the client. A deal can be fully priced, signed and billed and still not
 dispatch because of that.
 
-## Jobs, book, recurring and checklists
+## Jobs and recurring
 
-**Jobs** is the Bookings list filtered to commercial and office work. **New commercial job**
-is the internal-booking form for a negotiated quote. **Book** is the heavier book-a-site path
-for an existing account. **Recurring** manages repeating commercial and partner schedules.
-**Checklists** publishes what the crew is asked to do on site.
+**Jobs** is the Bookings list filtered to commercial and office work. **Book a site** is the
+structured path for an existing account (commercial, office, or STR turnover). Creating the
+account itself is **New account** on the Accounts list — that used to live on a separate Book
+tab next to a second "New commercial job" form.
+
+**Recurring** manages repeating commercial and partner schedules.
 
 ## STR
 
-The STR workspace covers short-term-rental hosts, their properties and turnovers. Two sync
-buttons sit in the header on the STR and Accounts tabs: **Sync contractors** and **Sync to
-Airtable**.
+STR *hosts* are rows on Accounts (filter **STR / Airbnb**). Open a host for properties,
+per-turnover rates, upcoming and recent turnovers, pause/resume, and the scheduler link.
+
+**STR ops** is the turnover queue — crew pinning, assignment, batches. Mailing the host
+agreement and payment setup is **Proposals → Send → STR**, not this tab.
 
 Hosts have their own portal at partner.novaracleaning.com; this is the internal side of it.
-Mailing the host agreement and payment setup is **Proposals → Send → STR**, not this tab.
 
 ## Portfolio
 
-Property-manager companies, their unit registry, standing rates, and onboarding attention.
-Mailing the portfolio agreement is **Proposals → Send → Property Manager**.
+Filter **Portfolio** (or click a portfolio row) for property-manager companies, their unit
+registry, standing rates, and onboarding attention. Mailing the portfolio agreement is
+**Proposals → Send → Property Manager**.
 
 ## Common questions
 
 **"A commercial client's cleans stopped generating."**
-Check Compliance first. An expired certificate blocks the whole account.
+Open **Certificates** on Accounts first. An expired certificate blocks the whole account.
 
 **"Can I override an insurance block?"**
 Yes, with a documented reason, for 1 to 30 days. Use it to cover a renewal in flight, not to
@@ -134,3 +155,7 @@ Almost certainly our certificate hasn't been sent to the client — the fourth r
 **"I'm a VA and I can't open this."**
 Correct. Use Proposals for walkthroughs, pricing and sending; ask an admin for account,
 compliance and STR work.
+
+**"Where did Book / STR / Compliance go?"**
+They are still here. Book is **Jobs → Book a site**. STR hosts are on the Accounts list.
+Certificates, STR ops, checklists, and comms are the pills on Accounts.
