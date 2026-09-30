@@ -14,6 +14,7 @@ import {
   roleById,
 } from "@/lib/hiring/roles";
 import { formatRosterDate, isReapplyBlocked } from "@/lib/pulse-check/roster";
+import { sendApplicantReceivedEmail } from "@/lib/talent/received-email";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -187,10 +188,17 @@ export async function POST(req: Request): Promise<NextResponse> {
       .single();
     if (error) throw new Error(error.message);
 
+    const receivedMail = await sendApplicantReceivedEmail({
+      email,
+      firstName,
+      fullName,
+    });
+
     await supabase.from("events").insert({
       event_type: "applicant.created",
       source: "hiring-site",
-      summary: `New cleaner applicant (hiring site): ${fullName} — ${applicantRoleLabel(roleId)}${state ? ` · ${state}` : ""}${zipCode ? ` ${zipCode}` : ""}`,
+      summary: `New cleaner applicant (hiring site): ${fullName} — ${applicantRoleLabel(roleId)}${state ? ` · ${state}` : ""}${zipCode ? ` ${zipCode}` : ""}` +
+        (receivedMail.sent ? "" : ` (confirmation email not sent: ${receivedMail.error})`),
       data: {
         applicant_id: created.id,
         applicant_email: email,
@@ -200,6 +208,8 @@ export async function POST(req: Request): Promise<NextResponse> {
         evergreen: role.evergreen,
         experience,
         availability,
+        received_email_sent: receivedMail.sent,
+        received_email_error: receivedMail.error,
       },
     });
 

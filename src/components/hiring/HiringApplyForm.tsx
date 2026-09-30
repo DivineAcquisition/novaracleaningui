@@ -105,8 +105,8 @@ export function HiringApplyForm({ defaultRole = "field-tech", className, compact
         <h3 className="mt-3 font-jakarta text-xl font-bold text-slate-900">Application received</h3>
         <p className="mt-2 text-sm leading-relaxed text-slate-600">
           Thanks for applying for <span className="font-semibold">{applicantRoleLabel(roleId)}</span>.
-          Our recruiting team reviews every submission and will reach out when it’s a fit —
-          including evergreen roles, which we fill when demand opens.
+          We emailed you a confirmation. If you are selected, expect a phone call or text
+          from us to set up a phone screen.
         </p>
       </div>
     );
@@ -128,7 +128,7 @@ export function HiringApplyForm({ defaultRole = "field-tech", className, compact
         </h3>
         {!compact && (
           <p className="mt-1.5 text-sm text-slate-500">
-            Takes about two minutes. We’ll follow up when we’re ready to screen.
+            Takes about two minutes. If you are selected, we’ll call or text to set up a phone screen.
           </p>
         )}
       </div>

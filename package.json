@@ -42,6 +42,7 @@
     "flow-divergence:verify": "tsx scripts/verify-flow-divergence.ts",
     "docs:pricing": "tsx scripts/docs/pricing-examples.ts",
     "onboarding:verify": "tsx scripts/verify-onboarding-sequence.ts",
+    "applicant-received:verify": "node --experimental-strip-types --no-warnings scripts/verify-applicant-received-email.ts",
     "tours:verify": "tsx scripts/verify-contractor-tours.ts",
     "tours:record": "tsx scripts/tours/record.ts",
     "tours:publish": "tsx scripts/tours/publish.ts",

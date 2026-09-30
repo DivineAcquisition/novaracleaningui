@@ -12,6 +12,7 @@ import { requireAdmin, AdminAuthError } from "@/lib/admin-auth";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import { primeAirtablePat } from "@/lib/airtable/sources/prime-pat";
 import { createTalentApplicantInAirtable } from "@/lib/airtable/talent";
+import { sendApplicantReceivedEmail } from "@/lib/talent/received-email";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -158,15 +159,23 @@ export async function POST(req: Request): Promise<NextResponse> {
     }
 
     const who = row.full_name || row.email || row.id;
+    const receivedMail = await sendApplicantReceivedEmail({
+      email: row.email,
+      firstName: airtable.firstName,
+      fullName: row.full_name,
+    });
     await supabase.from("events").insert({
       event_type: "applicant.created",
       source: "cleaner-hub",
-      summary: `Applicant added manually by ${principal.email}: ${who}`,
+      summary: `Applicant added manually by ${principal.email}: ${who}` +
+        (receivedMail.sent ? "" : ` (confirmation email not sent: ${receivedMail.error})`),
       data: {
         applicant_id: row.id,
         airtable_record_id: airtable.airtableRecordId,
         source: "manual",
         created_by: principal.email,
+        received_email_sent: receivedMail.sent,
+        received_email_error: receivedMail.error,
       },
     });
 
