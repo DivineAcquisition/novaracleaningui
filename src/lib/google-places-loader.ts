@@ -63,7 +63,7 @@ export function loadGooglePlaces(): Promise<typeof google.maps.places | null> {
     return Promise.resolve(window.google.maps.places);
   }
 
-  window.__novaraGooglePlacesPromise = (async () => {
+  const loadPromise = (async () => {
     let apiKey = "";
     try {
       const { data, error } = await supabase.functions.invoke("google-places-key", { body: {} });
@@ -80,23 +80,26 @@ export function loadGooglePlaces(): Promise<typeof google.maps.places | null> {
     return await new Promise<typeof google.maps.places | null>((resolve) => {
       const existing = document.getElementById(SCRIPT_ID) as HTMLScriptElement | null;
 
-      // With loading=async the callback fires before legacy `libraries=`
-      // params are applied — importLibrary("places") is required.
+      // libraries=places (no loading=async) attaches AutocompleteService before
+      // this callback. Do not call importLibrary("places") first: that loads
+      // Places API (New), which this key is not permitted to call, and it can
+      // hide the legacy service the dropdown actually uses.
       const onReady = async () => {
         if (window.__novaraGmAuthFailed) {
           resolve(null);
           return;
         }
         try {
-          if (!window.google?.maps) {
-            console.warn("[google-places] Script loaded but google.maps missing");
-            resolve(null);
+          const places = window.google?.maps?.places as { AutocompleteService?: unknown; AutocompleteSuggestion?: unknown } | undefined;
+          if (places?.AutocompleteService || places?.AutocompleteSuggestion) {
+            window.__novaraGooglePlacesReady = true;
+            resolve(window.google.maps.places);
             return;
           }
-          if (window.google.maps.importLibrary) {
+          if (window.google?.maps?.importLibrary) {
             await window.google.maps.importLibrary("places");
           }
-          if (window.google.maps.places) {
+          if (window.google?.maps?.places) {
             window.__novaraGooglePlacesReady = true;
             resolve(window.google.maps.places);
             return;
@@ -104,7 +107,7 @@ export function loadGooglePlaces(): Promise<typeof google.maps.places | null> {
           console.warn("[google-places] Places library loaded but namespace missing");
           resolve(null);
         } catch (err) {
-          console.warn("[google-places] importLibrary('places') failed", err);
+          console.warn("[google-places] Places library failed", err);
           resolve(window.google?.maps?.places ?? null);
         }
       };
@@ -127,9 +130,13 @@ export function loadGooglePlaces(): Promise<typeof google.maps.places | null> {
       script.id = SCRIPT_ID;
       script.async = true;
       script.defer = true;
+      // Do not set loading=async. With that flag Google ignores `libraries=places`,
+      // so the legacy AutocompleteService never attaches. This key is allowed to
+      // call Places from the booking site, but Places API (New) returns
+      // PERMISSION_DENIED, so suggestions have to come from the legacy service.
       script.src =
         `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}` +
-        `&callback=__novaraGooglePlacesCallback&loading=async&v=weekly`;
+        `&libraries=places&callback=__novaraGooglePlacesCallback&v=weekly`;
       script.onerror = () => {
         console.warn("[google-places] Script load failed");
         resolve(null);
@@ -137,6 +144,11 @@ export function loadGooglePlaces(): Promise<typeof google.maps.places | null> {
       document.head.appendChild(script);
     });
   })();
+
+  window.__novaraGooglePlacesPromise = loadPromise.then((places) => {
+    if (!places) delete window.__novaraGooglePlacesPromise;
+    return places;
+  });
 
   return window.__novaraGooglePlacesPromise;
 }
