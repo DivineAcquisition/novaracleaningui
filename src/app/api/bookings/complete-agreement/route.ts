@@ -49,7 +49,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     const { data: booking } = await supabase
       .from("bookings")
       .select(
-        "id, email, first_name, last_name, status, phone, address, city, state, zip_code, service_date, service_type, total_estimate_cents, deposit_cents, full_payment_discount, payment_option, pay_page_token, is_recurring, booking_channel, membership_plan, recurring_schedule_id",
+        "id, email, first_name, last_name, status, phone, address, city, state, zip_code, service_date, service_type, total_estimate_cents, deposit_cents, full_payment_discount, payment_option, pay_page_token, is_recurring, booking_channel, membership_plan, recurring_schedule_id, payment_intent_id",
       )
       .eq("pay_page_token", token)
       .maybeSingle();
