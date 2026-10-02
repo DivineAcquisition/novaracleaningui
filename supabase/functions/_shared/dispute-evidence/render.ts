@@ -1,8 +1,18 @@
 // Plain letter PDFs. Header carries the name. Body is black on white.
 // Page caps are the packet caps from the evidence set.
 
-import { pdfSafe } from "../qc-factual-summary-render.ts";
 import type { PacketDoc } from "./build.ts";
+
+function pdfSafe(value: string): string {
+  return String(value ?? "")
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
+    .replace(/[\u2010\u2011\u2012\u2013\u2014\u2212]/g, "-")
+    .replace(/\u2026/g, "...")
+    .replace(/[\u2022\u00B7]/g, "-")
+    .replace(/\u00A0/g, " ")
+    .replace(/[^\x09\x0A\x0D\x20-\x7E\u00A1-\u00FF]/g, "");
+}
 
 const PAGE_W = 612;
 const PAGE_H = 792;

@@ -27,6 +27,7 @@ export default function DisputeEvidencePanel({
   checklist,
   charges,
   acceptance,
+  drive,
 }: {
   bookingId: string;
   bookingRef?: string | null;
@@ -42,6 +43,11 @@ export default function DisputeEvidencePanel({
     userAgent?: string | null;
     agreementVersion?: string | null;
     documentId?: string | null;
+  } | null;
+  drive?: {
+    folderUrl?: string | null;
+    summaryUrl?: string | null;
+    agreementUrl?: string | null;
   } | null;
 }) {
   const [disputeId, setDisputeId] = useState("");
@@ -150,6 +156,14 @@ export default function DisputeEvidencePanel({
       <p className="text-xs text-slate-500">
         One file per evidence type: completion summary, communication, acceptance record, refund or cancellation policy, and a receipt only when the charge needs itemizing. Combined limit is 19 pages and 4.5 MB. The full agreement is not attached. Nothing is sent to Stripe until you approve.
       </p>
+      {(drive?.folderUrl || drive?.summaryUrl || drive?.agreementUrl) && (
+        <div className="rounded-lg border px-3 py-2 text-xs space-y-1" style={{ borderColor: "rgba(92, 15, 254, 0.22)", background: "rgba(92, 15, 254, 0.05)" }}>
+          <p className="font-semibold text-slate-800">Drive archive for this job</p>
+          {drive.folderUrl && <a className="block text-violet-700 font-medium hover:underline" href={drive.folderUrl} target="_blank" rel="noreferrer">Job folder — summary, agreement, before and after photos</a>}
+          {drive.summaryUrl && <a className="block text-violet-700 font-medium hover:underline" href={drive.summaryUrl} target="_blank" rel="noreferrer">Completion summary PDF</a>}
+          {drive.agreementUrl && <a className="block text-violet-700 font-medium hover:underline" href={drive.agreementUrl} target="_blank" rel="noreferrer">Executed agreement PDF</a>}
+        </div>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
         <input className="border rounded px-2 py-1 text-xs" placeholder="Stripe dispute id" value={disputeId} onChange={(e) => setDisputeId(e.target.value)} />
         <select className="border rounded px-2 py-1 text-xs" value={reason} onChange={(e) => setReason(e.target.value)}>

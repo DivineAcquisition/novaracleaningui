@@ -41,6 +41,26 @@ async function allow(admin: SB, jwt: string): Promise<void> {
   if (!ok) throw new Error("Admins or VAs only.");
 }
 
+function pieceFromRow(row: Record<string, unknown>): FrozenPiece {
+  return {
+    id: String(row.id),
+    clientKey: String(row.client_key),
+    bookingId: row.booking_id ? String(row.booking_id) : null,
+    chargeKey: row.charge_key ? String(row.charge_key) : null,
+    kind: row.kind as PieceKind,
+    seriesId: String(row.series_id),
+    version: Number(row.version),
+    eventId: String(row.event_id),
+    reason: String(row.reason),
+    fingerprint: String(row.fingerprint),
+    generatedAt: String(row.generated_at),
+    backfill: Boolean(row.backfill),
+    superseded: Boolean(row.superseded),
+    lines: (row.lines as string[]) || [],
+    gaps: (row.gaps as string[]) || [],
+  };
+}
+
 function stripeClient(key: string) {
   return {
     async uploadFile(filename: string, bytes: Uint8Array) {
@@ -91,7 +111,7 @@ serve(async (req) => {
       const chargeKey = String(body.chargeKey || "");
       const { data, error } = await admin.from("client_evidence_pieces").select("*").eq("booking_id", bookingId);
       if (error) return json({ ok: false, error: error.message }, 500);
-      const pieces = (data || []) as FrozenPiece[];
+      const pieces = ((data || []) as Array<Record<string, unknown>>).map(pieceFromRow);
       const keys = chargeKey ? [chargeKey] : [...new Set(pieces.map((piece) => piece.chargeKey).filter(Boolean))] as string[];
       return json({
         ok: true,
@@ -109,23 +129,7 @@ serve(async (req) => {
         reason: prepInput.reason || "general",
       });
       const { data: rows } = await admin.from("client_evidence_pieces").select("*").eq("client_key", String(body.clientKey || prepInput.customerEmail || "unknown"));
-      const existing = ((rows || []) as Array<Record<string, unknown>>).map((row) => ({
-        id: String(row.id),
-        clientKey: String(row.client_key),
-        bookingId: row.booking_id ? String(row.booking_id) : null,
-        chargeKey: row.charge_key ? String(row.charge_key) : null,
-        kind: row.kind as PieceKind,
-        seriesId: String(row.series_id),
-        version: Number(row.version),
-        eventId: String(row.event_id),
-        reason: String(row.reason),
-        fingerprint: String(row.fingerprint),
-        generatedAt: String(row.generated_at),
-        backfill: Boolean(row.backfill),
-        superseded: Boolean(row.superseded),
-        lines: row.lines as string[],
-        gaps: (row.gaps as string[]) || [],
-      })) as FrozenPiece[];
+      const existing = ((rows || []) as Array<Record<string, unknown>>).map(pieceFromRow);
       const result = preparePiece(existing, {
         clientKey: String(body.clientKey || prepInput.customerEmail || "unknown"),
         bookingId: body.bookingId ? String(body.bookingId) : null,
