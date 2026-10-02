@@ -36,6 +36,7 @@ import {
 } from "@/lib/address-history";
 import { mergeAddressParts, parseAddressString } from "@/lib/address-formatter";
 import { useAddressAutocomplete, type AddressAutocompleteStatus } from "@/hooks/use-address-autocomplete";
+import { AddressSuggestionMenu } from "@/components/booking/AddressSuggestionMenu";
 import type { AddressSuggestion } from "@/lib/google-places-loader";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
@@ -247,27 +248,8 @@ export function AddressAutocomplete({
         />
         <RiMapPinLine className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
 
-        {open && status === "ready" && suggestions.length > 0 && (
-          <ul className="absolute z-[10000] left-0 right-0 mt-1 max-h-64 overflow-auto rounded-md border border-slate-200 bg-white shadow-lg">
-            {suggestions.map((s) => (
-              <li key={s.id}>
-                <button
-                  type="button"
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    void handleSuggestionPick(s);
-                  }}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 transition-colors flex items-start gap-2"
-                >
-                  <RiMapPinLine className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
-                  <span className="min-w-0">
-                    <span className="block font-medium truncate">{s.primary}</span>
-                    {s.secondary && <span className="block text-xs text-slate-500 truncate">{s.secondary}</span>}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
+        {open && status === "ready" && (
+          <AddressSuggestionMenu suggestions={suggestions} onPick={(s) => void handleSuggestionPick(s)} />
         )}
       </div>
 

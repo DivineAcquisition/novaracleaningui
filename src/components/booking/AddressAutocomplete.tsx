@@ -33,6 +33,7 @@ import {
 import { parseAddressString, mergeAddressParts } from "@/lib/address-formatter";
 import { useAddressAutocomplete } from "@/hooks/use-address-autocomplete";
 import type { AddressSuggestion } from "@/lib/google-places-loader";
+import { AddressSuggestionMenu } from "@/components/booking/AddressSuggestionMenu";
 
 interface AddressComponents {
   street: string;
@@ -232,28 +233,8 @@ export function AddressAutocomplete({
         />
         <RiMapPinLine className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
 
-        {open && status === "ready" && suggestions.length > 0 && (
-          <ul className="absolute z-[10000] left-0 right-0 mt-1 max-h-64 overflow-auto rounded-md border border-border bg-popover shadow-lg">
-            {suggestions.map((s) => (
-              <li key={s.id}>
-                <button
-                  type="button"
-                  // mousedown fires before the input's blur, so the pick wins.
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    void handleSuggestionPick(s);
-                  }}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors flex items-start gap-2"
-                >
-                  <RiMapPinLine className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
-                  <span className="min-w-0">
-                    <span className="block font-medium truncate">{s.primary}</span>
-                    {s.secondary && <span className="block text-xs text-muted-foreground truncate">{s.secondary}</span>}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
+        {open && status === "ready" && (
+          <AddressSuggestionMenu suggestions={suggestions} onPick={(s) => void handleSuggestionPick(s)} />
         )}
       </div>
 
