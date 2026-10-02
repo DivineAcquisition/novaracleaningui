@@ -1428,6 +1428,55 @@ serve(async (req) => {
         break;
       }
 
+      case "charge.dispute.created":
+      case "charge.dispute.updated":
+      case "charge.dispute.closed": {
+        // deno-lint-ignore no-explicit-any
+        const dispute = event.data.object as any;
+        try {
+          const pi = typeof dispute.payment_intent === "string" ? dispute.payment_intent : dispute.payment_intent?.id;
+          let bookingId: string | null = null;
+          if (pi) {
+            const { data: row } = await supabase.from("bookings").select("id").eq("payment_intent_id", pi).maybeSingle();
+            bookingId = row?.id || null;
+          }
+          const due = dispute.evidence_details?.due_by
+            ? new Date(Number(dispute.evidence_details.due_by) * 1000).toISOString()
+            : null;
+          if (event.type === "charge.dispute.closed") {
+            await supabase.from("dispute_evidence_cases").update({
+              status: String(dispute.status || "closed"),
+              outcome: String(dispute.status || ""),
+              outcome_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            }).eq("stripe_dispute_id", dispute.id);
+          } else {
+            const { data: existing } = await supabase.from("dispute_evidence_cases").select("status").eq("stripe_dispute_id", dispute.id).maybeSingle();
+            const frozen = existing?.status === "submitted" || existing?.status === "accepted_without_evidence";
+            if (!existing) {
+              await supabase.from("dispute_evidence_cases").insert({
+                stripe_dispute_id: dispute.id,
+                booking_id: bookingId,
+                reason: dispute.reason || null,
+                evidence_due_at: due,
+                status: "draft",
+              });
+            } else if (!frozen) {
+              await supabase.from("dispute_evidence_cases").update({
+                booking_id: bookingId,
+                reason: dispute.reason || null,
+                evidence_due_at: due,
+                updated_at: new Date().toISOString(),
+              }).eq("stripe_dispute_id", dispute.id);
+            }
+          }
+          logStep("Dispute evidence case recorded", { disputeId: dispute.id, type: event.type, bookingId });
+        } catch (err) {
+          logStep("Dispute evidence recording failed (non-blocking)", { error: err instanceof Error ? err.message : String(err) });
+        }
+        break;
+      }
+
       default:
         logStep("Unhandled event type", { type: event.type });
     }

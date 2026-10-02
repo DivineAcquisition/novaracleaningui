@@ -35,6 +35,7 @@ import {
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import DisputeEvidencePanel from "@/components/admin/DisputeEvidencePanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -1793,6 +1794,25 @@ export function CaseFileSheet({ bookingId, caseRef, onClose }: { bookingId: stri
 
         {cf && (
           <div className="mt-4 space-y-5">
+            <DisputeEvidencePanel
+              bookingId={bookingId}
+              bookingRef={cf.ref}
+              booking={cf.booking}
+              messages={(cf.incident?.ghl?.client?.messages || []) as Array<{
+                id?: string | null;
+                at?: string | null;
+                direction?: string | null;
+                messageType?: string | null;
+                body?: string | null;
+                transcript?: string | null;
+                callDurationSeconds?: number | null;
+                callStatus?: string | null;
+              }>}
+              acceptance={cf.agreements?.[0] ? {
+                signerName: cf.agreements[0].signed_by,
+                signedAt: cf.agreements[0].signed_at,
+              } : null}
+            />
             {/* Customer & job */}
             <section className="rounded-xl border border-slate-200 p-4 space-y-1.5">
               <p className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
