@@ -167,7 +167,7 @@ const NAV_ITEMS: NavItem[] = [
     title: "Quality Control",
     url: "/admin/qc",
     icon: RiShieldCheckLine,
-    description: "Job documentation · issues · dispute packets",
+    description: "Job documentation · issues · Stripe evidence",
   },
   {
     title: "VA Performance",

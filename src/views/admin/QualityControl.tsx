@@ -356,7 +356,7 @@ export default function QualityControl() {
             <RiShieldCheckLine className="w-6 h-6 text-violet-600" /> Quality Control
           </h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            A documented job is a defensible job — photos + checklist in Supabase, dispute packets in Drive.
+            A documented job is a defensible job — photos and checklist in Supabase, a Stripe evidence set of one file per evidence type.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -1115,7 +1115,7 @@ function IssueSheet({ issue, doc, onClose, reload }: {
                   {doc.drive_pdf_url && (
                     <a href={doc.drive_pdf_url} target="_blank" rel="noreferrer"
                       className="inline-flex items-center gap-1 text-xs font-semibold text-violet-700 hover:underline">
-                      <RiFileTextLine className="w-3.5 h-3.5" /> Dispute packet (PDF)
+                      <RiFileTextLine className="w-3.5 h-3.5" /> Archive packet (PDF)
                     </a>
                   )}
                 </div>
@@ -1783,7 +1783,7 @@ export function CaseFileSheet({ bookingId, caseRef, onClose }: { bookingId: stri
             <RiFolderCheckLine className="w-5 h-5 text-violet-600" /> Case file — {cf?.ref || caseRef || "…"}
           </SheetTitle>
           <SheetDescription>
-            Assembled live: agreement, payments, photos, checklist, GHL conversation history, communication log, contractor dossier, and a gap-aware incident-day timeline. Raw records are listed in full — never replaced by a summary.
+            Assembled live from the booking, photos, checklist, payments, and messages. Stripe evidence is a separate draft: completion summary, communication, acceptance record, and the matching policy file. The full agreement stays archived.
           </SheetDescription>
         </SheetHeader>
 
@@ -1812,6 +1812,16 @@ export function CaseFileSheet({ bookingId, caseRef, onClose }: { bookingId: stri
                 ...cf.photos.before.map((url, i) => ({ label: `Before ${i + 1}`, url })),
                 ...cf.photos.after.map((url, i) => ({ label: `After ${i + 1}`, url })),
               ]}
+              checklist={cf.checklist ? {
+                completed_items: cf.checklist.completed_items as number | null | undefined,
+                total_items: cf.checklist.total_items as number | null | undefined,
+              } : null}
+              charges={(cf.payments?.stripe || []).map((p) => ({
+                label: p.kind || "Charge",
+                amountCents: p.amount_cents,
+                paymentIntentId: p.payment_intent_id,
+                kind: p.kind,
+              }))}
               acceptance={cf.agreements?.[0] ? {
                 signerName: cf.agreements[0].signed_by,
                 signedAt: cf.agreements[0].signed_at,
@@ -1969,7 +1979,7 @@ export function CaseFileSheet({ bookingId, caseRef, onClose }: { bookingId: stri
                   )}
                   {cf.documentation.drive_pdf_url && (
                     <a href={cf.documentation.drive_pdf_url} target="_blank" rel="noreferrer" className="text-xs text-violet-600 font-semibold hover:underline inline-flex items-center gap-0.5">
-                      <RiFileTextLine className="w-3.5 h-3.5" /> Dispute packet (PDF)
+                      <RiFileTextLine className="w-3.5 h-3.5" /> Archive packet (PDF)
                     </a>
                   )}
                 </div>
@@ -2169,7 +2179,7 @@ export function CaseFileSheet({ bookingId, caseRef, onClose }: { bookingId: stri
                   ))}
                 </ul>
                 <p className="text-[10px] text-amber-700/70 mt-2">
-                  These commitments are baked into every dispute packet PDF alongside the signed agreement.
+                  These clauses are quoted in the refund and cancellation policy file. The full signed agreement is archived and is not attached to the Stripe upload.
                 </p>
               </section>
             )}

@@ -24,6 +24,8 @@ export default function DisputeEvidencePanel({
   booking,
   messages,
   photos,
+  checklist,
+  charges,
   acceptance,
 }: {
   bookingId: string;
@@ -31,6 +33,8 @@ export default function DisputeEvidencePanel({
   booking: Record<string, unknown>;
   messages?: GhlMessage[];
   photos?: Array<{ label: string; url?: string | null }>;
+  checklist?: { completed_items?: number | null; total_items?: number | null } | null;
+  charges?: Array<{ label: string; amountCents: number | null; paymentIntentId?: string | null; kind?: string | null }>;
   acceptance?: {
     signerName?: string | null;
     signedAt?: string | null;
@@ -94,10 +98,12 @@ export default function DisputeEvidencePanel({
             serviceDate: booking.service_date || null,
             scheduledWindow: booking.time_slot || booking.arrival_window || null,
             finishedAt: booking.completed_at || null,
+            checklistCompleted: checklist?.completed_items ?? null,
+            checklistTotal: checklist?.total_items ?? null,
             photos: photos || [],
             messages: mappedMessages,
             acceptance: acceptance || null,
-            charges: [],
+            charges: charges || [],
           },
         },
       });
@@ -114,7 +120,9 @@ export default function DisputeEvidencePanel({
   };
 
   const budget = result?.budget as { ok?: boolean; pages?: number; bytes?: number; errors?: string[] } | undefined;
-  const packets = (result?.packets as Array<{ filename: string; field: string; pages?: number; bytes?: number }> | undefined) || [];
+  const packets = (result?.packets as Array<{ filename: string; field: string; pages?: number; bytes?: number; trimmed?: boolean }> | undefined) || [];
+  const warnings = (result?.warnings as string[] | undefined) || [];
+  const over = budget?.ok === false;
 
   return (
     <section className="rounded-xl border border-slate-200 p-4 space-y-3">
@@ -122,7 +130,7 @@ export default function DisputeEvidencePanel({
         <RiShieldCheckLine className="w-4 h-4 text-violet-600" /> Stripe dispute evidence
       </p>
       <p className="text-xs text-slate-500">
-        Builds one file per evidence type. Budget is 19 pages and 4.5 MB. Nothing is submitted until you approve.
+        One file per evidence type: completion summary, communication, acceptance record, refund or cancellation policy, and a receipt only when the charge needs itemizing. Combined limit is 19 pages and 4.5 MB. The full agreement is not attached. Nothing is sent to Stripe until you approve.
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
         <input className="border rounded px-2 py-1 text-xs" placeholder="Stripe dispute id" value={disputeId} onChange={(e) => setDisputeId(e.target.value)} />
@@ -137,7 +145,7 @@ export default function DisputeEvidencePanel({
         <Button size="sm" variant="outline" disabled={busy} onClick={() => void run("preview")}>
           {busy ? <RiLoader4Line className="w-3 h-3 animate-spin" /> : "Build draft"}
         </Button>
-        <Button size="sm" disabled={busy} onClick={() => void run("submit")}>Approve and submit once</Button>
+        <Button size="sm" disabled={busy || over} onClick={() => void run("submit")}>Approve and submit once</Button>
       </div>
       <textarea className="w-full border rounded p-2 text-xs" rows={2} placeholder="Note required to accept without evidence" value={note} onChange={(e) => setNote(e.target.value)} />
       <Button size="sm" variant="ghost" disabled={busy} onClick={() => void run("accept_without_evidence")}>Accept dispute without evidence</Button>
@@ -154,8 +162,19 @@ export default function DisputeEvidencePanel({
           ))}
         </ul>
       )}
+      {warnings.length > 0 && (
+        <ul className="text-xs text-amber-800 space-y-1">
+          {warnings.map((w) => <li key={w}>{w}</li>)}
+        </ul>
+      )}
       {Array.isArray(result?.missing) && (result?.missing as string[]).length > 0 && (
         <p className="text-xs text-amber-700">Not recorded: {(result?.missing as string[]).join(", ")}</p>
+      )}
+      {typeof result?.narrative === "string" && result.narrative && (
+        <p className="text-xs text-slate-600 whitespace-pre-wrap">{result.narrative}</p>
+      )}
+      {typeof result?.omittedMessages === "number" && (
+        <p className="text-[11px] text-slate-500">{result.omittedMessages} routine messages omitted from the communication packet. The full history stays on the case.</p>
       )}
     </section>
   );
