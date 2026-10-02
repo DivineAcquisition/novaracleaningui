@@ -9,8 +9,10 @@
 // and also avoids the old .pac-container z-index / focus-trap issues inside
 // dialogs.
 //
-// Fallback chain: Google suggestion → geocode-address (Nominatim) on blur →
-// pure-JS parseAddressString. A status pill makes the active path obvious.
+// Suggestions: Google when it accepts the key, otherwise the keyless
+// /api/address/suggest lookup (Photon + US Census). Typed without picking:
+// /api/address/geocode → geocode-address edge function → pure-JS
+// parseAddressString.
 
 import {
   RiCheckboxCircleLine,
@@ -37,7 +39,7 @@ import {
 import { mergeAddressParts, parseAddressString } from "@/lib/address-formatter";
 import { useAddressAutocomplete, type AddressAutocompleteStatus } from "@/hooks/use-address-autocomplete";
 import { AddressSuggestionMenu } from "@/components/booking/AddressSuggestionMenu";
-import type { AddressSuggestion } from "@/lib/google-places-loader";
+import { geocodeTypedAddress, type AddressSuggestion } from "@/lib/google-places-loader";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -68,7 +70,6 @@ export function AddressAutocomplete({
   const [addressHistory, setAddressHistory] = useState<AddressHistoryItem[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [geocodedLocation, setGeocodedLocation] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);
   const pickedRef = useRef(false);
 
@@ -133,13 +134,29 @@ export function AddressAutocomplete({
     });
   };
 
-  // Manual parse path — Nominatim first, then pure-JS parse.
+  // Manual parse path — keyless geocode, then the geocode-address edge
+  // function, then pure-JS parse.
   const parseManualEntry = async (raw?: string) => {
     const value = (raw ?? inputRef.current?.value ?? "").trim();
     if (!value) return;
-    setBusy(true);
     const local = parseAddressString(value);
     try {
+      const keyless = await geocodeTypedAddress(value);
+      if (keyless) {
+        const merged = mergeAddressParts(keyless, local);
+        const finalStreet = merged.street || local.street || value;
+        setGeocodedLocation(keyless.formattedAddress || null);
+        onAddressSelect({
+          street: finalStreet,
+          city: merged.city || "",
+          state: merged.state || "",
+          zipCode: merged.zipCode || "",
+          lat: keyless.lat ?? 0,
+          lng: keyless.lng ?? 0,
+        });
+        if (inputRef.current && finalStreet) inputRef.current.value = finalStreet;
+        return;
+      }
       const { data, error } = await supabase.functions.invoke("geocode-address", {
         body: { address: value, city: local.city, state: local.state, zip: local.zipCode },
       });
@@ -163,8 +180,6 @@ export function AddressAutocomplete({
     } catch (err) {
       console.warn("[AddressAutocomplete:admin] geocode fallback failed", err);
       emitFallback(local, value);
-    } finally {
-      setBusy(false);
     }
   };
 
@@ -253,32 +268,6 @@ export function AddressAutocomplete({
         )}
       </div>
 
-      {status === "blocked" && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-900 flex items-start gap-1.5">
-          <RiErrorWarningLine className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-          <span>
-            Google Places blocked this domain. Type the address and click{" "}
-            <button
-              type="button"
-              className="font-semibold underline underline-offset-2"
-              onClick={() => parseManualEntry()}
-              disabled={busy}
-            >
-              Parse manually
-            </button>
-            {" "}to autofill city / state / ZIP. Add{" "}
-            <code className="bg-amber-100 px-1 rounded">*.novaracleaning.com/*</code>{" "}
-            to the API key in Google Cloud Console.
-          </span>
-        </div>
-      )}
-
-      {status === "manual" && (
-        <p className="text-[11px] text-slate-500">
-          Type a full address (e.g. &quot;123 Main St, Arlington, VA 22201&quot;) and we&apos;ll split the parts on blur.
-        </p>
-      )}
-
       {validationError && (
         <div className="flex items-start gap-1.5 text-[11px] text-rose-700">
           <RiErrorWarningLine className="w-3.5 h-3.5 shrink-0 mt-0.5" />
@@ -306,7 +295,7 @@ function StatusBadge({ state }: { state: AddressAutocompleteStatus }) {
       icon: <RiLoader4Line className="w-3 h-3 animate-spin" />,
     },
     ready: {
-      label: "Google Places · ready",
+      label: "Address search · ready",
       cls: "bg-violet-50 text-violet-700 border-violet-200",
       icon: <RiCheckboxCircleLine className="w-3 h-3" />,
     },

@@ -2,11 +2,10 @@
 
 // ─── Address autocomplete (customer/booking) ──────────────────────────────────
 //
-// Uses the modern Places API (New) via useAddressAutocomplete and renders its
-// OWN suggestion dropdown (the legacy google.maps.places.Autocomplete widget is
-// no longer served to new API keys, which is why the old dropdown never
-// appeared). Falls back to typed entry + server-side geocoding (Nominatim) on
-// blur when Google is unavailable or the domain isn't allow-listed.
+// Renders its OWN suggestion dropdown from useAddressAutocomplete: Google when
+// it accepts the key, otherwise the keyless /api/address/suggest lookup
+// (Photon + US Census). Typed without picking: /api/address/geocode, then the
+// geocode-address edge function, then a local parse.
 
 import {
   RiCheckboxCircleLine,
@@ -32,7 +31,7 @@ import {
 } from "@/lib/address-history";
 import { parseAddressString, mergeAddressParts } from "@/lib/address-formatter";
 import { useAddressAutocomplete } from "@/hooks/use-address-autocomplete";
-import type { AddressSuggestion } from "@/lib/google-places-loader";
+import { geocodeTypedAddress, type AddressSuggestion } from "@/lib/google-places-loader";
 import { AddressSuggestionMenu } from "@/components/booking/AddressSuggestionMenu";
 
 interface AddressComponents {
@@ -138,6 +137,21 @@ export function AddressAutocomplete({
 
     const locallyParsed = parseAddressString(value);
     try {
+      const keyless = await geocodeTypedAddress(value);
+      if (keyless) {
+        const parsed = mergeAddressParts(keyless, locallyParsed);
+        setGeocodedLocation(keyless.formattedAddress || null);
+        emit({
+          street: parsed.street || value,
+          city: parsed.city || "",
+          state: parsed.state || "",
+          zipCode: parsed.zipCode || "",
+          lat: keyless.lat,
+          lng: keyless.lng,
+        });
+        if (inputRef.current && parsed.street) inputRef.current.value = parsed.street;
+        return;
+      }
       const { data, error: geoErr } = await supabase.functions.invoke("geocode-address", {
         body: { address: value, city: "", state: "", zip: "" },
       });
@@ -237,12 +251,6 @@ export function AddressAutocomplete({
           <AddressSuggestionMenu suggestions={suggestions} onPick={(s) => void handleSuggestionPick(s)} />
         )}
       </div>
-
-      {(status === "manual" || status === "blocked") && (
-        <p className="text-[11px] text-muted-foreground">
-          Type your full street address (e.g. 123 Main St, Frederick, MD 21703) — we&apos;ll verify it automatically.
-        </p>
-      )}
 
       {validationError && (
         <div className="flex items-start gap-2 text-xs text-destructive">
