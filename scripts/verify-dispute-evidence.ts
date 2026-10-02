@@ -10,6 +10,14 @@ import {
 import { STRIPE_EVIDENCE_LIMITS } from "../supabase/functions/_shared/dispute-evidence/limits.ts";
 import { renderEvidenceSet, validateRendered } from "../supabase/functions/_shared/dispute-evidence/render.ts";
 import { submitDisputeEvidence } from "../supabase/functions/_shared/dispute-evidence/submit.ts";
+import {
+  chargeReadiness,
+  fingerprintPiece,
+  otherEvidenceLines,
+  preparePiece,
+  readinessShare,
+  type FrozenPiece,
+} from "../supabase/functions/_shared/dispute-evidence/prep.ts";
 
 let failed = 0;
 function assert(cond: unknown, msg: string) {
@@ -139,7 +147,7 @@ assert(check.bytes < 4_500_000, "size stays under 4.5 MB");
 const signature = rendered.find((p) => p.stripeField === "customer_signature");
 assert(signature && signature.pages <= 2, "acceptance record is one to two pages");
 const comm = rendered.find((p) => p.stripeField === "customer_communication");
-assert(comm && comm.pages <= 6, "communication packet stays within 6 pages");
+assert(comm && comm.pages <= 4, "communication packet stays within 4 pages");
 assert(!rendered.some((p) => p.filename.includes("agreement-full")), "full agreement is not attached");
 
 const uploads: string[] = [];
@@ -172,6 +180,107 @@ const dup = buildDisputeEvidence({
 });
 assert(dup.packets.some((p) => p.stripeField === "duplicate_charge_documentation"), "duplicate reason leads with the charge breakdown");
 assert(dup.policyField === null, "duplicate reason does not force a policy file");
+
+const now = "2026-10-02T16:00:00Z";
+const acceptanceLines = ["Signer: Ben", `IP address: ${NOT_RECORDED}`];
+let folder: FrozenPiece[] = [];
+const firstPrep = preparePiece(folder, {
+  clientKey: "bostrow11@gmail.com",
+  bookingId: "booking-1",
+  chargeKey: "pi_deposit",
+  kind: "acceptance",
+  seriesId: "agreement-1",
+  eventId: "acceptance:agreement-1",
+  lines: acceptanceLines,
+  now,
+  backfill: false,
+  gaps: ["signature has no IP recorded (older record)"],
+});
+folder = firstPrep.pieces;
+assert(firstPrep.created?.version === 1, "completing a booking prepares an acceptance record");
+assert(firstPrep.created?.gaps.some((gap) => gap.includes("no IP recorded")) === true, "the gap names the older signature");
+assert(firstPrep.created?.fingerprint === fingerprintPiece("acceptance", acceptanceLines), "prepared piece carries a fingerprint");
+const retry = preparePiece(folder, {
+  clientKey: "bostrow11@gmail.com",
+  bookingId: "booking-1",
+  chargeKey: "pi_deposit",
+  kind: "acceptance",
+  seriesId: "agreement-1",
+  eventId: "acceptance:agreement-1",
+  lines: acceptanceLines,
+  now,
+  backfill: false,
+});
+assert(retry.duplicate === true && retry.created === null, "retrying a prep event does not create a duplicate");
+const frozenEdit = preparePiece(folder, {
+  clientKey: "bostrow11@gmail.com",
+  bookingId: "booking-1",
+  chargeKey: "pi_deposit",
+  kind: "acceptance",
+  seriesId: "agreement-1",
+  eventId: "acceptance:agreement-1:edit",
+  lines: ["Signer: Someone else"],
+  now,
+  backfill: false,
+});
+assert(Boolean(frozenEdit.rejected), "a frozen piece cannot be edited in place");
+const corrected = preparePiece(folder, {
+  clientKey: "bostrow11@gmail.com",
+  bookingId: "booking-1",
+  chargeKey: "pi_deposit",
+  kind: "acceptance",
+  seriesId: "agreement-1",
+  eventId: "acceptance:agreement-1:photo",
+  lines: [...acceptanceLines, "Late signature image added"],
+  now,
+  backfill: false,
+  correctionReason: "late signature image",
+});
+folder = corrected.pieces;
+assert(corrected.created?.version === 2, "a correction creates a new version");
+assert(folder.filter((piece) => piece.kind === "acceptance").length === 2, "the old version is kept");
+const resign = preparePiece(folder, {
+  clientKey: "bostrow11@gmail.com",
+  bookingId: "booking-1",
+  chargeKey: "pi_deposit",
+  kind: "acceptance",
+  seriesId: "agreement-2-autopay",
+  eventId: "acceptance:autopay",
+  lines: ["Signer: Ben", "Payment option: Auto-Pay"],
+  now,
+  backfill: false,
+});
+folder = resign.pieces;
+assert(resign.created?.version === 1, "switching payment authorization prepares a new acceptance record");
+assert(folder.filter((piece) => piece.kind === "acceptance" && piece.seriesId === "agreement-1").length === 2, "the earlier acceptance record is kept");
+
+for (const kind of ["policy", "receipt", "completion"] as const) {
+  const prep = preparePiece(folder, {
+    clientKey: "bostrow11@gmail.com",
+    bookingId: "booking-1",
+    chargeKey: "pi_deposit",
+    kind,
+    seriesId: kind,
+    eventId: `${kind}:booking-1`,
+    lines: kind === "completion" ? ["Photographs on file: 0"] : ["ok"],
+    now,
+    backfill: true,
+    gaps: kind === "completion" ? ["completion photos missing"] : [],
+  });
+  folder = prep.pieces;
+  assert(prep.created?.lines[0].startsWith("Prepared from existing records on 2026-10-02"), `${kind} backfill is labeled with the preparation date`);
+}
+const readiness = chargeReadiness(folder, "pi_deposit");
+assert(readiness.status === "ready_with_gaps", "a missing photo and a signature without an IP is Ready with gaps");
+assert(readiness.gaps.some((gap) => gap.includes("completion photos missing")), "the gap names the missing photos");
+const share = readinessShare([readiness, { status: "ready" }]);
+assert(share.shareReady === 0.5, "weekly readiness is the share of charges that are ready");
+const none = otherEvidenceLines([], 20);
+assert(none === null, "no Other Evidence file when nothing relevant exists");
+const other = otherEvidenceLines([
+  { priority: 2, source: "bookings", at: "2026-08-01", text: "Prior paid booking NVC-0090 for $140.00" },
+], 20);
+assert(other?.lines.some((line) => line.includes("NVC-0090")) === true, "prior paid bookings are listed with the amount");
 
 if (failed) {
   console.error(`\n${failed} failed`);

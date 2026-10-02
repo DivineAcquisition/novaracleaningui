@@ -115,11 +115,13 @@ export interface DisputeBuildInput {
   disputedAmountCents?: number | null;
   /** Names and phones that must never appear (contractor, other customers). */
   redact?: { names?: string[]; phones?: string[] };
+  /** Verified items for the optional Other Evidence file. */
+  otherItems?: Array<{ priority: number; source: string; at: string; text: string }>;
   limits?: Partial<DisputeEvidenceLimits>;
 }
 
 export interface PacketDoc {
-  id: "completion" | "communication" | "acceptance" | "policy" | "receipt";
+  id: "completion" | "communication" | "acceptance" | "policy" | "receipt" | "other";
   filename: string;
   stripeField: string;
   title: string;

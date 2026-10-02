@@ -50,6 +50,24 @@ export default function DisputeEvidencePanel({
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
   const [result, setResult] = useState<Record<string, unknown> | null>(null);
+  const [readiness, setReadiness] = useState<Array<{ chargeKey: string; status: string; gaps: string[] }> | null>(null);
+
+  const loadReadiness = async () => {
+    setBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("dispute-evidence", {
+        body: { action: "readiness", bookingId, chargeKey: String(booking.payment_intent_id || "") },
+      });
+      if (error) throw error;
+      const payload = data as { ok?: boolean; error?: string; charges?: Array<{ chargeKey: string; status: string; gaps: string[] }> };
+      if (payload?.ok === false) throw new Error(payload.error || "Failed");
+      setReadiness(payload.charges || []);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Readiness failed");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const mappedMessages = useMemo(() => (messages || []).map((m) => {
     const type = String(m.messageType || "").toUpperCase();
@@ -142,6 +160,7 @@ export default function DisputeEvidencePanel({
         <input className="border rounded px-2 py-1 text-xs" type="datetime-local" value={due} onChange={(e) => setDue(e.target.value)} />
       </div>
       <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="outline" disabled={busy} onClick={() => void loadReadiness()}>Readiness</Button>
         <Button size="sm" variant="outline" disabled={busy} onClick={() => void run("preview")}>
           {busy ? <RiLoader4Line className="w-3 h-3 animate-spin" /> : "Build draft"}
         </Button>
@@ -173,6 +192,12 @@ export default function DisputeEvidencePanel({
       {typeof result?.narrative === "string" && result.narrative && (
         <p className="text-xs text-slate-600 whitespace-pre-wrap">{result.narrative}</p>
       )}
+      {readiness && readiness.length === 0 && <p className="text-xs text-slate-500">Not ready. No prepared pieces are filed for this booking yet.</p>}
+      {readiness?.map((row) => (
+        <p key={row.chargeKey} className="text-xs text-slate-700">
+          {row.chargeKey}: {row.status.replace(/_/g, " ")}{row.gaps.length ? ` — ${row.gaps.join("; ")}` : ""}
+        </p>
+      ))}
       {typeof result?.omittedMessages === "number" && (
         <p className="text-[11px] text-slate-500">{result.omittedMessages} routine messages omitted from the communication packet. The full history stays on the case.</p>
       )}

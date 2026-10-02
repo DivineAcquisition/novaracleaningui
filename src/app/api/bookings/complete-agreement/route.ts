@@ -156,6 +156,43 @@ export async function POST(req: Request): Promise<NextResponse> {
           updated_at: new Date().toISOString(),
         })
         .eq("id", claim.id);
+      void supabase.functions.invoke("dispute-evidence", {
+        body: {
+          action: "prep",
+          kind: "acceptance",
+          bookingId: booking.id,
+          clientKey: booking.email,
+          chargeKey: booking.payment_intent_id || booking.id,
+          seriesId: `agreement:${booking.id}`,
+          eventId: `acceptance:${booking.id}`,
+          input: {
+            disputeId: `prep-${booking.id}`,
+            reason: "general",
+            customerEmail: booking.email,
+            customerName: name,
+            acceptance: {
+              signerName: name,
+              email: booking.email,
+              signedAt: new Date().toISOString(),
+              agreementName: "One-Time Service Agreement",
+              amountLabel: totalCents ? `$${(totalCents / 100).toFixed(2)}` : null,
+              depositLabel: depositCents ? `$${(depositCents / 100).toFixed(2)} deposit` : null,
+            },
+          },
+        },
+      }).catch(() => undefined);
+      void supabase.functions.invoke("dispute-evidence", {
+        body: {
+          action: "prep",
+          kind: "policy",
+          bookingId: booking.id,
+          clientKey: booking.email,
+          chargeKey: booking.payment_intent_id || booking.id,
+          seriesId: `policy:${booking.id}`,
+          eventId: `policy:${booking.id}`,
+          input: { disputeId: `prep-${booking.id}`, reason: "general", customerEmail: booking.email },
+        },
+      }).catch(() => undefined);
       return NextResponse.json({ ok: true, ...result });
     } catch (sendErr) {
       // Release the claim so a later retry (payment success) can try again.

@@ -5,6 +5,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { PDFDocument, StandardFonts, rgb } from "https://esm.sh/pdf-lib@1.17.1";
 import { buildDisputeEvidence, type DisputeBuildInput } from "../_shared/dispute-evidence/build.ts";
+import { chargeReadiness, linesForPrep, preparePiece, type FrozenPiece, type PieceKind } from "../_shared/dispute-evidence/prep.ts";
 import { STRIPE_EVIDENCE_LIMITS } from "../_shared/dispute-evidence/limits.ts";
 import { renderEvidenceSet, validateRendered } from "../_shared/dispute-evidence/render.ts";
 import { submitDisputeEvidence } from "../_shared/dispute-evidence/submit.ts";
@@ -84,6 +85,87 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const action = String(body.action || "preview");
     const input = body.input as DisputeBuildInput | undefined;
+
+    if (action === "readiness") {
+      const bookingId = String(body.bookingId || "");
+      const chargeKey = String(body.chargeKey || "");
+      const { data, error } = await admin.from("client_evidence_pieces").select("*").eq("booking_id", bookingId);
+      if (error) return json({ ok: false, error: error.message }, 500);
+      const pieces = (data || []) as FrozenPiece[];
+      const keys = chargeKey ? [chargeKey] : [...new Set(pieces.map((piece) => piece.chargeKey).filter(Boolean))] as string[];
+      return json({
+        ok: true,
+        charges: keys.map((key) => ({ chargeKey: key, ...chargeReadiness(pieces, key) })),
+      });
+    }
+
+    if (action === "prep") {
+      const kind = String(body.kind || "") as PieceKind;
+      const prepInput = body.input as DisputeBuildInput | undefined;
+      if (!prepInput) return json({ ok: false, error: "input is required" }, 400);
+      const built = linesForPrep(kind, {
+        ...prepInput,
+        disputeId: prepInput.disputeId || `prep-${body.bookingId || "client"}`,
+        reason: prepInput.reason || "general",
+      });
+      const { data: rows } = await admin.from("client_evidence_pieces").select("*").eq("client_key", String(body.clientKey || prepInput.customerEmail || "unknown"));
+      const existing = ((rows || []) as Array<Record<string, unknown>>).map((row) => ({
+        id: String(row.id),
+        clientKey: String(row.client_key),
+        bookingId: row.booking_id ? String(row.booking_id) : null,
+        chargeKey: row.charge_key ? String(row.charge_key) : null,
+        kind: row.kind as PieceKind,
+        seriesId: String(row.series_id),
+        version: Number(row.version),
+        eventId: String(row.event_id),
+        reason: String(row.reason),
+        fingerprint: String(row.fingerprint),
+        generatedAt: String(row.generated_at),
+        backfill: Boolean(row.backfill),
+        superseded: Boolean(row.superseded),
+        lines: row.lines as string[],
+        gaps: (row.gaps as string[]) || [],
+      })) as FrozenPiece[];
+      const result = preparePiece(existing, {
+        clientKey: String(body.clientKey || prepInput.customerEmail || "unknown"),
+        bookingId: body.bookingId ? String(body.bookingId) : null,
+        chargeKey: body.chargeKey ? String(body.chargeKey) : null,
+        kind,
+        seriesId: String(body.seriesId || kind),
+        eventId: String(body.eventId || `${kind}:${body.bookingId || "client"}`),
+        lines: built.lines,
+        now: String(body.now || new Date().toISOString()),
+        backfill: Boolean(body.backfill),
+        correctionReason: body.correctionReason ? String(body.correctionReason) : null,
+        gaps: built.gaps,
+      });
+      if (result.rejected) return json({ ok: true, rejected: result.rejected });
+      if (!result.created) return json({ ok: true, duplicate: true });
+      const created = result.created;
+      if (created.version > 1) {
+        await admin.from("client_evidence_pieces").update({ superseded: true }).eq("client_key", created.clientKey).eq("kind", created.kind).eq("series_id", created.seriesId).eq("superseded", false);
+      }
+      const { error } = await admin.from("client_evidence_pieces").insert({
+        client_key: created.clientKey,
+        booking_id: created.bookingId,
+        charge_key: created.chargeKey,
+        kind: created.kind,
+        series_id: created.seriesId,
+        version: created.version,
+        event_id: created.eventId,
+        reason: created.reason,
+        fingerprint: created.fingerprint,
+        generated_at: created.generatedAt,
+        backfill: created.backfill,
+        superseded: false,
+        lines: created.lines,
+        gaps: created.gaps,
+      });
+      if (error && /duplicate|unique/i.test(error.message)) return json({ ok: true, duplicate: true });
+      if (error) return json({ ok: false, error: error.message }, 500);
+      return json({ ok: true, created: { kind: created.kind, version: created.version, fingerprint: created.fingerprint, generatedAt: created.generatedAt } });
+    }
+
     if (!input?.disputeId || !input.reason) return json({ ok: false, error: "input.disputeId and input.reason are required" }, 400);
 
     if (action === "accept_without_evidence") {
