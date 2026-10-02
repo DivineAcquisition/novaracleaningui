@@ -1826,6 +1826,11 @@ export function CaseFileSheet({ bookingId, caseRef, onClose }: { bookingId: stri
                 signerName: cf.agreements[0].signed_by,
                 signedAt: cf.agreements[0].signed_at,
               } : null}
+              drive={{
+                folderUrl: cf.documentation?.drive_folder_url || null,
+                summaryUrl: cf.documentation?.drive_pdf_url || null,
+                agreementUrl: cf.agreements?.[0]?.pdf_url || cf.docuseal?.find((d) => d.document_url)?.document_url || null,
+              }}
             />
             {/* Customer & job */}
             <section className="rounded-xl border border-slate-200 p-4 space-y-1.5">
