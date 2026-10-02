@@ -23,12 +23,14 @@ export default function DisputeEvidencePanel({
   bookingRef,
   booking,
   messages,
+  photos,
   acceptance,
 }: {
   bookingId: string;
   bookingRef?: string | null;
   booking: Record<string, unknown>;
   messages?: GhlMessage[];
+  photos?: Array<{ label: string; url?: string | null }>;
   acceptance?: {
     signerName?: string | null;
     signedAt?: string | null;
@@ -92,7 +94,7 @@ export default function DisputeEvidencePanel({
             serviceDate: booking.service_date || null,
             scheduledWindow: booking.time_slot || booking.arrival_window || null,
             finishedAt: booking.completed_at || null,
-            photos: [],
+            photos: photos || [],
             messages: mappedMessages,
             acceptance: acceptance || null,
             charges: [],

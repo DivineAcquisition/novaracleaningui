@@ -54,6 +54,8 @@ export interface EvidencePhoto {
   label: string;
   /** When absent, the summary says the image was not recorded. */
   bytes?: Uint8Array | null;
+  /** Fetched by the evidence function before the PDF is built. Not printed. */
+  url?: string | null;
 }
 
 export interface AcceptanceInput {
@@ -122,6 +124,7 @@ export interface PacketDoc {
   stripeField: string;
   title: string;
   lines: string[];
+  images?: Array<{ label: string; bytes: Uint8Array }>;
   pageCap: number;
   trimmed: boolean;
   warnings: string[];
@@ -477,6 +480,10 @@ export function buildDisputeEvidence(input: DisputeBuildInput): DisputeEvidenceS
       pageCap: limits.packetPages.service_documentation,
       trimmed: summary.warnings.some((w) => w.includes("Photographs were reduced")),
       warnings: summary.warnings,
+      images: (input.photos || []).filter((p) => p.bytes && p.bytes.byteLength > 0).slice(0, 16).map((p) => ({
+        label: redactInternal(p.label, input.redact),
+        bytes: p.bytes as Uint8Array,
+      })),
     },
     {
       id: "communication",

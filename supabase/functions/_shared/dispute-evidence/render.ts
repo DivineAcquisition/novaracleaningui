@@ -15,10 +15,17 @@ interface PdfFont {
 interface PdfPage {
   drawText(text: string, opts: Record<string, unknown>): void;
   drawLine(opts: Record<string, unknown>): void;
+  drawImage(image: unknown, opts: Record<string, unknown>): void;
+}
+interface PdfImage {
+  width: number;
+  height: number;
 }
 interface PdfDoc {
   addPage(size: [number, number]): PdfPage;
   embedFont(font: string): Promise<PdfFont>;
+  embedJpg(bytes: Uint8Array): Promise<PdfImage>;
+  embedPng(bytes: Uint8Array): Promise<PdfImage>;
   getPages(): PdfPage[];
   save(): Promise<Uint8Array>;
 }
@@ -88,6 +95,37 @@ export async function renderPacketPdf(lib: PdfLibLike, packet: PacketDoc): Promi
     const isLabel = /^(Customer|Novara|Photo |Booking |Service|Timeline|Automated transcript)/.test(line)
       || line.endsWith(":");
     drawWrapped(line, line.startsWith("Automated transcript") ? 9 : 9, isLabel && line.length < 80 ? bold : font);
+  }
+  const images = packet.images || [];
+  for (let i = 0; i < images.length; i += 4) {
+    if (pages >= packet.pageCap) {
+      if (y < BOTTOM) break;
+      drawWrapped(`${images.length - i} photographs were not included because of the page cap.`, 9, font);
+      break;
+    }
+    if (y < 180) next();
+    if (pages > packet.pageCap) break;
+    const row = images.slice(i, i + 4);
+    for (let n = 0; n < row.length; n++) {
+      const img = row[n];
+      try {
+        const png = img.bytes[0] === 0x89 && img.bytes[1] === 0x50;
+        const embedded = png ? await pdf.embedPng(img.bytes) : await pdf.embedJpg(img.bytes);
+        const maxW = (PAGE_W - MARGIN * 2 - 12) / 2;
+        const maxH = 150;
+        const scale = Math.min(maxW / embedded.width, maxH / embedded.height, 1);
+        const w = embedded.width * scale;
+        const h = embedded.height * scale;
+        const col = n % 2;
+        const x = MARGIN + col * (maxW + 12);
+        if (col === 0 && y - h - 14 < BOTTOM) next();
+        page.drawText(pdfSafe(img.label).slice(0, 42), { x, y, size: 8, font: bold, color: black });
+        page.drawImage(embedded, { x, y: y - h - 12, width: w, height: h });
+        if (col === 1 || n === row.length - 1) y -= h + 28;
+      } catch {
+        drawWrapped(`${img.label}: image could not be embedded`, 9, font);
+      }
+    }
   }
   footer();
   const bytes = await pdf.save();

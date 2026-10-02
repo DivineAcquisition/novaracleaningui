@@ -1808,6 +1808,10 @@ export function CaseFileSheet({ bookingId, caseRef, onClose }: { bookingId: stri
                 callDurationSeconds?: number | null;
                 callStatus?: string | null;
               }>}
+              photos={[
+                ...cf.photos.before.map((url, i) => ({ label: `Before ${i + 1}`, url })),
+                ...cf.photos.after.map((url, i) => ({ label: `After ${i + 1}`, url })),
+              ]}
               acceptance={cf.agreements?.[0] ? {
                 signerName: cf.agreements[0].signed_by,
                 signedAt: cf.agreements[0].signed_at,

@@ -100,6 +100,21 @@ serve(async (req) => {
       return json({ ok: true, status: "accepted_without_evidence" });
     }
 
+    const photos = input.photos || [];
+    for (const photo of photos) {
+      if (photo.bytes || !photo.url) continue;
+      if (photos.filter((p) => p.bytes).length >= 12) break;
+      try {
+        const res = await fetch(photo.url);
+        if (!res.ok) continue;
+        const type = res.headers.get("content-type") || "";
+        if (!/jpeg|jpg|png/i.test(type) && !/\.(jpe?g|png)(\?|$)/i.test(photo.url)) continue;
+        const buf = new Uint8Array(await res.arrayBuffer());
+        if (buf.byteLength > 0 && buf.byteLength < 1_500_000) photo.bytes = buf;
+      } catch {
+        /* a failed fetch stays "image bytes not recorded" */
+      }
+    }
     const evidence = buildDisputeEvidence(input);
     const rendered = await renderEvidenceSet({ PDFDocument, StandardFonts, rgb }, evidence.packets);
     const text = Object.values(evidence.textFields).join("");
