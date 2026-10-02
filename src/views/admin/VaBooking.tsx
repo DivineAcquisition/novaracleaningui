@@ -72,6 +72,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { looksLikeNovaraStaffEmail } from "@/lib/staff-customer";
 import { useAvailability } from "@/hooks/use-availability";
+import { useAdminRole } from "@/hooks/use-admin-role";
 import { useDynamicQuote } from "@/hooks/use-dynamic-quote";
 import { PriceBreakdownCard } from "@/components/admin/PriceBreakdownCard";
 
@@ -86,6 +87,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { buildSignedAgreementBase64 } from "@/lib/service-agreement";
 import { sendCustomerChecklist, sendMembershipAgreement } from "@/lib/membership-admin";
 import { Input } from "@/components/ui/input";
@@ -339,6 +341,7 @@ function previewRecurringDates(start: string, cadence: Cadence, count = 4): stri
 // ─── Page ──────────────────────────────────────────────────────────────
 
 export default function VaBooking() {
+  const { isAdmin } = useAdminRole();
   const router = useRouter();
   const searchParams = useSearchParams();
   const leadIdParam = searchParams.get("lead_id");
@@ -569,6 +572,10 @@ export default function VaBooking() {
   // logged to price_overrides.
   const [overrideReason, setOverrideReason] = useState("");
   const [overrideNote, setOverrideNote] = useState("");
+  // Admins can lift service-area, price-floor, capacity, and calendar blocks.
+  // The server re-checks the admin role before it honors this.
+  const [adminOverride, setAdminOverride] = useState(false);
+  const [adminOverrideNote, setAdminOverrideNote] = useState("");
   const [promoCode, setPromoCode] = useState("");
   const [sendConfirmationSms, setSendConfirmationSms] = useState(true);
   const [sendChecklistEmail, setSendChecklistEmail] = useState(true);
@@ -1005,27 +1012,35 @@ export default function VaBooking() {
   const phoneDigits = digitsOnly(phone);
   const zipDigits = digitsOnly(zipCode);
 
+  const restrictionsLifted = isAdmin && adminOverride;
+
   const requirements = useMemo(() => {
     const list: string[] = [];
     if (!firstName.trim()) list.push("First name");
     if (!isValidEmail(email)) list.push("Valid email");
-    else if (looksLikeNovaraStaffEmail(email)) list.push("A personal customer email (not @novaracleaning.com)");
+    else if (!restrictionsLifted && looksLikeNovaraStaffEmail(email)) list.push("A personal customer email (not @novaracleaning.com)");
     if (phoneDigits.length < 10) list.push("Phone (10+ digits)");
     if (zipDigits.length !== 5) list.push("ZIP (5 digits)");
     if (!selectedDate) list.push(isRecurring ? "First service date" : "Service date");
     if (!selectedTime) list.push(isRecurring ? "Preferred time window" : "Time slot");
     // The verbal-agreement attestation is a one-time compliance artifact.
     // Recurring plans send the membership agreement for e-sign instead.
-    if (!isRecurring && !vaAgreedOnPhone) list.push("Confirm client agreed (phone)");
+    // An admin override can waive it; the waiver is written on the booking.
+    if (!restrictionsLifted && !isRecurring && !vaAgreedOnPhone) list.push("Confirm client agreed (phone)");
     // Unserved address → no quote, no booking; offer the waitlist instead.
-    if (zipDigits.length === 5 && !dynQuote.served) list.push("Serviceable ZIP (area not served — offer waitlist)");
+    // An admin override still needs a typed total, because there is no zone price.
+    if (zipDigits.length === 5 && !dynQuote.served) {
+      if (!restrictionsLifted) list.push("Serviceable ZIP (area not served — offer waitlist)");
+      else if (!overrideTotal.trim()) list.push("Adjusted total (outside the service area)");
+    }
     if (serviceType === "focused" && focusedSelections.length === 0) {
       list.push("At least one focused-clean area");
     }
     // Any price adjustment needs a reason from the standard list.
     if (!isRecurring && overrideTotal.trim() && !overrideReason) list.push("Adjustment reason");
+    if (restrictionsLifted && !adminOverrideNote.trim()) list.push("Override note");
     return list;
-  }, [firstName, email, phoneDigits, zipDigits, selectedDate, selectedTime, vaAgreedOnPhone, isRecurring, dynQuote.served, serviceType, focusedSelections, overrideTotal, overrideReason]);
+  }, [firstName, email, phoneDigits, zipDigits, selectedDate, selectedTime, vaAgreedOnPhone, isRecurring, dynQuote.served, serviceType, focusedSelections, overrideTotal, overrideReason, restrictionsLifted, adminOverrideNote]);
 
   const canSubmit = requirements.length === 0;
 
@@ -1083,6 +1098,7 @@ export default function VaBooking() {
           notes: [
             teamNotes.trim() || null,
             overrideNote,
+            restrictionsLifted ? `Admin restriction override: ${adminOverrideNote.trim()}` : null,
             deepClean.includeDeepClean
               ? "First-clean deep: include (+$75 on first visit only)."
               : `First-clean deep declined${deepClean.deepCleanedBefore === "yes" ? " (recently deep cleaned)" : ""}; surge may apply if condition requires a reset.`,
@@ -1390,10 +1406,12 @@ export default function VaBooking() {
         },
         sendConfirmationSms,
         sendChecklistEmail,
+        adminOverride: restrictionsLifted || undefined,
+        adminOverrideNote: restrictionsLifted ? adminOverrideNote.trim() : undefined,
       };
       if (overrideTotal.trim()) {
         const overrideCents = Math.round(parseFloat(overrideTotal) * 100);
-        if (dynQuote.breakdown?.ok) {
+        if (dynQuote.breakdown?.ok || restrictionsLifted) {
           // Dynamic pricing path: bounded VA adjustment with a required
           // reason. Server enforces the band and the absolute floor.
           payload.vaOverride = {
@@ -1891,6 +1909,38 @@ export default function VaBooking() {
         </div>
       </div>
 
+      {isAdmin && (
+        <div className="mb-6 rounded-2xl border border-violet-200 bg-violet-50/70 p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-slate-900">Override restrictions</p>
+              <p className="text-xs text-slate-600 mt-1">
+                Admins only. Turns off the service-area block, the price floor, full time slots,
+                the calendar window, the staff-email block, and the phone-agreement checkbox.
+                The booking is logged with your note. VAs cannot do this.
+              </p>
+            </div>
+            <Switch
+              checked={adminOverride}
+              onCheckedChange={setAdminOverride}
+              aria-label="Override booking restrictions"
+            />
+          </div>
+          {adminOverride && (
+            <div className="mt-3">
+              <Field label="Why this booking breaks a rule" required>
+                <Input
+                  value={adminOverrideNote}
+                  onChange={(e) => setAdminOverrideNote(e.target.value)}
+                  placeholder="Example: customer is just outside the zone and approved a custom price"
+                  className="bg-white"
+                />
+              </Field>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Optional inline lead lookup */}
       {leadLookupOpen && (
         <Card className="mb-6 border border-slate-200 rounded-2xl shadow-sm">
@@ -2073,8 +2123,10 @@ export default function VaBooking() {
                 </p>
               )}
               {zipDigits.length === 5 && !dynQuote.loading && !dynQuote.served && (
-                <p className="col-span-12 text-[11px] text-rose-700 -mt-2">
-                  Outside the service area (MD + DC + Northern VA). Offer the waitlist — no quote.
+                <p className={`col-span-12 text-[11px] -mt-2 ${restrictionsLifted ? "text-amber-800" : "text-rose-700"}`}>
+                  {restrictionsLifted
+                    ? "Outside the service area. Restriction override is on — enter an adjusted total to book this ZIP."
+                    : "Outside the service area (MD + DC + Northern VA). Offer the waitlist — no quote."}
                 </p>
               )}
             </div>
@@ -2563,6 +2615,7 @@ export default function VaBooking() {
             <InlineSchedulePicker
               selectedDate={selectedDate}
               selectedTime={selectedTime}
+              allowOverride={restrictionsLifted}
               onDateSelect={(d) => {
                 setSelectedDate(d);
                 setSelectedTime(undefined);
@@ -2713,6 +2766,14 @@ export default function VaBooking() {
                     const deltaPct = computed > 0 ? ((overrideCents - computed) / computed) * 100 : 0;
                     const band = dynQuote.meta.overrideBandPercent;
                     if (floor > 0 && overrideCents < floor) {
+                      if (restrictionsLifted) {
+                        return (
+                          <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+                            <strong>Below the floor.</strong> The usual minimum is {fmtMoney(floor)}.
+                            Restriction override is on, so this price will book and be logged.
+                          </div>
+                        );
+                      }
                       return (
                         <div className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-[11px] text-rose-800">
                           <strong>Below the floor.</strong> The minimum for this service and size is{" "}
@@ -3152,21 +3213,24 @@ export default function VaBooking() {
 function InlineSchedulePicker({
   selectedDate,
   selectedTime,
+  allowOverride = false,
   onDateSelect,
   onTimeSelect,
 }: {
   selectedDate: Date | undefined;
   selectedTime: string | undefined;
+  allowOverride?: boolean;
   onDateSelect: (d: Date) => void;
   onTimeSelect: (slot: string) => void;
 }) {
   // Internal booking can pick ANY upcoming date — the standard 3-day lead is
   // no longer a hard block, just a "short notice" highlight so the booker
-  // knows the date is inside the normal lead window.
+  // knows the date is inside the normal lead window. An admin override also
+  // opens past dates, dates past 60 days, and slots that are already full.
   const today = startOfDay(new Date());
-  const minDate = today;
+  const minDate = allowOverride ? addMonths(today, -12) : today;
   const recommendedDate = addDays(today, 3);
-  const endDate = addDays(new Date(), 60);
+  const endDate = addDays(new Date(), allowOverride ? 365 : 60);
   const [currentMonth, setCurrentMonth] = useState(startOfMonth(today));
   const { availability, loading } = useAvailability(minDate, endDate);
 
@@ -3187,7 +3251,7 @@ function InlineSchedulePicker({
   const slotsForDate = selectedDateStr ? availabilityByDate[selectedDateStr] || {} : {};
 
   // Only past dates are blocked — weekends and short-notice dates are allowed.
-  const isDateDisabled = (d: Date) => isBefore(startOfDay(d), today);
+  const isDateDisabled = (d: Date) => !allowOverride && isBefore(startOfDay(d), today);
   // Selectable, but inside the standard 3-day lead window → flag it.
   const isShortNotice = (d: Date) =>
     !isDateDisabled(d) && isBefore(startOfDay(d), recommendedDate);
@@ -3342,8 +3406,8 @@ function InlineSchedulePicker({
                     <div className="grid grid-cols-4 gap-1.5">
                       {slots.map((slot) => {
                         const av = slotsForDate[slot.id];
-                        const available =
-                          av === undefined ? true : av.available;
+                        const open = av === undefined ? true : av.available;
+                        const available = allowOverride ? true : open;
                         const isSel = selectedTime === slot.id;
                         return (
                           <button
@@ -3351,13 +3415,16 @@ function InlineSchedulePicker({
                             type="button"
                             onClick={() => available && onTimeSelect(slot.id)}
                             disabled={!available}
+                            title={!open && allowOverride ? "Full — selectable because restrictions are overridden" : undefined}
                             className={cn(
                               "h-8 rounded-md text-xs font-semibold transition-all tabular-nums",
                               isSel
                                 ? "bg-violet-600 text-white shadow-[0_2px_4px_-1px_rgba(16,163,74,0.45)]"
-                                : available
-                                  ? "bg-slate-50 text-slate-700 hover:bg-violet-50 hover:text-violet-900 border border-slate-200"
-                                  : "bg-slate-100 text-slate-400 line-through cursor-not-allowed border border-slate-100",
+                                : !open && allowOverride
+                                  ? "bg-amber-50 text-amber-900 hover:bg-amber-100 border border-amber-300"
+                                  : available
+                                    ? "bg-slate-50 text-slate-700 hover:bg-violet-50 hover:text-violet-900 border border-slate-200"
+                                    : "bg-slate-100 text-slate-400 line-through cursor-not-allowed border border-slate-100",
                             )}
                           >
                             {slot.label}

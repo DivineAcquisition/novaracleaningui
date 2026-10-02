@@ -532,6 +532,24 @@ async function ghlPushBooking(
   return { contactId, opportunityId };
 }
 
+/** True only when the request JWT belongs to a user with the admin role. */
+async function callerIsAdmin(req: Request, supabase: ReturnType<typeof createClient>): Promise<boolean> {
+  const jwt = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
+  const anon = Deno.env.get("SUPABASE_ANON_KEY") || "";
+  const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  if (!jwt || jwt === anon || jwt === service) return false;
+  const userClient = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    anon,
+    { global: { headers: { Authorization: `Bearer ${jwt}` } } },
+  );
+  const { data } = await userClient.auth.getUser(jwt);
+  const uid = data?.user?.id;
+  if (!uid) return false;
+  const { data: roles } = await supabase.from("user_roles").select("role").eq("user_id", uid);
+  return (roles || []).some((r: { role: string }) => r.role === "admin");
+}
+
 // ─── Main handler ───────────────────────────────────────────────────
 interface VaBookingBody {
   leadId?: string;
@@ -613,6 +631,12 @@ interface VaBookingBody {
   };
   /** Optional promo code from the admin form. Currently informational only on the VA path. */
   promoCode?: string;
+  /**
+   * Admin-only. Bypasses service-area, price-floor, and staff-email blocks.
+   * The caller must hold the admin role; a VA sending this is rejected.
+   */
+  adminOverride?: boolean;
+  adminOverrideNote?: string;
 }
 
 serve(async (req) => {
@@ -658,7 +682,16 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     );
 
-    if (await isStaffCustomerEmail(supabase, body.email)) {
+    const adminOverrideRequested = body.adminOverride === true;
+    const adminBypass = adminOverrideRequested && await callerIsAdmin(req, supabase);
+    if (adminOverrideRequested && !adminBypass) {
+      return new Response(
+        JSON.stringify({ error: "Only an admin can override booking restrictions." }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 403 },
+      );
+    }
+
+    if (!adminBypass && await isStaffCustomerEmail(supabase, body.email)) {
       return new Response(
         JSON.stringify({
           error: `${STAFF_CUSTOMER_ERROR}. Book the job to a personal customer email.`,
@@ -688,6 +721,7 @@ serve(async (req) => {
     let dynAuditId: string | null = null;
     let computedCents: number;
     let basePriceCents: number;
+    let pricedWithoutZone = false;
 
     if (dynCtx) {
       const condition = (
@@ -745,25 +779,39 @@ serve(async (req) => {
           quotedBy: body.csrName || "va_admin",
         });
         if (!result.served) {
-          // Unserved area → clear message + waitlist, never a wrong price.
-          return new Response(
-            JSON.stringify({ error: result.message, waitlist: true }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 422 },
-          );
-        }
-        if (!result.ok || !result.breakdown) {
+          const manualCents = body.vaOverride?.totalCents ?? body.priceOverride?.total;
+          if (!adminBypass || manualCents == null || !Number.isFinite(manualCents) || manualCents < 0) {
+            // Unserved area → clear message + waitlist, never a wrong price.
+            // An admin who turns on restriction override can book it by entering a total.
+            return new Response(
+              JSON.stringify({
+                error: adminBypass
+                  ? "This ZIP is outside the service area. Enter an adjusted total to book it."
+                  : result.message,
+                waitlist: !adminBypass,
+              }),
+              { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 422 },
+            );
+          }
+          pricedWithoutZone = true;
+          computedCents = manualCents;
+          basePriceCents = manualCents;
+        } else if (!result.ok || !result.breakdown) {
           return new Response(
             JSON.stringify({ error: result.message || "Could not price this booking." }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 422 },
           );
+        } else {
+          breakdown = result.breakdown;
+          dynConfigVersion = result.configVersion;
+          dynAuditId = result.auditId;
         }
-        breakdown = result.breakdown;
-        dynConfigVersion = result.configVersion;
-        dynAuditId = result.auditId;
       }
 
-      computedCents = breakdown.totalCents;
-      basePriceCents = breakdown.baseCents;
+      if (!pricedWithoutZone && breakdown) {
+        computedCents = breakdown.totalCents;
+        basePriceCents = breakdown.baseCents;
+      }
     } else {
       const calc = computePrice({
         homeSizeId: body.homeSizeId,
@@ -800,27 +848,33 @@ serve(async (req) => {
         );
       }
       const check = checkOverride(dynCtx.config, computedCents, body.vaOverride.totalCents, jobFloorCents);
-      if (!check.allowed) {
-        // Below-floor: never, at any level. Beyond-band overrides are
-        // allowed and admin is notified after the booking lands.
+      const floorWaived = adminBypass && check.belowFloor;
+      if (!check.allowed && !floorWaived) {
+        // Below-floor is refused for VAs. An admin restriction override
+        // can go under the floor; that booking is logged and emailed.
         return new Response(
           JSON.stringify({ error: check.reason }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 422 },
         );
       }
+      const overrideNote = [
+        body.vaOverride.note || null,
+        adminBypass ? `Admin restriction override. ${String(body.adminOverrideNote || "").trim()}`.trim() : null,
+      ].filter(Boolean).join(" — ") || null;
       pendingOverride = {
         original: computedCents,
         override: body.vaOverride.totalCents,
         deltaPct: Math.round(check.deltaPercent * 100) / 100,
-        reason: body.vaOverride.reasonCode,
-        note: body.vaOverride.note || null,
+        reason: floorWaived ? "admin_restriction_override" : body.vaOverride.reasonCode,
+        note: overrideNote,
         vaName: body.csrName || "va_admin",
-        notifyAdmin: check.notifyAdmin,
+        notifyAdmin: check.notifyAdmin || floorWaived,
       };
       computedCents = body.vaOverride.totalCents;
     } else if (body.priceOverride?.total != null) {
-      // Legacy admin override path. The floor is still absolute.
-      if (jobFloorCents > 0 && body.priceOverride.total < jobFloorCents) {
+      // Legacy admin override path. The floor holds unless this admin
+      // explicitly overrode restrictions.
+      if (!adminBypass && jobFloorCents > 0 && body.priceOverride.total < jobFloorCents) {
         return new Response(
           JSON.stringify({
             error: `Override is below the $${(jobFloorCents / 100).toFixed(2)} floor for this service — the floor protects cleaner pay and cannot be overridden.`,
@@ -928,6 +982,11 @@ serve(async (req) => {
     const accessNotes = accessNotesParts.length ? accessNotesParts.join(" · ") : null;
     const teamNotesParts: string[] = [];
     if (body.teamNotes || body.notes) teamNotesParts.push(String(body.teamNotes || body.notes));
+    if (adminBypass) {
+      teamNotesParts.push(
+        `Admin restriction override${body.adminOverrideNote ? `: ${String(body.adminOverrideNote).trim()}` : ""}`,
+      );
+    }
     if (pd.suppliesProvidedBy) teamNotesParts.push(`Supplies: ${pd.suppliesProvidedBy}`);
     if (body.promoCode) teamNotesParts.push(`Promo code: ${body.promoCode.toUpperCase()}`);
     const teamNotes = teamNotesParts.length ? teamNotesParts.join(" · ") : null;
