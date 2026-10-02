@@ -91,7 +91,11 @@ export function censusQueries(query: string): string[] {
 }
 
 function titleCase(s: string): string {
-  return s.toLowerCase().replace(/\b([a-z])/g, (c) => c.toUpperCase());
+  return s
+    .toLowerCase()
+    .replace(/\b([a-z])/g, (c) => c.toUpperCase())
+    // DC quadrants and compass suffixes stay capitalized: "Pennsylvania Ave SE".
+    .replace(/\b(Nw|Ne|Sw|Se)\b/g, (d) => d.toUpperCase());
 }
 
 function secondaryLine(city: string, state: string, zip: string): string {
@@ -236,8 +240,9 @@ function numberFits(typedNumber: string, m: AddressMatch): boolean {
 
 /**
  * Merge candidate lists in priority order, dropping repeats. Two hits are the
- * same address when the house number, first street word and ZIP agree
- * ("8201 Georgia Ave" from Census vs "8201 Georgia Avenue" from Photon).
+ * same address when the house number, first street word, city and state agree
+ * ("8201 Georgia Ave" from Census vs "8201 Georgia Avenue" from Photon, or one
+ * long road Photon splits into several ZIP segments).
  */
 export function mergeSuggestions(lists: AddressMatch[][], limit: number): AddressMatch[] {
   const out: AddressMatch[] = [];
@@ -245,7 +250,7 @@ export function mergeSuggestions(lists: AddressMatch[][], limit: number): Addres
   for (const list of lists) {
     for (const m of list) {
       const [number = "", word = ""] = m.street.toLowerCase().split(/\s+/);
-      const key = `${number}|${word}|${m.zipCode || m.city.toLowerCase()}`;
+      const key = `${number}|${word}|${m.city.toLowerCase()}|${m.state}`;
       if (seen.has(key)) continue;
       seen.add(key);
       out.push(m);
@@ -272,7 +277,9 @@ export async function suggestAddresses(query: string, limit = 6): Promise<Addres
 
   const [census, houses, streets] = await Promise.all([
     Promise.all(censusQueries(q).map(async (line) => parseCensusMatches(await getJson(censusGeocodeUrl(line))))).then(
-      (lists) => lists.flat(),
+      // The geocoder fuzzes the city when the state was only appended by us
+      // ("12 Main St Laur, MD" → Laura, OH). Keep the service states.
+      (lists) => lists.flat().filter((m) => NAMES_A_STATE.test(q) || SERVICE_STATES.includes(m.state)),
     ),
     photon(q, ["house"], SERVICE_AREA_BBOX),
     street.length >= 3 ? photon(street, ["street"], SERVICE_AREA_BBOX) : Promise.resolve([]),
@@ -304,7 +311,7 @@ export async function geocodeAddressLine(line: string): Promise<AddressMatch | n
   const census = await Promise.all(
     (lines.length > 0 ? lines : [q]).map(async (l) => parseCensusMatch(await getJson(censusGeocodeUrl(l)))),
   );
-  const exact = census.find((m) => m !== null);
+  const exact = census.find((m) => m !== null && (lines.length <= 1 || SERVICE_STATES.includes(m.state)));
   if (exact) return exact;
   const [top] = await suggestAddresses(q, 1);
   return top && matchesTypedStreet(q, top) ? top : null;

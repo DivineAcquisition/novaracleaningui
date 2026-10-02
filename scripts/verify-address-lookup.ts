@@ -155,6 +155,21 @@ check("census: first match parsed and title-cased", () => {
   assert.equal(parseCensusMatch({ result: { addressMatches: [] } }), null);
 });
 
+check("census: DC quadrant stays uppercase", () => {
+  const m = parseCensusMatch({
+    result: {
+      addressMatches: [
+        {
+          coordinates: { x: -76.98, y: 38.88 },
+          addressComponents: { zip: "20003", city: "WASHINGTON", state: "DC" },
+          matchedAddress: "1600 PENNSYLVANIA AVE SE, WASHINGTON, DC, 20003",
+        },
+      ],
+    },
+  });
+  assert.equal(m?.street, "1600 Pennsylvania Ave SE");
+});
+
 check("census: every match kept", () => {
   const two = {
     result: {
