@@ -104,7 +104,6 @@ serve(async (req) => {
         // purge-old-turnover-photos. Just stamp the doc — Drive is the archive.
         let docFiles = 0;
         if (doc.booking_id) {
-          // 1) Storage objects for this booking.
           const files = await listAll(supabase, `bookings/${doc.booking_id}`);
           docFiles = files.length;
           for (let i = 0; i < files.length; i += 100) {
@@ -113,21 +112,25 @@ serve(async (req) => {
             if (rmErr) throw new Error(`storage remove failed: ${rmErr.message}`);
             filesRemoved += batch.length;
           }
+        }
 
-          // 2) Booking arrays (dead links otherwise).
+        // Freeze photo_count / documented BEFORE clearing the booking arrays.
+        // That clear fires the documentation snapshot, which would otherwise
+        // see an empty gallery and write photo_count = 0.
+        const driveRef = doc.drive_folder_url ? [doc.drive_folder_url] : [];
+        const nowIso = new Date().toISOString();
+        await supabase.from("job_documentation").update({
+          photos_purged_at: nowIso,
+          before_photos: driveRef,
+          after_photos: driveRef,
+          updated_at: nowIso,
+        }).eq("id", doc.id);
+
+        if (doc.booking_id) {
           await supabase.from("bookings")
             .update({ before_photos: [], after_photos: [] })
             .eq("id", doc.booking_id);
         }
-
-        // 3) Documentation record: point at the Drive archive.
-        const driveRef = doc.drive_folder_url ? [doc.drive_folder_url] : [];
-        await supabase.from("job_documentation").update({
-          before_photos: driveRef,
-          after_photos: driveRef,
-          photos_purged_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }).eq("id", doc.id);
 
         purged++;
         log("purged", { ref: doc.booking_ref, bookingId: doc.booking_id, files: docFiles });

@@ -112,6 +112,51 @@ export async function findChild(
   return data.files?.[0] || null;
 }
 
+export interface DriveChild {
+  id: string;
+  name: string;
+  mimeType: string;
+  thumbnailLink?: string;
+}
+
+/** List every direct child of a folder, including ids for downloads. */
+export async function listChildFiles(token: string, parentId: string): Promise<DriveChild[]> {
+  const out: DriveChild[] = [];
+  let pageToken: string | undefined;
+  do {
+    const url = new URL("https://www.googleapis.com/drive/v3/files");
+    url.searchParams.set("q", `'${escapeQuery(parentId)}' in parents and trashed = false`);
+    url.searchParams.set("fields", "nextPageToken,files(id,name,mimeType,thumbnailLink)");
+    url.searchParams.set("pageSize", "1000");
+    url.searchParams.set("supportsAllDrives", "true");
+    url.searchParams.set("includeItemsFromAllDrives", "true");
+    if (pageToken) url.searchParams.set("pageToken", pageToken);
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) throw new Error(`drive list failed: ${res.status}`);
+    const data = await res.json();
+    for (const f of data.files || []) {
+      out.push({
+        id: String(f.id),
+        name: String(f.name),
+        mimeType: String(f.mimeType || ""),
+        thumbnailLink: f.thumbnailLink ? String(f.thumbnailLink) : undefined,
+      });
+    }
+    pageToken = data.nextPageToken;
+  } while (pageToken);
+  return out;
+}
+
+/** Download a Drive file's bytes. */
+export async function downloadFile(token: string, fileId: string): Promise<Uint8Array> {
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media&supportsAllDrives=true`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!res.ok) throw new Error(`drive download failed: ${res.status}`);
+  return new Uint8Array(await res.arrayBuffer());
+}
+
 /** List names of every file directly inside a folder (for upload dedupe). */
 export async function listChildNames(token: string, parentId: string): Promise<Set<string>> {
   const names = new Set<string>();

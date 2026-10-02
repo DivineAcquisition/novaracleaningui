@@ -653,6 +653,7 @@ function IssueSheet({ issue, doc, onClose, reload }: {
   const [insuranceMethod, setInsuranceMethod] = useState(issue.insurance_notification?.method || "");
   const [insuranceResponse, setInsuranceResponse] = useState(issue.insurance_notification?.carrier_response || "");
   const [incidentBusy, setIncidentBusy] = useState(false);
+  const [archivedPhotos, setArchivedPhotos] = useState<Array<{ name: string; url: string }>>([]);
 
   useEffect(() => {
     setManagerAccount(issue.manager_account || "");
@@ -784,8 +785,23 @@ function IssueSheet({ issue, doc, onClose, reload }: {
     }
   };
 
-  const beforePhotos = (doc?.before_photos || []).filter((u) => u.startsWith("http"));
-  const afterPhotos = (doc?.after_photos || []).filter((u) => u.startsWith("http"));
+  const isPhotoUrl = (u: string) =>
+    u.startsWith("http") && !u.includes("drive.google.com/drive/folders/");
+  const beforePhotos = (doc?.before_photos || []).filter(isPhotoUrl);
+  const afterPhotos = (doc?.after_photos || []).filter(isPhotoUrl);
+
+  useEffect(() => {
+    setArchivedPhotos([]);
+    if (!doc?.photos_purged_at || !doc.id) return;
+    let cancelled = false;
+    void supabase.functions.invoke("qc-drive-mirror", {
+      body: { action: "photo_links", documentationId: doc.id },
+    }).then(({ data }) => {
+      const photos = (data as { photos?: Array<{ name: string; url: string }> } | null)?.photos;
+      if (!cancelled && Array.isArray(photos)) setArchivedPhotos(photos);
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [doc?.id, doc?.photos_purged_at]);
   const caseMedia = normalizeQcIssueMedia(issue.evidence_files);
   const legacyMedia = legacyResolutionHttpUrls(issue.resolution_photos);
 
@@ -1114,8 +1130,19 @@ function IssueSheet({ issue, doc, onClose, reload }: {
                 )}
                 {doc.photos_purged_at && (
                   <p className="text-[11px] text-slate-500">
-                    Supabase copies purged {fmtDT(doc.photos_purged_at)} (14-day retention) — originals live in the Drive folder above.
+                    {doc.photo_count > 0
+                      ? `${doc.photo_count} photos are in the Drive folder. Workspace copies were removed ${fmtDT(doc.photos_purged_at)} (14-day retention).`
+                      : `No before/after photos were stored for this job. Workspace retention ran ${fmtDT(doc.photos_purged_at)}.`}
                   </p>
+                )}
+                {doc.photos_purged_at && archivedPhotos.length > 0 && (
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {archivedPhotos.map((p) => (
+                      <a key={p.url} href={p.url} target="_blank" rel="noreferrer" className="relative">
+                        <img src={p.url} alt={p.name} className="w-full h-16 object-cover rounded-md border border-slate-200" />
+                      </a>
+                    ))}
+                  </div>
                 )}
               </>
             ) : (

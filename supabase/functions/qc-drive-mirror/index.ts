@@ -26,12 +26,15 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { PDFDocument, StandardFonts, rgb } from "https://esm.sh/pdf-lib@1.17.1";
+import jpeg from "https://esm.sh/jpeg-js@0.4.4";
 import {
   driveConfigured,
   ensureFolder,
   fileUrl,
   folderUrl,
   getDriveToken,
+  downloadFile,
+  listChildFiles,
   listChildNames,
   shareReadableByLink,
   updateFile,
@@ -195,6 +198,98 @@ function extFromUrl(url: string): string {
 
 function isVideoExt(ext: string): boolean {
   return ["mp4", "mov", "webm", "m4v", "3gp"].includes(ext.toLowerCase());
+}
+
+const FOLDER_MIME = "application/vnd.google-apps.folder";
+/** Stripe dispute evidence rejects files over 5MB. Packets stay under this. */
+const PACKET_MAX_BYTES = 5 * 1024 * 1024;
+
+function isDownloadablePhotoUrl(url: string): boolean {
+  if (!/^https?:\/\//i.test(url)) return false;
+  if (/drive\.google\.com\/drive\/folders\//i.test(url)) return false;
+  return true;
+}
+
+function downscaleRgba(
+  src: { width: number; height: number; data: Uint8Array },
+  maxEdge: number,
+): { width: number; height: number; data: Uint8Array } {
+  const scale = Math.min(1, maxEdge / Math.max(src.width, src.height));
+  if (scale >= 0.999) return src;
+  const width = Math.max(1, Math.round(src.width * scale));
+  const height = Math.max(1, Math.round(src.height * scale));
+  const data = new Uint8Array(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    const sy = Math.min(src.height - 1, Math.floor(y / scale));
+    for (let x = 0; x < width; x++) {
+      const sx = Math.min(src.width - 1, Math.floor(x / scale));
+      const si = (sy * src.width + sx) * 4;
+      const di = (y * width + x) * 4;
+      data[di] = src.data[si];
+      data[di + 1] = src.data[si + 1];
+      data[di + 2] = src.data[si + 2];
+      data[di + 3] = src.data[si + 3];
+    }
+  }
+  return { width, height, data };
+}
+
+/** Re-encode a photo so the dispute packet can stay under 5MB. PNGs pass through. */
+function shrinkPhoto(bytes: Uint8Array, maxEdge: number, quality: number): Uint8Array {
+  if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50) return bytes;
+  try {
+    const decoded = jpeg.decode(bytes, { useTArray: true, formatAsRGBA: true });
+    const scaled = downscaleRgba(decoded, maxEdge);
+    const encoded = jpeg.encode(
+      { data: scaled.data, width: scaled.width, height: scaled.height },
+      quality,
+    );
+    return encoded.data as Uint8Array;
+  } catch {
+    return bytes;
+  }
+}
+
+async function imagesInFolder(
+  token: string,
+  folderId: string,
+  label: string,
+): Promise<Array<{ label: string; bytes: Uint8Array }>> {
+  const files = (await listChildFiles(token, folderId))
+    .filter((f) => f.mimeType.startsWith("image/"))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const out: Array<{ label: string; bytes: Uint8Array }> = [];
+  for (const file of files) {
+    try {
+      out.push({ label: `${label} — ${file.name}`, bytes: await downloadFile(token, file.id) });
+    } catch (e) {
+      log("archived photo download failed", { name: file.name, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+  return out;
+}
+
+/** Photos already mirrored into the job's Drive folder (before/after, including zones). */
+async function collectArchivedPhotos(
+  token: string,
+  jobFolderId: string,
+): Promise<Array<{ label: string; bytes: Uint8Array }>> {
+  const top = await listChildFiles(token, jobFolderId);
+  const out: Array<{ label: string; bytes: Uint8Array }> = [];
+  for (const entry of top) {
+    if (entry.mimeType !== FOLDER_MIME) continue;
+    if (entry.name === "before" || entry.name === "after") {
+      out.push(...await imagesInFolder(token, entry.id, entry.name.toUpperCase()));
+      continue;
+    }
+    const inner = await listChildFiles(token, entry.id);
+    for (const child of inner) {
+      if (child.mimeType === FOLDER_MIME && (child.name === "before" || child.name === "after")) {
+        out.push(...await imagesInFolder(token, child.id, `${entry.name} ${child.name.toUpperCase()}`));
+      }
+    }
+  }
+  return out;
 }
 
 function mimeFromExt(ext: string): string {
@@ -918,6 +1013,27 @@ async function buildSummaryPdf(doc: DocRow, extras: {
   return await pdf.save();
 }
 
+type PacketExtras = Parameters<typeof buildSummaryPdf>[1];
+
+/** Rebuild the packet until it fits Stripe's 5MB dispute-file limit. */
+async function buildPacketUnderCap(doc: DocRow, extras: PacketExtras): Promise<Uint8Array> {
+  const passes: Array<[number, number]> = [[1400, 62], [1100, 52], [800, 42], [560, 32]];
+  let last = new Uint8Array();
+  for (const [edge, quality] of passes) {
+    const photos = extras.photos.map((p) => ({
+      label: p.label,
+      bytes: shrinkPhoto(p.bytes, edge, quality),
+    }));
+    const realCaptures = (extras.realCaptures || []).map((c) => ({
+      ...c,
+      bytes: shrinkPhoto(c.bytes, edge, quality),
+    }));
+    last = await buildSummaryPdf(doc, { ...extras, photos, realCaptures });
+    if (last.byteLength <= PACKET_MAX_BYTES) return last;
+  }
+  return last;
+}
+
 // ─── Mirror one documentation row (resumable across runs) ────────────────────
 
 interface RunBudget {
@@ -1023,8 +1139,8 @@ async function mirrorOne(supabase: SB, token: string, rootFolderId: string, doc:
     : [];
   const skipGenericPdf = zoneSeq.length > 0;
 
-  await uploadSet(before, beforeFolder, "before", existingBefore, { skipPdf: skipGenericPdf });
-  await uploadSet(after, afterFolder, "after", existingAfter, { skipPdf: skipGenericPdf });
+  await uploadSet(before.filter(isDownloadablePhotoUrl), beforeFolder, "before", existingBefore, { skipPdf: skipGenericPdf });
+  await uploadSet(after.filter(isDownloadablePhotoUrl), afterFolder, "after", existingAfter, { skipPdf: skipGenericPdf });
 
   if (zoneSeq.length) {
     const byZone = new Map<string, { before: string[]; after: string[] }>();
@@ -1098,7 +1214,10 @@ async function mirrorOne(supabase: SB, token: string, rootFolderId: string, doc:
     }
   }
 
-  const pdfBytes = await buildSummaryPdf(doc, {
+  if (photoBytes.length === 0 && doc.drive_folder_id) {
+    photoBytes.push(...await collectArchivedPhotos(token, doc.drive_folder_id));
+  }
+  const pdfBytes = await buildPacketUnderCap(doc, {
     ...extras,
     payment,
     agreementBytes: agreement?.bytes || null,
@@ -1129,12 +1248,21 @@ async function mirrorOne(supabase: SB, token: string, rootFolderId: string, doc:
     drive_folder_url: folderUrl(jobFolder),
     drive_pdf_id: pdfId,
     drive_pdf_url: pdfId ? fileUrl(pdfId) : null,
-    drive_file_count: before.length + after.length + 1,
+    drive_file_count: Math.max(
+      before.filter(isDownloadablePhotoUrl).length + after.filter(isDownloadablePhotoUrl).length,
+      photoBytes.length,
+    ) + 1,
     checklist_snapshot: extras.checklist,
     checklist_progress_pct: extras.checklist?.progress_pct ?? null,
     cleaner_names: extras.cleanerNames || doc.cleaner_names,
-    photo_count: before.length + after.length,
-    documented: before.length > 0 && after.length > 0,
+    photo_count: Math.max(
+      before.filter(isDownloadablePhotoUrl).length + after.filter(isDownloadablePhotoUrl).length,
+      photoBytes.length,
+    ),
+    documented: Math.max(
+      before.filter(isDownloadablePhotoUrl).length + after.filter(isDownloadablePhotoUrl).length,
+      photoBytes.length,
+    ) > 0,
     updated_at: nowIso,
   }).eq("id", doc.id);
 
@@ -1168,6 +1296,96 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
+    const action = String(body?.action || "");
+
+    if (action === "photo_links" || action === "compact_packet") {
+      if (!driveConfigured()) return json({ ok: false, error: "drive_not_configured" }, 200);
+      const impersonate = await resolveSecret(supabase, "GOOGLE_DRIVE_IMPERSONATE_EMAIL");
+      const token = await getDriveToken(impersonate || undefined);
+      if (!token) return json({ ok: false, error: "drive_token_failed" }, 200);
+
+      const documentationId = body?.documentationId ? String(body.documentationId) : "";
+      const bookingRef = body?.bookingRef ? String(body.bookingRef) : "";
+      let lookup = supabase
+        .from("job_documentation")
+        .select("id, booking_id, job_id, booking_ref, client_name, client_email, service_type, service_date, address, cleaner_names, before_photos, after_photos, notes, completed_at, mirror_attempts, drive_folder_id, drive_pdf_id");
+      lookup = documentationId ? lookup.eq("id", documentationId) : lookup.eq("booking_ref", bookingRef);
+      const { data: doc, error: docErr } = await lookup.maybeSingle();
+      if (docErr) throw docErr;
+      if (!doc?.drive_folder_id) return json({ ok: false, error: "no_drive_folder" }, 404);
+
+      if (action === "photo_links") {
+        const top = await listChildFiles(token, doc.drive_folder_id);
+        const photos: Array<{ name: string; url: string }> = [];
+        const take = async (folderId: string, prefix: string) => {
+          if (photos.length >= 12) return;
+          const files = await listChildFiles(token, folderId);
+          for (const file of files) {
+            if (photos.length >= 12) return;
+            if (!file.mimeType.startsWith("image/")) continue;
+            photos.push({
+              name: `${prefix} ${file.name}`.trim(),
+              url: file.thumbnailLink || `https://drive.google.com/thumbnail?id=${file.id}&sz=w400`,
+            });
+          }
+        };
+        for (const entry of top) {
+          if (entry.mimeType !== FOLDER_MIME) continue;
+          if (entry.name === "before" || entry.name === "after") {
+            await take(entry.id, entry.name);
+          } else {
+            const inner = await listChildFiles(token, entry.id);
+            for (const child of inner) {
+              if (child.mimeType === FOLDER_MIME && (child.name === "before" || child.name === "after")) {
+                await take(child.id, `${entry.name} ${child.name}`);
+              }
+            }
+          }
+        }
+        return json({ ok: true, photos });
+      }
+
+      const archived = await collectArchivedPhotos(token, doc.drive_folder_id);
+      const extras = await enrichSnapshot(supabase, doc as DocRow);
+      const payment = doc.booking_id ? await loadPaymentRecord(supabase, doc.booking_id) : { rows: [] };
+      const packetIssues = await loadIssuesForPacket(supabase, doc.booking_id);
+      const pageCapture = await loadPageCaptureData(supabase, doc.booking_id, {
+        clientName: doc.client_name,
+        clientEmail: doc.client_email,
+        serviceType: doc.service_type,
+        serviceDate: doc.service_date,
+        address: doc.address,
+      });
+      const realCaptures = await loadRealPageCaptures(supabase, doc.booking_id);
+      const agreement = doc.booking_id
+        ? await loadAgreementPdf(supabase, doc.booking_id, doc.client_email)
+        : null;
+      const pdfBytes = await buildPacketUnderCap(doc as DocRow, {
+        ...extras,
+        payment,
+        agreementBytes: agreement?.bytes || null,
+        issues: packetIssues,
+        photos: archived,
+        pageCapture,
+        realCaptures,
+      });
+      if (doc.drive_pdf_id) {
+        await updateFile(token, doc.drive_pdf_id, pdfBytes, "application/pdf");
+      }
+      await supabase.from("job_documentation").update({
+        photo_count: archived.length,
+        documented: archived.length > 0,
+        updated_at: new Date().toISOString(),
+      }).eq("id", doc.id);
+      return json({
+        ok: true,
+        compacted: true,
+        bytes: pdfBytes.byteLength,
+        photos: archived.length,
+        underCap: pdfBytes.byteLength <= PACKET_MAX_BYTES,
+      });
+    }
+
     const onlyDocId = body?.docId ? String(body.docId) : null;
 
     if (!driveConfigured()) {
