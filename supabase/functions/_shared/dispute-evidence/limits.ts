@@ -19,7 +19,10 @@ export interface DisputeEvidenceLimits {
     customer_signature: number;
     policy: number;
     receipt: number;
+    uncategorized_file: number;
   };
+  /** Months to keep a client's prepared evidence. Card networks allow disputes long after a charge. */
+  retentionMonths: number;
 }
 
 export const STRIPE_EVIDENCE_LIMITS: DisputeEvidenceLimits = {
@@ -31,11 +34,13 @@ export const STRIPE_EVIDENCE_LIMITS: DisputeEvidenceLimits = {
   formats: ["pdf", "png", "jpg", "jpeg"],
   packetPages: {
     service_documentation: 6,
-    customer_communication: 6,
+    customer_communication: 4,
     customer_signature: 2,
     policy: 2,
     receipt: 1,
+    uncategorized_file: 2,
   },
+  retentionMonths: 24,
 };
 
 /** Approx body lines that fit on one letter page at the renderer size. */

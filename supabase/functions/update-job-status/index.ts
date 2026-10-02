@@ -132,6 +132,50 @@ serve(async (req) => {
   const { error: uErr } = await adminClient.from("bookings").update(patch).eq("id", bookingId);
   if (uErr) return json({ error: `failed to update booking: ${uErr.message}` }, 500);
 
+  if (toStatus === "completed") {
+    try {
+      const task = adminClient.functions.invoke("dispute-evidence", {
+        body: {
+          action: "prep",
+          kind: "completion",
+          bookingId,
+          clientKey: booking.email,
+          chargeKey: booking.payment_intent_id || bookingId,
+          seriesId: `completion:${bookingId}`,
+          eventId: `completion:${bookingId}`,
+          input: {
+            disputeId: `prep-${bookingId}`,
+            reason: "general",
+            customerEmail: booking.email,
+            customerName: booking.first_name,
+            serviceDate: booking.service_date,
+            serviceDescription: booking.service_type,
+            finishedAt: now,
+            scheduledWindow: booking.time_slot || booking.arrival_window,
+            photos: [],
+          },
+        },
+      });
+      const runtime = (globalThis as { EdgeRuntime?: { waitUntil: (work: Promise<unknown>) => void } }).EdgeRuntime;
+      if (runtime?.waitUntil) runtime.waitUntil(Promise.resolve(task).catch(() => undefined));
+      else void Promise.resolve(task).catch(() => undefined);
+      const comms = adminClient.functions.invoke("dispute-evidence", {
+        body: {
+          action: "prep",
+          kind: "communication",
+          bookingId,
+          clientKey: booking.email,
+          chargeKey: booking.payment_intent_id || bookingId,
+          seriesId: `communication:${bookingId}`,
+          eventId: `communication:${bookingId}`,
+          input: { disputeId: `prep-${bookingId}`, reason: "general", customerEmail: booking.email, messages: [] },
+        },
+      });
+      if (runtime?.waitUntil) runtime.waitUntil(Promise.resolve(comms).catch(() => undefined));
+      else void Promise.resolve(comms).catch(() => undefined);
+    } catch { /* prep never blocks job completion */ }
+  }
+
   if (booking.job_id) {
     const jobPatch: Record<string, unknown> = {};
     if (toStatus === "en_route") jobPatch.en_route_at = now;

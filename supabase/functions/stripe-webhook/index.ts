@@ -157,6 +157,32 @@ serve(async (req) => {
             .eq('id', booking.id);
         }
 
+        // Evidence prep must not delay or fail the payment.
+        try {
+          const task = supabase.functions.invoke("dispute-evidence", {
+            body: {
+              action: "prep",
+              kind: "receipt",
+              bookingId: booking.id,
+              clientKey: booking.email,
+              chargeKey: paymentIntent.id,
+              seriesId: paymentIntent.id,
+              eventId: `receipt:${paymentIntent.id}`,
+              input: {
+                disputeId: `prep-${booking.id}`,
+                reason: "general",
+                customerEmail: booking.email,
+                customerName: booking.first_name,
+                bookingRef: booking.booking_number ? `NVC-${String(booking.booking_number).padStart(4, "0")}` : booking.id,
+                charges: [{ label: "Charge", amountCents: paymentIntent.amount_received || paymentIntent.amount, paymentIntentId: paymentIntent.id, kind: "charge" }],
+              },
+            },
+          });
+          const runtime = (globalThis as { EdgeRuntime?: { waitUntil: (work: Promise<unknown>) => void } }).EdgeRuntime;
+          if (runtime?.waitUntil) runtime.waitUntil(Promise.resolve(task).catch(() => undefined));
+          else void Promise.resolve(task).catch(() => undefined);
+        } catch { /* prep never blocks payment */ }
+
         // Legacy VA rows may already be 'confirmed' with the deposit
         // outstanding; release held confirmation emails now. Newer internal
         // bookings stay pending_payment until this PI clears and are promoted
