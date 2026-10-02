@@ -444,6 +444,10 @@ verify_jwt = false
 [functions.qc-case-file]
 verify_jwt = false
 
+# Stripe dispute evidence set — admin/VA JWT or service role enforced inside.
+[functions.dispute-evidence]
+verify_jwt = false
+
 # Spotless Guarantee re-clean workflow — admin/VA JWT or service-role callbacks
 # (complete-booking / accept-job-offer) enforced inside.
 [functions.qc-reclean]
