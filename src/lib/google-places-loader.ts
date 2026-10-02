@@ -214,6 +214,13 @@ export function placesAutocompleteAvailable(): boolean {
   return !!(p?.AutocompleteSuggestion || p?.AutocompleteService);
 }
 
+// Once Google refuses a request (PERMISSION_DENIED, REQUEST_DENIED, …) stop
+// asking for the rest of the page. Every keystroke would otherwise wait on a
+// request we already know fails before reaching the keyless lookup.
+let newPlacesDisabled = false;
+let legacyPlacesDisabled = false;
+const LEGACY_TIMEOUT_MS = 3000;
+
 function getSessionToken(reset = false): unknown {
   const places = placesNs();
   if (!places?.AutocompleteSessionToken) return undefined;
@@ -241,7 +248,7 @@ function getLegacyPlacesService(): any {
 /** Try the modern API. Returns null (not []) to signal "fall back to legacy". */
 async function fetchNewSuggestions(input: string): Promise<AddressSuggestion[] | null> {
   const places = placesNs();
-  if (!places?.AutocompleteSuggestion?.fetchAutocompleteSuggestions) return null;
+  if (newPlacesDisabled || !places?.AutocompleteSuggestion?.fetchAutocompleteSuggestions) return null;
   try {
     const res = await places.AutocompleteSuggestion.fetchAutocompleteSuggestions({
       input,
@@ -261,8 +268,9 @@ async function fetchNewSuggestions(input: string): Promise<AddressSuggestion[] |
     }
     return out;
   } catch (err) {
+    newPlacesDisabled = true;
     lastPlacesError = (err as Error)?.message || String(err);
-    console.error(
+    console.warn(
       "[google-places] Places API (New) request failed — check the API key is authorized for 'Places API (New)' and billing is enabled:",
       lastPlacesError,
     );
@@ -272,16 +280,20 @@ async function fetchNewSuggestions(input: string): Promise<AddressSuggestion[] |
 
 /** Legacy AutocompleteService.getPlacePredictions (callback → promise). */
 function fetchLegacySuggestions(input: string): Promise<AddressSuggestion[]> {
-  const svc = getLegacyAutocompleteService();
+  const svc = legacyPlacesDisabled ? null : getLegacyAutocompleteService();
   if (!svc) return Promise.resolve([]);
   return new Promise((resolve) => {
+    // A refused key can leave the callback unanswered; don't hang the dropdown.
+    const timer = setTimeout(() => resolve([]), LEGACY_TIMEOUT_MS);
     svc.getPlacePredictions(
       { input, componentRestrictions: { country: "us" }, types: ["address"] },
       (preds: any[], statusStr: string) => {
+        clearTimeout(timer);
         if (statusStr !== "OK") {
           if (statusStr !== "ZERO_RESULTS") {
+            legacyPlacesDisabled = true;
             lastPlacesError = `legacy AutocompleteService status: ${statusStr}`;
-            console.error("[google-places] legacy getPlacePredictions:", statusStr);
+            console.warn("[google-places] legacy getPlacePredictions:", statusStr);
           }
           resolve([]);
           return;
@@ -299,24 +311,86 @@ function fetchLegacySuggestions(input: string): Promise<AddressSuggestion[]> {
   });
 }
 
+// ─── Keyless fallback (/api/address/*) ────────────────────────────────────────
+//
+// Photon suggestions + US Census geocoding, served by our own API routes. This
+// is what keeps the dropdown working when Google refuses the key.
+
+interface ServerAddressMatch {
+  id: string;
+  street: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  lat?: number;
+  lng?: number;
+  secondary: string;
+  label: string;
+}
+
+async function fetchServerSuggestions(input: string): Promise<AddressSuggestion[]> {
+  try {
+    const res = await fetch(`/api/address/suggest?q=${encodeURIComponent(input)}`);
+    if (!res.ok) return [];
+    const data = (await res.json()) as { suggestions?: ServerAddressMatch[] };
+    return (data.suggestions || []).map((m) => ({
+      id: m.id,
+      primary: m.street,
+      secondary: m.secondary,
+      _prediction: { kind: "server", match: m },
+    }));
+  } catch (err) {
+    console.warn("[address-lookup] suggestions failed", err);
+    return [];
+  }
+}
+
 /**
- * Fetch US address autocomplete suggestions for `input`. Tries the modern
- * Places API (New) first, then the legacy service, so it works no matter which
- * the key is authorized for. Returns [] (with a console error in lastPlacesError
- * on failure) so callers fall back to manual entry + server-side geocoding.
+ * Geocode an address the user typed without picking a suggestion. Returns
+ * null when nothing matched, so callers can try the edge function / local parse.
+ */
+export async function geocodeTypedAddress(line: string): Promise<PlacesAddressComponents | null> {
+  const q = line.trim();
+  if (q.length < 3 || typeof window === "undefined") return null;
+  try {
+    const res = await fetch(`/api/address/geocode?q=${encodeURIComponent(q)}`);
+    if (!res.ok) return null;
+    const { match } = (await res.json()) as { match?: ServerAddressMatch | null };
+    if (!match) return null;
+    return {
+      street: match.street,
+      city: match.city,
+      state: match.state,
+      zipCode: match.zipCode,
+      lat: match.lat,
+      lng: match.lng,
+      formattedAddress: match.label,
+    };
+  } catch (err) {
+    console.warn("[address-lookup] geocode failed", err);
+    return null;
+  }
+}
+
+/**
+ * Fetch US address autocomplete suggestions for `input`. Tries Google (Places
+ * API New, then the legacy service) and falls back to the keyless lookup, so
+ * the dropdown fills whether or not Google accepts the key.
  */
 export async function fetchAddressSuggestions(input: string): Promise<AddressSuggestion[]> {
   const trimmed = input.trim();
-  if (trimmed.length < 3 || !placesNs()) return [];
+  if (trimmed.length < 3) return [];
   lastPlacesError = null;
 
-  const fromNew = await fetchNewSuggestions(trimmed);
-  if (fromNew && fromNew.length > 0) return fromNew;
+  if (placesNs()) {
+    const fromNew = await fetchNewSuggestions(trimmed);
+    if (fromNew && fromNew.length > 0) return fromNew;
 
-  const fromLegacy = await fetchLegacySuggestions(trimmed);
-  if (fromLegacy.length > 0) return fromLegacy;
+    const fromLegacy = await fetchLegacySuggestions(trimmed);
+    if (fromLegacy.length > 0) return fromLegacy;
+  }
 
-  return fromNew || [];
+  return fetchServerSuggestions(trimmed);
 }
 
 /** Resolve a suggestion to full address components, then rotate the session. */
@@ -325,19 +399,40 @@ export async function resolveAddressSuggestion(
 ): Promise<PlacesAddressComponents | null> {
   const pred = suggestion._prediction as any;
 
+  // Keyless suggestion → Census for the exact point; keep the street the user saw.
+  if (pred?.kind === "server") {
+    const m = pred.match as ServerAddressMatch;
+    const exact = await geocodeTypedAddress(m.label);
+    return {
+      street: m.street,
+      city: m.city || exact?.city || "",
+      state: m.state || exact?.state || "",
+      zipCode: m.zipCode || exact?.zipCode || "",
+      lat: exact?.lat ?? m.lat,
+      lng: exact?.lng ?? m.lng,
+      formattedAddress: m.label,
+    };
+  }
+
+  // Google can serve predictions but refuse the details call; geocode the
+  // text of the suggestion instead of failing the pick.
+  const fromGoogle = await resolveGoogleSuggestion(pred);
+  if (fromGoogle) return fromGoogle;
+  return geocodeTypedAddress([suggestion.primary, suggestion.secondary].filter(Boolean).join(", "));
+}
+
+async function resolveGoogleSuggestion(pred: any): Promise<PlacesAddressComponents | null> {
   // Legacy prediction → PlacesService.getDetails.
   if (pred?.kind === "legacy") {
     const svc = getLegacyPlacesService();
     if (!svc) return null;
     return new Promise((resolve) => {
+      const timer = setTimeout(() => resolve(null), LEGACY_TIMEOUT_MS);
       svc.getDetails(
         { placeId: pred.placeId, fields: ["address_components", "geometry", "formatted_address"] },
         (place: google.maps.places.PlaceResult | null) => {
-          if (!place) {
-            resolve(null);
-            return;
-          }
-          resolve(parsePlaceResult(place));
+          clearTimeout(timer);
+          resolve(place ? parsePlaceResult(place) : null);
         },
       );
     });
@@ -353,7 +448,7 @@ export async function resolveAddressSuggestion(
     return parsePlaceNew(place);
   } catch (err) {
     lastPlacesError = (err as Error)?.message || String(err);
-    console.error("[google-places] resolveAddressSuggestion failed:", lastPlacesError);
+    console.warn("[google-places] resolveAddressSuggestion failed:", lastPlacesError);
     return null;
   }
 }
