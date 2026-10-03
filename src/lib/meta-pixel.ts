@@ -3,9 +3,11 @@
  * Each function safely no-ops if fbq is not loaded (e.g. ad blockers).
  */
 
-const callFbq = (event: string, params?: Record<string, unknown>) => {
+const callFbq = (event: string, params?: Record<string, unknown>, eventId?: string) => {
   if (typeof window !== 'undefined' && window.fbq) {
-    window.fbq('track', event, params);
+    const fbq = window.fbq as (...args: unknown[]) => void;
+    if (eventId) fbq('track', event, params, { eventID: eventId });
+    else fbq('track', event, params);
   }
 };
 
@@ -40,6 +42,7 @@ export function trackPurchase(
   serviceType: string,
   frequency: string,
   zoneId?: string,
+  eventId?: string,
 ) {
   callFbq('Purchase', {
     value,
@@ -47,5 +50,5 @@ export function trackPurchase(
     content_name: serviceType,
     content_category: frequency,
     content_ids: zoneId ? [zoneId] : [],
-  });
+  }, eventId);
 }

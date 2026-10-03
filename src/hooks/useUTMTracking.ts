@@ -16,6 +16,7 @@ const STORAGE_KEYS = {
   FIRST_VISIT_TIMESTAMP: "first_visit_timestamp",
   FBCLID: "fbclid",
   GCLID: "gclid",
+  FBP: "fbp",
 } as const;
 
 export interface TrackingData {
@@ -29,6 +30,7 @@ export interface TrackingData {
   first_visit_timestamp: string | null;
   fbclid: string | null;
   gclid: string | null;
+  fbp: string | null;
 }
 
 const isBrowser = () => typeof window !== "undefined";
@@ -85,6 +87,8 @@ export function useUTMTracking() {
     writeIfPresent("utm_term", STORAGE_KEYS.UTM_TERM);
     writeIfPresent("fbclid", STORAGE_KEYS.FBCLID);
     writeIfPresent("gclid", STORAGE_KEYS.GCLID);
+    const fbp = document.cookie.match(/(?:^|; )_fbp=([^;]*)/);
+    if (fbp?.[1]) writeStorage(STORAGE_KEYS.FBP, decodeURIComponent(fbp[1]));
 
     // ─── First-visit attribution (don't overwrite) ──────────────────
     if (!readStorage(STORAGE_KEYS.LANDING_PAGE)) {
@@ -126,6 +130,7 @@ export function getStoredTrackingData(): TrackingData {
     first_visit_timestamp: readStorage(STORAGE_KEYS.FIRST_VISIT_TIMESTAMP),
     fbclid: readStorage(STORAGE_KEYS.FBCLID),
     gclid: readStorage(STORAGE_KEYS.GCLID),
+    fbp: readStorage(STORAGE_KEYS.FBP),
   };
 }
 

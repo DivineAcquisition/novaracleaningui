@@ -468,7 +468,16 @@ export default function BookingSuccess() {
         }
         if (depositPaidAt) {
           // Webhook already stamped the deposit — nothing to verify.
+          // Still report Purchase with the booking id so Meta can merge
+          // it with the server event instead of dropping this page view.
           setPaymentVerified(true);
+          trackPurchase(
+            pricing.total / 100,
+            bookingData.serviceType,
+            bookingData.membershipPlan || 'none',
+            bookingData.zipCode,
+            bookingId || undefined,
+          );
           return;
         }
         if (!intentToVerify) {
@@ -499,7 +508,8 @@ export default function BookingSuccess() {
               pricing.total / 100,
               bookingData.serviceType,
               bookingData.membershipPlan || 'none',
-              bookingData.zipCode
+              bookingData.zipCode,
+              bookingId || undefined,
             );
             
             // Additional details check is now handled by the validation effect

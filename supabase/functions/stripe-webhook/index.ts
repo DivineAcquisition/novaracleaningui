@@ -8,6 +8,7 @@ import {
   remainingDueAfterUpfrontCents,
 } from "../_shared/booking-balance.ts";
 import { resolveSecret } from "../_shared/app-secrets.ts";
+import { sendMetaPurchase } from "../_shared/meta-capi.ts";
 import { provisionGlowMembership } from "../_shared/provision-glow-membership.ts";
 
 const corsHeaders = {
@@ -155,6 +156,17 @@ serve(async (req) => {
             .from('bookings')
             .update({ payment_received_at: new Date().toISOString() })
             .eq('id', booking.id);
+          try {
+            await sendMetaPurchase(
+              supabase,
+              booking,
+              Number(paymentIntent.amount_received || paymentIntent.amount || 0),
+            );
+          } catch (metaErr) {
+            logStep("Meta purchase failed (non-blocking)", {
+              error: metaErr instanceof Error ? metaErr.message : String(metaErr),
+            });
+          }
         }
 
         // Evidence prep must not delay or fail the payment.
@@ -1127,11 +1139,26 @@ serve(async (req) => {
         }
 
         if (bookingId && customerId && (purpose === "deposit" || purpose === "full_payment")) {
+          const { data: paidBooking } = await supabase
+            .from("bookings")
+            .select("*")
+            .eq("id", bookingId)
+            .maybeSingle();
+          const firstInvoicePayment = paidBooking && !paidBooking.payment_received_at;
           await supabase.from("bookings").update({
             customer_id: customerId,
             payment_received_at: new Date().toISOString(),
           }).eq("id", bookingId);
           logStep("Booking updated from deposit/full invoice payment", { bookingId, purpose });
+          if (firstInvoicePayment && paidBooking) {
+            try {
+              await sendMetaPurchase(supabase, paidBooking, Number(invoice.amount_paid || 0));
+            } catch (metaErr) {
+              logStep("Meta purchase failed (non-blocking)", {
+                error: metaErr instanceof Error ? metaErr.message : String(metaErr),
+              });
+            }
+          }
 
           // Internal bookings are created as pending_payment. Promote to
           // confirmed now that the deposit/full invoice has cleared so the
@@ -1221,6 +1248,13 @@ serve(async (req) => {
                   .from("bookings")
                   .update({ payment_received_at: new Date().toISOString() })
                   .eq("id", glowBooking.id);
+                try {
+                  await sendMetaPurchase(supabase, glowBooking, Number(invoice.amount_paid || 0));
+                } catch (metaErr) {
+                  logStep("Meta purchase failed (non-blocking)", {
+                    error: metaErr instanceof Error ? metaErr.message : String(metaErr),
+                  });
+                }
               }
               const detailsComplete = hasHomeDetails(glowBooking);
               const isAdminChannel = glowBooking.booking_channel === "admin";
