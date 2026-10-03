@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { AddressAutocomplete } from "@/components/booking/AddressAutocomplete";
 import { EmbeddedCardForm } from "@/components/token/EmbeddedCardForm";
 import { cn } from "@/lib/utils";
 
@@ -642,7 +643,16 @@ function AddPropertyModal({ onClose, onDone }: { onClose: () => void; onDone: ()
         This goes to our team for Section 5 pricing. It is not added or priced from here.
       </p>
       <Input className="mt-3" placeholder="Nickname (optional)" value={nickname} onChange={(e) => setNickname(e.target.value)} />
-      <Input className="mt-2" placeholder="Address" value={address} onChange={(e) => setAddress(e.target.value)} />
+      <div className="mt-2">
+        <AddressAutocomplete
+          label=""
+          placeholder="Address"
+          initialValue={address}
+          onAddressSelect={(addr) =>
+            setAddress([addr.street, addr.city, [addr.state, addr.zipCode].filter(Boolean).join(" ")].filter(Boolean).join(", "))
+          }
+        />
+      </div>
       <Button className="mt-4 w-full text-white" style={{ background: PURPLE }} disabled={busy || address.length < 5} onClick={() => void submit()}>
         {busy ? <RiLoader4Line className="h-4 w-4 animate-spin" /> : "Send to admin"}
       </Button>

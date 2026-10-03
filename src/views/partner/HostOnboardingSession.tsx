@@ -20,6 +20,7 @@ import {
 } from "@remixicon/react";
 
 import { SignaturePad } from "@/components/booking/SignaturePad";
+import { AddressAutocomplete } from "@/components/booking/AddressAutocomplete";
 import { PdfViewer } from "@/components/PdfViewer";
 import { TokenPageShell, TokenPanel } from "@/components/token/TokenPageShell";
 import { EmbeddedCardForm } from "@/components/token/EmbeddedCardForm";
@@ -615,11 +616,18 @@ function RatesStep({
               value={extra.nickname}
               onChange={(e) => setExtra({ ...extra, nickname: e.target.value })}
             />
-            <input
-              className={inputCls}
+            <AddressAutocomplete
+              label=""
               placeholder="Address"
-              value={extra.address}
-              onChange={(e) => setExtra({ ...extra, address: e.target.value })}
+              initialValue={extra.address}
+              onAddressSelect={(addr) =>
+                setExtra({
+                  ...extra,
+                  address: [addr.street, addr.city, [addr.state, addr.zipCode].filter(Boolean).join(" ")]
+                    .filter(Boolean)
+                    .join(", "),
+                })
+              }
             />
             <div className="grid grid-cols-2 gap-2">
               <input

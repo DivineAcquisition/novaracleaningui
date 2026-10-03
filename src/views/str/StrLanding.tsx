@@ -31,6 +31,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { AddressAutocomplete } from "@/components/booking/AddressAutocomplete";
 import { PortfolioCalEmbed } from "@/components/portfolio/PortfolioCalEmbed";
 import { formatPhoneNumber } from "@/lib/input-formatters";
 import { cn } from "@/lib/utils";
@@ -252,11 +253,18 @@ export default function StrLanding() {
 
                     <div className="mt-3 grid gap-3 sm:grid-cols-2">
                       <div className="sm:col-span-2">
-                        <Label>Property address</Label>
-                        <Input
-                          value={r.address}
-                          onChange={(e) => patch(r.key, { address: e.target.value })}
+                        <AddressAutocomplete
+                          inputId={`str-landing-property-address-${r.key}`}
+                          label="Property address"
                           placeholder="123 Main Street, Baltimore, MD"
+                          initialValue={r.address}
+                          onAddressSelect={(addr) =>
+                            patch(r.key, {
+                              address: [addr.street, addr.city, [addr.state, addr.zipCode].filter(Boolean).join(" ")]
+                                .filter(Boolean)
+                                .join(", "),
+                            })
+                          }
                         />
                       </div>
                       <div>

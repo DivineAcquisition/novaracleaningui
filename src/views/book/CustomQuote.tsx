@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { AddressAutocomplete } from "@/components/booking/AddressAutocomplete";
 
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -51,6 +52,10 @@ export default function CustomQuote() {
 
     if (!isValidPhoneNumber(formData.phone)) {
       toast.error("Please enter a valid 10-digit phone number");
+      return;
+    }
+    if (!formData.address.trim()) {
+      toast.error("Please enter the property address");
       return;
     }
 
@@ -190,14 +195,18 @@ export default function CustomQuote() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="address">Property Address *</Label>
-                <Input
-                  id="address"
-                  name="address"
-                  value={formData.address}
-                  onChange={handleChange}
-                  required
+                <AddressAutocomplete
+                  label="Property Address *"
                   placeholder="123 Main St, City, State ZIP"
+                  initialValue={formData.address}
+                  onAddressSelect={(addr) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      address: [addr.street, addr.city, [addr.state, addr.zipCode].filter(Boolean).join(" ")]
+                        .filter(Boolean)
+                        .join(", "),
+                    }))
+                  }
                 />
               </div>
 

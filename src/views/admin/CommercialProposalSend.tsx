@@ -45,6 +45,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { AddressAutocomplete } from "@/components/admin/AddressAutocomplete";
 import { cn } from "@/lib/utils";
 import { commercialProposalApi } from "@/lib/commercial-proposal-api";
 import { proposalSendRequirements } from "@/lib/commercial-proposal-send";
@@ -661,10 +662,21 @@ export default function CommercialProposalSend({
                     </Field>
                   </div>
                   <Field label="Site address">
-                    <Input
-                      value={site.address}
-                      onChange={(e) => setSites((prev) => prev.map((s) => s.key === site.key ? { ...s, address: e.target.value } : s))}
+                    <AddressAutocomplete
+                      key={`proposal-site-address-${site.key}`}
+                      inputId={`proposal-site-address-${site.key}`}
+                      label=""
                       placeholder={address || "456 Industrial Way"}
+                      initialValue={site.address}
+                      onAddressSelect={(addr) =>
+                        setSites((prev) =>
+                          prev.map((s) =>
+                            s.key === site.key
+                              ? { ...s, address: addr.street, city: addr.city, state: addr.state, zip: addr.zipCode }
+                              : s,
+                          ),
+                        )
+                      }
                     />
                   </Field>
                   <div className="grid sm:grid-cols-4 gap-3">

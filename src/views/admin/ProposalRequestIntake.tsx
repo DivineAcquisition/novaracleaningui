@@ -34,6 +34,7 @@ import {
 } from "@/lib/proposal-request";
 import { proposalApi } from "@/lib/proposal-request-api";
 import { ChecklistField } from "@/components/proposals/ChecklistField";
+import { AddressAutocomplete } from "@/components/admin/AddressAutocomplete";
 
 interface SiteDraft {
   address: string;
@@ -237,7 +238,16 @@ export default function ProposalRequestIntake({
                   </button>
                 )}
               </div>
-              <Input placeholder="Street address *" value={site.address} onChange={(e) => setSite(i, { address: e.target.value })} />
+              <AddressAutocomplete
+                key={`proposal-site-address-${i}`}
+                inputId={`proposal-site-address-${i}`}
+                label=""
+                placeholder="Street address *"
+                initialValue={site.address}
+                onAddressSelect={(addr) =>
+                  setSite(i, { address: addr.street, city: addr.city, state: addr.state, zip: addr.zipCode })
+                }
+              />
               <div className="grid grid-cols-6 gap-2">
                 <Input className="col-span-3" placeholder="City" value={site.city} onChange={(e) => setSite(i, { city: e.target.value })} />
                 <Input className="col-span-1" placeholder="ST" value={site.state} onChange={(e) => setSite(i, { state: e.target.value })} />

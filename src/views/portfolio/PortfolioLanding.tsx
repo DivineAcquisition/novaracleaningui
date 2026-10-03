@@ -31,6 +31,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { AddressAutocomplete } from "@/components/booking/AddressAutocomplete";
 import { BlurFade } from "@/components/magicui/blur-fade";
 import { BorderBeam } from "@/components/magicui/border-beam";
 import { Marquee } from "@/components/magicui/marquee";
@@ -491,7 +492,23 @@ export default function PortfolioLanding() {
                         <div key={i} className="space-y-2 rounded-xl border border-border/60 p-3">
                           <div className="grid gap-2 sm:grid-cols-12">
                             <Input className="sm:col-span-3" placeholder="Label" value={unit.label} onChange={(e) => setMixed((rows) => rows.map((r, idx) => (idx === i ? { ...r, label: e.target.value } : r)))} />
-                            <Input className="sm:col-span-6" placeholder="Street address" value={unit.address} onChange={(e) => setMixed((rows) => rows.map((r, idx) => (idx === i ? { ...r, address: e.target.value } : r)))} />
+                            <div className="sm:col-span-6">
+                              <AddressAutocomplete
+                                inputId={`portfolio-mixed-unit-address-${i}`}
+                                label=""
+                                placeholder="Street address"
+                                initialValue={unit.address}
+                                onAddressSelect={(addr) =>
+                                  setMixed((rows) =>
+                                    rows.map((r, idx) =>
+                                      idx === i
+                                        ? { ...r, address: addr.street, zipCode: addr.zipCode || r.zipCode }
+                                        : r,
+                                    ),
+                                  )
+                                }
+                              />
+                            </div>
                             <Input className="sm:col-span-2" placeholder="ZIP" inputMode="numeric" value={unit.zipCode} onChange={(e) => setMixed((rows) => rows.map((r, idx) => (idx === i ? { ...r, zipCode: e.target.value.replace(/\D/g, "").slice(0, 5) } : r)))} />
                             <button
                               type="button"

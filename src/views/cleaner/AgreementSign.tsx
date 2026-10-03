@@ -22,6 +22,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 
 import { SignaturePad } from "@/components/booking/SignaturePad";
+import { AddressAutocomplete } from "@/components/booking/AddressAutocomplete";
 import { AgreementPdfPreview } from "@/components/cleaner/AgreementPdfPreview";
 import UrgentHireReturnLink from "@/components/cleaner/UrgentHireReturnLink";
 import { Button } from "@/components/ui/button";
@@ -251,14 +252,13 @@ export default function AgreementSign() {
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium">
-              Mailing address <span className="font-normal text-slate-400">(optional)</span>
-            </Label>
-            <Input
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
+            <AddressAutocomplete
+              label="Mailing address (optional)"
               placeholder="Street, city, state ZIP"
-              autoComplete="street-address"
+              initialValue={address}
+              onAddressSelect={(addr) =>
+                setAddress([addr.street, addr.city, [addr.state, addr.zipCode].filter(Boolean).join(" ")].filter(Boolean).join(", "))
+              }
             />
           </div>
 
