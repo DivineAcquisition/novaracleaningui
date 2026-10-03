@@ -24,6 +24,7 @@ import {
 } from "@remixicon/react";
 
 import { SignaturePad } from "@/components/booking/SignaturePad";
+import { AddressAutocomplete } from "@/components/booking/AddressAutocomplete";
 import { TokenPageShell, TokenPanel } from "@/components/token/TokenPageShell";
 import { EmbeddedSetupForm } from "@/components/token/EmbeddedSetupForm";
 import {
@@ -689,11 +690,13 @@ function RegistryStep({
               value={extra.unitLabel}
               onChange={(e) => setExtra({ ...extra, unitLabel: e.target.value })}
             />
-            <input
-              className={inputCls}
+            <AddressAutocomplete
+              label=""
               placeholder="Street address"
-              value={extra.address}
-              onChange={(e) => setExtra({ ...extra, address: e.target.value })}
+              initialValue={extra.address}
+              onAddressSelect={(addr) =>
+                setExtra({ ...extra, address: addr.street, city: addr.city, state: addr.state, zipCode: addr.zipCode })
+              }
             />
             <div className="grid grid-cols-3 gap-2">
               <input

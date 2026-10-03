@@ -28,6 +28,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { AddressAutocomplete } from "@/components/admin/AddressAutocomplete";
 import { ZoneMapEditor } from "@/components/commercial/ZoneMapEditor";
 import { parseSiteZones, type SiteZone } from "@/lib/site-zones";
 import { cn } from "@/lib/utils";
@@ -526,7 +527,13 @@ export function AccountSheet({ account, onClose, reload }: { account: AccountRow
                   <Input placeholder="Nickname *" value={siteEdit.nickname || ""} onChange={(e) => setSiteEdit({ ...siteEdit, nickname: e.target.value })} className="h-8 text-xs" />
                   <Input placeholder="Facility type" value={siteEdit.facility_type || ""} onChange={(e) => setSiteEdit({ ...siteEdit, facility_type: e.target.value })} className="h-8 text-xs" />
                 </div>
-                <Input placeholder="Street address" value={siteEdit.address || ""} onChange={(e) => setSiteEdit({ ...siteEdit, address: e.target.value })} className="h-8 text-xs" />
+                <AddressAutocomplete
+                  key={`site-edit-address-${siteEdit.id ?? "new"}`}
+                  label=""
+                  placeholder="Street address"
+                  initialValue={siteEdit.address || ""}
+                  onAddressSelect={(addr) => setSiteEdit({ ...siteEdit, address: addr.street, city: addr.city || siteEdit.city })}
+                />
                 <div className="grid grid-cols-3 gap-2">
                   <Input placeholder="City" value={siteEdit.city || ""} onChange={(e) => setSiteEdit({ ...siteEdit, city: e.target.value })} className="h-8 text-xs" />
                   <Input placeholder="Sqft" type="number" value={siteEdit.sqft ?? ""} onChange={(e) => setSiteEdit({ ...siteEdit, sqft: e.target.value ? Number(e.target.value) : null })} className="h-8 text-xs" />

@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { AddressAutocomplete } from "@/components/admin/AddressAutocomplete";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { proposalOfferApi } from "@/lib/proposal-offer-api";
@@ -275,7 +276,23 @@ export default function StrProposalSend({ initialHostId = "" }: { initialHostId?
               <Field label="Nickname"><Input value={p.nickname} onChange={(e) => setProperties((prev) => prev.map((x) => x.key === p.key ? { ...x, nickname: e.target.value } : x))} placeholder="Harbor loft" /></Field>
               <Field label="Turnover rate ($)" required><Input type="number" min={0} step="1" value={p.turnover} onChange={(e) => setProperties((prev) => prev.map((x) => x.key === p.key ? { ...x, turnover: e.target.value } : x))} placeholder="185" /></Field>
             </div>
-            <Field label="Address" required><Input value={p.address} onChange={(e) => setProperties((prev) => prev.map((x) => x.key === p.key ? { ...x, address: e.target.value } : x))} placeholder="12 Harbor St" /></Field>
+            <Field label="Address" required>
+              <AddressAutocomplete
+                inputId={`str-proposal-property-address-${p.key}`}
+                label=""
+                placeholder="12 Harbor St"
+                initialValue={p.address}
+                onAddressSelect={(addr) =>
+                  setProperties((prev) =>
+                    prev.map((x) =>
+                      x.key === p.key
+                        ? { ...x, address: addr.street, city: addr.city, state: addr.state, zip: addr.zipCode }
+                        : x,
+                    ),
+                  )
+                }
+              />
+            </Field>
             <div className="grid sm:grid-cols-4 gap-3">
               <Field label="City"><Input value={p.city} onChange={(e) => setProperties((prev) => prev.map((x) => x.key === p.key ? { ...x, city: e.target.value } : x))} /></Field>
               <Field label="State"><Input value={p.state} onChange={(e) => setProperties((prev) => prev.map((x) => x.key === p.key ? { ...x, state: e.target.value.toUpperCase() } : x))} maxLength={2} /></Field>

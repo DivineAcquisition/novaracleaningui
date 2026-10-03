@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { AddressAutocomplete } from "@/components/admin/AddressAutocomplete";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { fetchPmAdmin, type PmAdminAccount, type PmAdminUnit } from "@/lib/partner-admin-api";
@@ -299,7 +300,22 @@ export default function PmProposalSend({ initialPmAccountId = "" }: { initialPmA
             </div>
             <div className="grid sm:grid-cols-2 gap-3">
               <Field label="Label"><Input value={u.nickname} onChange={(e) => setUnits((prev) => prev.map((x) => x.key === u.key ? { ...x, nickname: e.target.value } : x))} placeholder="Unit 2B" /></Field>
-              <Field label="Address" required><Input value={u.address} onChange={(e) => setUnits((prev) => prev.map((x) => x.key === u.key ? { ...x, address: e.target.value } : x))} /></Field>
+              <Field label="Address" required>
+                <AddressAutocomplete
+                  inputId={`pm-proposal-unit-address-${u.key}`}
+                  label=""
+                  initialValue={u.address}
+                  onAddressSelect={(addr) =>
+                    setUnits((prev) =>
+                      prev.map((x) =>
+                        x.key === u.key
+                          ? { ...x, address: addr.street, city: addr.city, state: addr.state, zip: addr.zipCode }
+                          : x,
+                      ),
+                    )
+                  }
+                />
+              </Field>
             </div>
             <div className="grid sm:grid-cols-5 gap-3">
               <Field label="City"><Input value={u.city} onChange={(e) => setUnits((prev) => prev.map((x) => x.key === u.key ? { ...x, city: e.target.value } : x))} /></Field>

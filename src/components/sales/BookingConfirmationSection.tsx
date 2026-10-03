@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
+import { AddressAutocomplete } from "@/components/booking/AddressAutocomplete";
 import { supabase } from "@/integrations/supabase/client";
 import { calculateQuote, formatCents } from "@/lib/sales-pricing";
 import { SERVICE_TIERS } from "@/config/brand-config";
@@ -292,11 +293,15 @@ export function BookingConfirmationSection({
             </Label>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div className="md:col-span-3">
-                <Input
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
+                <AddressAutocomplete
+                  label=""
                   placeholder="Street address"
-                  className="bg-white border-gray-300 text-gray-900"
+                  initialValue={address}
+                  onAddressSelect={(addr) => {
+                    setAddress(addr.street);
+                    if (addr.city) setCity(addr.city);
+                    if (addr.state) setState(addr.state);
+                  }}
                 />
               </div>
               <Input

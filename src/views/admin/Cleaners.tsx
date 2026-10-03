@@ -66,6 +66,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { cn } from "@/lib/utils";
 import { describeEdgeError } from "@/lib/edge-invoke";
 import { Nec1099Panel } from "@/components/admin/Nec1099Panel";
+import { AddressAutocomplete } from "@/components/admin/AddressAutocomplete";
 import {
   cleanerSetupSteps,
   isAgreementSigned,
@@ -2836,7 +2837,15 @@ function EditCleanerProfileDialog({ cleaner, onSaved }: { cleaner: CleanerRow; o
               <div><Label>Email</Label><Input type="email" value={f.email} onChange={set("email")} className="mt-1" /></div>
               <div><Label>Phone</Label><Input type="tel" value={f.phone} onChange={set("phone")} className="mt-1" /></div>
             </div>
-            <div><Label>Home address</Label><Input value={f.home_address} onChange={set("home_address")} placeholder="Street address" className="mt-1" /></div>
+            <AddressAutocomplete
+              key={`cleaner-home-address-${cleaner.id}`}
+              label="Home address"
+              placeholder="Street address"
+              initialValue={f.home_address}
+              onAddressSelect={(addr) =>
+                setF((prev) => ({ ...prev, home_address: addr.street, home_city: addr.city, state: addr.state, home_zip: addr.zipCode }))
+              }
+            />
             <div className="grid grid-cols-3 gap-3">
               <div><Label>City</Label><Input value={f.home_city} onChange={set("home_city")} className="mt-1" /></div>
               <div><Label>State</Label><Input value={f.state} onChange={set("state")} placeholder="MD" className="mt-1" /></div>

@@ -29,6 +29,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { AddressAutocomplete } from "@/components/booking/AddressAutocomplete";
 import { cn } from "@/lib/utils";
 
 const PURPLE = "linear-gradient(135deg,#5C0FFE 0%,#8F7BFD 100%)";
@@ -1001,12 +1002,16 @@ function AddUnitModal({ onClose, onDone }: { onClose: () => void; onDone: () => 
         value={form.unitLabel}
         onChange={(e) => setForm({ ...form, unitLabel: e.target.value })}
       />
-      <Input
-        className="mt-2"
-        placeholder="Street address"
-        value={form.address}
-        onChange={(e) => setForm({ ...form, address: e.target.value })}
-      />
+      <div className="mt-2">
+        <AddressAutocomplete
+          label=""
+          placeholder="Street address"
+          initialValue={form.address}
+          onAddressSelect={(addr) =>
+            setForm({ ...form, address: addr.street, city: addr.city, state: addr.state, zipCode: addr.zipCode })
+          }
+        />
+      </div>
       <div className="mt-2 grid grid-cols-3 gap-2">
         <Input placeholder="City" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
         <Input placeholder="State" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} />

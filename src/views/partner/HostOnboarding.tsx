@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import {
   RiLoader4Line, RiUser3Line, RiMailLine, RiPhoneLine, RiBuilding2Line,
   RiHome4Line, RiAddLine, RiDeleteBinLine, RiArrowRightLine, RiArrowLeftLine,
-  RiCheckboxCircleLine, RiShieldCheckLine, RiKey2Line, RiMapPinLine,
+  RiCheckboxCircleLine, RiShieldCheckLine, RiKey2Line,
   RiSparklingLine, RiFlashlightFill,
 } from "@remixicon/react";
 
@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { AddressAutocomplete } from "@/components/booking/AddressAutocomplete";
 import { SEO } from "@/components/SEO";
 import { cn } from "@/lib/utils";
 import {
@@ -347,10 +348,19 @@ function StepProperties({
               <Input value={p.nickname} onChange={(e) => updateProp(i, { nickname: e.target.value })} placeholder="Lakehouse 2BR" className={PLAIN_INPUT} />
             </Field>
             <Field label="Address">
-              <div className="relative">
-                <RiMapPinLine className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <Input value={p.address} onChange={(e) => updateProp(i, { address: e.target.value })} placeholder="123 Lake Dr, Columbia, MD" className={INPUT_CLS} />
-              </div>
+              <AddressAutocomplete
+                inputId={`host-onboarding-property-address-${i}`}
+                label=""
+                placeholder="123 Lake Dr, Columbia, MD"
+                initialValue={p.address}
+                onAddressSelect={(addr) =>
+                  updateProp(i, {
+                    address: [addr.street, addr.city, [addr.state, addr.zipCode].filter(Boolean).join(" ")]
+                      .filter(Boolean)
+                      .join(", "),
+                  })
+                }
+              />
             </Field>
             <div className="grid grid-cols-3 gap-2">
               <Field label="Beds"><Input inputMode="numeric" value={p.bedrooms ?? ""} onChange={(e) => updateProp(i, { bedrooms: e.target.value === "" ? undefined : Number(e.target.value) })} className={PLAIN_INPUT} /></Field>

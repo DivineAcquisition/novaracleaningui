@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { AddressAutocomplete } from "@/components/booking/AddressAutocomplete";
 import { CompanyCoiDownloadLink } from "@/components/commercial/CompanyCoiDownloadLink";
 import { EmbeddedCardForm } from "@/components/token/EmbeddedCardForm";
 import { cn } from "@/lib/utils";
@@ -653,7 +654,14 @@ function CommercialRequests({ sites, onDone }: { sites: Site[]; onDone: () => vo
           </select>
         )}
         {kind === "additional_site" && (
-          <Input placeholder="New site address" value={address} onChange={(e) => setAddress(e.target.value)} />
+          <AddressAutocomplete
+            label=""
+            placeholder="New site address"
+            initialValue={address}
+            onAddressSelect={(addr) =>
+              setAddress([addr.street, addr.city, [addr.state, addr.zipCode].filter(Boolean).join(" ")].filter(Boolean).join(", "))
+            }
+          />
         )}
         {kind === "report_issue" && (
           <Input placeholder="Short title" value={title} onChange={(e) => setTitle(e.target.value)} />

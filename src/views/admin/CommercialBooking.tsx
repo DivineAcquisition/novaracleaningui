@@ -30,6 +30,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { AddressAutocomplete } from "@/components/admin/AddressAutocomplete";
 import { Badge } from "@/components/ui/badge";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -439,7 +440,18 @@ export default function CommercialBooking() {
             <Field label="Billing email *"><Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="ap@acme.com" /></Field>
             <Field label="Phone *"><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(301) 555-0100" /></Field>
           </div>
-          <Field label="Service address *"><Input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="123 Commerce Blvd, Suite 200" /></Field>
+          <AddressAutocomplete
+            key={`commercial-booking-address-${selectedAccount?.id ?? "new"}`}
+            label="Service address *"
+            placeholder="123 Commerce Blvd, Suite 200"
+            initialValue={address}
+            onAddressSelect={(addr) => {
+              setAddress(addr.street);
+              setCity(addr.city);
+              setStateVal(addr.state);
+              setZipCode(addr.zipCode);
+            }}
+          />
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <Field label="City *"><Input value={city} onChange={(e) => setCity(e.target.value)} /></Field>
             <Field label="State *"><Input value={stateVal} onChange={(e) => setStateVal(e.target.value.toUpperCase())} maxLength={2} placeholder="MD" /></Field>

@@ -55,6 +55,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { AddressAutocomplete } from "@/components/admin/AddressAutocomplete";
 import { cn } from "@/lib/utils";
 import { edgeResult } from "@/lib/edge-invoke";
 import { useAdminRole } from "@/hooks/use-admin-role";
@@ -1061,10 +1062,17 @@ function EditCustomerDialog({
             <Label className="text-sm">Phone</Label>
             <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
           </div>
-          <div>
-            <Label className="text-sm">Address</Label>
-            <Input value={address} onChange={(e) => setAddress(e.target.value)} />
-          </div>
+          <AddressAutocomplete
+            key={`customer-address-${customer.id}-${open ? "open" : "closed"}`}
+            label="Address"
+            initialValue={address}
+            onAddressSelect={(addr) => {
+              setAddress(addr.street);
+              setCity(addr.city);
+              setState(addr.state);
+              setZip(addr.zipCode);
+            }}
+          />
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <div className="col-span-2">
               <Label className="text-sm">City</Label>

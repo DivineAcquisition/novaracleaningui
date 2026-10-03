@@ -49,6 +49,11 @@ interface AddressAutocompleteProps {
   label?: string;
   placeholder?: string;
   error?: string;
+  /** Override the input's id (and the label's htmlFor) when more than one
+   *  instance of this component can be mounted at once — a list of site
+   *  rows, for example. Defaults to the original fixed id so every
+   *  existing single-instance caller is unaffected. */
+  inputId?: string;
 }
 
 export function AddressAutocomplete({
@@ -57,6 +62,7 @@ export function AddressAutocomplete({
   label = "Street Address *",
   placeholder = "Start typing address...",
   error,
+  inputId = "customer-address-autocomplete",
 }: AddressAutocompleteProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -192,7 +198,7 @@ export function AddressAutocomplete({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <Label htmlFor="customer-address-autocomplete">{label}</Label>
+        <Label htmlFor={inputId}>{label}</Label>
         {addressHistory.length > 0 && (
           <Popover open={showHistory} onOpenChange={setShowHistory}>
             <PopoverTrigger asChild>
@@ -231,7 +237,7 @@ export function AddressAutocomplete({
       <div className="relative">
         <Input
           ref={inputRef}
-          id="customer-address-autocomplete"
+          id={inputId}
           type="text"
           placeholder={placeholder}
           defaultValue={initialValue}
