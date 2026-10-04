@@ -17,7 +17,7 @@
 //   DOCS_CAPTURE_FONT_DIR   folder with @fontsource Inter, Plus Jakarta Sans and
 //                           JetBrains Mono — without it, system fonts are used
 
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { chromium, type Route } from "playwright";
 
@@ -66,10 +66,13 @@ const SECTIONS: SectionCard[] = [
     rows: [
       {
         nodes: [
-          { t: "ZIP code", c: "pricing_zone_zips" },
+          { t: "ZIP code", c: "service_coverage_zones" },
           { t: "Home size", c: "sq ft band" },
-          { t: "Instant price", c: "quote-dynamic-price", hi: true },
-          { t: "Deposit or card on file", c: "create-payment-intent" },
+          // The website prices from the shared price list; create-payment-intent
+          // recomputes it server-side so the charge always matches the quote.
+          // (The layered engine on the next card is the booking desk's.)
+          { t: "Instant price", c: "_shared/pricing.ts", hi: true },
+          { t: "Deposit or pay in full", c: "create-payment-intent" },
           { t: "Booked", c: "stripe-webhook" },
         ],
       },
@@ -87,7 +90,7 @@ const SECTIONS: SectionCard[] = [
     kind: "section",
     slug: "pricing-engine",
     title: "The pricing engine",
-    pitch: "Same home, same date, same address: same price. Every layer is its own line, so any quote can be explained.",
+    pitch: "Every quote our booking desk gives runs through it, and every layer is its own line.",
     rows: [
       {
         nodes: [
@@ -102,19 +105,19 @@ const SECTIONS: SectionCard[] = [
     ],
     note: "* Demand layer is built and switched off today. Add-ons and the same-day fee are flat amounts, added last.",
     around: [
-      { t: "Live quotes", c: "quote-dynamic-price" },
+      { t: "Booking-desk quotes", c: "quote-dynamic-price" },
       { t: "Every quote logged", c: "price_quote_audit" },
       { t: "Logged manual overrides", c: "price_overrides" },
       { t: "Separate commercial formula", c: "quote-commercial-price" },
     ],
     post:
-      "Our pricing is a pipeline, not a guess: base rate × condition × zone × demand, clamped by a floor and a ceiling, then flat add-ons. Same inputs, same price, every time, and every layer shows as its own line.",
+      "Our pricing is a pipeline, not a guess: base rate × condition × zone (× demand, built and switched off for now), clamped by a floor and a ceiling, then flat add-ons. Every quote our booking desk gives runs through it, and every layer shows as its own line.",
   },
   {
     kind: "section",
     slug: "recurring-revenue",
     title: "Recurring revenue",
-    pitch: "Glow memberships turn a one-off clean into a standing relationship, with the same cleaner every visit.",
+    pitch: "Glow memberships turn a one-off clean into a standing relationship with the same cleaner.",
     rows: [
       {
         nodes: [
@@ -127,12 +130,12 @@ const SECTIONS: SectionCard[] = [
     ],
     around: [
       { t: "At-risk member alerts", c: "at-risk board" },
-      { t: "Credits and expiry", c: "check-credit-expiry" },
+      { t: "Self-serve manage link by text", c: "send-recurring-manage-link" },
       { t: "Pause and resume", c: "pause-subscription" },
       { t: "MRR tracking", c: "admin-memberships" },
     ],
     post:
-      "The most valuable thing a cleaning company can build is a recurring customer. Members get their next visit booked automatically with the same cleaner, and an at-risk board flags quiet cancellations before they happen.",
+      "The most valuable thing a cleaning company can build is a recurring customer. Members get their next visit booked automatically with the same cleaner, and an at-risk board flags anyone who's gone quiet: overdue, no schedule, or sitting on unused credits.",
   },
   {
     kind: "section",
@@ -167,27 +170,31 @@ const SECTIONS: SectionCard[] = [
   {
     kind: "section",
     slug: "dispatch",
-    title: "Dispatch without a dispatcher",
-    pitch: "Postgres holds the clock and the rules; edge functions do the texting. Jobs get offered, claimed and covered on their own.",
+    // Approval-first since 2026-07-06: nothing is texted to cleaners until an
+    // admin approves the job (dispatch_auto_offers_enabled defaults to off),
+    // and declined/expired offers come back for approval rather than rolling
+    // on. No-show cover is the part that runs on its own (coverage-runner).
+    title: "Dispatch in one click",
+    pitch: "One person approves. The system ranks cleaners, texts the offers and takes the first claim.",
     rows: [
       {
         nodes: [
           { t: "Booking confirmed" },
+          { t: "One-click approval", c: "Dispatch console" },
           { t: "Rank cleaners", c: "location · rating · workload" },
           { t: "SMS offer, first to claim", c: "dispatch-job", hi: true },
-          { t: "Check in on site", c: "job-check-in" },
-          { t: "Checklist + photo proof", c: "cleaner-job-checklist" },
+          { t: "Check-in, checklist, photos", c: "job-check-in" },
         ],
       },
     ],
     around: [
-      { t: "Unclaimed offers roll to the next closest", c: "expire-job-offers" },
-      { t: "Coverage brain in Postgres", c: "run_coverage_cycle" },
+      { t: "No-show? Backups offered one by one", c: "run_coverage_cycle" },
+      { t: "Missed offers come back for approval", c: "expire-job-offers" },
       { t: "Reliability scores every 6h", c: "compute-cleaner-scores" },
       { t: "Live map of crews", c: "apploye-live-tracking" },
     ],
     post:
-      "We don't have a dispatcher. Postgres owns the clock and the rules, edge functions send the texts: ranked cleaners get an SMS offer, first to claim wins, and unclaimed offers roll to the next closest automatically.",
+      "Dispatch takes one click. A person approves the job; the system ranks cleaners by location, rating and workload, texts the offers, and the first to claim gets it. If a cleaner no-shows, backups are offered automatically, one after another.",
   },
   {
     kind: "section",
@@ -219,32 +226,36 @@ const SECTIONS: SectionCard[] = [
     kind: "section",
     slug: "back-office",
     title: "Pay and paperwork",
-    pitch: "From a finished job to a contractor payout to a 1099, with no spreadsheet in the middle.",
+    pitch: "From a finished job to a contractor payout to a 1099, all from one pay ledger.",
+    // The live Payroll screen is Custom Payout (confirm → contractor notified →
+    // mark paid) plus Run Payroll for Extra Pay over Stripe Connect. The
+    // Approve & Pay batch (payroll-execute) exists but isn't mounted, so it
+    // isn't claimed here.
     rows: [
       {
         nodes: [
           { t: "Job approved", c: "admin-review-completion" },
-          { t: "Pay = job value × tier", c: "process-payout" },
-          { t: "Approve & Pay", c: "payroll-execute", hi: true },
-          { t: "Stripe Connect transfer", c: "pay-cleaner-transfer" },
-          { t: "1099-NEC from the pay ledger", c: "nec-1099" },
+          { t: "Pay = job value × rate", c: "suggested per crew member" },
+          { t: "Payout confirmed", c: "contractor texted + emailed", hi: true },
+          { t: "Logged to the pay ledger", c: "manual_payouts" },
+          { t: "1099-NEC from that ledger", c: "nec-1099" },
         ],
       },
     ],
     around: [
+      { t: "Extra pay over Stripe Connect", c: "pay-cleaner-transfer" },
       { t: "W-9 collected in onboarding", c: "cleaner_w9" },
-      { t: "P&L synced", c: "pl-sheet-sync" },
-      { t: "Weekly report", c: "weekly-report-generate" },
-      { t: "Tips passed through 100%", c: "cleaner_tips" },
+      { t: "P&L synced daily", c: "pl-sheet-sync" },
+      { t: "Tips passed through 100%", c: "tip-cleaner" },
     ],
     post:
-      "Paying 1099 cleaners usually means a spreadsheet and a late night. Ours: job approved → pay calculated from job value × tier → one Approve & Pay → Stripe Connect transfers → 1099-NEC built from the same ledger.",
+      "Paying 1099 cleaners usually means a spreadsheet and a late night. Ours: job approved → pay suggested from job value × rate → one confirm texts and emails the contractor → it lands in the pay ledger → the 1099-NEC is built from that same ledger.",
   },
   {
     kind: "section",
     slug: "other-channels",
     title: "Two more revenue lines, same rails",
-    pitch: "Airbnb hosts and commercial buildings run on the same dispatch, checklists and payouts as homes.",
+    pitch: "Airbnb hosts and offices run on the same dispatch, checklists and payouts as homes.",
     rows: [
       {
         label: "AIRBNB / SHORT-TERM RENTAL",
@@ -252,7 +263,7 @@ const SECTIONS: SectionCard[] = [
           { t: "Host signs up", c: "partner-host-onboarding" },
           { t: "Turnovers generated", c: "partner-jobs-generate" },
           { t: "On Google Calendar + GHL", c: "sync-turnover-calendar", hi: true },
-          { t: "Dispatched like any job", c: "dispatch-job" },
+          { t: "Same crew, or the dispatch queue", c: "book-partner-job" },
         ],
       },
       {
@@ -266,7 +277,7 @@ const SECTIONS: SectionCard[] = [
       },
     ],
     post:
-      "Once dispatch, checklists and payouts exist, a new revenue line is mostly a new front door. Airbnb turnovers land on the calendar and get dispatched like any job; commercial runs walkthrough → priced proposal → signed agreement.",
+      "Once dispatch, checklists and payouts exist, a new revenue line is mostly a new front door. Airbnb turnovers land on the calendar and go to the host's regular crew or the same dispatch queue as any job; commercial runs walkthrough → priced proposal → signed agreement.",
   },
 ];
 
@@ -275,7 +286,7 @@ const AREAS: Array<{ title: string; line: string }> = [
   { title: "Pricing engine", line: "Layered, explainable, deterministic" },
   { title: "Recurring revenue", line: "Glow memberships, same cleaner" },
   { title: "Speed-to-lead", line: "VA, automation and an AI agent" },
-  { title: "Dispatch", line: "First to claim wins, no dispatcher" },
+  { title: "Dispatch", line: "One approval, first to claim wins" },
   { title: "Quality control", line: "Re-cleans and dispute-proof files" },
   { title: "Pay and paperwork", line: "Payouts, payroll, 1099s" },
   { title: "Other channels", line: "Airbnb turnovers and commercial" },
@@ -367,7 +378,7 @@ const ARROW = `<svg class="arrow" width="40" height="18" viewBox="0 0 40 18"><pa
 function nodeHtml(n: Node, i: number): string {
   const list = n.list ? `<div class="tools">${n.list.map((x) => `<span>${esc(x)}</span>`).join("")}</div>` : "";
   return `<div class="node${n.hi ? " hi" : ""}${n.list ? " wide" : ""}"><div class="step">${String(i + 1).padStart(2, "0")}</div><h3>${esc(n.t)}</h3>${
-    n.c ? `<code>${esc(n.c)}</code>` : ""
+    n.c ? `<code>${esc(n.c).replace(/_/g, "_<wbr>")}</code>` : ""
   }${list}</div>`;
 }
 
@@ -490,8 +501,11 @@ async function main() {
   const guide = await loadGuideImage(resolve(ROOT, "public/cleaner/guide-pdfs/day-to-day-job-operations.pdf"));
   const logo = encodePng(crop(guide, 140, 82, 164, 164));
 
-  rmSync(OUT, { recursive: true, force: true });
+  // Only this script's own output: live/ is written by live-screens.ts.
   mkdirSync(OUT, { recursive: true });
+  for (const name of readdirSync(OUT)) {
+    if (/^\d\d-.*\.png$/.test(name) || name === "README.md") rmSync(join(OUT, name));
+  }
 
   const cards: Array<{ file: string; html: string; title: string; post: string }> = [
     {
@@ -554,6 +568,9 @@ async function main() {
     "",
     "Every node names the real edge function, table or route behind it. Regenerate with",
     "`npx tsx scripts/marketing/architecture-cards.ts` after changing anything in that file.",
+    "",
+    "`live/` has a matching card of real app screens for each area, numbered the same (01–08), so",
+    "the thread can go diagram → live screen for every part. See `live/README.md`.",
     "",
     "| Image | Area | Draft post |",
     "| --- | --- | --- |",

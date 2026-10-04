@@ -6,17 +6,20 @@ Each is 1600×900 (X's in-feed size), rendered at 2× for sharp text. Post them 
 Every node names the real edge function, table or route behind it. Regenerate with
 `npx tsx scripts/marketing/architecture-cards.ts` after changing anything in that file.
 
+`live/` has a matching card of real app screens for each area, numbered the same (01–08), so
+the thread can go diagram → live screen for every part. See `live/README.md`.
+
 | Image | Area | Draft post |
 | --- | --- | --- |
 | `00-cover.png` | Cover | We run a cleaning company on software we built ourselves. Here's the whole system, one piece at a time. 🧵 |
 | `01-customer-booking.png` | Customer booking | Most cleaning companies still answer “how much?” with “we'll call you.” Ours answers with a number: ZIP → home size → exact price → deposit → booked. One flow, no phone tag. |
-| `02-pricing-engine.png` | The pricing engine | Our pricing is a pipeline, not a guess: base rate × condition × zone × demand, clamped by a floor and a ceiling, then flat add-ons. Same inputs, same price, every time, and every layer shows as its own line. |
-| `03-recurring-revenue.png` | Recurring revenue | The most valuable thing a cleaning company can build is a recurring customer. Members get their next visit booked automatically with the same cleaner, and an at-risk board flags quiet cancellations before they happen. |
+| `02-pricing-engine.png` | The pricing engine | Our pricing is a pipeline, not a guess: base rate × condition × zone (× demand, built and switched off for now), clamped by a floor and a ceiling, then flat add-ons. Every quote our booking desk gives runs through it, and every layer shows as its own line. |
+| `03-recurring-revenue.png` | Recurring revenue | The most valuable thing a cleaning company can build is a recurring customer. Members get their next visit booked automatically with the same cleaner, and an at-risk board flags anyone who's gone quiet: overdue, no schedule, or sitting on unused credits. |
 | `04-speed-to-lead.png` | Speed-to-lead | Leads go cold in minutes. Ours don't get the chance: a cron checks every minute for leads nobody has called in 10 minutes and texts them, and an AI SMS agent can quote, find a slot and send a payment link on its own. |
-| `05-dispatch.png` | Dispatch without a dispatcher | We don't have a dispatcher. Postgres owns the clock and the rules, edge functions send the texts: ranked cleaners get an SMS offer, first to claim wins, and unclaimed offers roll to the next closest automatically. |
+| `05-dispatch.png` | Dispatch in one click | Dispatch takes one click. A person approves the job; the system ranks cleaners by location, rating and workload, texts the offers, and the first to claim gets it. If a cleaner no-shows, backups are offered automatically, one after another. |
 | `06-quality-control.png` | Quality control | A complaint shouldn't be a he-said-she-said. Every one opens a case: a free re-clean under our Spotless Guarantee, plus a file built live from signed agreements, Stripe charges, photos, the checklist and a full audit trail. |
-| `07-back-office.png` | Pay and paperwork | Paying 1099 cleaners usually means a spreadsheet and a late night. Ours: job approved → pay calculated from job value × tier → one Approve & Pay → Stripe Connect transfers → 1099-NEC built from the same ledger. |
-| `08-other-channels.png` | Two more revenue lines, same rails | Once dispatch, checklists and payouts exist, a new revenue line is mostly a new front door. Airbnb turnovers land on the calendar and get dispatched like any job; commercial runs walkthrough → priced proposal → signed agreement. |
+| `07-back-office.png` | Pay and paperwork | Paying 1099 cleaners usually means a spreadsheet and a late night. Ours: job approved → pay suggested from job value × rate → one confirm texts and emails the contractor → it lands in the pay ledger → the 1099-NEC is built from that same ledger. |
+| `08-other-channels.png` | Two more revenue lines, same rails | Once dispatch, checklists and payouts exist, a new revenue line is mostly a new front door. Airbnb turnovers land on the calendar and go to the host's regular crew or the same dispatch queue as any job; commercial runs walkthrough → priced proposal → signed agreement. |
 | `09-by-the-numbers.png` | By the numbers | All of it, by the numbers: 363k lines, 225 backend functions, 373 migrations, 118 pages, a contractor mobile app and 12 integrations. Built for one cleaning company. Running it today. |
 
 ## Where the numbers come from

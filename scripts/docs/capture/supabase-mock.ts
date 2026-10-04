@@ -859,6 +859,8 @@ export interface CaptureOverlay {
   api?: Record<string, (body: any) => unknown>;
   /** Storage objects (e.g. demo photos): return null to fall through. */
   storage?: (path: string) => { contentType: string; body: string | Buffer } | null;
+  /** Postgres RPCs, keyed by function name. */
+  rpcs?: Record<string, (body: any) => unknown>;
 }
 
 let overlay: CaptureOverlay | null = null;
@@ -960,7 +962,7 @@ export async function handleSupabase(route: Route, request: PWRequest): Promise<
   // ── rpc ──
   if (path.startsWith("/rest/v1/rpc/")) {
     const name = path.split("/rest/v1/rpc/")[1];
-    const entry = name in RPCS ? RPCS[name] : null;
+    const entry = overlay?.rpcs?.[name] ?? (name in RPCS ? RPCS[name] : null);
     const value = typeof entry === "function" ? entry(parseBody(request)) : entry;
     return json(route, value);
   }
