@@ -58,12 +58,13 @@ async function exportMessages(token: string, locationId: string): Promise<Msg[]>
 }
 
 function messageList(raw: unknown): Msg[] {
-  const root = raw as Record<string, unknown>;
-  const nested = root?.messages as unknown;
-  const list = Array.isArray(nested)
-    ? nested as Record<string, unknown>[]
-    : Array.isArray((nested as { messages?: unknown[] } | undefined)?.messages)
-    ? (nested as { messages: Record<string, unknown>[] }).messages
+  const root = raw as Record<string, unknown> | Record<string, unknown>[];
+  const list = Array.isArray(raw)
+    ? raw as Record<string, unknown>[]
+    : Array.isArray((root as Record<string, unknown>)?.messages)
+    ? (root as { messages: Record<string, unknown>[] }).messages
+    : Array.isArray(((root as { messages?: { messages?: unknown[] } }).messages)?.messages)
+    ? ((root as { messages: { messages: Record<string, unknown>[] } }).messages).messages
     : [];
   return list.map((m) => {
     const atRaw = m.dateAdded ?? m.timestamp ?? m.createdAt ?? 0;
