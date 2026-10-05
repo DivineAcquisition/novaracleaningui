@@ -40,7 +40,7 @@ async function ghl(token: string, path: string, init?: RequestInit) {
     Authorization: `Bearer ${token}`,
     Version: GHL_VERSION,
     Accept: "application/json",
-    "User-Agent": "Mozilla/5.0",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
     ...((init?.headers as Record<string, string> | undefined) || {}),
   };
   if (init?.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
@@ -57,7 +57,12 @@ async function exportMessages(token: string, locationId: string): Promise<Msg[]>
     log("export failed", { status: res.status });
     return [];
   }
-  return messageList(res.body);
+  const msgs = messageList(res.body);
+  if (!msgs.length) {
+    const kind = res.body && typeof res.body === "object" ? Object.keys(res.body as object).slice(0, 6) : typeof res.body;
+    log("export empty", { status: res.status, kind });
+  }
+  return msgs;
 }
 
 function messageList(raw: unknown): Msg[] {
@@ -377,9 +382,11 @@ serve(async (req) => {
   const deadline = Date.now() + (dry || wantedContact || wantedConv ? 0 : 50000);
   const seenInbound = new Set<string>();
   const failedSend = new Set<string>();
+  let exportCount = 0;
 
   do {
   const exported = await exportMessages(token, locationId);
+  exportCount = exported.length;
   const since = seenInbound.size === 0 ? Date.now() - 6 * 60 * 60 * 1000 : Date.now() - 90 * 1000;
   const inboundNow = exported.filter((m) => m.direction === "inbound" && m.at >= since && !seenInbound.has(m.id));
   for (const m of inboundNow) seenInbound.add(m.id);
@@ -391,6 +398,17 @@ serve(async (req) => {
     for (const m of exported) {
       if (m.contactId === wantedContact && m.conversationId) fromExport.set(m.conversationId, { id: m.conversationId, contactId: m.contactId });
     }
+  }
+  const { data: openThreads } = await supabase
+    .from("lsa_chat_threads")
+    .select("ghl_conversation_id, ghl_contact_id, status")
+    .eq("handoff", false)
+    .limit(20);
+  for (const open of openThreads || []) {
+    if (!open.ghl_conversation_id || !open.ghl_contact_id) continue;
+    if (open.status === "human" || open.status === "opted_out") continue;
+    if (wantedContact && open.ghl_contact_id !== wantedContact) continue;
+    fromExport.set(open.ghl_conversation_id, { id: open.ghl_conversation_id, contactId: open.ghl_contact_id });
   }
   const search = await ghl(token, `/conversations/search?locationId=${encodeURIComponent(locationId)}&limit=20`);
   const searched = search.ok ? (((search.body as { conversations?: Record<string, unknown>[] }).conversations) || []) : [];
@@ -755,7 +773,7 @@ serve(async (req) => {
   await new Promise((resolve) => setTimeout(resolve, 2000));
   } while (Date.now() < deadline);
 
-  return new Response(JSON.stringify({ mode, count: report.length, report }), {
+  return new Response(JSON.stringify({ mode, count: report.length, exportCount, report }), {
     headers: { ...cors, "Content-Type": "application/json" },
   });
   } catch (error) {
