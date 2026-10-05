@@ -116,10 +116,12 @@ serve(async (req) => {
 
     if (action === "tick") {
       const parts = zonedNowParts(now, settings.timezone);
-      const pastRunSlot =
-        parts.weekday > settings.run_weekday ||
-        (parts.weekday === settings.run_weekday && parts.hour >= settings.run_hour);
-      const due = settings.enabled && pastRunSlot;
+      // Only the configured hour. "Any time after Monday 8am" made every
+      // later hour this week look due, so a Drive failure re-sent the notice
+      // on the hour until the week ended.
+      const due = settings.enabled
+        && parts.weekday === settings.run_weekday
+        && parts.hour === settings.run_hour;
       const results: unknown[] = [];
       if (due) {
         const week = priorCompletedWeek(now, settings.timezone);
@@ -190,6 +192,17 @@ async function generateForPeriod(
 
   if (existing?.status === "generated" && existing?.pdf_status === "generated" && !force) {
     return { ok: true, skipped: "already_generated", id: existing.id, driveUrl: existing.drive_url };
+  }
+  // A report that already notified (PDF is in storage; Drive may still be
+  // pending) must not email or Discord again. Retries can still try Drive.
+  // An admin on-demand force is the only path that sends again.
+  const alreadyNotified = Boolean(existing?.notified_at);
+  const resendNotice = force && trigger === "on_demand";
+  if (alreadyNotified && !resendNotice && trigger !== "retry") {
+    return { ok: true, skipped: "already_notified", id: existing.id, status: existing.status };
+  }
+  if (alreadyNotified && trigger === "retry" && Number(existing?.pdf_attempts || 0) >= MAX_ATTEMPTS) {
+    return { ok: true, skipped: "retry_limit", id: existing.id, status: existing.status };
   }
 
   const attempts = Number(existing?.pdf_attempts || 0) + 1;
@@ -267,13 +280,15 @@ async function generateForPeriod(
       generated_at: generatedAt,
     });
 
-    await notifyWeeklyReport(sb, "ready", settings, {
-      periodStart,
-      periodEnd,
-      driveUrl: drive.url,
-      summary: insight.executive_summary,
-    });
-    await sb.from("weekly_reports").update({ notified_at: new Date().toISOString() }).eq("id", id);
+    if (!alreadyNotified || resendNotice) {
+      await notifyWeeklyReport(sb, "ready", settings, {
+        periodStart,
+        periodEnd,
+        driveUrl: drive.url,
+        summary: insight.executive_summary,
+      });
+      await sb.from("weekly_reports").update({ notified_at: new Date().toISOString() }).eq("id", id);
+    }
 
     return {
       ok: true,
@@ -294,8 +309,7 @@ async function generateForPeriod(
       pdf_attempts: attempts,
     }).eq("id", id);
 
-    const already = existing?.failure_notified_at;
-    if (!already || attempts >= MAX_ATTEMPTS) {
+    if (!existing?.failure_notified_at) {
       await notifyWeeklyReport(sb, "failed", settings, {
         periodStart,
         periodEnd,
