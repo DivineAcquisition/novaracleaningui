@@ -399,11 +399,12 @@ serve(async (req) => {
       if (m.contactId === wantedContact && m.conversationId) fromExport.set(m.conversationId, { id: m.conversationId, contactId: m.contactId });
     }
   }
-  const { data: openThreads } = await supabase
+  const { data: openThreads, error: openError } = await supabase
     .from("lsa_chat_threads")
     .select("ghl_conversation_id, ghl_contact_id, status")
     .eq("handoff", false)
     .limit(20);
+  log("open threads", { n: openThreads?.length || 0, error: openError?.message || null, matched: exported.filter((m) => m.contactId === wantedContact).length });
   for (const open of openThreads || []) {
     if (!open.ghl_conversation_id || !open.ghl_contact_id) continue;
     if (open.status === "human" || open.status === "opted_out") continue;
