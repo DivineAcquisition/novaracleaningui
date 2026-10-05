@@ -21,7 +21,7 @@ const cors = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-lsa-secret",
 };
 
-type Msg = { id: string; direction: string; type: string; body: string; at: number };
+type Msg = { id: string; direction: string; type: string; body: string; at: number; source: string; contactId: string; conversationId: string };
 
 function log(step: string, details?: unknown) {
   console.log(`[LSA-CHAT] ${step}${details ? " " + JSON.stringify(details) : ""}`);
@@ -50,6 +50,13 @@ async function ghl(token: string, path: string, init?: RequestInit) {
   return { ok: res.ok, status: res.status, body };
 }
 
+async function exportMessages(token: string, locationId: string): Promise<Msg[]> {
+  const res = await ghl(token, `/conversations/messages/export?locationId=${encodeURIComponent(locationId)}`);
+  if (!res.ok) return [];
+  const list = ((res.body as { messages?: Record<string, unknown>[] }).messages) || [];
+  return messageList(list);
+}
+
 function messageList(raw: unknown): Msg[] {
   const root = raw as Record<string, unknown>;
   const nested = root?.messages as unknown;
@@ -68,6 +75,9 @@ function messageList(raw: unknown): Msg[] {
       type: String(m.messageType || m.type || "").toUpperCase(),
       body,
       at: Number.isFinite(atNum) ? atNum : 0,
+      source: String(m.source || ""),
+      contactId: String(m.contactId || ""),
+      conversationId: String(m.conversationId || ""),
     };
   }).filter((m) => m.body.trim()).sort((a, b) => a.at - b.at);
 }
@@ -94,7 +104,13 @@ function isAutomatedNotice(body: string): boolean {
     || t.includes("job offer")
     || t.includes("submit your w-9")
     || t.includes("is still pending")
-    || t.includes("reply stop");
+    || t.includes("reply stop")
+    || t.includes("tried giving you");
+}
+
+function sameOutbound(sent: string, actual: string): boolean {
+  const stripped = actual.replace(/\s*reply stop to unsubscribe\.?$/i, "").trim();
+  return stripped === sent.trim() || actual.trim() === sent.trim();
 }
 
 function toE164(input: string): string | null {
@@ -224,20 +240,58 @@ serve(async (req) => {
     return new Response(JSON.stringify({ error: "GHL not configured" }), { status: 500, headers: cors });
   }
 
+  if (!dry) {
+    const lock = Number(await secret(supabase, "LSA_CHAT_AGENT_LOCK") || 0);
+    if (lock && Date.now() - lock < 48000) {
+      return new Response(JSON.stringify({ skipped: "busy" }), { headers: { ...cors, "Content-Type": "application/json" } });
+    }
+    await supabase.from("app_secrets").upsert({
+      key: "LSA_CHAT_AGENT_LOCK",
+      value: String(Date.now()),
+      description: "chat agent watch lock",
+    }, { onConflict: "key" });
+  }
+
   const wantedContact = String(payload.contactId || payload.contact_id || (payload.contact as { id?: string } | undefined)?.id || "");
   const wantedConv = String(payload.conversationId || payload.conversation_id || "");
-  const searchPath = wantedContact
-    ? `/conversations/search?locationId=${encodeURIComponent(locationId)}&contactId=${encodeURIComponent(wantedContact)}&limit=5`
-    : `/conversations/search?locationId=${encodeURIComponent(locationId)}&limit=25`;
-  const search = await ghl(token, searchPath);
-  if (!search.ok) {
-    log("search failed", { status: search.status });
-    return new Response(JSON.stringify({ error: "ghl search failed" }), { status: 502, headers: cors });
-  }
-  let conversations = ((search.body as { conversations?: Record<string, unknown>[] }).conversations) || [];
-  if (wantedConv) conversations = conversations.filter((c) => String(c.id || "") === wantedConv);
   const report: Array<Record<string, unknown>> = [];
   const freshAfter = Date.now() - 48 * 60 * 60 * 1000;
+  const deadline = Date.now() + (dry || wantedContact || wantedConv ? 0 : 52000);
+  const seenInbound = new Set<string>();
+
+  do {
+  const exported = await exportMessages(token, locationId);
+  const since = seenInbound.size === 0 ? Date.now() - 6 * 60 * 60 * 1000 : Date.now() - 90 * 1000;
+  const inboundNow = exported.filter((m) => m.direction === "inbound" && m.at >= since && !seenInbound.has(m.id));
+  for (const m of inboundNow) seenInbound.add(m.id);
+  const fromExport = new Map<string, { id: string; contactId: string }>();
+  for (const m of (seenInbound.size && inboundNow.length === 0 ? exported.filter((m) => m.direction === "inbound" && m.at >= since) : inboundNow)) {
+    if (m.conversationId) fromExport.set(m.conversationId, { id: m.conversationId, contactId: m.contactId });
+  }
+  if (wantedContact) {
+    for (const m of exported) {
+      if (m.contactId === wantedContact && m.conversationId) fromExport.set(m.conversationId, { id: m.conversationId, contactId: m.contactId });
+    }
+  }
+  const search = await ghl(token, `/conversations/search?locationId=${encodeURIComponent(locationId)}&limit=20`);
+  const searched = search.ok ? (((search.body as { conversations?: Record<string, unknown>[] }).conversations) || []) : [];
+  const conversations: Array<{ id: string; contactId: string }> = [];
+  const have = new Set<string>();
+  for (const c of [...fromExport.values(), ...searched.map((c) => ({ id: String(c.id || ""), contactId: String(c.contactId || "") }))]) {
+    if (!c.id || have.has(c.id)) continue;
+    if (wantedConv && c.id !== wantedConv) continue;
+    if (wantedContact && c.contactId && c.contactId !== wantedContact) continue;
+    have.add(c.id);
+    conversations.push(c);
+  }
+  const exportByConv = new Map<string, Msg[]>();
+  for (const m of exported) {
+    const id = m.conversationId;
+    if (!id) continue;
+    const list = exportByConv.get(id) || [];
+    list.push(m);
+    exportByConv.set(id, list);
+  }
 
   for (const conv of conversations) {
     const conversationId = String(conv.id || "");
@@ -245,8 +299,10 @@ serve(async (req) => {
     if (!conversationId || !contactId) continue;
 
     const msgsRes = await ghl(token, `/conversations/${conversationId}/messages?limit=40`);
-    if (!msgsRes.ok) continue;
-    const messages = messageList(msgsRes.body).filter((m) => isChat(m.type) || isLsaText(m.body));
+    const loaded = msgsRes.ok ? messageList(msgsRes.body) : [];
+    const messages = (loaded.length ? loaded : (exportByConv.get(conversationId) || []))
+      .filter((m) => isChat(m.type) || isLsaText(m.body));
+    if (!messages.length) continue;
     const lsaAt = messages.find((m) => isLsaText(m.body));
     const channel = channelOf(messages);
     const facebook = channel === "FB" || channel === "IG";
@@ -276,7 +332,8 @@ serve(async (req) => {
     const manualTakeover = Boolean(row?.opener_sent_at) && messages.some((m) =>
       m.direction === "outbound"
       && isChat(m.type)
-      && !sentBodies.has(m.body.trim())
+      && m.source !== "workflow"
+      && ![...sentBodies].some((sent) => sameOutbound(sent, m.body))
       && !isAutomatedNotice(m.body)
       && !m.body.startsWith("Hey, this is Malik from NovaraCleaning")
     );
@@ -512,6 +569,17 @@ serve(async (req) => {
     } else {
       report.push({ conversationId, action: dry ? "would-send" : "no-reply", status: patch.status || row?.status, preview: reply?.slice(0, 80) || null });
     }
+  }
+  if (Date.now() >= deadline) break;
+  await new Promise((resolve) => setTimeout(resolve, 3000));
+  } while (Date.now() < deadline);
+
+  if (!dry) {
+    await supabase.from("app_secrets").upsert({
+      key: "LSA_CHAT_AGENT_LOCK",
+      value: "0",
+      description: "chat agent watch lock",
+    }, { onConflict: "key" });
   }
 
   return new Response(JSON.stringify({ mode, count: report.length, report }), {
