@@ -93,7 +93,7 @@ function isLsaText(body: string): boolean {
 }
 
 function isChat(type: string): boolean {
-  return type.includes("SMS") || type.includes("FB") || type.includes("IG") || type.includes("CUSTOM");
+  return type.includes("SMS") || type.includes("FB") || type.includes("IG") || type.includes("CUSTOM") || type === "2";
 }
 
 function channelOf(messages: Msg[]): "SMS" | "FB" | "IG" {
@@ -436,13 +436,16 @@ serve(async (req) => {
     const contactId = String(conv.contactId || "");
     if (!conversationId || !contactId || failedSend.has(conversationId)) continue;
     try {
-    const cached = exportByConv.get(conversationId) || [];
+    const cached = exportByConv.get(conversationId) || exported.filter((m) => m.contactId && m.contactId === contactId);
     const loaded = cached.length ? cached : await (async () => {
       const msgsRes = await ghl(token, `/conversations/${conversationId}/messages?limit=40`);
       return msgsRes.ok ? messageList(msgsRes.body) : [];
     })();
-    const messages = loaded.filter((m) => isChat(m.type) || isLsaText(m.body));
-    if (!messages.length) continue;
+    const messages = loaded.filter((m) => isChat(m.type) || isLsaText(m.body) || m.type === "2");
+    if (!messages.length) {
+      log("no chat messages", { conversationId, cached: cached.length, types: loaded.slice(0, 4).map((m) => m.type) });
+      continue;
+    }
     const lsaAt = messages.find((m) => isLsaText(m.body));
     const channel = channelOf(messages);
     const facebook = channel === "FB" || channel === "IG";
