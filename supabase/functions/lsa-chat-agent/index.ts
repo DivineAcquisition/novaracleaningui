@@ -21,7 +21,7 @@ const cors = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-lsa-secret",
 };
 
-type Msg = { id: string; direction: string; type: string; body: string; at: number; source: string; contactId: string; conversationId: string };
+type Msg = { id: string; direction: string; type: string; body: string; at: number; source: string; contactId: string; conversationId: string; fromPhone: string };
 
 function log(step: string, details?: unknown) {
   console.log(`[LSA-CHAT] ${step}${details ? " " + JSON.stringify(details) : ""}`);
@@ -77,6 +77,7 @@ function messageList(raw: unknown): Msg[] {
       source: String(m.source || ""),
       contactId: String(m.contactId || ""),
       conversationId: String(m.conversationId || ""),
+      fromPhone: toE164(String(m.from || "")) || "",
     };
   }).filter((m) => m.body.trim()).sort((a, b) => a.at - b.at);
 }
@@ -260,6 +261,7 @@ serve(async (req) => {
   const freshAfter = Date.now() - 48 * 60 * 60 * 1000;
   const deadline = Date.now() + (dry || wantedContact || wantedConv ? 0 : 50000);
   const seenInbound = new Set<string>();
+  const failedSend = new Set<string>();
 
   do {
   const exported = await exportMessages(token, locationId);
@@ -298,7 +300,7 @@ serve(async (req) => {
   for (const conv of conversations) {
     const conversationId = String(conv.id || "");
     const contactId = String(conv.contactId || "");
-    if (!conversationId || !contactId) continue;
+    if (!conversationId || !contactId || failedSend.has(conversationId)) continue;
     try {
     const cached = exportByConv.get(conversationId) || [];
     const loaded = cached.length ? cached : await (async () => {
@@ -311,11 +313,24 @@ serve(async (req) => {
     const channel = channelOf(messages);
     const facebook = channel === "FB" || channel === "IG";
 
-    const { data: row } = await supabase
+    let { data: row } = await supabase
       .from("lsa_chat_threads")
       .select("*")
       .eq("ghl_conversation_id", conversationId)
       .maybeSingle();
+    if (!row) {
+      const fromPhone = [...messages].reverse().find((m) => m.direction === "inbound" && m.fromPhone)?.fromPhone;
+      if (fromPhone) {
+        const { data: byPhone } = await supabase
+          .from("lsa_chat_threads")
+          .select("*")
+          .eq("customer_phone", fromPhone)
+          .eq("handoff", false)
+          .order("updated_at", { ascending: false })
+          .limit(1);
+        if (byPhone?.[0] && byPhone[0].status !== "human" && byPhone[0].status !== "opted_out") row = byPhone[0];
+      }
+    }
 
     const owned = Boolean(row?.opener_sent_at && !row?.handoff && row?.status !== "human" && row?.status !== "opted_out");
     if (!lsaAt && !facebook && !owned) continue;
@@ -551,24 +566,40 @@ serve(async (req) => {
     }
 
     if (reply && !dry) {
-      const sent = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-ghl-sms`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
-        },
-        body: JSON.stringify({ contactId, message: reply, type: channel }),
-      });
-      const sentBody = await sent.text();
+      const sendSms = async (payload: Record<string, unknown>) => {
+        const sent = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-ghl-sms`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
+          },
+          body: JSON.stringify(payload),
+        });
+        const sentBody = await sent.text();
+        return { ok: sent.ok, status: sent.status, body: sentBody };
+      };
+      let sent = await sendSms({ contactId, message: reply, type: channel });
+      const phone = String(patch.customer_phone || row?.customer_phone || "");
+      if (!sent.ok && phone && /contact not found/i.test(sent.body)) {
+        sent = await sendSms({ phone, message: reply, type: channel });
+      }
       if (!sent.ok) {
-        log("send failed", { conversationId, status: sent.status, body: sentBody.slice(0, 180) });
+        failedSend.add(conversationId);
+        log("send failed", { conversationId, status: sent.status, body: sent.body.slice(0, 180) });
         report.push({ conversationId, action: "send-failed" });
         continue;
       }
+      let sentJson: Record<string, unknown> = {};
+      try { sentJson = JSON.parse(sent.body) as Record<string, unknown>; } catch { /* ignore */ }
+      if (sentJson.contactId) patch.ghl_contact_id = String(sentJson.contactId);
       patch.last_reply_at = new Date().toISOString();
       patch.channel = channel;
       patch.agent_messages = [...sentBodies, reply.trim()];
+      patch.ghl_conversation_id = conversationId;
       await supabase.from("lsa_chat_threads").upsert(patch);
+      if (row?.ghl_conversation_id && row.ghl_conversation_id !== conversationId) {
+        await supabase.from("lsa_chat_threads").delete().eq("ghl_conversation_id", row.ghl_conversation_id);
+      }
       report.push({ conversationId, action: openerSent ? "replied" : "opener", status: patch.status });
     } else {
       report.push({ conversationId, action: dry ? "would-send" : "no-reply", status: patch.status || row?.status, preview: reply?.slice(0, 80) || null });
