@@ -40,6 +40,7 @@ async function ghl(token: string, path: string, init?: RequestInit) {
     Authorization: `Bearer ${token}`,
     Version: GHL_VERSION,
     Accept: "application/json",
+    "User-Agent": "Mozilla/5.0",
     ...((init?.headers as Record<string, string> | undefined) || {}),
   };
   if (init?.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
@@ -52,21 +53,18 @@ async function ghl(token: string, path: string, init?: RequestInit) {
 
 async function exportMessages(token: string, locationId: string): Promise<Msg[]> {
   const res = await ghl(token, `/conversations/messages/export?locationId=${encodeURIComponent(locationId)}`);
-  if (!res.ok) return [];
-  const list = ((res.body as { messages?: Record<string, unknown>[] }).messages) || [];
-  return messageList(list);
+  if (!res.ok) {
+    log("export failed", { status: res.status });
+    return [];
+  }
+  return messageList(res.body);
 }
 
 function messageList(raw: unknown): Msg[] {
-  const root = raw as Record<string, unknown> | Record<string, unknown>[];
-  const list = Array.isArray(raw)
-    ? raw as Record<string, unknown>[]
-    : Array.isArray((root as Record<string, unknown>)?.messages)
-    ? (root as { messages: Record<string, unknown>[] }).messages
-    : Array.isArray(((root as { messages?: { messages?: unknown[] } }).messages)?.messages)
-    ? ((root as { messages: { messages: Record<string, unknown>[] } }).messages).messages
-    : [];
-  return list.map((m) => {
+  const root = raw && typeof raw === "object" ? raw as Record<string, unknown> : null;
+  const nested = root?.messages;
+  const list = (Array.isArray(raw) ? raw : Array.isArray(nested) ? nested : Array.isArray((nested as { messages?: unknown[] } | undefined)?.messages) ? (nested as { messages: unknown[] }).messages : []) as Record<string, unknown>[];
+  return list.filter((m) => m && typeof m === "object").map((m) => {
     const atRaw = m.dateAdded ?? m.timestamp ?? m.createdAt ?? 0;
     const atNum = typeof atRaw === "number" ? (atRaw < 1e12 ? atRaw * 1000 : atRaw) : Date.parse(String(atRaw));
     const body = m.body != null ? String(m.body) : (m.message != null ? String(m.message) : "");
@@ -216,6 +214,8 @@ serve(async (req) => {
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
   );
+  let releaseLock = false;
+  try {
   const url = new URL(req.url);
   const payload = await req.json().catch(() => ({})) as Record<string, unknown>;
   const expected = await secret(supabase, "LSA_CHAT_AGENT_SECRET");
@@ -243,9 +243,10 @@ serve(async (req) => {
 
   if (!dry) {
     const lock = Number(await secret(supabase, "LSA_CHAT_AGENT_LOCK") || 0);
-    if (lock && Date.now() - lock < 48000) {
+    if (lock && Date.now() - lock < 55000) {
       return new Response(JSON.stringify({ skipped: "busy" }), { headers: { ...cors, "Content-Type": "application/json" } });
     }
+    releaseLock = true;
     await supabase.from("app_secrets").upsert({
       key: "LSA_CHAT_AGENT_LOCK",
       value: String(Date.now()),
@@ -257,7 +258,7 @@ serve(async (req) => {
   const wantedConv = String(payload.conversationId || payload.conversation_id || "");
   const report: Array<Record<string, unknown>> = [];
   const freshAfter = Date.now() - 48 * 60 * 60 * 1000;
-  const deadline = Date.now() + (dry || wantedContact || wantedConv ? 0 : 52000);
+  const deadline = Date.now() + (dry || wantedContact || wantedConv ? 0 : 50000);
   const seenInbound = new Set<string>();
 
   do {
@@ -298,11 +299,13 @@ serve(async (req) => {
     const conversationId = String(conv.id || "");
     const contactId = String(conv.contactId || "");
     if (!conversationId || !contactId) continue;
-
-    const msgsRes = await ghl(token, `/conversations/${conversationId}/messages?limit=40`);
-    const loaded = msgsRes.ok ? messageList(msgsRes.body) : [];
-    const messages = (loaded.length ? loaded : (exportByConv.get(conversationId) || []))
-      .filter((m) => isChat(m.type) || isLsaText(m.body));
+    try {
+    const cached = exportByConv.get(conversationId) || [];
+    const loaded = cached.length ? cached : await (async () => {
+      const msgsRes = await ghl(token, `/conversations/${conversationId}/messages?limit=40`);
+      return msgsRes.ok ? messageList(msgsRes.body) : [];
+    })();
+    const messages = loaded.filter((m) => isChat(m.type) || isLsaText(m.body));
     if (!messages.length) continue;
     const lsaAt = messages.find((m) => isLsaText(m.body));
     const channel = channelOf(messages);
@@ -418,7 +421,7 @@ serve(async (req) => {
       const knownRelay = relay || String(row?.relay_phone || "");
       const customerTexts = inbound.map((m) => m.body).join("\n");
       const fromCustomer = phonesIn(customerTexts).filter((p) => p !== knownRelay);
-      const fromNotice = phonesIn(lsaAt.body).filter((p) => p !== knownRelay);
+      const fromNotice = phonesIn(lsaAt?.body || "").filter((p) => p !== knownRelay);
       const phone = fromCustomer[0] || (saidYes(customerSaid) ? fromNotice[0] : null) || row?.customer_phone || null;
       const zip = (customerTexts.match(/\b(\d{5})\b/) || [])[1] || row?.zip_code || null;
       const sqftMatch = customerTexts.match(/(\d{3,5})\s*(sq|square)/i);
@@ -570,22 +573,35 @@ serve(async (req) => {
     } else {
       report.push({ conversationId, action: dry ? "would-send" : "no-reply", status: patch.status || row?.status, preview: reply?.slice(0, 80) || null });
     }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      log("thread failed", { conversationId, message });
+      report.push({ conversationId, action: "error", message: message.slice(0, 160) });
+    }
   }
   if (Date.now() >= deadline) break;
-  await new Promise((resolve) => setTimeout(resolve, 3000));
+  await new Promise((resolve) => setTimeout(resolve, 2000));
   } while (Date.now() < deadline);
-
-  if (!dry) {
-    await supabase.from("app_secrets").upsert({
-      key: "LSA_CHAT_AGENT_LOCK",
-      value: "0",
-      description: "chat agent watch lock",
-    }, { onConflict: "key" });
-  }
 
   return new Response(JSON.stringify({ mode, count: report.length, report }), {
     headers: { ...cors, "Content-Type": "application/json" },
   });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    log("run failed", { message });
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: { ...cors, "Content-Type": "application/json" },
+    });
+  } finally {
+    if (releaseLock) {
+      await supabase.from("app_secrets").upsert({
+        key: "LSA_CHAT_AGENT_LOCK",
+        value: "0",
+        description: "chat agent watch lock",
+      }, { onConflict: "key" });
+    }
+  }
 });
 
 async function bookAndLink(
