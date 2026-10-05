@@ -77,8 +77,24 @@ function isLsaText(body: string): boolean {
   return t.includes("local services ads") || t.includes("g.co/homeservices") || t.includes("notes from lsa") || t.includes("replies to this number will be sent to the customer");
 }
 
-function isSms(type: string): boolean {
-  return type.includes("SMS") || type.includes("CUSTOM");
+function isChat(type: string): boolean {
+  return type.includes("SMS") || type.includes("FB") || type.includes("IG") || type.includes("CUSTOM");
+}
+
+function channelOf(messages: Msg[]): "SMS" | "FB" | "IG" {
+  if (messages.some((m) => m.type.includes("IG"))) return "IG";
+  if (messages.some((m) => m.type.includes("FB"))) return "FB";
+  return "SMS";
+}
+
+function isAutomatedNotice(body: string): boolean {
+  const t = body.toLowerCase();
+  return t.includes("missed your call")
+    || t.includes("pulse check")
+    || t.includes("job offer")
+    || t.includes("submit your w-9")
+    || t.includes("is still pending")
+    || t.includes("reply stop");
 }
 
 function toE164(input: string): string | null {
@@ -230,16 +246,10 @@ serve(async (req) => {
 
     const msgsRes = await ghl(token, `/conversations/${conversationId}/messages?limit=40`);
     if (!msgsRes.ok) continue;
-    const messages = messageList(msgsRes.body).filter((m) => isSms(m.type) || isLsaText(m.body));
+    const messages = messageList(msgsRes.body).filter((m) => isChat(m.type) || isLsaText(m.body));
     const lsaAt = messages.find((m) => isLsaText(m.body));
-    if (!lsaAt) continue;
-
-    const threadText = messages.map((m) => m.body).join("\n");
-    const serviceType = serviceFrom(threadText);
-    const after = messages.filter((m) => m.at >= lsaAt.at);
-    const humanAlready = after.some((m) =>
-      m.direction === "outbound" && isSms(m.type) && !m.body.includes("missed your call") && !m.body.startsWith(OPENER.slice(0, 40))
-    );
+    const channel = channelOf(messages);
+    const facebook = channel === "FB" || channel === "IG";
 
     const { data: row } = await supabase
       .from("lsa_chat_threads")
@@ -247,8 +257,47 @@ serve(async (req) => {
       .eq("ghl_conversation_id", conversationId)
       .maybeSingle();
 
-    if (row?.handoff || row?.status === "opted_out") {
+    const owned = Boolean(row?.opener_sent_at && !row?.handoff && row?.status !== "human" && row?.status !== "opted_out");
+    if (!lsaAt && !facebook && !owned) continue;
+
+    const threadText = messages.map((m) => m.body).join("\n");
+    const serviceType = serviceFrom(lsaAt ? threadText : (row?.service_hint ? `${row.service_hint}\n${threadText}` : threadText));
+    const startAt = lsaAt?.at || 0;
+    const humanAlready = messages.some((m) =>
+      m.at >= startAt
+      && m.direction === "outbound"
+      && isChat(m.type)
+      && !isAutomatedNotice(m.body)
+      && !m.body.startsWith("Hey, this is Malik from NovaraCleaning")
+    );
+    const sentBodies = new Set<string>(
+      (Array.isArray(row?.agent_messages) ? row.agent_messages : []).map((s: string) => String(s).trim()),
+    );
+    const manualTakeover = Boolean(row?.opener_sent_at) && messages.some((m) =>
+      m.direction === "outbound"
+      && isChat(m.type)
+      && !sentBodies.has(m.body.trim())
+      && !isAutomatedNotice(m.body)
+      && !m.body.startsWith("Hey, this is Malik from NovaraCleaning")
+    );
+
+    if (row?.handoff || row?.status === "opted_out" || row?.status === "human") {
       report.push({ conversationId, action: "skipped", reason: row.status });
+      continue;
+    }
+
+    if (manualTakeover) {
+      if (!dry) {
+        await supabase.from("lsa_chat_threads").upsert({
+          ghl_conversation_id: conversationId,
+          ghl_contact_id: contactId,
+          channel,
+          status: "human",
+          handoff: true,
+          updated_at: new Date().toISOString(),
+        });
+      }
+      report.push({ conversationId, action: "stopped-manual" });
       continue;
     }
 
@@ -270,7 +319,7 @@ serve(async (req) => {
     const contactBody = (contact.ok ? contact.body : {}) as { contact?: Record<string, unknown> };
     const c = contactBody.contact || (contact.body as Record<string, unknown>) || {};
     const relay = toE164(String(c.phone || conv.phone || ""));
-    const inbound = messages.filter((m) => m.direction === "inbound" && isSms(m.type) && !isLsaText(m.body));
+    const inbound = messages.filter((m) => m.direction === "inbound" && isChat(m.type) && !isLsaText(m.body));
     const latestInbound = inbound[inbound.length - 1];
     const customerSaid = latestInbound?.body || "";
 
@@ -288,8 +337,9 @@ serve(async (req) => {
       continue;
     }
 
-    const openerSent = Boolean(row?.opener_sent_at) || messages.some((m) => m.direction === "outbound" && m.body.includes("Got your inquiry from google"));
-    const lastTouch = Math.max(lsaAt.at, latestInbound?.at || 0);
+    const opener = lsaAt ? OPENER : "Hey, this is Malik from NovaraCleaning. What's your phone number so I can text or call and get you a fair price?";
+    const openerSent = Boolean(row?.opener_sent_at) || messages.some((m) => m.direction === "outbound" && m.body.startsWith("Hey, this is Malik from NovaraCleaning"));
+    const lastTouch = Math.max(lsaAt?.at || 0, latestInbound?.at || 0);
     let reply: string | null = null;
     let patch: Record<string, unknown> = {
       ghl_conversation_id: conversationId,
@@ -304,8 +354,8 @@ serve(async (req) => {
         report.push({ conversationId, action: "old-lsa-left-alone" });
         continue;
       }
-      reply = OPENER;
-      patch = { ...patch, status: "need_phone", opener_sent_at: new Date().toISOString() };
+      reply = opener;
+      patch = { ...patch, channel, status: "need_phone", opener_sent_at: new Date().toISOString() };
     } else if (latestInbound && (!row?.last_inbound_id || row.last_inbound_id !== latestInbound.id)) {
       const knownRelay = relay || String(row?.relay_phone || "");
       const customerTexts = inbound.map((m) => m.body).join("\n");
@@ -446,7 +496,7 @@ serve(async (req) => {
           "Content-Type": "application/json",
           Authorization: `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
         },
-        body: JSON.stringify({ contactId, message: reply, type: "SMS" }),
+        body: JSON.stringify({ contactId, message: reply, type: channel }),
       });
       const sentBody = await sent.text();
       if (!sent.ok) {
@@ -455,6 +505,8 @@ serve(async (req) => {
         continue;
       }
       patch.last_reply_at = new Date().toISOString();
+      patch.channel = channel;
+      patch.agent_messages = [...sentBodies, reply.trim()];
       await supabase.from("lsa_chat_threads").upsert(patch);
       report.push({ conversationId, action: openerSent ? "replied" : "opener", status: patch.status });
     } else {
