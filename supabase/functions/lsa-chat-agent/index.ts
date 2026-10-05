@@ -143,20 +143,63 @@ function saidYes(text: string): boolean {
   return /^(yes|yeah|yep|yea|ya|ok|okay|sure|book it|send it|lock it|that works|sounds good)\b/i.test(text.trim());
 }
 
+function nextWeekday(name: string): string {
+  const days = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+  const target = days.indexOf(name);
+  const now = new Date();
+  const delta = (target - now.getDay() + 7) % 7 || 7;
+  now.setDate(now.getDate() + delta);
+  return now.toISOString().slice(0, 10);
+}
+
+function parseWhen(text: string): { date: string | null; slot: string | null } {
+  const t = text.toLowerCase();
+  let slot: string | null = null;
+  if (/\bmorning\b/.test(t)) slot = "8:00 AM - 12:00 PM";
+  else if (/\bafternoon\b/.test(t)) slot = "12:00 PM - 4:00 PM";
+  else if (/\bevening\b|\bnight\b/.test(t)) slot = "4:00 PM - 8:00 PM";
+  let date: string | null = null;
+  const iso = text.match(/\b(20\d{2}-\d{2}-\d{2})\b/);
+  if (iso) date = iso[1];
+  else if (/\btoday\b/.test(t)) date = new Date().toISOString().slice(0, 10);
+  else if (/\btomorrow\b/.test(t)) {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    date = d.toISOString().slice(0, 10);
+  } else {
+    for (const day of ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]) {
+      if (t.includes(day)) {
+        date = nextWeekday(day);
+        break;
+      }
+    }
+  }
+  return { date, slot };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
   );
+  const url = new URL(req.url);
+  const payload = await req.json().catch(() => ({})) as Record<string, unknown>;
   const expected = await secret(supabase, "LSA_CHAT_AGENT_SECRET");
-  const got = req.headers.get("x-lsa-secret") || "";
+  const got = req.headers.get("x-lsa-secret") || url.searchParams.get("secret") || String(payload.secret || "");
   if (!expected || got !== expected) {
     return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: cors });
   }
 
-  const payload = await req.json().catch(() => ({}));
-  const mode = String((payload as { mode?: string }).mode || "run");
+  const direction = String(
+    (payload.direction as string) ||
+    ((payload.message as { direction?: string } | undefined)?.direction) ||
+    "inbound",
+  ).toLowerCase();
+  if (direction === "outbound") {
+    return new Response(JSON.stringify({ skipped: "outbound" }), { headers: { ...cors, "Content-Type": "application/json" } });
+  }
+  const mode = String(payload.mode || (payload.contactId || payload.contact_id || payload.conversationId ? "webhook" : "run"));
   const dry = mode === "audit";
 
   const token = (await secret(supabase, "GHL_PIT_TOKEN")) || (Deno.env.get("GHL_PIT_TOKEN") || "");
@@ -165,12 +208,18 @@ serve(async (req) => {
     return new Response(JSON.stringify({ error: "GHL not configured" }), { status: 500, headers: cors });
   }
 
-  const search = await ghl(token, `/conversations/search?locationId=${encodeURIComponent(locationId)}&limit=40`);
+  const wantedContact = String(payload.contactId || payload.contact_id || (payload.contact as { id?: string } | undefined)?.id || "");
+  const wantedConv = String(payload.conversationId || payload.conversation_id || "");
+  const searchPath = wantedContact
+    ? `/conversations/search?locationId=${encodeURIComponent(locationId)}&contactId=${encodeURIComponent(wantedContact)}&limit=5`
+    : `/conversations/search?locationId=${encodeURIComponent(locationId)}&limit=25`;
+  const search = await ghl(token, searchPath);
   if (!search.ok) {
     log("search failed", { status: search.status });
     return new Response(JSON.stringify({ error: "ghl search failed" }), { status: 502, headers: cors });
   }
-  const conversations = ((search.body as { conversations?: Record<string, unknown>[] }).conversations) || [];
+  let conversations = ((search.body as { conversations?: Record<string, unknown>[] }).conversations) || [];
+  if (wantedConv) conversations = conversations.filter((c) => String(c.id || "") === wantedConv);
   const report: Array<Record<string, unknown>> = [];
   const freshAfter = Date.now() - 48 * 60 * 60 * 1000;
 
@@ -259,17 +308,22 @@ serve(async (req) => {
       patch = { ...patch, status: "need_phone", opener_sent_at: new Date().toISOString() };
     } else if (latestInbound && (!row?.last_inbound_id || row.last_inbound_id !== latestInbound.id)) {
       const knownRelay = relay || String(row?.relay_phone || "");
-      const fromCustomer = phonesIn(customerSaid).filter((p) => p !== knownRelay);
+      const customerTexts = inbound.map((m) => m.body).join("\n");
+      const fromCustomer = phonesIn(customerTexts).filter((p) => p !== knownRelay);
       const fromNotice = phonesIn(lsaAt.body).filter((p) => p !== knownRelay);
       const phone = fromCustomer[0] || (saidYes(customerSaid) ? fromNotice[0] : null) || row?.customer_phone || null;
-      const zip = (customerSaid.match(/\b(\d{5})\b/) || [])[1] || row?.zip_code || null;
-      const sqftMatch = customerSaid.match(/(\d{3,5})\s*(sq|square)/i);
-      const bedsMatch = customerSaid.match(/(\d)\s*(bed|br|bedroom)/i);
+      const zip = (customerTexts.match(/\b(\d{5})\b/) || [])[1] || row?.zip_code || null;
+      const sqftMatch = customerTexts.match(/(\d{3,5})\s*(sq|square)/i);
+      const bedsMatch = customerTexts.match(/(\d)\s*(bed|br|bedroom)/i);
       const sqft = sqftMatch ? Number(sqftMatch[1]) : row?.sqft || null;
       const beds = bedsMatch ? Number(bedsMatch[1]) : row?.bedrooms || null;
-      const emailMatch = customerSaid.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+      const emailMatch = customerTexts.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
       const email = emailMatch ? emailMatch[0] : row?.email || null;
-      const firstName = row?.first_name || null;
+      const named = customerTexts.match(/\b(?:i'm|im|this is|name is)\s+([A-Za-z]{2,20})\b/i);
+      const firstName = named?.[1] || row?.first_name || null;
+      const when = parseWhen(customerTexts);
+      const preferredDate = when.date || row?.preferred_date || null;
+      const timeSlot = when.slot || row?.time_slot || null;
 
       patch = {
         ...patch,
@@ -279,6 +333,9 @@ serve(async (req) => {
         sqft,
         bedrooms: beds,
         email,
+        first_name: firstName,
+        preferred_date: preferredDate,
+        time_slot: timeSlot,
         last_inbound_id: latestInbound.id,
       };
 
@@ -330,16 +387,16 @@ serve(async (req) => {
             patch.home_size_id = homeSizeId;
             patch.status = "quoted";
             const label = serviceType === "deep" ? "deep clean" : serviceType === "moveInOut" ? "move-out clean" : "standard clean";
-            reply = `For that size, a ${label} is ${money(total)}. A 50% deposit (${money(deposit)}) holds the spot, and the rest is charged after the clean. Want me to send the pay link?`;
+            reply = `For that size, a ${label} is ${money(total)}. A 50% deposit (${money(deposit)}) holds the spot, and the rest is charged after the clean. Want me to lock a day?`;
           }
         }
-      } else if (saidYes(customerSaid) && !row?.pay_url) {
-        if (!email || !firstName) {
+      } else if ((saidYes(customerSaid) || preferredDate) && !row?.pay_url && row?.quote_cents) {
+        if (!preferredDate || !timeSlot) {
+          reply = "What day works, and do you want morning, afternoon, or evening?";
+          patch.status = "need_when";
+        } else if (!email || !firstName) {
           reply = "What's your first name and email so I can send the pay link?";
           patch.status = "need_contact";
-          if (email) patch.email = email;
-          const name = customerSaid.split(/\s+/).find((w) => /^[A-Za-z]{2,}$/.test(w) && !/^(yes|yeah|ok|okay|sure)$/i.test(w));
-          if (name && !emailMatch) patch.first_name = name;
         } else if (dry) {
           reply = "[would send pay link]";
           patch.status = "booked";
@@ -351,6 +408,8 @@ serve(async (req) => {
             zip: String(zip),
             homeSizeId: String(row.home_size_id || (sqft ? homeSizeFromSqft(Number(sqft)) : homeSizeFromBeds(Number(beds)))),
             serviceType,
+            serviceDate: String(preferredDate),
+            timeSlot: String(timeSlot),
           }, patch);
         }
       } else if (row?.status === "need_contact") {
@@ -367,6 +426,8 @@ serve(async (req) => {
             zip: String(zip),
             homeSizeId: String(row.home_size_id),
             serviceType,
+            serviceDate: String(preferredDate || row.preferred_date),
+            timeSlot: String(timeSlot || row.time_slot),
           }, patch);
         } else {
           reply = "I still need a first name and an email to send the pay link.";
@@ -408,12 +469,10 @@ serve(async (req) => {
 
 async function bookAndLink(
   supabase: ReturnType<typeof createClient>,
-  info: { firstName: string; email: string; phone: string; zip: string; homeSizeId: string; serviceType: string },
+  info: { firstName: string; email: string; phone: string; zip: string; homeSizeId: string; serviceType: string; serviceDate: string; timeSlot: string },
   patch: Record<string, unknown>,
 ): Promise<string> {
-  const day = new Date();
-  day.setDate(day.getDate() + 2);
-  const serviceDate = day.toISOString().slice(0, 10);
+  const serviceDate = info.serviceDate;
   const res = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/book-as-va`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}` },
@@ -425,7 +484,7 @@ async function bookAndLink(
       homeSizeId: info.homeSizeId,
       serviceType: info.serviceType,
       serviceDate,
-      timeSlot: "8:00 AM - 12:00 PM",
+      timeSlot: info.timeSlot,
       invoiceMode: "deposit_plus_preauth",
       csrName: "Malik",
       sendConfirmationSms: false,

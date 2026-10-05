@@ -19,6 +19,8 @@ CREATE TABLE IF NOT EXISTS public.lsa_chat_threads (
   status text NOT NULL DEFAULT 'new',
   handoff boolean NOT NULL DEFAULT false,
   opener_sent_at timestamptz,
+  preferred_date text,
+  time_slot text,
   last_inbound_id text,
   last_reply_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
