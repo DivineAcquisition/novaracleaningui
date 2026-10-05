@@ -693,6 +693,10 @@ verify_jwt = false
 [functions.send-ghl-sms]
 verify_jwt = false
 
+# LSA texts arrive from a Google relay number. Cron calls this with no user JWT.
+[functions.lsa-chat-agent]
+verify_jwt = false
+
 [functions.send-partner-auth-email]
 verify_jwt = false
 
