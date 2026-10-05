@@ -159,10 +159,123 @@ function homeSizeFromBeds(beds: number): string {
 
 function serviceFrom(text: string): string {
   const t = text.toLowerCase();
-  if (/\bmove[\s-]?(in|out)\b/.test(t)) return "moveInOut";
-  if (t.includes("deep")) return "deep";
-  if (t.includes("standard") || t.includes("regular") || t.includes("maintenance")) return "standard";
-  return "deep";
+  if (/\bmove[\s-]?(in|out)\b|\bmoving out\b/.test(t)) return "moveInOut";
+  if (/\bdeep\b/.test(t)) return "deep";
+  if (/\bstandard\b|\bregular\b|\bmaintenance\b|\bbasic\b/.test(t)) return "standard";
+  return "";
+}
+
+type Facts = {
+  property: string;
+  service: string;
+  move: string;
+  beds: number | null;
+  baths: number | null;
+  sqft: number | null;
+  flooring: string;
+  scope: string;
+  address: string;
+};
+
+function propertyFrom(text: string): string {
+  const t = text.toLowerCase();
+  if (/\btown\s?homes?\b|\btownhouses?\b/.test(t)) return "townhome";
+  if (/\bapartments?\b|\bcondos?\b/.test(t)) return "apartment";
+  if (/\bhouses?\b/.test(t)) return "house";
+  return "";
+}
+
+function flooringFrom(text: string): string {
+  const t = text.toLowerCase();
+  const bits: string[] = [];
+  if (/hardwood|\bwood\b/.test(t)) bits.push("hardwood");
+  if (/lvp|vinyl|\btile\b/.test(t)) bits.push("lvp/tile");
+  if (/carpet/.test(t)) bits.push("carpet");
+  if (/laminate/.test(t)) bits.push("laminate");
+  return bits.join(", ");
+}
+
+function sizeFrom(text: string): { beds: number | null; baths: number | null; sqft: number | null } {
+  const pair = text.match(/(\d+)\s*b(?:ed(?:room)?s?)?\s*[&/]\s*(\d+)\s*b/i);
+  const bedsMatch = text.match(/(\d+)\s*(?:bed(?:room)?s?|br)\b/i);
+  const bathsMatch = text.match(/(\d+)\s*(?:bath(?:room)?s?|ba)\b/i);
+  const sqftMatch = text.match(/(\d{3,5})\s*(?:sq(?:[\s.-]?(?:ft|feet|f))?|square)/i);
+  return {
+    beds: pair ? Number(pair[1]) : bedsMatch ? Number(bedsMatch[1]) : null,
+    baths: pair ? Number(pair[2]) : bathsMatch ? Number(bathsMatch[1]) : null,
+    sqft: sqftMatch ? Number(sqftMatch[1]) : null,
+  };
+}
+
+function saysFullHome(text: string): boolean {
+  return /\bfull service\b|\bwhole (house|home)\b|\bentire (house|home)\b/i.test(text);
+}
+
+function saysOneRoom(text: string): boolean {
+  return /\b(just|only)\b|\bone bedroom\b|\bjust that\b/i.test(text);
+}
+
+function askedOneRoom(text: string): boolean {
+  return /how much.{0,40}\b(bed|bath|kitchen|room)\b/i.test(text);
+}
+
+function gatherFacts(text: string, latest: string, status: string, saved: Partial<Facts>): Facts {
+  const size = sizeFrom(text);
+  const facts: Facts = {
+    property: propertyFrom(text) || saved.property || "",
+    service: serviceFrom(text) || saved.service || "",
+    move: saved.move || "",
+    beds: size.beds ?? saved.beds ?? null,
+    baths: size.baths ?? saved.baths ?? null,
+    sqft: size.sqft ?? saved.sqft ?? null,
+    flooring: flooringFrom(text) || saved.flooring || "",
+    scope: saved.scope || "",
+    address: saved.address || "",
+  };
+  const all = text.toLowerCase();
+  if (/\bmove[\s-]?(in|out)\b|\bmoving out\b/.test(all)) facts.move = "yes";
+  if (/\bstill (living|occupying|in the home)\b|\bnot a move\b/.test(all)) facts.move = "no";
+  if (facts.move === "yes") facts.service = "moveInOut";
+  if (saysFullHome(text) || (facts.beds !== null && facts.beds >= 2) || (facts.sqft !== null && facts.sqft >= 500)) {
+    if (facts.scope !== "room") facts.scope = "full";
+  }
+  if (status === "need_scope") {
+    if (saysFullHome(latest) || /\bfull\b/i.test(latest)) facts.scope = "full";
+    else if (saysOneRoom(latest) || /^(one|1)\b/i.test(latest.trim())) facts.scope = "room";
+  }
+  if (status === "need_property" && !facts.property) facts.property = propertyFrom(latest);
+  if (status === "need_service" && !facts.service) facts.service = serviceFrom(latest);
+  if (status === "need_move" && !facts.move) {
+    if (/^(yes|yeah|yep|yea|ya)\b/i.test(latest.trim())) facts.move = "yes";
+    else if (/^(no|nah|nope)\b/i.test(latest.trim())) facts.move = "no";
+  }
+  if (facts.move === "yes") facts.service = "moveInOut";
+  if (status === "need_floor" && !facts.flooring && latest.trim()) facts.flooring = latest.trim().slice(0, 80);
+  if (status === "need_address" && latest.trim() && !saidYes(latest)) facts.address = latest.trim().slice(0, 140);
+  return facts;
+}
+
+function nextAsk(facts: Facts, text: string): { reply: string; status: string } | null {
+  const oneRoom = askedOneRoom(text) && facts.scope !== "full" && facts.scope !== "room";
+  if (oneRoom) return { reply: "Just cleaning one bedroom? Or your looking for a full service", status: "need_scope" };
+  if (facts.scope === "room") return null;
+  if (!facts.property) return { reply: "Is this a house or a townhome?", status: "need_property" };
+  if (!facts.service) return { reply: "What's the core service your after standard clean or deep clean?", status: "need_service" };
+  if (facts.service === "deep" && !facts.move) return { reply: "Is this a move out?", status: "need_move" };
+  if (!facts.beds && !facts.baths && !facts.sqft) return { reply: "Ok. How many bedrooms and bathrooms?", status: "need_size" };
+  if (!facts.flooring) return { reply: "Also flooring type?", status: "need_floor" };
+  return null;
+}
+
+function casualMoney(cents: number): string {
+  const dollars = cents / 100;
+  return Number.isInteger(dollars) ? `$${dollars}` : `$${dollars.toFixed(2)}`;
+}
+
+function priceLine(cents: number, room: boolean): string {
+  const amount = casualMoney(cents);
+  if (room) return `Will just be ${amount}`;
+  return `I'll send the checklist of everything we clean. Put your total at ${amount}. A 50% deposit is required.`;
 }
 
 function money(cents: number): string {
@@ -338,7 +451,8 @@ serve(async (req) => {
     if (!lsaAt && !facebook && !owned) continue;
 
     const threadText = messages.map((m) => m.body).join("\n");
-    const serviceType = serviceFrom(lsaAt ? threadText : (row?.service_hint ? `${row.service_hint}\n${threadText}` : threadText));
+    const customerBlob = messages.filter((m) => m.direction === "inbound" && !isLsaText(m.body)).map((m) => m.body).join("\n");
+    let serviceType = serviceFrom(customerBlob);
     const startAt = lsaAt?.at || 0;
     const humanAlready = messages.some((m) =>
       m.at >= startAt
@@ -442,10 +556,17 @@ serve(async (req) => {
       const fromNotice = phonesIn(lsaAt?.body || "").filter((p) => p !== knownRelay);
       const phone = fromCustomer[0] || (saidYes(customerSaid) ? fromNotice[0] : null) || row?.customer_phone || null;
       const zip = (customerTexts.match(/\b(\d{5})\b/) || [])[1] || row?.zip_code || null;
-      const sqftMatch = customerTexts.match(/(\d{3,5})\s*(sq|square)/i);
-      const bedsMatch = customerTexts.match(/(\d)\s*(bed|br|bedroom)/i);
-      const sqft = sqftMatch ? Number(sqftMatch[1]) : row?.sqft || null;
-      const beds = bedsMatch ? Number(bedsMatch[1]) : row?.bedrooms || null;
+      const saved = (row?.details && typeof row.details === "object" ? row.details : {}) as Partial<Facts>;
+      const facts = gatherFacts(customerTexts, customerSaid, String(row?.status || ""), {
+        ...saved,
+        beds: saved.beds ?? row?.bedrooms ?? null,
+        sqft: saved.sqft ?? row?.sqft ?? null,
+      });
+      const sqft = facts.sqft;
+      const beds = facts.beds;
+      serviceType = facts.service || serviceType;
+      patch.details = facts;
+      patch.service_hint = facts.service || null;
       const emailMatch = customerTexts.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
       const email = emailMatch ? emailMatch[0] : row?.email || null;
       const named = customerTexts.match(/\b(?:i'm|im|this is|name is)\s+([A-Za-z]{2,20})\b/i);
@@ -468,6 +589,8 @@ serve(async (req) => {
         last_inbound_id: latestInbound.id,
       };
 
+      const ask = nextAsk(facts, customerTexts);
+
       if (!phone) {
         reply = "I just need the best number to reach you on. What's your phone number?";
         patch.status = "need_phone";
@@ -480,48 +603,58 @@ serve(async (req) => {
             body: JSON.stringify({ body: `Customer phone from LSA chat (not the Google relay): ${phone}` }),
           });
         }
-      } else if (!sqft && !beds) {
-        reply = "Got it. About how many bedrooms and bathrooms, or the square feet?";
-        patch.status = "need_size";
+      } else if (ask) {
+        reply = ask.reply;
+        patch.status = ask.status;
       } else if (!row?.quote_cents) {
-        const homeSizeId = sqft ? homeSizeFromSqft(Number(sqft)) : homeSizeFromBeds(Number(beds));
-        if (!homeSizeId) {
-          reply = "That home is big enough that I need to price it with you directly. I'll have someone call you on that number.";
-          patch.status = "human";
-          patch.handoff = true;
-        } else {
-          const quoteRes = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/quote-dynamic-price`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-              apikey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
-            },
-            body: JSON.stringify({
-              action: "quote",
-              zip,
-              serviceType,
-              homeSizeId,
-              condition: "standard",
-            }),
-          });
-          const quote = await quoteRes.json().catch(() => ({}));
-          if (!quote.ok || !quote.served) {
-            reply = quote.message || "We don't cover that ZIP yet. I can put you on the list for when we do.";
-            patch.status = "unserved";
+          const room = facts.scope === "room";
+          const homeSizeId = room ? null : sqft ? homeSizeFromSqft(Number(sqft)) : beds ? homeSizeFromBeds(Number(beds)) : null;
+          if (!room && !homeSizeId) {
+            reply = "That home is big enough that I need to price it with you directly. I'll have someone call you on that number.";
+            patch.status = "human";
+            patch.handoff = true;
           } else {
-            const total = Number(quote.breakdown?.totalCents || 0);
-            const deposit = Math.round(total / 2);
-            patch.quote_cents = total;
-            patch.home_size_id = homeSizeId;
-            patch.status = "quoted";
-            const label = serviceType === "deep" ? "deep clean" : serviceType === "moveInOut" ? "move-out clean" : "standard clean";
-            reply = `For that size, a ${label} is ${money(total)}. A 50% deposit (${money(deposit)}) holds the spot, and the rest is charged after the clean. Want me to lock a day?`;
+            const selections = room
+              ? [
+                ...(facts.beds ? [{ areaId: "bedroom", quantity: facts.beds }] : []),
+                ...(facts.baths ? [{ areaId: "bathroom", quantity: facts.baths }] : []),
+                ...(!facts.beds && !facts.baths ? [{ areaId: "bedroom", quantity: 1 }] : []),
+              ]
+              : undefined;
+            const quoteRes = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/quote-dynamic-price`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+                apikey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
+              },
+              body: JSON.stringify({
+                action: "quote",
+                zip,
+                serviceType: room ? "focused" : serviceType,
+                homeSizeId,
+                focused: room ? { selections } : undefined,
+                condition: "standard",
+              }),
+            });
+            const quote = await quoteRes.json().catch(() => ({}));
+            if (!quote.ok || !quote.served) {
+              reply = quote.message || "We don't cover that ZIP yet. I can put you on the list for when we do.";
+              patch.status = "unserved";
+            } else {
+              const total = Number(quote.breakdown?.totalCents || 0);
+              patch.quote_cents = total;
+              patch.home_size_id = homeSizeId;
+              patch.status = "quoted";
+              reply = priceLine(total, room);
+            }
           }
-        }
       } else if ((saidYes(customerSaid) || preferredDate) && !row?.pay_url && row?.quote_cents) {
-        if (!preferredDate || !timeSlot) {
-          reply = "What day works, and do you want morning, afternoon, or evening?";
+        if (!facts.address) {
+          reply = "What's the street address?";
+          patch.status = "need_address";
+        } else if (!preferredDate || !timeSlot) {
+          reply = "What day works, morning afternoon or evening?";
           patch.status = "need_when";
         } else if (!email || !firstName) {
           reply = "What's your first name and email so I can send the pay link?";
@@ -563,8 +696,13 @@ serve(async (req) => {
         }
       } else if (row?.pay_url) {
         reply = `You're all set once the deposit is in. Here's the link again: ${row.pay_url}`;
+      } else if (![...sentBodies].some((sent) => sent.toLowerCase().includes("let me know what you think"))) {
+        reply = "Let me know what you think.?";
+        patch.status = "quoted";
+      } else if (customerSaid.includes("?")) {
+        reply = await malikReply(supabase, customerSaid, String(row?.status || "quoted"));
       } else {
-        reply = await malikReply(supabase, customerSaid, String(row?.status || "need_phone"));
+        reply = null;
       }
     }
 
@@ -697,7 +835,7 @@ async function malikReply(supabase: ReturnType<typeof createClient>, customerSai
       model,
       max_tokens: 120,
       temperature: 0.4,
-      system: "You are Malik texting for NovaraCleaning. One or two short sentences. Sound like a person, not a script. Do not invent a price. Ask only for the missing piece: " + missing + ".",
+      system: "You are Malik texting for NovaraCleaning. Write the way he actually texts: short, loose grammar, no customer-service tone. Do not give a price. Do not pitch a deposit. One or two sentences.",
       messages: [{ role: "user", content: `The customer just said: ${customerSaid.slice(0, 500)}` }],
     }),
   });
