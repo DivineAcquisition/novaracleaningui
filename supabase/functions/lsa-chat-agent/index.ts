@@ -104,13 +104,15 @@ function isAutomatedNotice(body: string): boolean {
     || t.includes("job offer")
     || t.includes("submit your w-9")
     || t.includes("is still pending")
-    || t.includes("reply stop")
     || t.includes("tried giving you");
 }
 
 function sameOutbound(sent: string, actual: string): boolean {
-  const stripped = actual.replace(/\s*reply stop to unsubscribe\.?$/i, "").trim();
-  return stripped === sent.trim() || actual.trim() === sent.trim();
+  const clean = (value: string) => value
+    .replace(/\s*reply stop to unsubscribe\.?/gi, "")
+    .replace(/\s*thanks, novaracleaning\.?/gi, "")
+    .trim();
+  return clean(actual) === clean(sent);
 }
 
 function toE164(input: string): string | null {
@@ -342,6 +344,7 @@ serve(async (req) => {
       m.at >= startAt
       && m.direction === "outbound"
       && isChat(m.type)
+      && m.source !== "workflow"
       && !isAutomatedNotice(m.body)
       && !m.body.startsWith("Hey, this is Malik from NovaraCleaning")
     );
