@@ -6,7 +6,7 @@
 //   { action: "advance_screening", applicantId }
 //   { action: "reject",            applicantId, reason }  ← emails applicant from team@ (CC contact@)
 //   { action: "reinstate",         applicantId, targetStage? }  ← rejected → onboarding (default) / screening / applicant
-//   { action: "launch_onboarding", applicantId }   ← email + SMS via existing channels
+//   { action: "launch_onboarding", applicantId }   ← email (Resend) + SMS
 //   { action: "resend_onboarding", applicantId }   ← one-click nudge for stalled onboarding
 //   { action: "activate",          applicantId }   ← gates: agreement signed + payout setup
 //
@@ -27,6 +27,8 @@ import { requireAdmin, AdminAuthError } from "@/lib/admin-auth";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import { edgeResult } from "@/lib/edge-invoke";
 import { deriveDownstreamFields, type ScreeningAnswers } from "@/lib/phone-screening";
+import { sendOnboardingInviteEmail } from "@/lib/talent/onboarding-email";
+import { usableInviteEmail } from "@/lib/talent/onboarding-invite";
 import { sendApplicantRejectEmail } from "@/lib/talent/reject-email";
 
 export const runtime = "nodejs";
@@ -82,6 +84,33 @@ async function logEvent(
   });
 }
 
+/**
+ * Prefer the applicant's email. If that row never captured one, use the
+ * linked contractor record — onboarding is still initiated for that person.
+ */
+async function resolveInviteEmail(
+  supabase: ReturnType<typeof getAdminSupabase>,
+  applicantEmail: string | null,
+  cleanerId: string | null,
+): Promise<{ email: string | null; error: string | null }> {
+  const fromApplicant = usableInviteEmail(applicantEmail);
+  if (fromApplicant) return { email: fromApplicant, error: null };
+
+  let cleanerEmail: string | null = null;
+  if (cleanerId) {
+    const { data } = await supabase.from("cleaners").select("email").eq("id", cleanerId).maybeSingle();
+    cleanerEmail = usableInviteEmail(data?.email);
+  }
+  if (cleanerEmail) return { email: cleanerEmail, error: null };
+
+  const raw = String(applicantEmail || "").trim();
+  if (!raw) return { email: null, error: "No email on the applicant record." };
+  if (raw.toLowerCase().endsWith("@pending.novara")) {
+    return { email: null, error: "Placeholder email address on file." };
+  }
+  return { email: null, error: `"${raw}" isn't a sendable email address.` };
+}
+
 /** Digits-only sanity check before we ask a transport to send anywhere. */
 function usablePhone(input: string | null | undefined): string | null {
   const digits = String(input || "").replace(/[^0-9]/g, "");
@@ -101,43 +130,37 @@ interface InviteOutcome {
 }
 
 /**
- * Email + SMS through the existing notification infrastructure.
+ * Email + SMS whenever onboarding is launched or re-sent.
  *
- * Both channels report WHY they failed rather than just that they did. The
- * old version threw the reason away, so a missing GHL token, an unreachable
- * phone number and a dead Resend key all surfaced to the admin as the same
- * unactionable "Action failed".
+ * The text still goes through GHL. The email is sent directly through Resend
+ * and is only marked sent when that API accepts it — the cleaner-email
+ * function used to report success while swallowing the provider error, so a
+ * launch could look emailed when the person only got the text.
  */
 async function sendOnboardingInvite(
   supabase: ReturnType<typeof getAdminSupabase>,
   applicant: ApplicantRow,
   onboardingUrl: string,
+  email: string | null,
+  emailUnavailable: string | null,
 ): Promise<InviteOutcome> {
   const firstName = applicant.first_name || applicant.full_name || "there";
   const out: InviteOutcome = { emailed: false, smsSent: false, emailError: null, smsError: null };
 
-  if (applicant.email) {
-    const { data, error } = await supabase.functions.invoke("send-cleaner-email", {
-      body: {
-        type: "invitation",
-        email: applicant.email,
-        data: {
-          firstName,
-          lastName: applicant.last_name || "",
-          email: applicant.email,
-          onboardingUrl,
-        },
-      },
+  if (email) {
+    const mail = await sendOnboardingInviteEmail({
+      email,
+      firstName,
+      onboardingUrl,
     });
-    const res = await edgeResult(error, data);
-    out.emailed = res.ok;
-    if (!res.ok) {
-      out.emailError = res.error;
+    out.emailed = mail.sent;
+    if (!mail.sent) {
+      out.emailError = mail.error;
       // eslint-disable-next-line no-console
-      console.warn("[talent-actions] invite email failed:", res.error);
+      console.warn("[talent-actions] invite email failed:", mail.error);
     }
   } else {
-    out.emailError = "No email on the applicant record.";
+    out.emailError = emailUnavailable || "No email on the applicant record.";
   }
 
   const phone = usablePhone(applicant.phone);
@@ -430,10 +453,13 @@ export async function POST(req: Request): Promise<NextResponse> {
             : { onboarding_launched_at: applicant.onboarding_launched_at || new Date().toISOString() }),
         });
 
+        const inviteContact = await resolveInviteEmail(supabase, applicant.email, cleanerId);
         const { emailed, smsSent, emailError, smsError } = await sendOnboardingInvite(
           supabase,
           applicant,
           inviteUrl,
+          inviteContact.email,
+          inviteContact.error,
         );
 
         await logEvent(supabase, {

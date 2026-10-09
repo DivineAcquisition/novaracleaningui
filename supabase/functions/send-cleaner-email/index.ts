@@ -2,7 +2,6 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { Resend } from "https://esm.sh/resend@2.0.0";
 import { renderAsync } from "https://esm.sh/@react-email/components@0.0.22";
 import * as React from "https://esm.sh/react@18.3.1";
-import { CleanerInvitation } from "../_shared/email-templates/CleanerInvitation.tsx";
 import { CleanerAssignment } from "../_shared/email-templates/CleanerAssignment.tsx";
 import { BookingCompletion } from "../_shared/email-templates/BookingCompletion.tsx";
 import { PayoutConfirmation } from "../_shared/email-templates/PayoutConfirmation.tsx";
@@ -35,17 +34,41 @@ serve(async (req) => {
     let html = "";
 
     switch (type) {
-      case "invitation":
-        subject = "Welcome to Novara Cleaning Team!";
-        html = await renderAsync(
-          React.createElement(CleanerInvitation, {
-            firstName: data.firstName,
-            lastName: data.lastName,
-            email: data.email,
-            onboardingUrl: data.onboardingUrl,
-          })
-        );
+      case "invitation": {
+        const escapeHtml = (value: string) =>
+          value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+        const first = escapeHtml(String(data?.firstName || "there"));
+        const onboardingUrl = String(data?.onboardingUrl || "").trim();
+        if (!onboardingUrl.startsWith("https://")) {
+          throw new Error("Onboarding link was not ready to email.");
+        }
+        const safeUrl = escapeHtml(onboardingUrl);
+        subject = "Welcome to Novara Cleaning — start your onboarding";
+        html = `
+          <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#0f172a">
+            <h2 style="margin:0 0 8px;font-size:20px">You're in — let's finish onboarding</h2>
+            <p style="margin:0 0 16px;color:#475569">Hi ${first},</p>
+            <p style="margin:0 0 16px;color:#475569">
+              You've been selected to join the Novara Cleaning contractor team.
+              This link opens your onboarding: the agreement, phone verification, supplies,
+              dress code, W-9, Stripe payouts, and training videos.
+            </p>
+            <p style="margin:24px 0;text-align:center">
+              <a href="${safeUrl}"
+                 style="display:inline-block;background:#7c3aed;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600">
+                Start onboarding
+              </a>
+            </p>
+            <p style="margin:0 0 8px;color:#64748b;font-size:14px">
+              Or paste this link into your browser. It stays valid for 14 days:
+            </p>
+            <p style="margin:0 0 16px;font-size:13px;word-break:break-all">
+              <a href="${safeUrl}" style="color:#7c3aed">${safeUrl}</a>
+            </p>
+            <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">Novara Cleaning</p>
+          </div>`;
         break;
+      }
 
       case "assignment":
         subject = "New Booking Assignment";
@@ -475,6 +498,14 @@ serve(async (req) => {
       subject,
       html,
     });
+
+    // Resend returns { data, error } and does not throw. Treating that as
+    // success is how an onboarding invite was marked emailed while only the
+    // SMS went out.
+    if (emailResponse.error) {
+      const providerError = emailResponse.error as { message?: string };
+      throw new Error(providerError.message || JSON.stringify(emailResponse.error));
+    }
 
     logStep("Email sent successfully", { data: emailResponse.data });
 
