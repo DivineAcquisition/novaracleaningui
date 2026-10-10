@@ -8,6 +8,8 @@ import { resolve } from "node:path";
 import {
   buildRecurringPauseReason,
   buildRecurringPauseSms,
+  buildRecurringResumeSms,
+  RECURRING_RESUME_EMAIL_SUBJECT,
   CUSTOMER_SELF_PAUSE_REASON,
   CUSTOMER_SELF_PAUSE_REASON_CODE,
   customerSelfPauseFields,
@@ -23,6 +25,8 @@ import {
   CUSTOMER_SELF_PAUSE_REASON_CODE as denoSelfCode,
   customerSelfPauseFields as denoSelfPause,
   RECURRING_PAUSE_EMAIL_SUBJECT as denoSubject,
+  buildRecurringResumeSms as denoResumeSms,
+  RECURRING_RESUME_EMAIL_SUBJECT as denoResumeSubject,
   recurringResumeClearFields as denoResumeClear,
 } from "../supabase/functions/_shared/recurring-pause.ts";
 
@@ -70,6 +74,21 @@ check("Deno customer self-pause code matches src", denoSelfCode, CUSTOMER_SELF_P
 check("resume clears pause_reason", recurringResumeClearFields().pause_reason, null);
 check("resume clears pause_reason_code", recurringResumeClearFields().pause_reason_code, null);
 check("resume clears paused_at", recurringResumeClearFields().paused_at, null);
+const resumeSms = buildRecurringResumeSms({
+  firstName: "Laure",
+  when: "Wed, Oct 14 at 1:30 PM - 2:30 PM",
+  chargedLabel: "$125.50",
+});
+check("resume SMS names the customer", resumeSms.includes("Laure, your"), true);
+check("resume SMS names the visit", resumeSms.includes("Wed, Oct 14 at 1:30 PM - 2:30 PM"), true);
+check("resume SMS names the charge", resumeSms.includes("$125.50"), true);
+check("resume email subject", RECURRING_RESUME_EMAIL_SUBJECT.includes("back on"), true);
+check("Deno resume SMS matches src", denoResumeSms({
+  firstName: "Laure",
+  when: "Wed, Oct 14 at 1:30 PM - 2:30 PM",
+  chargedLabel: "$125.50",
+}), resumeSms);
+check("Deno resume subject matches src", denoResumeSubject, RECURRING_RESUME_EMAIL_SUBJECT);
 check("Deno resume clear matches src", denoResumeClear(), recurringResumeClearFields());
 const selfPause = customerSelfPauseFields();
 check("customer pause overwrites reason", selfPause.pause_reason, CUSTOMER_SELF_PAUSE_REASON);
@@ -85,7 +104,10 @@ const wired: Array<[string, string]> = [
   ["supabase/functions/send-membership-email/index.ts", "recurring_paused"],
   ["src/components/admin/PauseRecurringDialog.tsx", "admin-recurring-pause"],
   ["src/views/admin/RecurringSchedules.tsx", "PauseRecurringDialog"],
-  ["src/views/admin/RecurringSchedules.tsx", "recurringResumeClearFields"],
+  ["src/views/admin/RecurringSchedules.tsx", "ResumeRecurringDialog"],
+  ["src/components/admin/ResumeRecurringDialog.tsx", "admin-recurring-resume"],
+  ["supabase/functions/admin-recurring-resume/index.ts", "buildRecurringResumeSms"],
+  ["supabase/functions/send-membership-email/index.ts", "recurring_resumed"],
   ["src/views/admin/RecurringSchedules.tsx", "Resume service"],
   ["src/views/admin/RecurringSchedules.tsx", "Pause service"],
   ["supabase/functions/manage-recurring-schedule/index.ts", "recurringResumeClearFields"],

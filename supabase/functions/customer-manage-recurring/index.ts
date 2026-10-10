@@ -1,6 +1,12 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.80.0";
-import { customerSelfPauseFields, recurringResumeClearFields } from "../_shared/recurring-pause.ts";
+import { sendSms } from "../_shared/sms.ts";
+import {
+  buildRecurringResumeSms,
+  customerSelfPauseFields,
+  RECURRING_RESUME_EMAIL_SUBJECT,
+  recurringResumeClearFields,
+} from "../_shared/recurring-pause.ts";
 
 // customer-manage-recurring
 //
@@ -96,6 +102,31 @@ serve(async (req) => {
 
     const { error } = await admin.from("customer_recurring_schedules").update(patch).eq("id", sched.id);
     if (error) return json({ error: error.message }, 400);
+
+    if (action === "resume") {
+      const when = [sched.next_service_date, sched.preferred_time_slot].filter(Boolean).join(" at ");
+      const sms = buildRecurringResumeSms({
+        firstName: sched.first_name,
+        when: when || "your usual day",
+      });
+      if (sched.phone) {
+        await sendSms(admin, { toPhone: sched.phone, message: sms, type: "confirmation" }).catch(() => false);
+      }
+      if (sched.email) {
+        await admin.functions.invoke("send-membership-email", {
+          body: {
+            type: "recurring_resumed",
+            email: sched.email,
+            data: {
+              name: sched.first_name || "there",
+              when: when || "your usual day",
+              subject: RECURRING_RESUME_EMAIL_SUBJECT,
+            },
+          },
+        }).catch(() => undefined);
+      }
+    }
+
     return json({ success: true, action });
   } catch (error) {
     return json({ success: false, error: error instanceof Error ? error.message : String(error) }, 400);

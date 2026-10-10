@@ -1,7 +1,7 @@
 // admin-recurring-pause
 //
 // Admin/VA: pause a customer_recurring_schedules row and tell the customer
-// why, by SMS and email. Resume stays a silent local toggle on the hub.
+// why, by SMS and email. Resume is admin-recurring-resume (date, time, charge, notify).
 //
 // Body: { scheduleId, reasonCode, reason? }
 //   reasonCode — cleaner_unavailable | finding_coverage | quality |

@@ -45,7 +45,7 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { AddressAutocomplete } from "@/components/admin/AddressAutocomplete";
 import PauseRecurringDialog from "@/components/admin/PauseRecurringDialog";
-import { recurringResumeClearFields } from "@/lib/recurring-pause";
+import ResumeRecurringDialog from "@/components/admin/ResumeRecurringDialog";
 import { MEMBERSHIP_PRICES } from "@/lib/pricing";
 import { sendCustomerChecklist, sendMembershipAgreement } from "@/lib/membership-admin";
 import { cn } from "@/lib/utils";
@@ -130,7 +130,7 @@ interface Member {
 
 const TIME_SLOTS = [
   "8:00 AM - 9:00 AM", "9:00 AM - 10:00 AM", "10:00 AM - 11:00 AM", "11:00 AM - 12:00 PM",
-  "12:00 PM - 1:00 PM", "1:00 PM - 2:00 PM", "2:00 PM - 3:00 PM", "3:00 PM - 4:00 PM",
+  "12:00 PM - 1:00 PM", "1:00 PM - 2:00 PM", "1:30 PM - 2:30 PM", "2:00 PM - 3:00 PM", "3:00 PM - 4:00 PM",
   "4:00 PM - 5:00 PM", "5:00 PM - 6:00 PM",
 ];
 const fmtMoney = (c: number | null | undefined) => (c == null ? "—" : `$${(c / 100).toFixed(0)}`);
@@ -447,6 +447,7 @@ export default function AdminRecurringSchedules() {
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [liveTick, setLiveTick] = useState(0);
   const [pauseTarget, setPauseTarget] = useState<Schedule | null>(null);
+  const [resumeTarget, setResumeTarget] = useState<Schedule | null>(null);
 
   const load = useCallback(async (opts: { silent?: boolean } = {}) => {
     if (!opts.silent) setLoading(true);
@@ -879,6 +880,7 @@ export default function AdminRecurringSchedules() {
             onTextManageLink={textManageLink}
             onCopyManageLink={copyManageLink}
             onAskPause={setPauseTarget}
+            onAskResume={setResumeTarget}
             onPatch={patch}
             setWorking={setWorking}
           />
@@ -898,7 +900,7 @@ export default function AdminRecurringSchedules() {
               {active.map((s) => (
                 <ScheduleRow key={s.id} s={s} cleaners={cleaners} cleanerName={cleanerName} working={working}
                   onPatch={patch} onGenerate={generateNow} onTextLink={textManageLink} onCopyLink={copyManageLink}
-                  onAskPause={setPauseTarget} timeSlots={TIME_SLOTS} />
+                  onAskPause={setPauseTarget} onAskResume={setResumeTarget} timeSlots={TIME_SLOTS} />
               ))}
             </div>
           )}
@@ -909,7 +911,7 @@ export default function AdminRecurringSchedules() {
               {paused.map((s) => (
                 <ScheduleRow key={s.id} s={s} cleaners={cleaners} cleanerName={cleanerName} working={working}
                   onPatch={patch} onGenerate={generateNow} onTextLink={textManageLink} onCopyLink={copyManageLink}
-                  onAskPause={setPauseTarget} timeSlots={TIME_SLOTS} />
+                  onAskPause={setPauseTarget} onAskResume={setResumeTarget} timeSlots={TIME_SLOTS} />
               ))}
             </div>
           )}
@@ -921,6 +923,12 @@ export default function AdminRecurringSchedules() {
         onOpenChange={(v) => { if (!v) setPauseTarget(null); }}
         schedule={pauseTarget}
         onDone={() => { setPauseTarget(null); load(); }}
+      />
+      <ResumeRecurringDialog
+        open={Boolean(resumeTarget)}
+        onOpenChange={(v) => { if (!v) setResumeTarget(null); }}
+        schedule={resumeTarget}
+        onDone={() => { setResumeTarget(null); load(); }}
       />
     </div>
   );
@@ -938,6 +946,7 @@ function MemberSheet({
   onTextManageLink,
   onCopyManageLink,
   onAskPause,
+  onAskResume,
   onPatch,
   setWorking,
 }: {
@@ -950,6 +959,7 @@ function MemberSheet({
   onTextManageLink: (scheduleId: string) => void;
   onCopyManageLink: (token: string | null | undefined) => void;
   onAskPause: (s: Schedule) => void;
+  onAskResume: (s: Schedule) => void;
   onPatch: (id: string, fields: Record<string, unknown>) => void;
   setWorking: (v: string | null) => void;
 }) {
@@ -1366,7 +1376,7 @@ function MemberSheet({
                             <Button
                               size="sm"
                               className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
-                              onClick={() => onPatch(s.id, { active: true, ...recurringResumeClearFields() })}
+                              onClick={() => onAskResume(s)}
                             >
                               <RiPlayLine className="w-3.5 h-3.5 mr-1" /> Resume service
                             </Button>
@@ -1549,12 +1559,13 @@ function nextCadenceDate(date: string, cadence: string): string {
 }
 
 function ScheduleRow({
-  s, cleaners, cleanerName, working, onPatch, onGenerate, onTextLink, onCopyLink, onAskPause, timeSlots,
+  s, cleaners, cleanerName, working, onPatch, onGenerate, onTextLink, onCopyLink, onAskPause, onAskResume, timeSlots,
 }: {
   s: Schedule; cleaners: Cleaner[]; cleanerName: (id: string | null) => string; working: string | null;
   onPatch: (id: string, f: Record<string, unknown>) => void; onGenerate: (id: string) => void;
   onTextLink: (id: string) => void; onCopyLink: (token: string | null | undefined) => void;
   onAskPause: (s: Schedule) => void;
+  onAskResume: (s: Schedule) => void;
   timeSlots: string[];
 }) {
   const [open, setOpen] = useState(false);
@@ -1685,16 +1696,10 @@ function ScheduleRow({
               size="sm"
               variant={s.active ? "outline" : "default"}
               className={cn("h-8 text-xs", !s.active && "bg-emerald-600 hover:bg-emerald-700 text-white")}
-              title={s.active ? "Pause and tell the customer why" : "Resume this schedule"}
+              title={s.active ? "Pause and tell the customer why" : "Resume, set the next clean, and notify them"}
               onClick={() => {
-                if (s.active) {
-                  onAskPause(s);
-                  return;
-                }
-                onPatch(s.id, {
-                  active: true,
-                  ...recurringResumeClearFields(),
-                });
+                if (s.active) onAskPause(s);
+                else onAskResume(s);
               }}
             >
               {s.active

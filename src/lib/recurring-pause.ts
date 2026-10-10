@@ -75,6 +75,21 @@ export function buildRecurringPauseSms(reason: string): string {
 }
 
 export const RECURRING_PAUSE_EMAIL_SUBJECT = "Your Novara recurring cleaning is paused";
+export const RECURRING_RESUME_EMAIL_SUBJECT = "Your Novara recurring cleaning is back on";
+
+/** Customer SMS when a paused recurring clean is resumed. */
+export function buildRecurringResumeSms(args: {
+  firstName?: string | null;
+  when: string;
+  chargedLabel?: string | null;
+}): string {
+  const name = String(args.firstName || "").trim();
+  const who = name ? `${name}, your` : "Your";
+  const when = String(args.when || "").trim() || "your usual day";
+  const charged = String(args.chargedLabel || "").trim();
+  const charge = charged ? ` We charged ${charged} to the card on file.` : "";
+  return `Novara: ${who} cleaning is back on. Next visit ${when}.${charge} ${RECURRING_PAUSE_PHONE}`;
+}
 
 /** Not an admin picker option — stamped when the customer pauses themselves. */
 export const CUSTOMER_SELF_PAUSE_REASON_CODE = "customer_self";

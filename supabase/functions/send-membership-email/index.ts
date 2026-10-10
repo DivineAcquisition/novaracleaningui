@@ -22,7 +22,7 @@ const logStep = (step: string, details?: any) => {
 };
 
 interface MembershipEmailRequest {
-  type: 'welcome' | 'renewal' | 'credit_allocated' | 'subscription_cancelled' | 'credit_expiry_warning' | 'checkout_link' | 'recurring_paused';
+  type: 'welcome' | 'renewal' | 'credit_allocated' | 'subscription_cancelled' | 'credit_expiry_warning' | 'checkout_link' | 'recurring_paused' | 'recurring_resumed';
   email: string;
   data: {
     name?: string;
@@ -36,8 +36,10 @@ interface MembershipEmailRequest {
     monthlyAmount?: number; // cents
     depositAmount?: number; // cents
     firstServiceDate?: string;
-    // recurring_paused
+    // recurring_paused / recurring_resumed
     reason?: string;
+    when?: string;
+    chargedLabel?: string;
     cadence?: string;
     subject?: string;
   };
@@ -122,6 +124,24 @@ serve(async (req: Request) => {
         html = await renderAsync(React.createElement(RecurringPaused, data));
         subject = data.subject || "Your Novara recurring cleaning is paused";
         break;
+      case 'recurring_resumed': {
+        const who = data.name || "there";
+        const when = data.when || "your usual day";
+        const charged = data.chargedLabel
+          ? `<p style="margin:0 0 16px;color:#475569">We charged <strong>${data.chargedLabel}</strong> to the card on file.</p>`
+          : "";
+        subject = data.subject || "Your Novara recurring cleaning is back on";
+        html = `
+          <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#0f172a">
+            <h2 style="margin:0 0 8px;font-size:20px">Your cleaning is back on</h2>
+            <p style="margin:0 0 16px;color:#475569">Hi ${who},</p>
+            <p style="margin:0 0 16px;color:#475569">Your recurring cleaning has resumed. Next visit: <strong>${when}</strong>.</p>
+            ${charged}
+            <p style="margin:0 0 16px;color:#475569">Questions? Call (844) 735-2070.</p>
+            <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">Novara Cleaning</p>
+          </div>`;
+        break;
+      }
       default:
         throw new Error(`Unknown email type: ${type}`);
     }
