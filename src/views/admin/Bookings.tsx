@@ -389,11 +389,14 @@ export default function AdminBookings({
 
   // Keep the open sheet's booking row fresh after mutations (customer info
   // edits, service adjusts, etc.) so the summary reflects the saved values.
+  // Skip while a reload is in flight: reinstate applies the new status
+  // immediately, and the list still holds the cancelled row until that
+  // reload finishes.
   useEffect(() => {
-    if (!selected) return;
+    if (!selected || loading) return;
     const match = bookings.find((b) => b.id === selected.id);
     if (match && match !== selected) setSelected(match);
-  }, [bookings, selected]);
+  }, [bookings, selected, loading]);
 
   const filtersActive =
     statusFilter !== "all" || dateRange !== "all" || search.trim().length > 0;
@@ -611,7 +614,10 @@ export default function AdminBookings({
       <BookingSheet
         booking={selected}
         onClose={() => setSelected(null)}
-        onMutated={load}
+        onMutated={(patch) => {
+          if (patch) setSelected((cur) => (cur ? { ...cur, ...patch } : cur));
+          void load();
+        }}
       />
     </div>
   );
@@ -1919,7 +1925,7 @@ function BookingSheet({
 }: {
   booking: BookingRow | null;
   onClose: () => void;
-  onMutated: () => void;
+  onMutated: (patch?: Partial<BookingRow>) => void;
 }) {
   const [working, setWorking] = useState<string | null>(null);
   const [suppressReview, setSuppressReview] = useState(false);
@@ -2514,8 +2520,22 @@ function BookingSheet({
       });
       const outcome = await edgeResult(error, data);
       if (!outcome.ok) throw new Error(outcome.error || "Reinstate failed");
-      toast.success("Booking reopened — deposit reminders start again.");
-      onMutated();
+      const payUrl = (data as { payUrl?: string | null; invoiceWarning?: string | null } | null)?.payUrl;
+      const invoiceWarning = (data as { invoiceWarning?: string | null } | null)?.invoiceWarning;
+      if (invoiceWarning) {
+        toast.warning(`Booking reopened, but the pay link was not refreshed: ${invoiceWarning}`);
+      } else {
+        toast.success("Booking reopened — deposit reminders start again.");
+      }
+      onMutated({
+        status: "pending_payment",
+        cancel_reason: null,
+        auto_cancelled_reason: null,
+        cancelled_at: null,
+        payment_received_at: booking.payment_received_at ?? null,
+        hosted_invoice_url: payUrl || booking.hosted_invoice_url || null,
+        pending_deposit_started_at: new Date().toISOString(),
+      });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
     } finally {

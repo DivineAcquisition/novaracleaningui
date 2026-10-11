@@ -65,6 +65,7 @@
     "facebook-leads:verify": "node --experimental-strip-types --no-warnings scripts/verify-facebook-lead-alerts.ts",
     "termination-sms:verify": "tsx scripts/verify-termination-sms.ts",
     "recurring-pause:verify": "tsx scripts/verify-recurring-pause.ts",
+    "reinstate-booking:verify": "node --experimental-strip-types --no-warnings scripts/verify-reinstate-booking.ts",
     "bookings-checklist:verify": "node --experimental-strip-types --no-warnings scripts/verify-bookings-checklist.ts",
     "checkout-nudge:verify": "node --experimental-strip-types --no-warnings scripts/verify-checkout-nudge-guard.ts",
     "engagement-end:verify": "node --experimental-strip-types --no-warnings scripts/verify-engagement-end.ts",
