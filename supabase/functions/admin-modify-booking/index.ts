@@ -463,49 +463,58 @@ serve(async (req) => {
     }
 
     if (action === "reinstate_unpaid_deposit") {
-      if (booking.status !== "cancelled") {
-        throw new Error("Only cancelled bookings can be reinstated.");
-      }
       if (booking.payment_received_at) {
         throw new Error("This booking already has a payment — reopen it as a new booking instead.");
       }
+      // A previous click can reopen the row and then fail the response (the
+      // text send threw). The panel stays on Cancelled, so the next click
+      // must resend the pay link instead of refusing.
+      const alreadyPending = booking.status === "pending_payment";
+      if (booking.status !== "cancelled" && !alreadyPending) {
+        throw new Error("Only cancelled bookings can be reinstated.");
+      }
       // Same rule as the Bookings "Can reinstate" badge: either reason field,
       // including the stored code unpaid_deposit (underscore, not a space).
-      const reason = `${booking.auto_cancelled_reason || ""} ${booking.cancel_reason || ""}`;
+      // A half-finished reopen has already cleared those reasons.
+      const reason = `${booking.auto_cancelled_reason || ""} ${booking.cancel_reason || ""} ${booking.team_notes || ""}`;
       const looksUnpaid =
         /unpaid.?deposit/i.test(reason) ||
-        Boolean(booking.hosted_invoice_url || booking.stripe_invoice_id);
+        Boolean(booking.hosted_invoice_url || booking.stripe_invoice_id) ||
+        (alreadyPending && Number(booking.deposit_cents || 0) > 0);
       if (!looksUnpaid) {
         throw new Error("This cancelled booking is not an unpaid-deposit auto-cancel.");
       }
 
       const nowIso = new Date().toISOString();
-      const noteLine = `Reinstated after unpaid-deposit auto-cancel ${nowIso.slice(0, 10)} (customer requested).`;
+      const noteLine = alreadyPending
+        ? `Deposit pay link resent ${nowIso.slice(0, 10)}.`
+        : `Reinstated after unpaid-deposit auto-cancel ${nowIso.slice(0, 10)} (customer requested).`;
       const prevNotes = String(booking.team_notes || "").trim();
       const pay = await reissueDepositInvoice(admin, booking);
 
       const bookingPatch: Record<string, unknown> = {
-        status: "pending_payment",
-        cancel_reason: null,
-        cancelled_at: null,
-        auto_cancelled_reason: null,
-        cancel_fee_cents: 0,
         pending_deposit_started_at: nowIso,
         hosted_invoice_url: pay.url || booking.hosted_invoice_url || null,
         updated_at: nowIso,
         team_notes: prevNotes ? `${prevNotes}\n${noteLine}` : noteLine,
       };
+      if (!alreadyPending) {
+        bookingPatch.status = "pending_payment";
+        bookingPatch.cancel_reason = null;
+        bookingPatch.cancelled_at = null;
+        bookingPatch.auto_cancelled_reason = null;
+        bookingPatch.cancel_fee_cents = 0;
+      }
       if (pay.invoiceId) bookingPatch.stripe_invoice_id = pay.invoiceId;
 
-      const { data: updated, error: upErr } = await admin
-        .from("bookings")
-        .update(bookingPatch)
-        .eq("id", bookingId)
-        .eq("status", "cancelled")
-        .select("id");
+      let updateQuery = admin.from("bookings").update(bookingPatch).eq("id", bookingId);
+      updateQuery = alreadyPending
+        ? updateQuery.eq("status", "pending_payment")
+        : updateQuery.eq("status", "cancelled");
+      const { data: updated, error: upErr } = await updateQuery.select("id");
       if (upErr) throw new Error(`Reinstate failed: ${errMessage(upErr)}`);
       if (!updated || updated.length === 0) {
-        throw new Error("Reinstate failed: this booking is no longer cancelled.");
+        throw new Error("Reinstate failed: this booking changed before it could be reopened.");
       }
 
       await admin
@@ -592,6 +601,7 @@ serve(async (req) => {
           status: "pending_payment",
           payUrl: link,
           invoiceWarning: pay.warning,
+          resent: alreadyPending,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
       );

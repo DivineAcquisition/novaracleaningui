@@ -58,6 +58,11 @@ check(
 );
 check("reinstate confirms a row changed", reinstate.includes('.select("id")'), true);
 check(
+  "a booking already reopened can be clicked again",
+  reinstate.includes('booking.status === "pending_payment"'),
+  true,
+);
+check(
   "a text failure cannot fail the reopen",
   reinstate.includes("[admin-modify-booking] reinstate SMS failed"),
   true,

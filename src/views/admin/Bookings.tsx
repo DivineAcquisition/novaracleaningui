@@ -2519,11 +2519,29 @@ function BookingSheet({
         body: { action: "reinstate_unpaid_deposit", bookingId: booking.id },
       });
       const outcome = await edgeResult(error, data);
-      if (!outcome.ok) throw new Error(outcome.error || "Reinstate failed");
-      const payUrl = (data as { payUrl?: string | null; invoiceWarning?: string | null } | null)?.payUrl;
-      const invoiceWarning = (data as { invoiceWarning?: string | null } | null)?.invoiceWarning;
+      if (!outcome.ok) {
+        const msg = outcome.error || "Reinstate failed";
+        // The row can already be pending when the panel still says Cancelled.
+        if (/only cancelled|no longer cancelled|changed before it could be reopened|reading 'trim'/i.test(msg)) {
+          const { data: fresh } = await (supabase.from as any)("bookings")
+            .select("status, cancel_reason, auto_cancelled_reason, cancelled_at, hosted_invoice_url, pending_deposit_started_at, payment_received_at")
+            .eq("id", booking.id)
+            .maybeSingle();
+          if (fresh && fresh.status && fresh.status !== "cancelled") {
+            toast.success("This booking is already reopened and pending the deposit.");
+            onMutated(fresh as Partial<BookingRow>);
+            return;
+          }
+        }
+        throw new Error(msg);
+      }
+      const body = data as { payUrl?: string | null; invoiceWarning?: string | null; resent?: boolean } | null;
+      const payUrl = body?.payUrl;
+      const invoiceWarning = body?.invoiceWarning;
       if (invoiceWarning) {
         toast.warning(`Booking reopened, but the pay link was not refreshed: ${invoiceWarning}`);
+      } else if (body?.resent) {
+        toast.success("Pay link sent again. This booking is already pending the deposit.");
       } else {
         toast.success("Booking reopened — deposit reminders start again.");
       }
