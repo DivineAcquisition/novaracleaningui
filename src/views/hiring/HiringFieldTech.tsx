@@ -84,7 +84,7 @@ export default function HiringFieldTech() {
         description="Join Novara Cleaning as a Field Tech independent contractor. Watch the role intro, then apply. Evergreen Specialized Contractor and Commercial Cleaner lists also open."
         canonical="https://hiring.novaracleaning.com/hiring/field-tech"
       />
-      <HiringNav ctaHref="#apply" />
+      <HiringNav ctaHref={`/hiring/apply?role=${defaultRole}`} ctaLabel="Apply" />
 
       <section className="relative overflow-hidden border-b border-slate-200/80">
         <div
@@ -137,7 +137,7 @@ export default function HiringFieldTech() {
                 </p>
                 <p className="mt-1 text-amber-900/90">
                   Watch this short intro first — it covers the role, pay, and what you need to bring.
-                  Then submit your application below.
+                  Then start your application — one question at a time.
                 </p>
               </div>
               <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 shadow-sm">
@@ -252,7 +252,7 @@ export default function HiringFieldTech() {
                     <span>{role.pay}</span>
                   </div>
                   <Link
-                    href={`/hiring/field-tech?role=${role.id}#apply`}
+                    href={`/hiring/apply?role=${role.id}`}
                     className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-[#5C0FFE] hover:underline"
                   >
                     Apply for {role.shortTitle}

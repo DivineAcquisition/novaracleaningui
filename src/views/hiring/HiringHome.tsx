@@ -142,7 +142,7 @@ export default function HiringHome() {
           {evergreen.map((role) => (
             <Link
               key={role.id}
-              href={`/hiring/field-tech?role=${role.id}#apply`}
+              href={`/hiring/apply?role=${role.id}`}
               className="group block rounded-2xl border border-dashed border-slate-300 bg-white/70 p-5 transition hover:border-amber-300 hover:bg-white sm:p-6"
             >
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -187,7 +187,7 @@ export default function HiringHome() {
                 <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#5C0FFE]/10 text-xs font-bold text-[#5C0FFE]">
                   1
                 </span>
-                <span>Submit the short application for the role that matches you.</span>
+                <span>Answer one question at a time. A car, a photo ID, and a yes to supplies are required.</span>
               </li>
               <li className="flex gap-3">
                 <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#5C0FFE]/10 text-xs font-bold text-[#5C0FFE]">
