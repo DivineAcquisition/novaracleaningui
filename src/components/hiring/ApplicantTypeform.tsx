@@ -88,13 +88,20 @@ function toDraft(answers: Answers, hiringRole: string | null): HiringApplication
   };
 }
 
+function emailForForm(saved: string | undefined, sessionEmail: string | undefined): string {
+  const value = (saved || "").trim();
+  const onFile = (sessionEmail || "").trim().toLowerCase();
+  if (!value || (onFile && value.toLowerCase() === onFile)) return "";
+  return value;
+}
+
 function blankAnswers(hiringRole: string | null, session?: PublicHiringSession | null): Answers {
   const saved = session?.answers || {};
   return {
     role: isOpenApplicantRole(saved.role) ? saved.role : presetRoleForHiringPage(hiringRole),
     firstName: saved.firstName || session?.firstName || "",
     lastName: saved.lastName || session?.lastName || "",
-    email: saved.email || session?.email || "",
+    email: emailForForm(saved.email, session?.email),
     phone: saved.phone || session?.phone || "",
     address: saved.address || "",
     zipCode: saved.zipCode || "",
@@ -316,7 +323,6 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
                 index={index}
                 answers={answers}
                 intent={step === "role" ? intent : null}
-                sessionEmail={session?.email || ""}
                 error={error}
                 submitting={submitting}
                 headingRef={headingRef}
@@ -395,7 +401,6 @@ function Question({
   index,
   answers,
   intent,
-  sessionEmail,
   error,
   submitting,
   headingRef,
@@ -409,7 +414,6 @@ function Question({
   index: number;
   answers: Answers;
   intent: string | null;
-  sessionEmail: string;
   error: string | null;
   submitting: boolean;
   headingRef: RefObject<HTMLHeadingElement>;
@@ -434,9 +438,11 @@ function Question({
           <ReviewRow label="Name" value={`${answers.firstName} ${answers.lastName}`.trim()} onEdit={() => onEdit("name")} />
           <ReviewRow label="Email" value={answers.email} onEdit={() => onEdit("email")} />
           <ReviewRow label="Phone" value={answers.phone} onEdit={() => onEdit("phone")} />
-          <ReviewRow label="Address" value={answers.address} onEdit={() => onEdit("address")} />
-          <ReviewRow label="ZIP" value={answers.zipCode} onEdit={() => onEdit("zip")} />
-          <ReviewRow label="State" value={answers.state} onEdit={() => onEdit("state")} />
+          <ReviewRow
+            label="Address"
+            value={[answers.address, [answers.zipCode, answers.state].filter(Boolean).join(" ")].filter(Boolean).join(", ")}
+            onEdit={() => onEdit("address")}
+          />
           <ReviewRow label="Applying as" value={answers.contractorType === "Individual" ? "Just me" : answers.contractorType} onEdit={() => onEdit("contractorType")} />
           <ReviewRow label="Car" value="Yes — I have my own car" onEdit={() => onEdit("car")} />
           <ReviewRow label="Photo ID" value={answers.idFile?.name || "Uploaded"} onEdit={() => onEdit("id")} />
@@ -479,16 +485,8 @@ function Question({
   }
 
   if (step === "email") {
-    const filledFromLink = Boolean(sessionEmail) && answers.email.trim().toLowerCase() === sessionEmail.trim().toLowerCase();
     return (
-      <TextStep
-        n={n}
-        title="What’s the best email to reach you?"
-        hint={filledFromLink ? "Filled in from your application link. Change it if another address is better." : "We’ll only use this to follow up on your application."}
-        error={error}
-        headingRef={headingRef}
-        onOk={onAdvance}
-      >
+      <TextStep n={n} title="What’s the best email to reach you?" hint="We’ll only use this to follow up on your application." error={error} headingRef={headingRef} onOk={onAdvance}>
         <Field label="Email" type="email" autoComplete="email" placeholder="you@email.com" value={answers.email} onChange={(v) => onPatch({ email: v })} onEnter={onAdvance} />
       </TextStep>
     );
@@ -504,21 +502,33 @@ function Question({
 
   if (step === "address") {
     return (
-      <TextStep n={n} title="What’s your street address?" hint="Search for your address. We’ll fill in the ZIP and state from the result." error={error} headingRef={headingRef} onOk={onAdvance}>
-        <AddressSearchField
-          value={answers.address}
-          onChange={(address) => onPatch({ address })}
-          onResolved={(partial) => onPatch(partial)}
-          onEnter={onAdvance}
-        />
-      </TextStep>
-    );
-  }
-
-  if (step === "zip") {
-    return (
-      <TextStep n={n} title="What’s your ZIP code?" error={error} headingRef={headingRef} onOk={onAdvance}>
-        <Field label="ZIP code" autoComplete="postal-code" inputMode="numeric" placeholder="21213" value={answers.zipCode} onChange={(v) => onPatch({ zipCode: v.replace(/\D/g, "").slice(0, 5) })} onEnter={onAdvance} />
+      <TextStep n={n} title="Where do you live?" hint="Search for your street. ZIP and state fill in from the result, and you can correct them here." error={error} headingRef={headingRef} onOk={onAdvance}>
+        <div className="space-y-5">
+          <AddressSearchField
+            value={answers.address}
+            onChange={(address) => onPatch({ address })}
+            onResolved={(partial) => onPatch(partial)}
+            onEnter={onAdvance}
+          />
+          <Field
+            label="ZIP code"
+            autoComplete="postal-code"
+            inputMode="numeric"
+            placeholder="21213"
+            value={answers.zipCode}
+            onChange={(v) => onPatch({ zipCode: v.replace(/\D/g, "").slice(0, 5) })}
+            onEnter={onAdvance}
+          />
+          <div>
+            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">State</p>
+            <ChoiceList
+              compact
+              choices={APPLICANT_STATES.map((s) => ({ value: s.value, label: s.label }))}
+              selected={answers.state}
+              onPick={(value) => onPatch({ state: value })}
+            />
+          </div>
+        </div>
       </TextStep>
     );
   }
@@ -826,10 +836,12 @@ function ChoiceList({
   choices,
   selected,
   onPick,
+  compact = false,
 }: {
   choices: Choice[];
   selected: string;
   onPick: (value: string) => void;
+  compact?: boolean;
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -851,7 +863,7 @@ function ChoiceList({
   }, [choices, onPick, selected]);
 
   return (
-    <div className="mt-8 space-y-2.5">
+    <div className={cn(compact ? "space-y-2" : "mt-8 space-y-2.5")}>
       {choices.map((choice, i) => {
         const on = selected === choice.value && !choice.disabled;
         const letter = String.fromCharCode(65 + i);

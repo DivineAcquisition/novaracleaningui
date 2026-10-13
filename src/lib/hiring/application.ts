@@ -120,8 +120,6 @@ const BASE_STEPS: ApplicationStep[] = [
   "email",
   "phone",
   "address",
-  "zip",
-  "state",
   "contractorType",
   "car",
   "id",
@@ -394,6 +392,12 @@ export function issuesForStep(step: ApplicationStep, draft: HiringApplicationDra
       const address = oneLine(draft.address);
       if (address.length < 5) return issue(400, "missing_address", "Enter your street address.");
       if (address.length > 200) return issue(400, "missing_address", "Keep the address under 200 characters.");
+      if (!/^\d{5}$/.test(draft.zipCode.trim())) {
+        return issue(400, "invalid_zip", "Enter a 5-digit ZIP code.");
+      }
+      if (!includesValue(APPLICANT_STATES, draft.state)) {
+        return issue(400, "invalid_state", "Choose the state you live in.");
+      }
       return null;
     }
     case "zip":

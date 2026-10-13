@@ -126,6 +126,9 @@ export function toPublicSession(row: HiringSessionRow): PublicHiringSession {
   const status: HiringSessionStatus = row.status === "submitted" ? "submitted" : "open";
   const state =
     answers.state || (row.source === "indeed" ? stateFromIndeedJob(row.job_title) || "" : "");
+  const relay = String(row.email || "").trim().toLowerCase();
+  const typedEmail =
+    answers.email && answers.email.trim().toLowerCase() !== relay ? answers.email : "";
   return {
     token: row.token,
     email: row.email,
@@ -139,7 +142,7 @@ export function toPublicSession(row: HiringSessionRow): PublicHiringSession {
       ...answers,
       firstName: answers.firstName || fromName.firstName,
       lastName: answers.lastName || fromName.lastName,
-      email: answers.email || row.email,
+      email: typedEmail,
       phone: answers.phone || row.phone || "",
       ...(state ? { state } : {}),
     },

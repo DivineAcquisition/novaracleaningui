@@ -18,7 +18,7 @@ import {
   type HiringApplicationDraft,
 } from "../src/lib/hiring/application";
 import { parseIndeedApplicant, splitPersonName, stateFromIndeedJob } from "../src/lib/hiring/indeed";
-import { hiringApplyUrl, isHiringToken, sanitizeAnswers } from "../src/lib/hiring/session";
+import { hiringApplyUrl, isHiringToken, sanitizeAnswers, toPublicSession } from "../src/lib/hiring/session";
 
 let failures = 0;
 function check(name: string, actual: unknown, expected: unknown) {
@@ -124,6 +124,30 @@ check("Google state MD prefills Maryland", applicantStateFromAddress("MD"), "Mar
 check("Google state name prefills Virginia", applicantStateFromAddress("Virginia"), "Virginia");
 check("Google state DC prefills DC", applicantStateFromAddress("DC"), "DC");
 check("a state we do not hire stays blank", applicantStateFromAddress("OH"), "");
+check("address step asks for the ZIP on the same page", issuesForStep("address", draft({ zipCode: "" }))?.code, "invalid_zip");
+check("address step asks for the state on the same page", issuesForStep("address", draft({ state: "" }))?.code, "invalid_state");
+check("zip is not its own question", visibleSteps("No").includes("zip"), false);
+check("state is not its own question", visibleSteps("No").includes("state"), false);
+const sessionRow = {
+  id: "1",
+  token: "a".repeat(48),
+  email: "relay@indeedemail.com",
+  full_name: "Ada Lovelace",
+  phone: null,
+  source: "indeed",
+  job_title: "House Cleaners (DMV), Baltimore, MD",
+  answers: { email: "relay@indeedemail.com", firstName: "Ada" },
+  step_index: 0,
+  status: "open",
+  expires_at: "2026-12-01T00:00:00.000Z",
+  submitted_at: null,
+};
+check("invite email is not copied into the form", toPublicSession(sessionRow).answers.email, "");
+check(
+  "an email the applicant typed is kept",
+  toPublicSession({ ...sessionRow, answers: { email: "ada@example.com" } }).answers.email,
+  "ada@example.com",
+);
 
 const indeed = parseIndeedApplicant({
   sender: "Conversation-CassaundraWoodward-5gfay@indeedemail.com",
