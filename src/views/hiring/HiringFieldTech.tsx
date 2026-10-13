@@ -11,7 +11,6 @@ import { useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   RiArrowLeftLine,
-  RiArrowRightLine,
   RiCheckboxCircleFill,
   RiDownload2Line,
   RiFileTextLine,
@@ -218,15 +217,13 @@ export default function HiringFieldTech() {
             <section id="evergreen" className="scroll-mt-24 space-y-5">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-700">
-                  Also recruiting
+                  Opening soon
                 </p>
                 <h2 className="mt-2 font-jakarta text-2xl font-bold text-slate-900">
-                  Evergreen contractor lists
+                  Other contractor roles
                 </h2>
                 <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">
-                  These roles stay open as an{" "}
-                  <strong className="font-semibold text-slate-800">active evergreen list</strong> —
-                  we review every applicant and select contractors when demand opens.
+                  Lead Cleaner, Specialized Contractor, and company crews are opening soon. Field Cleaner is the role you can apply for now.
                 </p>
               </div>
 
@@ -251,13 +248,7 @@ export default function HiringFieldTech() {
                     <span>{role.type}</span>
                     <span>{role.pay}</span>
                   </div>
-                  <Link
-                    href={`/hiring/apply?role=${role.id}`}
-                    className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-[#5C0FFE] hover:underline"
-                  >
-                    Apply for {role.shortTitle}
-                    <RiArrowRightLine className="h-4 w-4" />
-                  </Link>
+                  <p className="mt-5 text-sm font-semibold text-amber-800">Opening soon</p>
                 </article>
               ))}
             </section>

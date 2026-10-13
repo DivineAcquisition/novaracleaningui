@@ -96,8 +96,7 @@ export default function HiringHome() {
             Find where you fit
           </h2>
           <p className="mt-2 text-sm text-slate-500 sm:text-base">
-            {open.length} open role{open.length === 1 ? "" : "s"} · {evergreen.length} evergreen
-            lists (selected when needed)
+            {open.length} open role{open.length === 1 ? "" : "s"} · other roles opening soon
           </p>
         </div>
 
@@ -140,10 +139,9 @@ export default function HiringHome() {
           ))}
 
           {evergreen.map((role) => (
-            <Link
+            <div
               key={role.id}
-              href={`/hiring/apply?role=${role.id}`}
-              className="group block rounded-2xl border border-dashed border-slate-300 bg-white/70 p-5 transition hover:border-amber-300 hover:bg-white sm:p-6"
+              className="block rounded-2xl border border-dashed border-slate-300 bg-white/70 p-5 sm:p-6"
             >
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
@@ -154,7 +152,7 @@ export default function HiringHome() {
                     <EvergreenBadge />
                   </div>
                   <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">
-                    {role.tagline} Applicants are selected when needed.
+                    {role.tagline} Opening soon.
                   </p>
                   <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs font-medium text-slate-500">
                     <span className="inline-flex items-center gap-1">
@@ -165,12 +163,8 @@ export default function HiringHome() {
                     <span>{role.pay}</span>
                   </div>
                 </div>
-                <span className="inline-flex shrink-0 items-center gap-1 self-start text-sm font-semibold text-slate-600 transition group-hover:gap-2 group-hover:text-[#5C0FFE]">
-                  Learn more
-                  <RiArrowRightLine className="h-4 w-4" />
-                </span>
               </div>
-            </Link>
+            </div>
           ))}
         </div>
 

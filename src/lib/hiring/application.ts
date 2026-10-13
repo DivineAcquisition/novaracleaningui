@@ -1,3 +1,5 @@
+import { postalStateCode } from "@/lib/us-states";
+
 // ─── Public applicant intake ────────────────────────────────────────────────
 //
 // Mirrors the fields a new row in Airtable Applicants
@@ -232,19 +234,34 @@ const EXT_MIME: Record<string, string> = {
   ".pdf": "application/pdf",
 };
 
-export function presetRoleForHiringPage(roleId: string | null | undefined): ApplicantRole {
-  if (roleId === "specialized-contractors") return "Specialized Contractor";
-  return "Field Cleaner (Contractor)";
+export const OPEN_APPLICANT_ROLE: ApplicantRole = "Field Cleaner (Contractor)";
+
+export function isOpenApplicantRole(value: string | null | undefined): boolean {
+  return value === OPEN_APPLICANT_ROLE;
 }
 
-export function hiringIntentNote(roleId: string | null | undefined): string | null {
-  if (roleId === "commercial-cleaner") {
-    return "Commercial routes are filled from this same application when demand opens. Pick the role that matches how you work.";
-  }
-  if (roleId === "specialized-contractors") {
-    return "Specialty work is an active list — we reach out when a deep clean or move-out opens near you.";
-  }
+/** Every public hiring page starts on Field Cleaner. The other roles are opening soon. */
+export function presetRoleForHiringPage(_roleId: string | null | undefined): ApplicantRole {
+  return OPEN_APPLICANT_ROLE;
+}
+
+export function hiringIntentNote(_roleId: string | null | undefined): string | null {
   return null;
+}
+
+const APPLICANT_STATE_BY_POSTAL: Record<string, ApplicantState> = {
+  MD: "Maryland",
+  VA: "Virginia",
+  DC: "DC",
+  NY: "New York",
+  CA: "California",
+  TX: "Texas",
+};
+
+/** Map a Google Places state ("MD" or "Maryland") onto an Airtable applicant state. */
+export function applicantStateFromAddress(raw: string | null | undefined): ApplicantState | "" {
+  const code = postalStateCode(raw);
+  return APPLICANT_STATE_BY_POSTAL[code] || "";
 }
 
 export function optionLabel<T extends { value: string; label: string }>(

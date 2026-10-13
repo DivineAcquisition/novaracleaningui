@@ -7,9 +7,12 @@
 
 import {
   EXPERIENCE_SOMEWHAT,
+  OPEN_APPLICANT_ROLE,
   TRANSPORTATION_CAR,
   TRANSPORTATION_NONE,
+  applicantStateFromAddress,
   issuesForStep,
+  presetRoleForHiringPage,
   validateHiringApplication,
   visibleSteps,
   type HiringApplicationDraft,
@@ -116,6 +119,11 @@ check(
 );
 check("car step rejects no vehicle before the ID", issuesForStep("car", draft({ transportation: TRANSPORTATION_NONE }))?.code, "no_car");
 check("California is an allowed state", codeOf({ state: "California" }), "ok");
+check("hiring pages open Field Cleaner only", presetRoleForHiringPage("specialized-contractors"), OPEN_APPLICANT_ROLE);
+check("Google state MD prefills Maryland", applicantStateFromAddress("MD"), "Maryland");
+check("Google state name prefills Virginia", applicantStateFromAddress("Virginia"), "Virginia");
+check("Google state DC prefills DC", applicantStateFromAddress("DC"), "DC");
+check("a state we do not hire stays blank", applicantStateFromAddress("OH"), "");
 
 const indeed = parseIndeedApplicant({
   sender: "Conversation-CassaundraWoodward-5gfay@indeedemail.com",

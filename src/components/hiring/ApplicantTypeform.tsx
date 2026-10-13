@@ -21,14 +21,17 @@ import {
   CONTRACTOR_TYPES,
   DAY_LABEL,
   EXPERIENCE_OPTIONS,
+  OPEN_APPLICANT_ROLE,
   PREFERRED_DAYS,
   TRANSPORTATION_CAR,
   TRANSPORTATION_NONE,
+  applicantStateFromAddress,
   availabilityLabel,
   experienceLabel,
   gateCopy,
   hiringIntentNote,
   isApplicationIssue,
+  isOpenApplicantRole,
   issuesForStep,
   presetRoleForHiringPage,
   validateHiringApplication,
@@ -37,6 +40,9 @@ import {
   type ApplicationStep,
   type HiringApplicationDraft,
 } from "@/lib/hiring/application";
+import { AddressSuggestionMenu } from "@/components/booking/AddressSuggestionMenu";
+import { useAddressAutocomplete } from "@/hooks/use-address-autocomplete";
+import type { AddressSuggestion } from "@/lib/google-places-loader";
 import { formatPhoneNumber } from "@/lib/input-formatters";
 import { HIRING_GRADIENT } from "@/components/hiring/HiringChrome";
 import type { PublicHiringSession } from "@/lib/hiring/session";
@@ -70,7 +76,7 @@ type Answers = {
   idFile: File | null;
 };
 
-type Choice = { value: string; label: string; hint?: string };
+type Choice = { value: string; label: string; hint?: string; disabled?: boolean };
 
 function toDraft(answers: Answers, hiringRole: string | null): HiringApplicationDraft {
   return {
@@ -85,7 +91,7 @@ function toDraft(answers: Answers, hiringRole: string | null): HiringApplication
 function blankAnswers(hiringRole: string | null, session?: PublicHiringSession | null): Answers {
   const saved = session?.answers || {};
   return {
-    role: saved.role || presetRoleForHiringPage(hiringRole),
+    role: isOpenApplicantRole(saved.role) ? saved.role : presetRoleForHiringPage(hiringRole),
     firstName: saved.firstName || session?.firstName || "",
     lastName: saved.lastName || session?.lastName || "",
     email: saved.email || session?.email || "",
@@ -310,6 +316,7 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
                 index={index}
                 answers={answers}
                 intent={step === "role" ? intent : null}
+                sessionEmail={session?.email || ""}
                 error={error}
                 submitting={submitting}
                 headingRef={headingRef}
@@ -348,8 +355,8 @@ function Success({ name }: { name: string }) {
         Application received{name ? `, ${name}` : ""}
       </h1>
       <p className="mx-auto mt-4 max-w-md text-base leading-relaxed text-slate-600">
-        Thanks for applying. We review every submission and reach out when it’s a fit — including
-        evergreen roles, which we fill when demand opens.
+        Thanks for applying for Field Cleaner. We review every submission and reach out when it’s a fit.
+        The other roles are opening soon.
       </p>
       <Link
         href="/hiring"
@@ -388,6 +395,7 @@ function Question({
   index,
   answers,
   intent,
+  sessionEmail,
   error,
   submitting,
   headingRef,
@@ -401,6 +409,7 @@ function Question({
   index: number;
   answers: Answers;
   intent: string | null;
+  sessionEmail: string;
   error: string | null;
   submitting: boolean;
   headingRef: RefObject<HTMLHeadingElement>;
@@ -470,8 +479,16 @@ function Question({
   }
 
   if (step === "email") {
+    const filledFromLink = Boolean(sessionEmail) && answers.email.trim().toLowerCase() === sessionEmail.trim().toLowerCase();
     return (
-      <TextStep n={n} title="What’s the best email to reach you?" hint="We’ll only use this to follow up on your application." error={error} headingRef={headingRef} onOk={onAdvance}>
+      <TextStep
+        n={n}
+        title="What’s the best email to reach you?"
+        hint={filledFromLink ? "Filled in from your application link. Change it if another address is better." : "We’ll only use this to follow up on your application."}
+        error={error}
+        headingRef={headingRef}
+        onOk={onAdvance}
+      >
         <Field label="Email" type="email" autoComplete="email" placeholder="you@email.com" value={answers.email} onChange={(v) => onPatch({ email: v })} onEnter={onAdvance} />
       </TextStep>
     );
@@ -487,8 +504,13 @@ function Question({
 
   if (step === "address") {
     return (
-      <TextStep n={n} title="What’s your street address?" hint="We use this to see which jobs are actually near you." error={error} headingRef={headingRef} onOk={onAdvance}>
-        <Field label="Street address" autoComplete="street-address" placeholder="123 Main St" value={answers.address} onChange={(v) => onPatch({ address: v })} onEnter={onAdvance} />
+      <TextStep n={n} title="What’s your street address?" hint="Search for your address. We’ll fill in the ZIP and state from the result." error={error} headingRef={headingRef} onOk={onAdvance}>
+        <AddressSearchField
+          value={answers.address}
+          onChange={(address) => onPatch({ address })}
+          onResolved={(partial) => onPatch(partial)}
+          onEnter={onAdvance}
+        />
       </TextStep>
     );
   }
@@ -682,7 +704,12 @@ function Question({
 function choicesFor(step: ApplicationStep): Choice[] {
   switch (step) {
     case "role":
-      return APPLICANT_ROLES.map((r) => ({ value: r.value, label: r.label, hint: r.hint }));
+      return APPLICANT_ROLES.map((r) => ({
+        value: r.value,
+        label: r.label,
+        hint: r.value === OPEN_APPLICANT_ROLE ? r.hint : "Opening soon",
+        disabled: r.value !== OPEN_APPLICANT_ROLE,
+      }));
     case "state":
       return APPLICANT_STATES.map((s) => ({ value: s.value, label: s.label }));
     case "contractorType":
@@ -740,6 +767,8 @@ function hintFor(step: ApplicationStep): string | null {
       return "A car is the only transportation we accept. You need to drive yourself — rideshare doesn’t count.";
     case "supplies":
       return "Contractors bring their own supplies. You have to be willing to get whatever you don’t already own.";
+    case "role":
+      return "Field Cleaner is open now. The other roles are opening soon.";
     case "state":
       return "We hire in Maryland, Virginia, DC, New York, California, and Texas.";
     default:
@@ -807,13 +836,13 @@ function ChoiceList({
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
-      if (e.key === "Enter" && selected) {
+      if (e.key === "Enter" && selected && !choices.find((c) => c.value === selected)?.disabled) {
         e.preventDefault();
         onPick(selected);
         return;
       }
       const idx = "abcdefghijklmnopqrstuvwxyz".indexOf(e.key.toLowerCase());
-      if (idx < 0 || idx >= choices.length) return;
+      if (idx < 0 || idx >= choices.length || choices[idx].disabled) return;
       e.preventDefault();
       onPick(choices[idx].value);
     };
@@ -824,19 +853,25 @@ function ChoiceList({
   return (
     <div className="mt-8 space-y-2.5">
       {choices.map((choice, i) => {
-        const on = selected === choice.value;
+        const on = selected === choice.value && !choice.disabled;
         const letter = String.fromCharCode(65 + i);
         return (
           <button
             key={choice.value}
             type="button"
             aria-pressed={on}
-            onClick={() => onPick(choice.value)}
+            aria-disabled={choice.disabled || undefined}
+            disabled={choice.disabled}
+            onClick={() => {
+              if (!choice.disabled) onPick(choice.value);
+            }}
             className={cn(
               "flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition sm:gap-4 sm:px-4 sm:py-4",
-              on
-                ? "border-[#5C0FFE] bg-white shadow-[0_14px_30px_-20px_rgba(92,15,254,0.85)]"
-                : "border-slate-200 bg-white/80 hover:border-[#8F7BFD]/60 hover:bg-white",
+              choice.disabled
+                ? "cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400"
+                : on
+                  ? "border-[#5C0FFE] bg-white shadow-[0_14px_30px_-20px_rgba(92,15,254,0.85)]"
+                  : "border-slate-200 bg-white/80 hover:border-[#8F7BFD]/60 hover:bg-white",
             )}
           >
             <span
@@ -848,8 +883,12 @@ function ChoiceList({
               {on ? <RiCheckLine className="h-4 w-4" /> : letter}
             </span>
             <span className="min-w-0">
-              <span className="block text-base font-semibold text-slate-900">{choice.label}</span>
-              {choice.hint && <span className="mt-0.5 block text-sm text-slate-500">{choice.hint}</span>}
+              <span className={cn("block text-base font-semibold", choice.disabled ? "text-slate-400" : "text-slate-900")}>{choice.label}</span>
+              {choice.hint && (
+                <span className={cn("mt-0.5 block text-sm", choice.disabled ? "font-semibold text-amber-700" : "text-slate-500")}>
+                  {choice.hint}
+                </span>
+              )}
             </span>
           </button>
         );
@@ -979,6 +1018,87 @@ function TextStep({
       <div className="mt-6">
         <OkButton onClick={onOk} />
       </div>
+    </div>
+  );
+}
+
+function AddressSearchField({
+  value,
+  onChange,
+  onResolved,
+  onEnter,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onResolved: (partial: Partial<Answers>) => void;
+  onEnter: () => void;
+}) {
+  const { suggestions, query, resolve, clear } = useAddressAutocomplete();
+  const [open, setOpen] = useState(false);
+
+  async function pick(suggestion: AddressSuggestion) {
+    setOpen(false);
+    const parsed = await resolve(suggestion);
+    clear();
+    if (!parsed) return;
+    const street = parsed.street || parsed.formattedAddress || value;
+    const zipCode = String(parsed.zipCode || "").replace(/\D/g, "").slice(0, 5);
+    const state = applicantStateFromAddress(parsed.state);
+    onResolved({
+      address: street,
+      ...(zipCode ? { zipCode } : {}),
+      ...(state ? { state } : {}),
+    });
+  }
+
+  return (
+    <div className="relative">
+      <label className="block">
+        <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">Street address</span>
+        <input
+          type="text"
+          value={value}
+          placeholder="Start typing your address"
+          autoComplete="off"
+          role="combobox"
+          aria-expanded={open && suggestions.length > 0}
+          aria-autocomplete="list"
+          onChange={(e) => {
+            onChange(e.target.value);
+            query(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => {
+            if (value.trim().length >= 3) {
+              query(value);
+              setOpen(true);
+            }
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              setOpen(false);
+              clear();
+              return;
+            }
+            if (e.key !== "Enter") return;
+            e.preventDefault();
+            if (open && suggestions[0]) {
+              void pick(suggestions[0]);
+              return;
+            }
+            onEnter();
+          }}
+          className="h-14 w-full rounded-2xl border border-slate-200 bg-white px-4 text-lg text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-[#5C0FFE] focus:ring-4 focus:ring-[#5C0FFE]/10"
+        />
+      </label>
+      {open && suggestions.length > 0 && (
+        <AddressSuggestionMenu
+          suggestions={suggestions}
+          onPick={(suggestion) => {
+            void pick(suggestion);
+          }}
+        />
+      )}
     </div>
   );
 }

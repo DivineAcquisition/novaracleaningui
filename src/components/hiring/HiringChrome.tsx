@@ -105,7 +105,7 @@ export function EvergreenBadge({ className }: { className?: string }) {
         className,
       )}
     >
-      Active evergreen list
+      Opening soon
     </span>
   );
 }
