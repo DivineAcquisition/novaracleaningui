@@ -53,6 +53,14 @@ export async function submitDisputeEvidence(
   for (const [k, v] of Object.entries(textFields)) {
     body[k.startsWith("evidence[") ? k : `evidence[${k}]`] = v;
   }
-  await client.updateDispute(disputeId, body, true);
+  try {
+    await client.updateDispute(disputeId, body, true);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (/maximum number of evidence|already been submitted|already submitted/i.test(message)) {
+      return { state: { status: "submitted", fileIds: staged.fileIds }, alreadySubmitted: true };
+    }
+    throw err;
+  }
   return { state: { status: "submitted", fileIds: staged.fileIds }, alreadySubmitted: false };
 }

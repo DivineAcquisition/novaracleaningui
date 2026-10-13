@@ -68,7 +68,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     // before payment — no signature, no DocuSeal record.
     const { data: signed } = await supabase
       .from("service_agreements")
-      .select("id, signed_by, customer_name")
+      .select("id, signed_by, customer_name, ip, user_agent, accepted_at, agreement_version, agreed_terms, agreed_disclaimer, agreed_refund, agreed_service_agreement")
       .eq("booking_id", booking.id)
       .eq("source", "pay_page")
       .eq("agreed_terms", true)
@@ -170,13 +170,32 @@ export async function POST(req: Request): Promise<NextResponse> {
             reason: "general",
             customerEmail: booking.email,
             customerName: name,
+            serviceDate: booking.service_date,
+            serviceAddress: addressLine || null,
+            billingAddress: addressLine || null,
+            disputedAmountCents: totalCents || null,
+            bookingRef: booking.id,
             acceptance: {
               signerName: name,
               email: booking.email,
-              signedAt: new Date().toISOString(),
+              phone: booking.phone || null,
+              signedAt: signed[0].accepted_at || new Date().toISOString(),
+              ip: signed[0].ip || null,
+              userAgent: signed[0].user_agent || null,
               agreementName: "One-Time Service Agreement",
+              agreementVersion: signed[0].agreement_version || null,
               amountLabel: totalCents ? `$${(totalCents / 100).toFixed(2)}` : null,
               depositLabel: depositCents ? `$${(depositCents / 100).toFixed(2)} deposit` : null,
+              balanceLabel: balanceCents ? `$${(balanceCents / 100).toFixed(2)} balance` : null,
+              paymentOption: booking.payment_option || null,
+              relationship: "residential",
+              signaturePresent: Boolean(signatureImage),
+              acknowledgments: [
+                { label: "Terms of Service", accepted: signed[0].agreed_terms === true },
+                { label: "Disclaimer", accepted: signed[0].agreed_disclaimer === true },
+                { label: "Refund Policy", accepted: signed[0].agreed_refund === true },
+                { label: "Service Agreement", accepted: signed[0].agreed_service_agreement === true },
+              ],
             },
           },
         },

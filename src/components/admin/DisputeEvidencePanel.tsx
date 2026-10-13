@@ -33,7 +33,7 @@ export default function DisputeEvidencePanel({
   bookingRef?: string | null;
   booking: Record<string, unknown>;
   messages?: GhlMessage[];
-  photos?: Array<{ label: string; url?: string | null }>;
+  photos?: Array<{ label: string; url?: string | null; phase?: string | null; room?: string | null; takenAt?: string | null; jobId?: string | null }>;
   checklist?: { completed_items?: number | null; total_items?: number | null } | null;
   charges?: Array<{ label: string; amountCents: number | null; paymentIntentId?: string | null; kind?: string | null }>;
   acceptance?: {
@@ -55,6 +55,9 @@ export default function DisputeEvidencePanel({
   const [due, setDue] = useState("");
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
+  const [narrative, setNarrative] = useState("");
+  const [lossCause, setLossCause] = useState("reason_code_not_answered");
+  const [lossNote, setLossNote] = useState("");
   const [result, setResult] = useState<Record<string, unknown> | null>(null);
   const [readiness, setReadiness] = useState<Array<{ chargeKey: string; status: string; gaps: string[] }> | null>(null);
 
@@ -91,7 +94,7 @@ export default function DisputeEvidencePanel({
     };
   }), [messages]);
 
-  const run = async (action: "preview" | "submit" | "accept_without_evidence") => {
+  const run = async (action: "preview" | "submit" | "stage" | "accept_without_evidence" | "loss_review" | "withdrawal_draft") => {
     const id = disputeId.trim();
     if (!id) {
       toast.error("Enter the Stripe dispute id.");
@@ -101,25 +104,44 @@ export default function DisputeEvidencePanel({
       toast.error("A note is required to accept without evidence.");
       return;
     }
+    if (action === "loss_review" && !lossNote.trim()) {
+      toast.error("A note is required for a lost-dispute review.");
+      return;
+    }
     setBusy(true);
     try {
       const address = [booking.address, booking.city, booking.state, booking.zip_code].filter(Boolean).join(", ");
+      const chargeCents = charges?.find((charge) => charge.amountCents != null)?.amountCents
+        ?? (typeof booking.final_charge_cents === "number" ? booking.final_charge_cents : null)
+        ?? (typeof booking.total_estimate_cents === "number" ? booking.total_estimate_cents : null);
       const { data, error } = await supabase.functions.invoke("dispute-evidence", {
         body: {
           action,
           bookingId,
-          note,
+          note: action === "loss_review" ? lossNote : note,
+          cause: lossCause,
+          narrative: narrative.trim() || undefined,
+          clientKey: booking.email || null,
+          chargeKey: booking.payment_intent_id || charges?.[0]?.paymentIntentId || null,
+          customerName: [booking.first_name, booking.last_name].filter(Boolean).join(" ") || booking.first_name || null,
+          serviceDate: booking.service_date || null,
+          serviceAddress: address || null,
+          serviceDocumented: (photos || []).length > 0 || Boolean(booking.completed_at),
+          relationshipIntact: true,
           input: {
             disputeId: id,
             reason,
             evidenceDueAt: due || null,
             now: new Date().toISOString(),
             bookingRef: bookingRef || null,
+            jobId: booking.job_id || null,
             customerName: [booking.first_name, booking.last_name].filter(Boolean).join(" ") || booking.first_name || null,
             customerEmail: booking.email || null,
             billingAddress: address || null,
+            serviceAddress: address || null,
             serviceDescription: booking.service_type ? String(booking.service_type).replace(/_/g, " ") : null,
             serviceDate: booking.service_date || null,
+            disputedAmountCents: chargeCents,
             scheduledWindow: booking.time_slot || booking.arrival_window || null,
             finishedAt: booking.completed_at || null,
             checklistCompleted: checklist?.completed_items ?? null,
@@ -134,8 +156,18 @@ export default function DisputeEvidencePanel({
       if (error) throw error;
       const payload = data as { ok?: boolean; error?: string };
       if (payload?.ok === false) throw new Error(payload.error || "Failed");
-      setResult(data as Record<string, unknown>);
-      toast.success(action === "preview" ? "Draft ready" : action === "submit" ? "Submitted once" : "Accepted without evidence");
+      const payloadResult = data as Record<string, unknown>;
+      setResult(payloadResult);
+      if (typeof payloadResult.narrative === "string" && !narrative.trim()) setNarrative(payloadResult.narrative);
+      const labels: Record<string, string> = {
+        preview: "Draft ready",
+        submit: "Submitted once",
+        stage: "Staged, not submitted",
+        accept_without_evidence: "Accepted without evidence",
+        loss_review: "Loss review saved",
+        withdrawal_draft: "Withdrawal draft ready. It was not sent.",
+      };
+      toast.success(labels[action]);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Dispute evidence failed");
     } finally {
@@ -144,7 +176,19 @@ export default function DisputeEvidencePanel({
   };
 
   const budget = result?.budget as { ok?: boolean; pages?: number; bytes?: number; errors?: string[] } | undefined;
-  const packets = (result?.packets as Array<{ filename: string; field: string; pages?: number; bytes?: number; trimmed?: boolean }> | undefined) || [];
+  const packets = (result?.packets as Array<{
+    filename: string;
+    field: string;
+    pages?: number;
+    bytes?: number;
+    trimmed?: boolean;
+    pdfBase64?: string | null;
+    identity?: { customerName?: string; serviceDate?: string; recordId?: string; chargeAmount?: string; packetName?: string };
+    pagesPreview?: string[][];
+  }> | undefined) || [];
+  const review = result?.checklist as { ok?: boolean; items?: Array<{ id: string; ok: boolean; label: string }> } | undefined;
+  const dueMs = due ? Date.parse(due) - Date.now() : NaN;
+  const dueLabel = !due ? null : dueMs <= 24 * 60 * 60 * 1000 ? "Due within 24 hours" : dueMs <= 48 * 60 * 60 * 1000 ? "Due within 48 hours" : "Due later than 48 hours";
   const warnings = (result?.warnings as string[] | undefined) || [];
   const over = budget?.ok === false;
 
@@ -173,27 +217,58 @@ export default function DisputeEvidencePanel({
         </select>
         <input className="border rounded px-2 py-1 text-xs" type="datetime-local" value={due} onChange={(e) => setDue(e.target.value)} />
       </div>
+      {dueLabel && <p className={`text-xs font-medium ${dueLabel.startsWith("Due within 24") ? "text-rose-600" : "text-slate-600"}`}>{dueLabel}</p>}
       <div className="flex flex-wrap gap-2">
         <Button size="sm" variant="outline" disabled={busy} onClick={() => void loadReadiness()}>Readiness</Button>
         <Button size="sm" variant="outline" disabled={busy} onClick={() => void run("preview")}>
           {busy ? <RiLoader4Line className="w-3 h-3 animate-spin" /> : "Build draft"}
         </Button>
+        <Button size="sm" variant="outline" disabled={busy || over} onClick={() => void run("stage")}>Stage, do not submit</Button>
         <Button size="sm" disabled={busy || over} onClick={() => void run("submit")}>Approve and submit once</Button>
       </div>
+      <textarea className="w-full border rounded p-2 text-xs" rows={4} placeholder="Response narrative. The first two sentences must answer the dispute reason. Leave blank to use the generated note." value={narrative} onChange={(e) => setNarrative(e.target.value)} />
       <textarea className="w-full border rounded p-2 text-xs" rows={2} placeholder="Note required to accept without evidence" value={note} onChange={(e) => setNote(e.target.value)} />
       <Button size="sm" variant="ghost" disabled={busy} onClick={() => void run("accept_without_evidence")}>Accept dispute without evidence</Button>
+      <div className="flex flex-wrap gap-2 items-center">
+        <select className="border rounded px-2 py-1 text-xs" value={lossCause} onChange={(e) => setLossCause(e.target.value)}>
+          {["reason_code_not_answered", "evidence_not_tied_to_customer", "photos_unreadable", "authorization_evidence_missing", "evidence_missing_or_late", "other"].map((cause) => (
+            <option key={cause} value={cause}>{cause.replace(/_/g, " ")}</option>
+          ))}
+        </select>
+        <input className="border rounded px-2 py-1 text-xs flex-1" placeholder="Note for a lost dispute" value={lossNote} onChange={(e) => setLossNote(e.target.value)} />
+        <Button size="sm" variant="outline" disabled={busy} onClick={() => void run("loss_review")}>Save loss review</Button>
+        <Button size="sm" variant="ghost" disabled={busy} onClick={() => void run("withdrawal_draft")}>Withdrawal draft</Button>
+      </div>
       {budget && (
         <p className={`text-xs font-medium ${budget.ok ? "text-emerald-700" : "text-rose-600"}`}>
           {budget.pages} pages · {budget.bytes} bytes · limit 19 pages / 4.5 MB
           {budget.errors?.length ? ` · ${budget.errors.join(" ")}` : ""}
         </p>
       )}
-      {packets.length > 0 && (
-        <ul className="text-xs text-slate-600 space-y-1">
-          {packets.map((p) => (
-            <li key={p.filename}>{p.field}: {p.filename} · {p.pages} pages</li>
+      {review?.items && (
+        <ul className="text-xs space-y-1">
+          {review.items.map((item) => (
+            <li key={item.id} className={item.ok ? "text-emerald-700" : "text-rose-600"}>{item.ok ? "Yes" : "No"} — {item.label}</li>
           ))}
         </ul>
+      )}
+      {packets.length > 0 && (
+        <div className="space-y-3">
+          {packets.map((p) => (
+            <div key={p.filename} className="text-xs text-slate-700 space-y-1">
+              <p className="font-medium">{p.field}: {p.filename} · {p.pages ?? "?"} pages · {p.bytes ?? 0} bytes</p>
+              {p.identity && (
+                <p>{p.identity.customerName} · {p.identity.serviceDate} · {p.identity.recordId} · {p.identity.chargeAmount}</p>
+              )}
+              {p.pdfBase64 && (
+                <iframe title={p.filename} className="w-full h-[480px] border bg-white" src={`data:application/pdf;base64,${p.pdfBase64}`} />
+              )}
+              {!p.pdfBase64 && p.pagesPreview?.slice(0, 2).map((page, index) => (
+                <pre key={`${p.filename}-${index}`} className="whitespace-pre-wrap bg-white border p-2 text-[11px] leading-4">{page.join("\n")}</pre>
+              ))}
+            </div>
+          ))}
+        </div>
       )}
       {warnings.length > 0 && (
         <ul className="text-xs text-amber-800 space-y-1">
@@ -203,8 +278,8 @@ export default function DisputeEvidencePanel({
       {Array.isArray(result?.missing) && (result?.missing as string[]).length > 0 && (
         <p className="text-xs text-amber-700">Not recorded: {(result?.missing as string[]).join(", ")}</p>
       )}
-      {typeof result?.narrative === "string" && result.narrative && (
-        <p className="text-xs text-slate-600 whitespace-pre-wrap">{result.narrative}</p>
+      {result?.draft && typeof (result.draft as { draft?: string }).draft === "string" && (
+        <pre className="text-xs whitespace-pre-wrap border p-2 bg-white">{(result.draft as { draft: string }).draft}</pre>
       )}
       {readiness && readiness.length === 0 && <p className="text-xs text-slate-500">Not ready. No prepared pieces are filed for this booking yet.</p>}
       {readiness?.map((row) => (

@@ -2,7 +2,16 @@
 // frozen pieces, checks their fingerprints, and only rebuilds the pieces
 // that change (communication and other evidence).
 
-import { buildDisputeEvidence, NOT_RECORDED, type DisputeBuildInput, type EvidenceMessage, type PacketDoc } from "./build.ts";
+import {
+  buildDisputeEvidence,
+  identityFromInput,
+  NOT_RECORDED,
+  packetOrder,
+  receiptPacketLines,
+  type DisputeBuildInput,
+  type PacketDoc,
+  type PageIdentity,
+} from "./build.ts";
 import { lineBudget, STRIPE_EVIDENCE_LIMITS } from "./limits.ts";
 
 export type PieceKind = "acceptance" | "policy" | "receipt" | "completion" | "communication" | "other";
@@ -23,6 +32,7 @@ export interface FrozenPiece {
   superseded: boolean;
   lines: string[];
   gaps: string[];
+  identity?: PageIdentity | null;
 }
 
 export interface PrepRequest {
@@ -37,10 +47,14 @@ export interface PrepRequest {
   backfill: boolean;
   correctionReason?: string | null;
   gaps?: string[];
+  identity?: PageIdentity | null;
 }
 
-export function fingerprintPiece(kind: PieceKind, lines: string[]): string {
-  const text = `${kind}\n${lines.join("\n")}`;
+export function fingerprintPiece(kind: PieceKind, lines: string[], identity?: PageIdentity | null): string {
+  const id = identity
+    ? `${identity.customerName}|${identity.serviceDate}|${identity.recordId}|${identity.chargeAmount}|${identity.packetName}\n`
+    : "";
+  const text = `${kind}\n${id}${lines.join("\n")}`;
   let hash = 0x811c9dc5;
   for (let i = 0; i < text.length; i++) {
     hash ^= text.charCodeAt(i);
@@ -66,7 +80,7 @@ export function preparePiece(existing: FrozenPiece[], req: PrepRequest): {
   if (existing.some((piece) => piece.eventId === req.eventId)) {
     return { pieces: existing, created: null, duplicate: true };
   }
-  const fingerprint = fingerprintPiece(req.kind, req.lines);
+  const fingerprint = fingerprintPiece(req.kind, req.lines, req.identity);
   const current = existing
     .filter((piece) => sameSlot(piece, req) && !piece.superseded)
     .sort((a, b) => b.version - a.version)[0];
@@ -99,8 +113,9 @@ export function preparePiece(existing: FrozenPiece[], req: PrepRequest): {
       ? [`Prepared from existing records on ${req.now.slice(0, 10)}.`, ...req.lines]
       : req.lines,
     gaps: req.gaps || [],
+    identity: req.identity || null,
   };
-  if (req.backfill) created.fingerprint = fingerprintPiece(created.kind, created.lines);
+  if (req.backfill) created.fingerprint = fingerprintPiece(created.kind, created.lines, created.identity);
   const pieces = existing.map((piece) => sameSlot(piece, req) && !piece.superseded
     ? { ...piece, superseded: true }
     : piece);
@@ -112,12 +127,22 @@ export type Readiness = "ready" | "ready_with_gaps" | "not_ready";
 
 const CORE: PieceKind[] = ["acceptance", "policy", "receipt", "completion"];
 
-export function chargeReadiness(pieces: FrozenPiece[], chargeKey: string): {
+function pieceForCharge(pieces: FrozenPiece[], kind: PieceKind, chargeKey: string, bookingId?: string | null): FrozenPiece | undefined {
+  const active = pieces.filter((piece) => !piece.superseded && piece.kind === kind);
+  return active.find((piece) => piece.chargeKey === chargeKey)
+    || (bookingId ? active.find((piece) => piece.bookingId === bookingId) : undefined)
+    || active.find((piece) => piece.chargeKey == null && (kind === "acceptance" || kind === "policy"));
+}
+
+export function chargeReadiness(pieces: FrozenPiece[], chargeKey: string, bookingId?: string | null): {
   status: Readiness;
   prepared: Array<{ kind: PieceKind; generatedAt: string }>;
   gaps: string[];
 } {
-  const current = pieces.filter((piece) => piece.chargeKey === chargeKey && !piece.superseded);
+  const current = CORE.flatMap((kind) => {
+    const piece = pieceForCharge(pieces, kind, chargeKey, bookingId);
+    return piece ? [piece] : [];
+  });
   const prepared = CORE.flatMap((kind) => {
     const piece = current.find((row) => row.kind === kind);
     return piece ? [{ kind, generatedAt: piece.generatedAt }] : [];
@@ -167,9 +192,7 @@ export function linesForPrep(kind: PieceKind, input: DisputeBuildInput): { lines
   if (kind === "receipt") {
     const charges = input.charges || [];
     return {
-      lines: charges.length
-        ? charges.map((charge) => `${charge.label}: ${charge.amountCents == null ? NOT_RECORDED : `$${(charge.amountCents / 100).toFixed(2)}`} ${charge.paymentIntentId || NOT_RECORDED}`)
-        : [NOT_RECORDED],
+      lines: receiptPacketLines(input),
       gaps: charges.length ? [] : ["receipt was never prepared"],
     };
   }
@@ -192,12 +215,13 @@ export function linesForPrep(kind: PieceKind, input: DisputeBuildInput): { lines
 }
 
 export function verifyFingerprint(piece: FrozenPiece): boolean {
-  return fingerprintPiece(piece.kind, piece.lines) === piece.fingerprint;
+  return fingerprintPiece(piece.kind, piece.lines, piece.identity) === piece.fingerprint;
 }
 
 export function assembleFromPrepared(opts: {
   pieces: FrozenPiece[];
   chargeKey: string;
+  bookingId?: string | null;
   input: DisputeBuildInput;
   now: string;
 }): {
@@ -210,10 +234,10 @@ export function assembleFromPrepared(opts: {
   const mismatches: string[] = [];
   const built: PieceKind[] = [];
   const warnings = [...fresh.warnings];
-  const current = opts.pieces.filter((piece) => piece.chargeKey === opts.chargeKey && !piece.superseded);
+  const pieceFor = (kind: PieceKind) => pieceForCharge(opts.pieces, kind, opts.chargeKey, opts.bookingId);
 
   const useFrozen = (kind: PieceKind, fallbackId: PacketDoc["id"], field: string, title: string, cap: number): PacketDoc => {
-    const piece = current.find((row) => row.kind === kind);
+    const piece = pieceFor(kind);
     if (!piece) {
       built.push(kind);
       const fallback = fresh.packets.find((packet) => packet.id === fallbackId);
@@ -227,18 +251,28 @@ export function assembleFromPrepared(opts: {
         pageCap: cap,
         trimmed: false,
         warnings: [`${kind} was not prepared ahead of the dispute.`],
+        identity: fallback?.identity || identityFromInput(opts.input, title),
+        images: fallback?.images,
+        photoMinHeight: fallback?.photoMinHeight || STRIPE_EVIDENCE_LIMITS.minPhotoHeightPt,
+        photoMinWidth: fallback?.photoMinWidth || STRIPE_EVIDENCE_LIMITS.minPhotoWidthPt,
+        photoMaxHeight: fallback?.photoMaxHeight || STRIPE_EVIDENCE_LIMITS.photoMaxHeightPt,
       };
     }
     if (!verifyFingerprint(piece)) mismatches.push(`${kind} fingerprint does not match the stored file.`);
+    const freshPacket = fresh.packets.find((packet) => packet.id === fallbackId);
     return {
       id: fallbackId,
-      filename: fresh.packets.find((packet) => packet.id === fallbackId)?.filename || `${kind}-${opts.input.disputeId}.pdf`,
-      stripeField: field,
+      filename: freshPacket?.filename || `${kind}-${opts.input.disputeId}.pdf`,
+      stripeField: freshPacket?.stripeField || field,
       title,
       lines: piece.lines,
       pageCap: cap,
       trimmed: false,
-      warnings: [],
+      warnings: piece.identity ? [] : [`${kind} was prepared before the identification strip was stored. The strip uses the dispute record.`],
+      identity: piece.identity || freshPacket?.identity || identityFromInput(opts.input, title),
+      photoMinHeight: freshPacket?.photoMinHeight || STRIPE_EVIDENCE_LIMITS.minPhotoHeightPt,
+      photoMinWidth: freshPacket?.photoMinWidth || STRIPE_EVIDENCE_LIMITS.minPhotoWidthPt,
+      photoMaxHeight: freshPacket?.photoMaxHeight || STRIPE_EVIDENCE_LIMITS.photoMaxHeightPt,
     };
   };
 
@@ -250,23 +284,37 @@ export function assembleFromPrepared(opts: {
   ];
   const policy = fresh.packets.find((packet) => packet.id === "policy");
   if (policy) {
-    const frozenPolicy = current.find((row) => row.kind === "policy");
+    const frozenPolicy = pieceFor("policy");
     if (frozenPolicy) {
       if (!verifyFingerprint(frozenPolicy)) mismatches.push("policy fingerprint does not match the stored file.");
-      packets.push({ ...policy, lines: frozenPolicy.lines });
+      packets.push({ ...policy, lines: frozenPolicy.lines, identity: frozenPolicy.identity || policy.identity });
     } else {
       built.push("policy");
       packets.push({ ...policy, lines: [`Built at dispute time on ${opts.now.slice(0, 10)}.`, ...policy.lines] });
     }
   }
-  const receipt = fresh.packets.find((packet) => packet.id === "receipt");
-  if (receipt) {
-    const frozenReceipt = current.find((row) => row.kind === "receipt");
-    packets.push(frozenReceipt
-      ? { ...receipt, lines: frozenReceipt.lines }
-      : { ...receipt, lines: [`Built at dispute time on ${opts.now.slice(0, 10)}.`, ...receipt.lines] });
-    if (!frozenReceipt) built.push("receipt");
+  const freshReceipt = fresh.packets.find((packet) => packet.id === "receipt");
+  const frozenReceipt = pieceFor("receipt");
+  if (freshReceipt || frozenReceipt) {
     if (frozenReceipt && !verifyFingerprint(frozenReceipt)) mismatches.push("receipt fingerprint does not match the stored file.");
+    if (!frozenReceipt) built.push("receipt");
+    const base = freshReceipt || {
+      id: "receipt" as const,
+      filename: `receipt-${opts.input.disputeId}.pdf`,
+      stripeField: "receipt",
+      title: "Receipt and charge breakdown",
+      lines: [],
+      pageCap: limits.receipt,
+      trimmed: false,
+      warnings: [],
+      identity: identityFromInput(opts.input, "Receipt and charge breakdown"),
+      photoMinHeight: STRIPE_EVIDENCE_LIMITS.minPhotoHeightPt,
+      photoMinWidth: STRIPE_EVIDENCE_LIMITS.minPhotoWidthPt,
+      photoMaxHeight: STRIPE_EVIDENCE_LIMITS.photoMaxHeightPt,
+    };
+    packets.push(frozenReceipt
+      ? { ...base, lines: frozenReceipt.lines, identity: frozenReceipt.identity || base.identity }
+      : { ...base, lines: [`Built at dispute time on ${opts.now.slice(0, 10)}.`, ...(freshReceipt?.lines || [NOT_RECORDED])] });
   }
 
   const otherCap = lineBudget(limits.uncategorized_file);
@@ -281,8 +329,15 @@ export function assembleFromPrepared(opts: {
       pageCap: limits.uncategorized_file,
       trimmed: other.omitted > 0,
       warnings: [],
+      identity: identityFromInput(opts.input, "Other evidence"),
+      photoMinHeight: STRIPE_EVIDENCE_LIMITS.minPhotoHeightPt,
+      photoMinWidth: STRIPE_EVIDENCE_LIMITS.minPhotoWidthPt,
+      photoMaxHeight: STRIPE_EVIDENCE_LIMITS.photoMaxHeightPt,
     });
   }
+
+  const order = packetOrder(opts.input.reason);
+  packets.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
 
   return { packets, fingerprintMismatches: mismatches, builtAtDisputeTime: built, warnings };
 }
