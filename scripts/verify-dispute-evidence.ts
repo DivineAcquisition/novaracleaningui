@@ -1,16 +1,23 @@
+import { inflateSync } from "zlib";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import {
   NOT_RECORDED,
   buildDisputeEvidence,
   packetContains,
+  photoCaption,
+  photoDisplaySize,
+  photoSlotsForCap,
   policyFieldFor,
   reminderLevel,
+  selectCompletionPhotos,
   type EvidenceMessage,
+  type EvidencePhoto,
 } from "../supabase/functions/_shared/dispute-evidence/build.ts";
 import { STRIPE_EVIDENCE_LIMITS } from "../supabase/functions/_shared/dispute-evidence/limits.ts";
 import { renderEvidenceSet, validateRendered } from "../supabase/functions/_shared/dispute-evidence/render.ts";
 import { submitDisputeEvidence } from "../supabase/functions/_shared/dispute-evidence/submit.ts";
 import {
+  assembleFromPrepared,
   chargeReadiness,
   fingerprintPiece,
   otherEvidenceLines,
@@ -18,6 +25,41 @@ import {
   readinessShare,
   type FrozenPiece,
 } from "../supabase/functions/_shared/dispute-evidence/prep.ts";
+import { reviewChecklist, validateLossReview, weeklyDisputeReport, withdrawalDraft } from "../supabase/functions/_shared/dispute-evidence/review.ts";
+
+function pdfText(bytes: Uint8Array): string {
+  const raw = Buffer.from(bytes);
+  const parts: Buffer[] = [];
+  const marker = Buffer.from("stream");
+  let cursor = 0;
+  while (cursor < raw.length) {
+    const start = raw.indexOf(marker, cursor);
+    if (start < 0) break;
+    let dataStart = start + marker.length;
+    if (raw[dataStart] === 0x0d) dataStart++;
+    if (raw[dataStart] === 0x0a) dataStart++;
+    const end = raw.indexOf("endstream", dataStart);
+    if (end < 0) break;
+    let slice = raw.subarray(dataStart, end);
+    while (slice.length && (slice[slice.length - 1] === 0x0a || slice[slice.length - 1] === 0x0d || slice[slice.length - 1] === 0x20)) {
+      slice = slice.subarray(0, slice.length - 1);
+    }
+    try {
+      parts.push(inflateSync(slice));
+    } catch {
+      parts.push(slice);
+    }
+    cursor = end + "endstream".length;
+  }
+  const inflated = Buffer.concat(parts).toString("latin1");
+  return inflated.replace(/<([0-9A-Fa-f\s]+)>/g, (raw, hex: string) => {
+    const clean = hex.replace(/\s+/g, "");
+    if (!clean || clean.length % 2) return raw;
+    let out = "";
+    for (let i = 0; i < clean.length; i += 2) out += String.fromCharCode(parseInt(clean.slice(i, i + 2), 16));
+    return out;
+  });
+}
 
 let failed = 0;
 function assert(cond: unknown, msg: string) {
@@ -83,6 +125,7 @@ const set = buildDisputeEvidence({
   serviceDescription: "Standard clean",
   serviceDate: "2026-09-10",
   purchaseIp: null,
+  serviceAddress: "301 Warren Avenue, Baltimore, MD 21230",
   checklistCompleted: 32,
   checklistTotal: 32,
   photos: [{ label: "Before 1" }],
@@ -136,6 +179,138 @@ assert(!set.narrative.toLowerCase().includes("clearly"), "narrative does not spe
 assert(set.textFields.customer_name === "Ben", "text fields carry the customer name");
 assert(set.packets.every((p) => p.stripeField), "every packet maps to a Stripe field");
 assert(new Set(set.packets.map((p) => p.stripeField)).size === set.packets.length, "one file per evidence type");
+assert(packetContains(set, "Delivery proof"), "completion summary opens with the delivery proof");
+assert(packetContains(set, "Customer: Ben"), "delivery proof names the customer");
+assert(packetContains(set, "Service address: 301 Warren Avenue, Baltimore, MD 21230"), "delivery proof names the service address");
+assert(set.packets.every((packet) => packet.identity.customerName === "Ben" && packet.identity.serviceDate === "2026-09-10" && packet.identity.recordId === "NVC-0104" && packet.identity.chargeAmount === "$77.55"), "every packet carries the identification strip fields");
+assert(set.narrative.includes("Completion Summary"), "the narrative names the proving packet");
+assert(!set.narrative.toLowerCase().includes("fraud"), "the narrative does not accuse");
+
+const fraud = buildDisputeEvidence({
+  disputeId: "du_fraud",
+  reason: "fraudulent",
+  customerName: "Ben",
+  serviceDate: "2026-09-10",
+  bookingRef: "NVC-0104",
+  disputedAmountCents: 7755,
+  messages: [complaint],
+  acceptance: { signerName: "Benjamin Ostrow", signedAt: "2026-09-05T18:51:38Z", ip: "203.0.113.8", userAgent: "Mozilla/5.0", paymentOption: "Pay in Full", relationship: "str_host" },
+});
+assert(fraud.packets[0].id === "acceptance", "a fraud dispute leads with the acceptance record");
+assert(fraud.packets[1].id === "communication", "fraud evidence continues with the customer's own messages");
+assert(fraud.narrative.includes("Acceptance Record"), "the fraud narrative names the acceptance record");
+assert(!fraud.narrative.toLowerCase().includes("fraud"), "the fraud narrative stays factual");
+assert(packetContains(fraud, "Payment option: Pay in Full"), "a host acceptance record shows the payment option");
+
+const missing = buildDisputeEvidence({
+  disputeId: "du_nr",
+  reason: "product_not_received",
+  customerName: "Ben",
+  serviceDate: "2026-09-10",
+  serviceAddress: "301 Warren Avenue, Baltimore, MD 21230",
+  bookingRef: "NVC-0104",
+  disputedAmountCents: 7755,
+  messages: [],
+});
+assert(missing.packets[0].id === "completion", "a service-not-received dispute leads with the completion summary");
+assert(missing.narrative.split(/(?<=\.)\s+/).slice(0, 2).join(" ").includes("Completion Summary"), "the first sentences name the completion summary");
+
+const canceled = buildDisputeEvidence({
+  disputeId: "du_cancel",
+  reason: "subscription_canceled",
+  customerName: "Ben",
+  serviceDate: "2026-09-10",
+  bookingRef: "NVC-0104",
+  messages: [],
+});
+assert(canceled.packets[0].id === "policy", "a subscription-canceled dispute leads with the policy");
+assert(canceled.policyField === "cancellation_policy", "a subscription-canceled dispute uses the cancellation policy field");
+
+const credit = buildDisputeEvidence({
+  disputeId: "du_credit",
+  reason: "credit_not_processed",
+  customerName: "Ben",
+  charges: [{ label: "Refund", amountCents: 2000, kind: "refund", paymentIntentId: "re_1" }],
+  messages: [],
+});
+assert(credit.packets[0].id === "policy", "a credit-not-processed dispute leads with the policy");
+assert(credit.policyField === "refund_policy", "a credit-not-processed dispute uses the refund policy field");
+
+const versioned = buildDisputeEvidence({
+  disputeId: "du_version",
+  reason: "product_unacceptable",
+  customerName: "Ben",
+  disputedAmountCents: 1000,
+  charges: [{ label: "Charge", amountCents: 1000, paymentIntentId: "pi_1" }],
+  policySnapshot: {
+    acceptedVersionRecorded: true,
+    effectiveOn: "2026-06-01",
+    clauses: [{ text: "Completed service payments are final once the service is rendered.", cite: "Refund Policy 1.1" }],
+  },
+  messages: [],
+});
+const versionedPolicy = versioned.packets.find((packet) => packet.id === "policy");
+assert(Boolean(versionedPolicy?.lines.some((line) => line.includes("2026-06-01"))), "a recorded policy version shows its effective date");
+assert(!versionedPolicy?.lines.some((line) => line.includes("was not recorded")), "a recorded policy version is not described as missing");
+
+const currentOnly = buildDisputeEvidence({
+  disputeId: "du_current",
+  reason: "subscription_canceled",
+  customerName: "Ben",
+  messages: [],
+});
+assert(packetContains(currentOnly, "was not recorded") || packetContains(currentOnly, "not recorded"), "a missing policy version is stated");
+assert(packetContains(currentOnly, "novaracleaning.com/cancellation-policy"), "both policy addresses are printed as citations");
+
+const photos: EvidencePhoto[] = [
+  { label: "Kitchen before", phase: "before", room: "Kitchen", takenAt: "2026-09-10T14:02:00Z", jobId: "NVC-0104", priority: 3 },
+  { label: "Kitchen after", phase: "after", room: "Kitchen", takenAt: "2026-09-10T16:40:00Z", jobId: "NVC-0104", priority: 3 },
+  { label: "Bath before", phase: "before", room: "Bath", takenAt: "2026-09-10T14:05:00Z", jobId: "NVC-0104", priority: 1 },
+  { label: "Bath after", phase: "after", room: "Bath", takenAt: "2026-09-10T16:44:00Z", jobId: "NVC-0104", priority: 1 },
+];
+assert(photoCaption(photos[0]).includes("before") && photoCaption(photos[0]).includes("Kitchen") && photoCaption(photos[0]).includes("NVC-0104"), "a photo caption names before or after, the room, and the job");
+const tight = selectCompletionPhotos(photos, photoSlotsForCap(2));
+assert(tight.kept.length === 2 && tight.omitted === 2, "a smaller page cap drops photos instead of shrinking them");
+const capped = buildDisputeEvidence({
+  disputeId: "du_photos",
+  reason: "product_not_received",
+  customerName: "Ben",
+  bookingRef: "NVC-0104",
+  serviceDate: "2026-09-10",
+  photos,
+  limits: { packetPages: { ...STRIPE_EVIDENCE_LIMITS.packetPages, service_documentation: 2 } },
+  messages: [],
+});
+assert(packetContains(capped, "additional photographs are on file"), "the summary states how many photographs remain on file");
+const readable = photoDisplaySize(1600, 1200, 516, 300, STRIPE_EVIDENCE_LIMITS.minPhotoWidthPt, STRIPE_EVIDENCE_LIMITS.minPhotoHeightPt);
+assert(Boolean(readable && readable.h >= STRIPE_EVIDENCE_LIMITS.minPhotoHeightPt && readable.w >= STRIPE_EVIDENCE_LIMITS.minPhotoWidthPt), "a normal photo is displayed at or above the minimum size");
+assert(photoDisplaySize(4000, 400, 516, 300, STRIPE_EVIDENCE_LIMITS.minPhotoWidthPt, STRIPE_EVIDENCE_LIMITS.minPhotoHeightPt) === null, "a photo that cannot meet the minimum size is dropped");
+
+const scored = buildDisputeEvidence({
+  disputeId: "du_score",
+  reason: "general",
+  customerName: "Ben",
+  zoneLines: ["Kitchen. Novara Score 92. Cleaner pay rate $25/hr."],
+  messages: [{ id: "secret", at: "2026-09-10T12:00:00Z", direction: "novara", channel: "sms", body: "Internal QC note about the cleaner", source: "internal", internal: true }],
+  redact: { names: ["Kyonta Terry"], phones: ["4105551212"] },
+});
+assert(!JSON.stringify(scored).includes("Novara Score"), "Novara Score is omitted");
+assert(!JSON.stringify(scored).includes("$25/hr"), "pay data is omitted");
+assert(!JSON.stringify(scored).includes("Internal QC note"), "internal notes are omitted");
+
+const loss = validateLossReview("photos_unreadable", "The after photos were too small to read.");
+assert(loss.ok === true, "a lost dispute accepts a cause tag and a note");
+assert(validateLossReview("nope", "note").ok === false, "an unknown loss cause is rejected");
+const report = weeklyDisputeReport([
+  { reason: "product_not_received", outcome: "lost", lossCause: "photos_unreadable", readyAtArrival: false },
+  { reason: "product_not_received", outcome: "won", readyAtArrival: true },
+]);
+assert(report.byReason.product_not_received.lost === 1 && report.byReason.product_not_received.won === 1, "the weekly report groups outcomes by dispute reason");
+assert(report.byCause.photos_unreadable === 1, "the weekly report groups losses by cause");
+assert(report.shareReadyAtArrival === 0.5, "the weekly report includes how many disputes were ready when they arrived");
+const draft = withdrawalDraft({ customerName: "Ben", serviceDocumented: true, relationshipIntact: true, serviceDate: "2026-09-10", serviceAddress: "301 Warren Avenue" });
+assert(draft?.sentAutomatically === false && draft.draft.includes("withdraw"), "a withdrawal note is a draft and is not sent automatically");
+assert(withdrawalDraft({ serviceDocumented: false, relationshipIntact: true }) === null, "no withdrawal draft when delivery is not documented");
 
 async function main() {
 const rendered = await renderEvidenceSet(lib, set.packets);
@@ -178,7 +353,7 @@ const dup = buildDisputeEvidence({
   ],
   messages: [],
 });
-assert(dup.packets.some((p) => p.stripeField === "duplicate_charge_documentation"), "duplicate reason leads with the charge breakdown");
+assert(dup.packets[0]?.stripeField === "duplicate_charge_documentation", "duplicate reason leads with the charge breakdown");
 assert(dup.policyField === null, "duplicate reason does not force a policy file");
 
 const now = "2026-10-02T16:00:00Z";
@@ -281,6 +456,91 @@ const other = otherEvidenceLines([
   { priority: 2, source: "bookings", at: "2026-08-01", text: "Prior paid booking NVC-0090 for $140.00" },
 ], 20);
 assert(other?.lines.some((line) => line.includes("NVC-0090")) === true, "prior paid bookings are listed with the amount");
+const withHistory = buildDisputeEvidence({
+  disputeId: "du_other",
+  reason: "fraudulent",
+  customerName: "Ben",
+  bookingRef: "NVC-0104",
+  serviceDate: "2026-09-10",
+  otherItems: [{ priority: 2, source: "bookings", at: "2026-08-01", text: "Prior paid booking NVC-0090 for $140.00" }],
+  messages: [],
+});
+assert(withHistory.packets.some((packet) => packet.id === "other" && packet.lines.some((line) => line.includes("NVC-0090"))), "prior paid bookings are filed in Other Evidence");
+const emptyOther = buildDisputeEvidence({ disputeId: "du_none", reason: "general", customerName: "Ben", messages: [], otherItems: [] });
+assert(!emptyOther.packets.some((packet) => packet.id === "other"), "no Other Evidence file when nothing relevant exists");
+
+const preparedAcceptance = preparePiece([], {
+  clientKey: "ben@example.com",
+  bookingId: "booking-1",
+  chargeKey: "pi_deposit",
+  kind: "acceptance",
+  seriesId: "agreement-1",
+  eventId: "acceptance:live",
+  lines: ["Signer: Ben", "IP address: 203.0.113.8"],
+  now,
+  backfill: false,
+});
+const assembled = assembleFromPrepared({
+  pieces: preparedAcceptance.pieces,
+  chargeKey: "pi_deposit",
+  now,
+  input: {
+    disputeId: "du_live",
+    reason: "fraudulent",
+    customerName: "Ben",
+    serviceDate: "2026-09-10",
+    bookingRef: "NVC-0104",
+    disputedAmountCents: 7755,
+    messages: [complaint],
+  },
+});
+assert(assembled.packets[0]?.id === "acceptance", "assembly keeps the fraud lead packet first");
+assert(assembled.packets.some((packet) => packet.lines.includes("Signer: Ben")), "assembly uses the frozen acceptance record");
+assert(assembled.packets.some((packet) => packet.lines.some((line) => line.includes("not satisfied"))), "assembly rebuilds the communication packet through the dispute");
+assert(assembled.fingerprintMismatches.length === 0, "a matching fingerprint is verified");
+const mismatched = assembleFromPrepared({
+  pieces: preparedAcceptance.pieces.map((piece) => ({ ...piece, fingerprint: "tampered" })),
+  chargeKey: "pi_deposit",
+  now,
+  input: {
+    disputeId: "du_live",
+    reason: "fraudulent",
+    customerName: "Ben",
+    messages: [],
+  },
+});
+assert(mismatched.fingerprintMismatches.length > 0, "a changed file is flagged when its fingerprint does not match");
+
+const checklist = reviewChecklist(set, { ok: true });
+assert(checklist.items.some((item) => item.id === "pages_identified" && item.ok), "the review checklist confirms every packet is identified");
+const blocked = reviewChecklist(set, { ok: false, errors: ["over"] });
+assert(blocked.ok === false, "the review checklist blocks a set that is over budget");
+
+const png = Uint8Array.from(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64"));
+const photoSet = buildDisputeEvidence({
+  disputeId: "du_img",
+  reason: "product_not_received",
+  customerName: "Ben",
+  serviceDate: "2026-09-10",
+  bookingRef: "NVC-0104",
+  disputedAmountCents: 7755,
+  serviceAddress: "301 Warren Avenue",
+  photos: [{ label: "Kitchen after", phase: "after", room: "Kitchen", takenAt: "2026-09-10T16:40:00Z", jobId: "NVC-0104", bytes: png }],
+  messages: [],
+});
+const photoPdf = await renderEvidenceSet(lib, photoSet.packets.filter((packet) => packet.id === "completion"));
+const photoText = pdfText(photoPdf[0].bytes);
+assert(photoText.includes("after") && photoText.includes("Kitchen") && photoText.includes("NVC-0104"), "the rendered photo caption names after, the room, and the job");
+assert(photoText.split("Ben").length - 1 >= photoPdf[0].pages, "every completion page shows the customer name");
+
+for (const packet of rendered) {
+  const text = pdfText(packet.bytes);
+  assert(text.includes("Ben"), `${packet.filename} shows the customer name`);
+  assert(text.includes("2026-09-10"), `${packet.filename} shows the service date`);
+  assert(text.includes("NVC-0104"), `${packet.filename} shows the job id`);
+  assert(text.includes("$77.55"), `${packet.filename} shows the charge amount`);
+  assert(text.split("Ben").length - 1 >= packet.pages, `${packet.filename} identifies every page`);
+}
 
 if (failed) {
   console.error(`\n${failed} failed`);

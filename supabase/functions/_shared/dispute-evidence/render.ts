@@ -1,7 +1,8 @@
-// Plain letter PDFs. Header carries the name. Body is black on white.
-// Page caps are the packet caps from the evidence set.
+// Plain letter PDFs. Every page carries the identification strip from the
+// packet record. Photos are drawn at or above the minimum size, or dropped.
 
-import type { PacketDoc } from "./build.ts";
+import { photoDisplaySize, type PacketDoc } from "./build.ts";
+import { NOVARA_LOGO_PNG } from "./logo.ts";
 
 function pdfSafe(value: string): string {
   return String(value ?? "")
@@ -25,6 +26,7 @@ interface PdfFont {
 interface PdfPage {
   drawText(text: string, opts: Record<string, unknown>): void;
   drawLine(opts: Record<string, unknown>): void;
+  drawRectangle?(opts: Record<string, unknown>): void;
   drawImage(image: unknown, opts: Record<string, unknown>): void;
 }
 interface PdfImage {
@@ -45,35 +47,81 @@ export interface PdfLibLike {
   rgb: (r: number, g: number, b: number) => unknown;
 }
 
+export function identificationStrip(packet: PacketDoc, page: number): string[] {
+  const id = packet.identity;
+  return [
+    "Novara Cleaning",
+    `${id?.packetName || packet.title}  page ${page}`,
+    `${id?.customerName || "not recorded"}  ·  ${id?.serviceDate || "not recorded"}`,
+    `${id?.recordId || "not recorded"}  ·  ${id?.chargeAmount || "not recorded"}`,
+  ];
+}
+
+export function previewPages(packet: PacketDoc): string[][] {
+  const body: string[][] = [];
+  let chunk: string[] = [];
+  let used = 0;
+  const budget = 28;
+  for (const line of packet.lines) {
+    if (used >= budget) {
+      body.push(chunk);
+      chunk = [];
+      used = 0;
+    }
+    chunk.push(line);
+    used++;
+  }
+  if (chunk.length || body.length === 0) body.push(chunk);
+  return body.map((lines, index) => [...identificationStrip(packet, index + 1), "", ...lines]);
+}
+
 export async function renderPacketPdf(lib: PdfLibLike, packet: PacketDoc): Promise<{ bytes: Uint8Array; pages: number }> {
   const pdf = await lib.PDFDocument.create();
   const font = await pdf.embedFont(lib.StandardFonts.Helvetica);
   const bold = await pdf.embedFont(lib.StandardFonts.HelveticaBold);
   const black = lib.rgb(0.08, 0.08, 0.08);
   const gray = lib.rgb(0.35, 0.35, 0.38);
+  const brand = lib.rgb(92 / 255, 15 / 255, 254 / 255);
+  const brandSoft = lib.rgb(143 / 255, 123 / 255, 253 / 255);
+  let logo: PdfImage | null = null;
+  try {
+    logo = await pdf.embedPng(NOVARA_LOGO_PNG);
+  } catch {
+    logo = null;
+  }
   let page = pdf.addPage([PAGE_W, PAGE_H]);
-  let y = PAGE_H - 46;
+  let y = PAGE_H - 56;
   let pages = 1;
 
   const header = () => {
-    page.drawText(pdfSafe("Novara Cleaning"), { x: MARGIN, y, size: 11, font: bold, color: black });
+    const [, packetLine, who, record] = identificationStrip(packet, pages);
+    if (page.drawRectangle) {
+      page.drawRectangle({ x: 0, y: PAGE_H - 7, width: PAGE_W, height: 7, color: brand });
+    }
+    const logoSize = 18;
+    const textX = MARGIN + (logo ? logoSize + 8 : 0);
+    y = PAGE_H - 28;
+    if (logo) {
+      page.drawImage(logo, { x: MARGIN, y: y - 4, width: logoSize, height: logoSize });
+    }
+    page.drawText("Novara Cleaning", { x: textX, y: y + 4, size: 11, font: bold, color: brand });
     y -= 14;
-    page.drawText(pdfSafe(packet.title), { x: MARGIN, y, size: 9, font, color: gray });
+    page.drawText(pdfSafe(packetLine), { x: textX, y, size: 8, font, color: brandSoft });
+    y -= 12;
+    page.drawText(pdfSafe(who), { x: MARGIN, y, size: 8, font, color: black });
+    y -= 11;
+    page.drawText(pdfSafe(record), { x: MARGIN, y, size: 8, font, color: black });
     y -= 8;
-    page.drawLine({ start: { x: MARGIN, y }, end: { x: PAGE_W - MARGIN, y }, thickness: 0.6, color: gray });
+    page.drawLine({ start: { x: MARGIN, y }, end: { x: PAGE_W - MARGIN, y }, thickness: 1.25, color: brand });
     y -= 14;
-  };
-  const footer = () => {
-    page.drawText(pdfSafe(`${packet.filename}  page ${pages}`), {
-      x: MARGIN, y: 28, size: 8, font, color: gray,
-    });
   };
   const next = () => {
-    footer();
+    if (pages >= packet.pageCap) return false;
     page = pdf.addPage([PAGE_W, PAGE_H]);
     pages++;
-    y = PAGE_H - 46;
+    y = PAGE_H - 56;
     header();
+    return true;
   };
   header();
 
@@ -91,53 +139,86 @@ export async function renderPacketPdf(lib: PdfLibLike, packet: PacketDoc): Promi
     }
     if (cur) lines.push(cur);
     for (const line of lines.length ? lines : [""]) {
-      if (y < BOTTOM) next();
+      if (y < BOTTOM) {
+        if (!next()) return;
+      }
       page.drawText(line, { x: MARGIN, y, size, font: face, color: black });
       y -= size + 3;
     }
   };
 
   for (const line of packet.lines) {
+    if (pages > packet.pageCap) break;
     if (!line.trim()) {
       y -= 6;
       continue;
     }
-    const isLabel = /^(Customer|Novara|Photo |Booking |Service|Timeline|Automated transcript)/.test(line)
+    const isLabel = /^(Customer|Novara|Delivery proof|Photo |Booking |Service|Timeline|Automated transcript|How )/.test(line)
       || line.endsWith(":");
-    drawWrapped(line, line.startsWith("Automated transcript") ? 9 : 9, isLabel && line.length < 80 ? bold : font);
+    drawWrapped(line, 9, isLabel && line.length < 80 ? bold : font);
   }
-  const images = packet.images || [];
-  for (let i = 0; i < images.length; i += 4) {
-    if (pages >= packet.pageCap) {
-      if (y < BOTTOM) break;
-      drawWrapped(`${images.length - i} photographs were not included because of the page cap.`, 9, font);
-      break;
-    }
-    if (y < 180) next();
-    if (pages > packet.pageCap) break;
-    const row = images.slice(i, i + 4);
-    for (let n = 0; n < row.length; n++) {
-      const img = row[n];
-      try {
-        const png = img.bytes[0] === 0x89 && img.bytes[1] === 0x50;
-        const embedded = png ? await pdf.embedPng(img.bytes) : await pdf.embedJpg(img.bytes);
-        const maxW = (PAGE_W - MARGIN * 2 - 12) / 2;
-        const maxH = 150;
-        const scale = Math.min(maxW / embedded.width, maxH / embedded.height, 1);
-        const w = embedded.width * scale;
-        const h = embedded.height * scale;
-        const col = n % 2;
-        const x = MARGIN + col * (maxW + 12);
-        if (col === 0 && y - h - 14 < BOTTOM) next();
-        page.drawText(pdfSafe(img.label).slice(0, 42), { x, y, size: 8, font: bold, color: black });
-        page.drawImage(embedded, { x, y: y - h - 12, width: w, height: h });
-        if (col === 1 || n === row.length - 1) y -= h + 28;
-      } catch {
-        drawWrapped(`${img.label}: image could not be embedded`, 9, font);
+
+  if (packet.signature?.bytes?.byteLength) {
+    try {
+      const png = packet.signature.bytes[0] === 0x89 && packet.signature.bytes[1] === 0x50;
+      const embedded = png ? await pdf.embedPng(packet.signature.bytes) : await pdf.embedJpg(packet.signature.bytes);
+      const maxW = width;
+      const maxH = 72;
+      const scale = Math.min(maxW / embedded.width, maxH / embedded.height, 1);
+      const w = embedded.width * scale;
+      const h = embedded.height * scale;
+      if (y - h - 16 < BOTTOM) next();
+      if (pages <= packet.pageCap) {
+        page.drawText("Signature image", { x: MARGIN, y, size: 8, font: bold, color: black });
+        page.drawImage(embedded, { x: MARGIN, y: y - h - 12, width: w, height: h });
+        y -= h + 28;
       }
+    } catch {
+      drawWrapped("Signature image: not recorded", 9, font);
     }
   }
-  footer();
+
+  const images = packet.images || [];
+  const minH = packet.photoMinHeight || 220;
+  const minW = packet.photoMinWidth || 200;
+  const maxH = Math.max(packet.photoMaxHeight || 300, minH);
+  let dropped = 0;
+  for (const img of images) {
+    if (pages > packet.pageCap) {
+      dropped++;
+      continue;
+    }
+    try {
+      const png = img.bytes[0] === 0x89 && img.bytes[1] === 0x50;
+      const embedded = png ? await pdf.embedPng(img.bytes) : await pdf.embedJpg(img.bytes);
+      const size = photoDisplaySize(embedded.width, embedded.height, width, maxH, minW, minH);
+      if (!size) {
+        dropped++;
+        drawWrapped(`${img.label}: omitted because it could not be shown at the minimum readable size.`, 9, font);
+        continue;
+      }
+      const needed = size.h + 28;
+      if (y - needed < BOTTOM) {
+        if (!next()) {
+          dropped++;
+          continue;
+        }
+      }
+      if (pages > packet.pageCap) {
+        dropped++;
+        continue;
+      }
+      drawWrapped(img.label, 8, bold);
+      page.drawImage(embedded, { x: MARGIN, y: y - size.h, width: size.w, height: size.h });
+      y -= size.h + 16;
+    } catch {
+      drawWrapped(`${img.label}: image could not be embedded`, 9, font);
+    }
+  }
+  if (dropped > 0) {
+    drawWrapped(`${dropped} additional photographs are on file and were not included because of the page cap.`, 9, font);
+  }
+
   const bytes = await pdf.save();
   return { bytes, pages: pdf.getPages().length };
 }
@@ -171,14 +252,15 @@ export async function renderEvidenceSet(
 export function validateRendered(
   packets: RenderedPacket[],
   text: string,
-  limits: { combinedPages: number; combinedBytes: number; singleFilePages: number; textCharacters: number },
+  limits: { combinedPages: number; combinedBytes: number; singleFilePages: number; textCharacters: number; formats?: string[] },
 ): { ok: boolean; pages: number; bytes: number; errors: string[] } {
   const errors: string[] = [];
   const pages = packets.reduce((n, p) => n + p.pages, 0);
   const bytes = packets.reduce((n, p) => n + p.bytes.byteLength, 0);
+  const allowed = new Set((limits.formats || ["pdf", "png", "jpg", "jpeg"]).map((item) => item.toLowerCase()));
   const fields = new Set<string>();
   for (const p of packets) {
-    if (p.format !== "pdf") errors.push(`${p.filename} is not a PDF.`);
+    if (!allowed.has(p.format)) errors.push(`${p.filename} is not an accepted format.`);
     if (p.pages > limits.singleFilePages) errors.push(`${p.filename} exceeds the single-file page limit.`);
     if (fields.has(p.stripeField)) errors.push(`More than one file for ${p.stripeField}.`);
     fields.add(p.stripeField);

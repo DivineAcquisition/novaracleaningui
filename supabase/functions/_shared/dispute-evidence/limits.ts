@@ -1,15 +1,21 @@
 // Stripe dispute evidence budgets.
-// Confirmed 2026-10-02 against https://docs.stripe.com/disputes/best-practices
-// and the dispute evidence object (one file per evidence type; PDF/JPEG/PNG;
-// combined 4.5 MB; combined under 50 pages; Mastercard 19 pages; text fields
-// share 150,000 characters). Numbers stay in this object so they can be
-// overridden. There is no 17-file cap in Stripe's documentation.
+// Reconfirmed 2026-10-13 against https://docs.stripe.com/disputes/best-practices
+// and https://docs.stripe.com/disputes/api:
+//   - one file per evidence type (combine documents into that file)
+//   - PDF, JPEG, and PNG only
+//   - combined file size no more than 4.5 MB
+//   - combined page count must be less than 50, and Mastercard is 19 pages
+//   - text fields share 150,000 characters
+//   - evidence can be staged, and submission is a single opportunity
+// There is no 17-file cap. Numbers stay here so they can be overridden.
+// 19 pages is the budget for every card network because it is the strictest.
 
 export interface DisputeEvidenceLimits {
   confirmedAt: string;
   combinedBytes: number;
   /** Strictest network page budget. Applied to every card network. */
   combinedPages: number;
+  /** Stripe also requires the combined page count to be under 50. */
   singleFilePages: number;
   textCharacters: number;
   formats: string[];
@@ -21,12 +27,18 @@ export interface DisputeEvidenceLimits {
     receipt: number;
     uncategorized_file: number;
   };
+  /** Displayed photo size. Photos are dropped, never shrunk below this, to fit more. */
+  minPhotoHeightPt: number;
+  minPhotoWidthPt: number;
+  photoMaxHeightPt: number;
   /** Months to keep a client's prepared evidence. Card networks allow disputes long after a charge. */
   retentionMonths: number;
+  /** How far back a one-time backfill will look. */
+  lookbackDays: number;
 }
 
 export const STRIPE_EVIDENCE_LIMITS: DisputeEvidenceLimits = {
-  confirmedAt: "2026-10-02",
+  confirmedAt: "2026-10-13",
   combinedBytes: 4_500_000,
   combinedPages: 19,
   singleFilePages: 50,
@@ -40,11 +52,15 @@ export const STRIPE_EVIDENCE_LIMITS: DisputeEvidenceLimits = {
     receipt: 1,
     uncategorized_file: 2,
   },
+  minPhotoHeightPt: 220,
+  minPhotoWidthPt: 200,
+  photoMaxHeightPt: 300,
   retentionMonths: 24,
+  lookbackDays: 730,
 };
 
-/** Approx body lines that fit on one letter page at the renderer size. */
-export const LINES_PER_PAGE = 42;
+/** Approx body lines that fit on one letter page under the identification strip. */
+export const LINES_PER_PAGE = 36;
 
 export function lineBudget(pages: number): number {
   return Math.max(1, pages) * LINES_PER_PAGE;

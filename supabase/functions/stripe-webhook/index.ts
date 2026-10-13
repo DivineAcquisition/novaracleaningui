@@ -1488,6 +1488,49 @@ serve(async (req) => {
         break;
       }
 
+      case "charge.refunded": {
+        // deno-lint-ignore no-explicit-any
+        const charge = event.data.object as any;
+        try {
+          const pi = typeof charge.payment_intent === "string" ? charge.payment_intent : charge.payment_intent?.id;
+          let bookingId: string | null = null;
+          let email: string | null = null;
+          if (pi) {
+            const { data: row } = await supabase.from("bookings").select("id, email").eq("payment_intent_id", pi).maybeSingle();
+            bookingId = row?.id || null;
+            email = row?.email || null;
+          }
+          const task = supabase.functions.invoke("dispute-evidence", {
+            body: {
+              action: "prep",
+              kind: "receipt",
+              bookingId,
+              clientKey: email,
+              chargeKey: pi || charge.id,
+              seriesId: pi || charge.id,
+              eventId: `receipt:${pi || charge.id}:refund:${charge.amount_refunded || 0}`,
+              correctionReason: "refund recorded",
+              input: {
+                disputeId: `prep-${bookingId || charge.id}`,
+                reason: "general",
+                customerEmail: email,
+                charges: [
+                  { label: "Charge", amountCents: charge.amount ?? null, paymentIntentId: pi || null, kind: "charge" },
+                  { label: "Refund", amountCents: charge.amount_refunded ?? null, paymentIntentId: pi || null, kind: "refund" },
+                ],
+              },
+            },
+          });
+          const runtime = (globalThis as { EdgeRuntime?: { waitUntil: (work: Promise<unknown>) => void } }).EdgeRuntime;
+          if (runtime?.waitUntil) runtime.waitUntil(Promise.resolve(task).catch(() => undefined));
+          else void Promise.resolve(task).catch(() => undefined);
+          logStep("Receipt evidence refreshed after refund", { chargeId: charge.id, bookingId });
+        } catch (err) {
+          logStep("Receipt evidence refresh failed (non-blocking)", { error: err instanceof Error ? err.message : String(err) });
+        }
+        break;
+      }
+
       case "charge.dispute.created":
       case "charge.dispute.updated":
       case "charge.dispute.closed": {
@@ -1529,6 +1572,20 @@ serve(async (req) => {
                 updated_at: new Date().toISOString(),
               }).eq("stripe_dispute_id", dispute.id);
             }
+          }
+          if (event.type === "charge.dispute.created" && bookingId) {
+            const readyTask = supabase.functions.invoke("dispute-evidence", {
+              body: { action: "readiness", bookingId, chargeKey: pi || "" },
+            }).then(async (readyRes) => {
+              const charges = (readyRes.data?.charges || []) as Array<{ status?: string }>;
+              const ready = charges.length > 0 && charges.every((row) => row.status === "ready");
+              await supabase.from("dispute_evidence_cases").update({
+                ready_at_arrival: ready,
+              }).eq("stripe_dispute_id", dispute.id);
+            }).catch(() => undefined);
+            const runtime = (globalThis as { EdgeRuntime?: { waitUntil: (work: Promise<unknown>) => void } }).EdgeRuntime;
+            if (runtime?.waitUntil) runtime.waitUntil(readyTask);
+            else void readyTask;
           }
           logStep("Dispute evidence case recorded", { disputeId: dispute.id, type: event.type, bookingId });
         } catch (err) {

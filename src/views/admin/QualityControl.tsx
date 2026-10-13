@@ -1733,7 +1733,13 @@ interface CaseFile {
     addon_charges: Array<Record<string, any>>;
     completion_hold: Record<string, any> | null;
   };
-  photos: { before: string[]; after: string[]; purged: boolean; submitted_at: string | null };
+  photos: {
+    before: string[];
+    after: string[];
+    purged: boolean;
+    submitted_at: string | null;
+    zones?: Array<{ zoneName: string; kind: "before" | "after" | string; url: string; label: string }>;
+  };
   four_stage_sequence?: Array<{ stage: string; url: string }>;
   reclean_photos?: Array<{ before: string[]; after: string[] }>;
   checklist: Record<string, any> | null;
@@ -1808,10 +1814,19 @@ export function CaseFileSheet({ bookingId, caseRef, onClose }: { bookingId: stri
                 callDurationSeconds?: number | null;
                 callStatus?: string | null;
               }>}
-              photos={[
-                ...cf.photos.before.map((url, i) => ({ label: `Before ${i + 1}`, url })),
-                ...cf.photos.after.map((url, i) => ({ label: `After ${i + 1}`, url })),
-              ]}
+              photos={(cf.photos.zones && cf.photos.zones.length > 0
+                ? cf.photos.zones.map((zone) => ({
+                  label: zone.label,
+                  url: zone.url,
+                  phase: zone.kind,
+                  room: zone.zoneName,
+                  jobId: cf.ref,
+                }))
+                : [
+                  ...cf.photos.before.map((url, i) => ({ label: `Before ${i + 1}`, url, phase: "before", jobId: cf.ref })),
+                  ...cf.photos.after.map((url, i) => ({ label: `After ${i + 1}`, url, phase: "after", jobId: cf.ref })),
+                ]
+              )}
               checklist={cf.checklist ? {
                 completed_items: cf.checklist.completed_items as number | null | undefined,
                 total_items: cf.checklist.total_items as number | null | undefined,

@@ -147,12 +147,26 @@ serve(async (req) => {
             disputeId: `prep-${bookingId}`,
             reason: "general",
             customerEmail: booking.email,
-            customerName: booking.first_name,
+            customerName: [booking.first_name, booking.last_name].filter(Boolean).join(" ") || booking.first_name,
             serviceDate: booking.service_date,
             serviceDescription: booking.service_type,
+            serviceAddress: [booking.address, booking.city, booking.state, booking.zip_code].filter(Boolean).join(", "),
+            billingAddress: [booking.address, booking.city, booking.state, booking.zip_code].filter(Boolean).join(", "),
+            bookingRef: booking.booking_number ? `NVC-${String(booking.booking_number).padStart(4, "0")}` : bookingId,
+            jobId: booking.job_id || null,
+            disputedAmountCents: booking.final_charge_cents || booking.total_estimate_cents || null,
             finishedAt: now,
             scheduledWindow: booking.time_slot || booking.arrival_window,
-            photos: [],
+            checklistCompleted: null,
+            checklistTotal: null,
+            photos: [
+              ...(Array.isArray(booking.before_photos) ? booking.before_photos : []).map((url: string, i: number) => ({
+                label: `Before ${i + 1}`, url, phase: "before", jobId: booking.job_id || bookingId,
+              })),
+              ...(Array.isArray(booking.after_photos) ? booking.after_photos : []).map((url: string, i: number) => ({
+                label: `After ${i + 1}`, url, phase: "after", jobId: booking.job_id || bookingId,
+              })),
+            ],
           },
         },
       });
