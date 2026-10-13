@@ -703,6 +703,10 @@ function touchpointTimeline(input: DisputeBuildInput): string {
   ].join(" | ");
 }
 
+function fileTag(input: DisputeBuildInput): string {
+  return String(input.bookingRef || input.disputeId || "case").replace(/[^\w.-]+/g, "-");
+}
+
 function packetBase(limits: DisputeEvidenceLimits): Pick<PacketDoc, "photoMinHeight" | "photoMinWidth" | "photoMaxHeight"> {
   return {
     photoMinHeight: limits.minPhotoHeightPt,
@@ -751,7 +755,7 @@ export function buildDisputeEvidence(input: DisputeBuildInput): DisputeEvidenceS
   const packets: PacketDoc[] = [
     {
       id: "completion",
-      filename: `service-documentation-${input.disputeId}.pdf`,
+      filename: `completion-summary-${fileTag(input)}.pdf`,
       stripeField: "service_documentation",
       title: "Completion summary",
       lines: summary.lines.map((line) => redactInternal(line, input.redact)),
@@ -764,7 +768,7 @@ export function buildDisputeEvidence(input: DisputeBuildInput): DisputeEvidenceS
     },
     {
       id: "communication",
-      filename: `customer-communication-${input.disputeId}.pdf`,
+      filename: `customer-communication-${fileTag(input)}.pdf`,
       stripeField: "customer_communication",
       title: "Customer communication",
       lines: comm.lines,
@@ -776,7 +780,7 @@ export function buildDisputeEvidence(input: DisputeBuildInput): DisputeEvidenceS
     },
     {
       id: "acceptance",
-      filename: `customer-signature-${input.disputeId}.pdf`,
+      filename: `acceptance-record-${fileTag(input)}.pdf`,
       stripeField: "customer_signature",
       title: "Acceptance record",
       lines: acceptanceLines(input.acceptance, input.policySnapshot, input.redact).map((line) => redactInternal(line, input.redact)),
@@ -793,7 +797,7 @@ export function buildDisputeEvidence(input: DisputeBuildInput): DisputeEvidenceS
     const lines = policyLines(policyField, input.policySnapshot);
     packets.push({
       id: "policy",
-      filename: `${policyField.replace(/_/g, "-")}-${input.disputeId}.pdf`,
+      filename: `${policyField.replace(/_/g, "-")}-${fileTag(input)}.pdf`,
       stripeField: policyField,
       title: "Refund and cancellation policy",
       lines,
@@ -811,7 +815,7 @@ export function buildDisputeEvidence(input: DisputeBuildInput): DisputeEvidenceS
     const field = input.reason.toLowerCase() === "duplicate" ? "duplicate_charge_documentation" : "receipt";
     packets.push({
       id: "receipt",
-      filename: `${field.replace(/_/g, "-")}-${input.disputeId}.pdf`,
+      filename: `${field.replace(/_/g, "-")}-${fileTag(input)}.pdf`,
       stripeField: field,
       title: "Receipt and charge breakdown",
       lines: receipt,

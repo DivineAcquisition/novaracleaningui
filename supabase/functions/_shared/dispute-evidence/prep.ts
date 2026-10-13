@@ -270,6 +270,7 @@ export function assembleFromPrepared(opts: {
       trimmed: false,
       warnings: piece.identity ? [] : [`${kind} was prepared before the identification strip was stored. The strip uses the dispute record.`],
       identity: piece.identity || freshPacket?.identity || identityFromInput(opts.input, title),
+      images: freshPacket?.images,
       photoMinHeight: freshPacket?.photoMinHeight || STRIPE_EVIDENCE_LIMITS.minPhotoHeightPt,
       photoMinWidth: freshPacket?.photoMinWidth || STRIPE_EVIDENCE_LIMITS.minPhotoWidthPt,
       photoMaxHeight: freshPacket?.photoMaxHeight || STRIPE_EVIDENCE_LIMITS.photoMaxHeightPt,

@@ -348,7 +348,12 @@ serve(async (req) => {
       return json({ ok: true, draft, sentAutomatically: false });
     }
 
-    if (!input?.disputeId || !input.reason) return json({ ok: false, error: "input.disputeId and input.reason are required" }, 400);
+    if (!input?.reason) return json({ ok: false, error: "Choose the claim the customer is making." }, 400);
+    const sendsToStripe = action === "submit" || action === "stage" || action === "accept_without_evidence" || action === "loss_review";
+    if (!input.disputeId) {
+      if (sendsToStripe) return json({ ok: false, error: "Enter the Stripe dispute id before sending anything to Stripe." }, 400);
+      input.disputeId = `preview-${String(body.bookingId || "case")}-${input.reason}`;
+    }
 
     if (action === "accept_without_evidence") {
       const note = String(body.note || "").trim();
@@ -513,7 +518,7 @@ serve(async (req) => {
           generatedAt: p.lines[0]?.startsWith("Built at dispute time") ? p.lines[0] : null,
           preview: p.lines.slice(0, 80),
           pagesPreview: previewPages(p),
-          pdfBase64: size > 0 && size < 400_000 ? bytesToBase64(rendered[i].bytes) : null,
+          pdfBase64: size > 0 && size < 2_000_000 ? bytesToBase64(rendered[i].bytes) : null,
         };
       }),
     });

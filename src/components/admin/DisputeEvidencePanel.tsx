@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { RiLoader4Line, RiShieldCheckLine } from "@remixicon/react";
+import { RiDownloadLine, RiFilePdf2Line, RiLoader4Line } from "@remixicon/react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,146 @@ interface GhlMessage {
   callDurationSeconds?: number | null;
   callStatus?: string | null;
   source?: string | null;
+}
+
+type ClaimId =
+  | "product_not_received"
+  | "product_unacceptable"
+  | "fraudulent"
+  | "unrecognized"
+  | "subscription_canceled"
+  | "credit_not_processed"
+  | "duplicate"
+  | "general";
+
+interface PlannedDoc {
+  name: string;
+  detail: string;
+}
+
+const CLAIMS: Array<{
+  id: ClaimId;
+  title: string;
+  customerSays: string;
+  lead: string;
+  documents: (chargeCount: number) => PlannedDoc[];
+}> = [
+  {
+    id: "product_not_received",
+    title: "Service was not received",
+    customerSays: "Nobody came, or the clean did not happen.",
+    lead: "Completion summary",
+    documents: (chargeCount) => [
+      { name: "Completion summary", detail: "The visit, the checklist, and the before and after photos." },
+      { name: "Customer communication", detail: "Messages about this visit." },
+      { name: "Acceptance record", detail: "The agreement the customer signed, and when." },
+      ...(chargeCount > 1 ? [{ name: "Receipt", detail: "Each charge on this visit, on its own line." }] : []),
+    ],
+  },
+  {
+    id: "product_unacceptable",
+    title: "Service was unacceptable",
+    customerSays: "The clean was incomplete, dirty, or not what they paid for.",
+    lead: "Completion summary",
+    documents: (chargeCount) => [
+      { name: "Completion summary", detail: "What was done, and the before and after photos." },
+      { name: "Customer communication", detail: "The complaint and any remedy that was offered." },
+      { name: "Acceptance record", detail: "The agreement the customer signed." },
+      { name: "Refund policy", detail: "The refund terms they accepted." },
+      ...(chargeCount > 1 ? [{ name: "Receipt", detail: "Each charge on this visit, on its own line." }] : []),
+    ],
+  },
+  {
+    id: "fraudulent",
+    title: "Does not recognize the charge",
+    customerSays: "They say this charge is fraud, or the card was not theirs.",
+    lead: "Acceptance record",
+    documents: (chargeCount) => [
+      { name: "Acceptance record", detail: "The customer accepted this service." },
+      { name: "Customer communication", detail: "Their own messages about the booking." },
+      { name: "Completion summary", detail: "The visit that matches the charge." },
+      ...(chargeCount > 1 ? [{ name: "Receipt", detail: "Each charge on this visit, on its own line." }] : []),
+    ],
+  },
+  {
+    id: "unrecognized",
+    title: "Does not recognize the payment",
+    customerSays: "They do not remember authorizing this payment.",
+    lead: "Acceptance record",
+    documents: (chargeCount) => [
+      { name: "Acceptance record", detail: "The customer accepted this service." },
+      { name: "Customer communication", detail: "Their own messages about the booking." },
+      { name: "Completion summary", detail: "The visit that matches the charge." },
+      ...(chargeCount > 1 ? [{ name: "Receipt", detail: "Each charge on this visit, on its own line." }] : []),
+    ],
+  },
+  {
+    id: "subscription_canceled",
+    title: "Membership was canceled",
+    customerSays: "They say they canceled before this charge.",
+    lead: "Cancellation policy",
+    documents: () => [
+      { name: "Cancellation policy", detail: "The cancellation terms they accepted." },
+      { name: "Customer communication", detail: "When and how cancellation was requested." },
+      { name: "Acceptance record", detail: "The agreement that contains those terms." },
+      { name: "Completion summary", detail: "The visit this charge was for." },
+    ],
+  },
+  {
+    id: "credit_not_processed",
+    title: "Refund was not received",
+    customerSays: "A refund or credit they were promised never arrived.",
+    lead: "Refund policy",
+    documents: () => [
+      { name: "Refund policy", detail: "The refund terms, and any refund already issued." },
+      { name: "Receipt", detail: "The charge and any credit on it." },
+      { name: "Customer communication", detail: "The messages about the credit." },
+      { name: "Completion summary", detail: "The visit the refund is about." },
+      { name: "Acceptance record", detail: "The agreement they signed." },
+    ],
+  },
+  {
+    id: "duplicate",
+    title: "Charged more than once",
+    customerSays: "They say this payment duplicates another charge.",
+    lead: "Receipt",
+    documents: () => [
+      { name: "Receipt", detail: "Each payment on its own line, and what it was for." },
+      { name: "Customer communication", detail: "Messages about the charges." },
+      { name: "Completion summary", detail: "The visit tied to the disputed payment." },
+      { name: "Acceptance record", detail: "The agreement for that service." },
+    ],
+  },
+  {
+    id: "general",
+    title: "Another claim",
+    customerSays: "The reason does not match the claims above.",
+    lead: "Completion summary",
+    documents: () => [
+      { name: "Completion summary", detail: "The visit, the checklist, and the photos." },
+      { name: "Customer communication", detail: "Messages about this service." },
+      { name: "Acceptance record", detail: "The agreement the customer signed." },
+      { name: "Refund policy", detail: "The refund terms they accepted." },
+      { name: "Receipt", detail: "The charge breakdown." },
+    ],
+  },
+];
+
+function money(cents: number | null): string {
+  if (cents == null || !Number.isFinite(cents)) return "Amount not on the booking";
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
+function downloadPdf(filename: string, pdfBase64: string) {
+  const binary = atob(pdfBase64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 export default function DisputeEvidencePanel({
@@ -50,33 +190,24 @@ export default function DisputeEvidencePanel({
     agreementUrl?: string | null;
   } | null;
 }) {
+  const [reason, setReason] = useState<ClaimId | "">("");
   const [disputeId, setDisputeId] = useState("");
-  const [reason, setReason] = useState("product_unacceptable");
   const [due, setDue] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [narrative, setNarrative] = useState("");
   const [lossCause, setLossCause] = useState("reason_code_not_answered");
   const [lossNote, setLossNote] = useState("");
   const [result, setResult] = useState<Record<string, unknown> | null>(null);
-  const [readiness, setReadiness] = useState<Array<{ chargeKey: string; status: string; gaps: string[] }> | null>(null);
+  const [openPacket, setOpenPacket] = useState<string | null>(null);
 
-  const loadReadiness = async () => {
-    setBusy(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("dispute-evidence", {
-        body: { action: "readiness", bookingId, chargeKey: String(booking.payment_intent_id || "") },
-      });
-      if (error) throw error;
-      const payload = data as { ok?: boolean; error?: string; charges?: Array<{ chargeKey: string; status: string; gaps: string[] }> };
-      if (payload?.ok === false) throw new Error(payload.error || "Failed");
-      setReadiness(payload.charges || []);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Readiness failed");
-    } finally {
-      setBusy(false);
-    }
-  };
+  const customerName = [booking.first_name, booking.last_name].filter(Boolean).join(" ") || String(booking.first_name || "Customer");
+  const address = [booking.address, booking.city, booking.state, booking.zip_code].filter(Boolean).join(", ");
+  const chargeCents = charges?.find((charge) => charge.amountCents != null)?.amountCents
+    ?? (typeof booking.final_charge_cents === "number" ? booking.final_charge_cents : null)
+    ?? (typeof booking.total_estimate_cents === "number" ? booking.total_estimate_cents : null);
+  const claim = CLAIMS.find((item) => item.id === reason) || null;
+  const planned = claim ? claim.documents(charges?.length || 0) : [];
 
   const mappedMessages = useMemo(() => (messages || []).map((m) => {
     const type = String(m.messageType || "").toUpperCase();
@@ -95,9 +226,13 @@ export default function DisputeEvidencePanel({
   }), [messages]);
 
   const run = async (action: "preview" | "submit" | "stage" | "accept_without_evidence" | "loss_review" | "withdrawal_draft") => {
-    const id = disputeId.trim();
-    if (!id) {
-      toast.error("Enter the Stripe dispute id.");
+    if (!reason) {
+      toast.error("Choose the claim the customer is making.");
+      return;
+    }
+    const stripeId = disputeId.trim();
+    if (action !== "preview" && action !== "withdrawal_draft" && !stripeId) {
+      toast.error("Enter the Stripe dispute id before sending anything to Stripe.");
       return;
     }
     if (action === "accept_without_evidence" && !note.trim()) {
@@ -108,12 +243,8 @@ export default function DisputeEvidencePanel({
       toast.error("A note is required for a lost-dispute review.");
       return;
     }
-    setBusy(true);
+    setBusy(action);
     try {
-      const address = [booking.address, booking.city, booking.state, booking.zip_code].filter(Boolean).join(", ");
-      const chargeCents = charges?.find((charge) => charge.amountCents != null)?.amountCents
-        ?? (typeof booking.final_charge_cents === "number" ? booking.final_charge_cents : null)
-        ?? (typeof booking.total_estimate_cents === "number" ? booking.total_estimate_cents : null);
       const { data, error } = await supabase.functions.invoke("dispute-evidence", {
         body: {
           action,
@@ -123,19 +254,19 @@ export default function DisputeEvidencePanel({
           narrative: narrative.trim() || undefined,
           clientKey: booking.email || null,
           chargeKey: booking.payment_intent_id || charges?.[0]?.paymentIntentId || null,
-          customerName: [booking.first_name, booking.last_name].filter(Boolean).join(" ") || booking.first_name || null,
+          customerName,
           serviceDate: booking.service_date || null,
           serviceAddress: address || null,
           serviceDocumented: (photos || []).length > 0 || Boolean(booking.completed_at),
           relationshipIntact: true,
           input: {
-            disputeId: id,
+            disputeId: stripeId || undefined,
             reason,
             evidenceDueAt: due || null,
             now: new Date().toISOString(),
             bookingRef: bookingRef || null,
             jobId: booking.job_id || null,
-            customerName: [booking.first_name, booking.last_name].filter(Boolean).join(" ") || booking.first_name || null,
+            customerName,
             customerEmail: booking.email || null,
             billingAddress: address || null,
             serviceAddress: address || null,
@@ -158,20 +289,14 @@ export default function DisputeEvidencePanel({
       if (payload?.ok === false) throw new Error(payload.error || "Failed");
       const payloadResult = data as Record<string, unknown>;
       setResult(payloadResult);
-      if (typeof payloadResult.narrative === "string" && !narrative.trim()) setNarrative(payloadResult.narrative);
-      const labels: Record<string, string> = {
-        preview: "Draft ready",
-        submit: "Submitted once",
-        stage: "Staged, not submitted",
-        accept_without_evidence: "Accepted without evidence",
-        loss_review: "Loss review saved",
-        withdrawal_draft: "Withdrawal draft ready. It was not sent.",
-      };
-      toast.success(labels[action]);
+      if (typeof payloadResult.narrative === "string") setNarrative(payloadResult.narrative);
+      const packets = (payloadResult.packets as Array<{ filename: string }> | undefined) || [];
+      if (packets[0]) setOpenPacket(packets[0].filename);
+      toast.success(action === "preview" ? "Documents are ready" : action === "submit" ? "Submitted once" : action === "stage" ? "Staged. Not submitted." : action === "withdrawal_draft" ? "Withdrawal draft is ready. It was not sent." : "Saved");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Dispute evidence failed");
+      toast.error(e instanceof Error ? e.message : "Could not build the documents");
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
 
@@ -179,117 +304,162 @@ export default function DisputeEvidencePanel({
   const packets = (result?.packets as Array<{
     filename: string;
     field: string;
+    title?: string;
     pages?: number;
     bytes?: number;
-    trimmed?: boolean;
     pdfBase64?: string | null;
     identity?: { customerName?: string; serviceDate?: string; recordId?: string; chargeAmount?: string; packetName?: string };
-    pagesPreview?: string[][];
   }> | undefined) || [];
-  const review = result?.checklist as { ok?: boolean; items?: Array<{ id: string; ok: boolean; label: string }> } | undefined;
-  const dueMs = due ? Date.parse(due) - Date.now() : NaN;
-  const dueLabel = !due ? null : dueMs <= 24 * 60 * 60 * 1000 ? "Due within 24 hours" : dueMs <= 48 * 60 * 60 * 1000 ? "Due within 48 hours" : "Due later than 48 hours";
   const warnings = (result?.warnings as string[] | undefined) || [];
-  const over = budget?.ok === false;
+  const missing = (result?.missing as string[] | undefined) || [];
 
   return (
-    <section className="rounded-xl border border-slate-200 p-4 space-y-3">
-      <p className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
-        <RiShieldCheckLine className="w-4 h-4 text-violet-600" /> Stripe dispute evidence
-      </p>
-      <p className="text-xs text-slate-500">
-        One file per evidence type: completion summary, communication, acceptance record, refund or cancellation policy, and a receipt only when the charge needs itemizing. Combined limit is 19 pages and 4.5 MB. The full agreement is not attached. Nothing is sent to Stripe until you approve.
-      </p>
-      {(drive?.folderUrl || drive?.summaryUrl || drive?.agreementUrl) && (
-        <div className="rounded-lg border px-3 py-2 text-xs space-y-1" style={{ borderColor: "rgba(92, 15, 254, 0.22)", background: "rgba(92, 15, 254, 0.05)" }}>
-          <p className="font-semibold text-slate-800">Drive archive for this job</p>
-          {drive.folderUrl && <a className="block text-violet-700 font-medium hover:underline" href={drive.folderUrl} target="_blank" rel="noreferrer">Job folder — summary, agreement, before and after photos</a>}
-          {drive.summaryUrl && <a className="block text-violet-700 font-medium hover:underline" href={drive.summaryUrl} target="_blank" rel="noreferrer">Completion summary PDF</a>}
-          {drive.agreementUrl && <a className="block text-violet-700 font-medium hover:underline" href={drive.agreementUrl} target="_blank" rel="noreferrer">Executed agreement PDF</a>}
+    <section className="rounded-2xl border border-violet-200/80 bg-white p-4 space-y-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-bold text-slate-900">Documents for a dispute</p>
+          <p className="text-xs text-slate-500 mt-1">Choose the claim. The PDFs for that claim are built from this case. Nothing is sent to Stripe until you submit it.</p>
+        </div>
+        <RiFilePdf2Line className="w-5 h-5 text-violet-600 shrink-0" />
+      </div>
+
+      <div className="rounded-xl bg-violet-50/80 px-3 py-2.5 text-xs text-slate-700 grid gap-1 sm:grid-cols-2">
+        <p><span className="text-slate-500">Customer</span> · {customerName}</p>
+        <p><span className="text-slate-500">Visit</span> · {bookingRef || "No job id"} · {String(booking.service_date || "date not recorded")}</p>
+        <p><span className="text-slate-500">Charge</span> · {money(typeof chargeCents === "number" ? chargeCents : null)}</p>
+        <p className="truncate"><span className="text-slate-500">Address</span> · {address || "not recorded"}</p>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {CLAIMS.map((item) => {
+          const selected = reason === item.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => {
+                setReason(item.id);
+                setResult(null);
+                setOpenPacket(null);
+                setNarrative("");
+              }}
+              className={`text-left rounded-xl border px-3 py-2.5 transition-colors ${selected ? "border-violet-500 bg-violet-50 ring-1 ring-violet-500" : "border-slate-200 hover:border-violet-300 bg-white"}`}
+            >
+              <p className="text-sm font-semibold text-slate-900">{item.title}</p>
+              <p className="text-xs text-slate-500 mt-0.5">{item.customerSays}</p>
+              <p className="text-[11px] font-medium text-violet-700 mt-1.5">Lead document · {item.lead}</p>
+            </button>
+          );
+        })}
+      </div>
+
+      {claim && (
+        <div className="rounded-xl border border-slate-200 p-3 space-y-2">
+          <p className="text-xs font-semibold text-slate-800">This claim produces {planned.length} {planned.length === 1 ? "document" : "documents"}</p>
+          <ol className="space-y-1.5">
+            {planned.map((doc, index) => (
+              <li key={doc.name} className="flex gap-2 text-xs">
+                <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${index === 0 ? "bg-violet-600 text-white" : "bg-slate-100 text-slate-600"}`}>{index + 1}</span>
+                <span>
+                  <span className="font-semibold text-slate-800">{doc.name}</span>
+                  {index === 0 && <span className="ml-1.5 text-[10px] uppercase tracking-wide text-violet-700">Opens the case</span>}
+                  <span className="block text-slate-500">{doc.detail}</span>
+                </span>
+              </li>
+            ))}
+          </ol>
+          <Button disabled={busy !== null} onClick={() => void run("preview")}>
+            {busy === "preview" ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : <RiFilePdf2Line className="w-4 h-4" />}
+            Generate these documents
+          </Button>
         </div>
       )}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-        <input className="border rounded px-2 py-1 text-xs" placeholder="Stripe dispute id" value={disputeId} onChange={(e) => setDisputeId(e.target.value)} />
-        <select className="border rounded px-2 py-1 text-xs" value={reason} onChange={(e) => setReason(e.target.value)}>
-          {["product_unacceptable", "fraudulent", "unrecognized", "product_not_received", "subscription_canceled", "credit_not_processed", "duplicate", "general"].map((r) => (
-            <option key={r} value={r}>{r.replace(/_/g, " ")}</option>
-          ))}
-        </select>
-        <input className="border rounded px-2 py-1 text-xs" type="datetime-local" value={due} onChange={(e) => setDue(e.target.value)} />
-      </div>
-      {dueLabel && <p className={`text-xs font-medium ${dueLabel.startsWith("Due within 24") ? "text-rose-600" : "text-slate-600"}`}>{dueLabel}</p>}
-      <div className="flex flex-wrap gap-2">
-        <Button size="sm" variant="outline" disabled={busy} onClick={() => void loadReadiness()}>Readiness</Button>
-        <Button size="sm" variant="outline" disabled={busy} onClick={() => void run("preview")}>
-          {busy ? <RiLoader4Line className="w-3 h-3 animate-spin" /> : "Build draft"}
-        </Button>
-        <Button size="sm" variant="outline" disabled={busy || over} onClick={() => void run("stage")}>Stage, do not submit</Button>
-        <Button size="sm" disabled={busy || over} onClick={() => void run("submit")}>Approve and submit once</Button>
-      </div>
-      <textarea className="w-full border rounded p-2 text-xs" rows={4} placeholder="Response narrative. The first two sentences must answer the dispute reason. Leave blank to use the generated note." value={narrative} onChange={(e) => setNarrative(e.target.value)} />
-      <textarea className="w-full border rounded p-2 text-xs" rows={2} placeholder="Note required to accept without evidence" value={note} onChange={(e) => setNote(e.target.value)} />
-      <Button size="sm" variant="ghost" disabled={busy} onClick={() => void run("accept_without_evidence")}>Accept dispute without evidence</Button>
-      <div className="flex flex-wrap gap-2 items-center">
-        <select className="border rounded px-2 py-1 text-xs" value={lossCause} onChange={(e) => setLossCause(e.target.value)}>
-          {["reason_code_not_answered", "evidence_not_tied_to_customer", "photos_unreadable", "authorization_evidence_missing", "evidence_missing_or_late", "other"].map((cause) => (
-            <option key={cause} value={cause}>{cause.replace(/_/g, " ")}</option>
-          ))}
-        </select>
-        <input className="border rounded px-2 py-1 text-xs flex-1" placeholder="Note for a lost dispute" value={lossNote} onChange={(e) => setLossNote(e.target.value)} />
-        <Button size="sm" variant="outline" disabled={busy} onClick={() => void run("loss_review")}>Save loss review</Button>
-        <Button size="sm" variant="ghost" disabled={busy} onClick={() => void run("withdrawal_draft")}>Withdrawal draft</Button>
-      </div>
+
       {budget && (
         <p className={`text-xs font-medium ${budget.ok ? "text-emerald-700" : "text-rose-600"}`}>
-          {budget.pages} pages · {budget.bytes} bytes · limit 19 pages / 4.5 MB
-          {budget.errors?.length ? ` · ${budget.errors.join(" ")}` : ""}
+          {packets.length} files · {budget.pages} pages · {(budget.bytes / 1024 / 1024).toFixed(2)} MB
+          {budget.ok ? " · inside Stripe’s 19 page and 4.5 MB limits" : ` · ${budget.errors?.join(" ") || "over the Stripe limit"}`}
         </p>
       )}
-      {review?.items && (
-        <ul className="text-xs space-y-1">
-          {review.items.map((item) => (
-            <li key={item.id} className={item.ok ? "text-emerald-700" : "text-rose-600"}>{item.ok ? "Yes" : "No"} — {item.label}</li>
-          ))}
-        </ul>
-      )}
+
       {packets.length > 0 && (
-        <div className="space-y-3">
-          {packets.map((p) => (
-            <div key={p.filename} className="text-xs text-slate-700 space-y-1">
-              <p className="font-medium">{p.field}: {p.filename} · {p.pages ?? "?"} pages · {p.bytes ?? 0} bytes</p>
-              {p.identity && (
-                <p>{p.identity.customerName} · {p.identity.serviceDate} · {p.identity.recordId} · {p.identity.chargeAmount}</p>
-              )}
-              {p.pdfBase64 && (
-                <iframe title={p.filename} className="w-full h-[480px] border bg-white" src={`data:application/pdf;base64,${p.pdfBase64}`} />
-              )}
-              {!p.pdfBase64 && p.pagesPreview?.slice(0, 2).map((page, index) => (
-                <pre key={`${p.filename}-${index}`} className="whitespace-pre-wrap bg-white border p-2 text-[11px] leading-4">{page.join("\n")}</pre>
-              ))}
-            </div>
-          ))}
+        <div className="space-y-2">
+          {packets.map((packet, index) => {
+            const open = openPacket === packet.filename;
+            return (
+              <article key={packet.filename} className="rounded-xl border border-slate-200 overflow-hidden">
+                <div className="flex items-center gap-2 px-3 py-2 bg-slate-50">
+                  <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${index === 0 ? "bg-violet-600 text-white" : "bg-white border text-slate-600"}`}>{index + 1}</span>
+                  <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setOpenPacket(open ? null : packet.filename)}>
+                    <p className="text-sm font-semibold text-slate-900 truncate">{packet.identity?.packetName || packet.filename}</p>
+                    <p className="text-[11px] text-slate-500">{packet.pages ?? "?"} pages · {packet.filename}</p>
+                  </button>
+                  {packet.pdfBase64 && (
+                    <Button size="sm" variant="outline" onClick={() => downloadPdf(packet.filename, packet.pdfBase64!)}>
+                      <RiDownloadLine className="w-3.5 h-3.5" /> Download
+                    </Button>
+                  )}
+                </div>
+                {open && packet.pdfBase64 && (
+                  <iframe title={packet.filename} className="w-full h-[520px] bg-white" src={`data:application/pdf;base64,${packet.pdfBase64}`} />
+                )}
+                {open && !packet.pdfBase64 && (
+                  <p className="px-3 py-2 text-xs text-amber-800">This file was built, and it is too large to preview here. Generate again after reducing the photo count, or download it from the job folder.</p>
+                )}
+              </article>
+            );
+          })}
         </div>
       )}
+
+      {missing.length > 0 && <p className="text-xs text-amber-800">Not on the case yet: {missing.join(", ")}. Those lines say “not recorded” in the PDF.</p>}
       {warnings.length > 0 && (
         <ul className="text-xs text-amber-800 space-y-1">
-          {warnings.map((w) => <li key={w}>{w}</li>)}
+          {warnings.map((warning) => <li key={warning}>{warning}</li>)}
         </ul>
       )}
-      {Array.isArray(result?.missing) && (result?.missing as string[]).length > 0 && (
-        <p className="text-xs text-amber-700">Not recorded: {(result?.missing as string[]).join(", ")}</p>
+
+      {(drive?.folderUrl || drive?.summaryUrl || drive?.agreementUrl) && (
+        <div className="text-xs space-y-1">
+          <p className="font-semibold text-slate-700">Already in the job folder</p>
+          {drive.folderUrl && <a className="block text-violet-700 font-medium hover:underline" href={drive.folderUrl} target="_blank" rel="noreferrer">Open the job folder</a>}
+          {drive.summaryUrl && <a className="block text-violet-700 font-medium hover:underline" href={drive.summaryUrl} target="_blank" rel="noreferrer">Stored completion summary</a>}
+          {drive.agreementUrl && <a className="block text-violet-700 font-medium hover:underline" href={drive.agreementUrl} target="_blank" rel="noreferrer">Signed agreement</a>}
+        </div>
       )}
-      {result?.draft && typeof (result.draft as { draft?: string }).draft === "string" && (
-        <pre className="text-xs whitespace-pre-wrap border p-2 bg-white">{(result.draft as { draft: string }).draft}</pre>
-      )}
-      {readiness && readiness.length === 0 && <p className="text-xs text-slate-500">Not ready. No prepared pieces are filed for this booking yet.</p>}
-      {readiness?.map((row) => (
-        <p key={row.chargeKey} className="text-xs text-slate-700">
-          {row.chargeKey}: {row.status.replace(/_/g, " ")}{row.gaps.length ? ` — ${row.gaps.join("; ")}` : ""}
-        </p>
-      ))}
-      {typeof result?.omittedMessages === "number" && (
-        <p className="text-[11px] text-slate-500">{result.omittedMessages} routine messages omitted from the communication packet. The full history stays on the case.</p>
-      )}
+
+      <details className="rounded-xl border border-slate-200 px-3 py-2">
+        <summary className="cursor-pointer text-xs font-semibold text-slate-700">Send this set to Stripe</summary>
+        <div className="mt-3 space-y-2">
+          <p className="text-xs text-slate-500">Use this only after the documents look right. Submission happens once.</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <input className="border rounded-lg px-2 py-1.5 text-xs" placeholder="Stripe dispute id, du_…" value={disputeId} onChange={(e) => setDisputeId(e.target.value)} />
+            <input className="border rounded-lg px-2 py-1.5 text-xs" type="datetime-local" value={due} onChange={(e) => setDue(e.target.value)} />
+          </div>
+          <textarea className="w-full border rounded-lg p-2 text-xs" rows={3} placeholder="The note Stripe receives. Leave it as generated, or edit the first two sentences so they answer this claim." value={narrative} onChange={(e) => setNarrative(e.target.value)} />
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" disabled={busy !== null || budget?.ok === false} onClick={() => void run("stage")}>Stage, do not submit</Button>
+            <Button size="sm" disabled={busy !== null || budget?.ok === false} onClick={() => void run("submit")}>Submit once</Button>
+          </div>
+          <textarea className="w-full border rounded-lg p-2 text-xs" rows={2} placeholder="Note, required only if you accept the dispute with no documents" value={note} onChange={(e) => setNote(e.target.value)} />
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="ghost" disabled={busy !== null} onClick={() => void run("accept_without_evidence")}>Accept without documents</Button>
+            <Button size="sm" variant="ghost" disabled={busy !== null} onClick={() => void run("withdrawal_draft")}>Draft a withdrawal. Do not send it.</Button>
+          </div>
+          <div className="flex flex-wrap gap-2 items-center">
+            <select className="border rounded-lg px-2 py-1 text-xs" value={lossCause} onChange={(e) => setLossCause(e.target.value)}>
+              {["reason_code_not_answered", "evidence_not_tied_to_customer", "photos_unreadable", "authorization_evidence_missing", "evidence_missing_or_late", "other"].map((cause) => (
+                <option key={cause} value={cause}>{cause.replace(/_/g, " ")}</option>
+              ))}
+            </select>
+            <input className="border rounded-lg px-2 py-1 text-xs flex-1 min-w-[12rem]" placeholder="Why a lost dispute was lost" value={lossNote} onChange={(e) => setLossNote(e.target.value)} />
+            <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void run("loss_review")}>Save loss review</Button>
+          </div>
+          {result?.draft && typeof (result.draft as { draft?: string }).draft === "string" && (
+            <pre className="text-xs whitespace-pre-wrap border rounded-lg p-2 bg-slate-50">{(result.draft as { draft: string }).draft}</pre>
+          )}
+        </div>
+      </details>
     </section>
   );
 }

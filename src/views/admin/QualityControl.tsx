@@ -1783,13 +1783,13 @@ export function CaseFileSheet({ bookingId, caseRef, onClose }: { bookingId: stri
 
   return (
     <Sheet open onOpenChange={(o) => !o && onClose()}>
-      <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
+      <SheetContent className="w-full sm:max-w-3xl overflow-y-auto">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             <RiFolderCheckLine className="w-5 h-5 text-violet-600" /> Case file — {cf?.ref || caseRef || "…"}
           </SheetTitle>
           <SheetDescription>
-            Assembled live from the booking, photos, checklist, payments, and messages. Stripe evidence is a separate draft: completion summary, communication, acceptance record, and the matching policy file. The full agreement stays archived.
+            Pick the claim the customer is making. The case file builds the PDFs that match that claim.
           </SheetDescription>
         </SheetHeader>
 
