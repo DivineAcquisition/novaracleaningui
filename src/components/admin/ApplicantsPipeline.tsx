@@ -48,6 +48,7 @@ import { cn } from "@/lib/utils";
 import { edgeResult } from "@/lib/edge-invoke";
 import PhoneScreeningForm from "@/components/admin/PhoneScreeningForm";
 import { RECOMMENDATION_LABEL, declineReasonLabel, type Recommendation } from "@/lib/phone-screening";
+import { GOVERNMENT_ID_FIELD_ID, availabilityLabel, experienceLabel } from "@/lib/hiring/application";
 
 // Onboarding is considered stalled when launched this long ago without a
 // signed agreement.
@@ -76,6 +77,10 @@ interface ApplicantRow {
   consent_1099: boolean | null;
   background_check_consent: boolean | null;
   pay_consent: boolean | null;
+  willing_to_get_supplies: boolean | null;
+  supplies_on_hand: string | null;
+  government_id_path: string | null;
+  submission: Record<string, unknown> | null;
   reliability_note: string | null;
   reason_note: string | null;
   stage: string;
@@ -690,16 +695,29 @@ export default function ApplicantsPipeline() {
                       ["Role", selected.role],
                       ["Department", selected.department],
                       ["Type", selected.contractor_type],
-                      ["Experience", selected.experience],
-                      ["Availability", selected.availability],
+                      ["Experience", experienceLabel(selected.experience) || selected.experience],
+                      ["Availability", availabilityLabel(selected.availability) || selected.availability],
                       ["Preferred days", (selected.preferred_days || []).join(", ")],
                       ["Transportation", selected.transportation],
+                      ["Photo ID", (selected.government_id_path || airtableIdUrl(selected)) ? "Uploaded" : null],
                       ["Authorized to work", selected.authorized_to_work],
                       ["1099 consent", selected.consent_1099 == null ? null : selected.consent_1099 ? "Yes" : "No"],
                       ["BG check consent", selected.background_check_consent == null ? null : selected.background_check_consent ? "Yes" : "No"],
                       ["Pay consent", selected.pay_consent == null ? null : selected.pay_consent ? "Yes" : "No"],
+                      ["Willing to get supplies", selected.willing_to_get_supplies == null ? null : selected.willing_to_get_supplies ? "Yes" : "No"],
+                      ["Supplies on hand", selected.supplies_on_hand],
                     ]}
                   />
+                  {(selected.government_id_path || airtableIdUrl(selected)) && (
+                    <button
+                      type="button"
+                      onClick={() => openApplicantId(selected)}
+                      className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#5C0FFE] hover:underline"
+                    >
+                      <RiFileTextLine className="h-4 w-4" />
+                      View photo ID
+                    </button>
+                  )}
                   {selected.reliability_note && (
                     <p className="text-sm text-slate-600 bg-slate-50 border border-slate-200 rounded-lg p-2.5">
                       <span className="font-medium text-slate-700">On reliability: </span>
@@ -1281,6 +1299,31 @@ function ChecklistRow({ ok, label, detail }: { ok: boolean; label: string; detai
       {detail && <span className="text-xs text-slate-400">· {detail}</span>}
     </div>
   );
+}
+
+function airtableIdUrl(row: ApplicantRow): string | null {
+  const raw = row.submission?.[GOVERNMENT_ID_FIELD_ID];
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  const first = raw[0] as { url?: string };
+  return typeof first?.url === "string" ? first.url : null;
+}
+
+async function openApplicantId(row: ApplicantRow) {
+  if (row.government_id_path) {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const res = await fetch(`/api/talent/id-document?applicantId=${encodeURIComponent(row.id)}`, {
+      headers: { Authorization: `Bearer ${sessionData.session?.access_token || ""}` },
+    });
+    const body = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
+    if (!res.ok || !body.url) {
+      toast.error(body.error || "Couldn't open the photo ID");
+      return;
+    }
+    window.open(body.url, "_blank", "noopener,noreferrer");
+    return;
+  }
+  const url = airtableIdUrl(row);
+  if (url) window.open(url, "_blank", "noopener,noreferrer");
 }
 
 function DetailGrid({ rows }: { rows: Array<[string, string | null | undefined]> }) {

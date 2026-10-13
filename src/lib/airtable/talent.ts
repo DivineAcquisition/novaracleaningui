@@ -12,6 +12,17 @@
 // Fields are referenced by FIELD ID so column renames in the Airtable UI can't
 // break the sync.
 
+import {
+  APPLICANT_DEPARTMENT,
+  APPLICANT_ROLES,
+  APPLICANT_STATES,
+  AVAILABILITY_OPTIONS,
+  CONTRACTOR_TYPES,
+  EXPERIENCE_OPTIONS,
+  PREFERRED_DAYS,
+  TRANSPORTATION_CAR,
+  TRANSPORTATION_NONE,
+} from "../hiring/application";
 import { createRecords, listRecords, updateRecords, type AirtableRecord, type Fields } from "./client";
 
 /** Applicants table in the Client & Revenue Ops base (the client's default base). */
@@ -32,8 +43,11 @@ export const TALENT_FIELDS = {
   department: "fldP8UuWqJB42LQFS",
   contractorType: "fldGD4Ul0wzovaIjK",
   transportation: "flddPBlrFUTDyiNz5",
+  governmentId: "fldhOvh9QzQuVd4NN",
   authorizedToWork: "fldUDu31uvFbPd8z9",
   consent1099: "fldetuCODrqo1S9Ax",
+  willingToGetSupplies: "flddV4WNeBCFigL4h",
+  suppliesOnHand: "fldsj6AneGK4IKatF",
   experience: "fldfXUNb5j2a6ORqc",
   availability: "fldexoUSC7tDn9zch",
   backgroundCheckConsent: "fldDv8iHBIcQGwOOP",
@@ -68,6 +82,10 @@ export interface TalentApplicant {
   consent1099: boolean | null;
   backgroundCheckConsent: boolean | null;
   payConsent: boolean | null;
+  /** Yes / No. Null when the column was empty (older rows). */
+  willingToGetSupplies: string | null;
+  suppliesOnHand: string | null;
+  hasGovernmentId: boolean;
   reliabilityNote: string | null;
   reasonNote: string | null;
   /** Airtable pipeline status — used ONLY to infer the initial stage on first import. */
@@ -137,6 +155,9 @@ export function mapTalentRecord(rec: AirtableRecord): TalentApplicant {
     consent1099: bool(f[TALENT_FIELDS.consent1099]),
     backgroundCheckConsent: bool(f[TALENT_FIELDS.backgroundCheckConsent]),
     payConsent: bool(f[TALENT_FIELDS.payConsent]),
+    willingToGetSupplies: str(f[TALENT_FIELDS.willingToGetSupplies]),
+    suppliesOnHand: str(f[TALENT_FIELDS.suppliesOnHand]),
+    hasGovernmentId: Array.isArray(f[TALENT_FIELDS.governmentId]) && (f[TALENT_FIELDS.governmentId] as unknown[]).length > 0,
     reliabilityNote: str(f[TALENT_FIELDS.reliabilityNote]),
     reasonNote: str(f[TALENT_FIELDS.reasonNote]),
     airtableStatus: str(f[TALENT_FIELDS.status]),
@@ -175,6 +196,24 @@ export async function fetchTalentApplicants(): Promise<TalentApplicant[]> {
   return records.map(mapTalentRecord);
 }
 
+const TALENT_KNOWN_OPTIONS: Record<string, readonly string[]> = {
+  [TALENT_FIELDS.role]: APPLICANT_ROLES.map((r) => r.value),
+  [TALENT_FIELDS.state]: APPLICANT_STATES.map((s) => s.value),
+  [TALENT_FIELDS.contractorType]: CONTRACTOR_TYPES.map((t) => t.value),
+  [TALENT_FIELDS.transportation]: [TRANSPORTATION_CAR, TRANSPORTATION_NONE],
+  [TALENT_FIELDS.authorizedToWork]: ["Yes", "No"],
+  [TALENT_FIELDS.experience]: EXPERIENCE_OPTIONS.map((o) => o.value),
+  [TALENT_FIELDS.availability]: AVAILABILITY_OPTIONS.map((o) => o.value),
+  [TALENT_FIELDS.preferredDays]: [...PREFERRED_DAYS],
+  [TALENT_FIELDS.willingToGetSupplies]: ["Yes", "No"],
+  [TALENT_FIELDS.department]: [
+    "Sales & Revenue",
+    "Operations & Customer Experience",
+    "Talent Acquisition",
+    APPLICANT_DEPARTMENT,
+  ],
+};
+
 export interface CreateTalentApplicantInput {
   fullName: string;
   email: string;
@@ -183,9 +222,59 @@ export interface CreateTalentApplicantInput {
   state?: string | null;
   address?: string | null;
   role?: string | null;
+  department?: string | null;
+  contractorType?: string | null;
   availability?: string | null;
   experience?: string | null;
+  preferredDays?: string[] | null;
+  transportation?: string | null;
+  authorizedToWork?: string | null;
+  consent1099?: boolean | null;
+  backgroundCheckConsent?: boolean | null;
+  payConsent?: boolean | null;
+  willingToGetSupplies?: string | null;
+  suppliesOnHand?: string | null;
+  reliabilityNote?: string | null;
   notes?: string | null;
+  /** Public URL Airtable can download. Written to the photo-ID attachment field. */
+  governmentIdUrl?: string | null;
+  governmentIdFilename?: string | null;
+}
+
+function applicantWriteFields(input: CreateTalentApplicantInput, mode: "create" | "update"): Fields {
+  const fields: Fields = {
+    [TALENT_FIELDS.contractorName]: input.fullName.trim(),
+    [TALENT_FIELDS.email]: input.email.trim().toLowerCase(),
+    [TALENT_FIELDS.phone]: input.phone?.trim() || undefined,
+    [TALENT_FIELDS.zipCode]: input.zipCode?.trim() || undefined,
+    [TALENT_FIELDS.state]: input.state?.trim() || undefined,
+    [TALENT_FIELDS.address]: input.address?.trim() || undefined,
+    [TALENT_FIELDS.role]: input.role?.trim() || (mode === "create" ? "Independent Cleaner" : undefined),
+    [TALENT_FIELDS.department]: input.department?.trim() || undefined,
+    [TALENT_FIELDS.contractorType]: input.contractorType?.trim() || undefined,
+    [TALENT_FIELDS.availability]: input.availability?.trim() || undefined,
+    // Do not trim — the Airtable choice "Somewhat " includes a trailing space.
+    [TALENT_FIELDS.experience]: input.experience || undefined,
+    [TALENT_FIELDS.preferredDays]: input.preferredDays?.length ? input.preferredDays : undefined,
+    [TALENT_FIELDS.transportation]: input.transportation?.trim() || undefined,
+    [TALENT_FIELDS.authorizedToWork]: input.authorizedToWork?.trim() || undefined,
+    [TALENT_FIELDS.consent1099]: input.consent1099 === true ? true : undefined,
+    [TALENT_FIELDS.backgroundCheckConsent]: input.backgroundCheckConsent === true ? true : undefined,
+    [TALENT_FIELDS.payConsent]: input.payConsent === true ? true : undefined,
+    [TALENT_FIELDS.willingToGetSupplies]: input.willingToGetSupplies?.trim() || undefined,
+    [TALENT_FIELDS.suppliesOnHand]: input.suppliesOnHand?.trim() || undefined,
+    [TALENT_FIELDS.reliabilityNote]: input.reliabilityNote?.trim() || undefined,
+    [TALENT_FIELDS.reasonNote]: input.notes?.trim() || undefined,
+    [TALENT_FIELDS.governmentId]: input.governmentIdUrl
+      ? [{ url: input.governmentIdUrl, filename: input.governmentIdFilename || "government-id" }]
+      : undefined,
+  };
+  if (mode === "create") {
+    fields[TALENT_FIELDS.status] = "Applied";
+    fields[TALENT_FIELDS.applicationStatus] = "New";
+    fields[TALENT_FIELDS.dateApplied] = new Date().toISOString().slice(0, 10);
+  }
+  return fields;
 }
 
 /**
@@ -201,25 +290,27 @@ export async function createTalentApplicantInAirtable(
   if (!fullName) throw new Error("Name is required");
   if (!email || !email.includes("@")) throw new Error("A valid email is required");
 
-  const fields: Fields = {
-    [TALENT_FIELDS.contractorName]: fullName,
-    [TALENT_FIELDS.email]: email,
-    [TALENT_FIELDS.phone]: input.phone?.trim() || undefined,
-    [TALENT_FIELDS.zipCode]: input.zipCode?.trim() || undefined,
-    [TALENT_FIELDS.state]: input.state?.trim() || undefined,
-    [TALENT_FIELDS.address]: input.address?.trim() || undefined,
-    [TALENT_FIELDS.role]: input.role?.trim() || "Independent Cleaner",
-    [TALENT_FIELDS.availability]: input.availability?.trim() || undefined,
-    [TALENT_FIELDS.experience]: input.experience?.trim() || undefined,
-    [TALENT_FIELDS.reasonNote]: input.notes?.trim() || undefined,
-    [TALENT_FIELDS.status]: "Applied",
-    [TALENT_FIELDS.applicationStatus]: "New",
-    [TALENT_FIELDS.dateApplied]: new Date().toISOString().slice(0, 10),
-  };
-
-  const created = await createRecords(TALENT_APPLICANTS_TABLE, [fields], { typecast: true });
+  const created = await createRecords(TALENT_APPLICANTS_TABLE, [applicantWriteFields(input, "create")], {
+    typecast: true,
+    knownOptions: TALENT_KNOWN_OPTIONS,
+  });
   const rec = created[0];
   if (!rec?.id) throw new Error("Airtable did not return a created record");
+  return mapTalentRecord(rec);
+}
+
+/** Patch an existing Applicants row. Does not reset Status or Application Status. */
+export async function updateTalentApplicantInAirtable(
+  recordId: string,
+  input: CreateTalentApplicantInput,
+): Promise<TalentApplicant> {
+  const updated = await updateRecords(
+    TALENT_APPLICANTS_TABLE,
+    [{ id: recordId, fields: applicantWriteFields(input, "update") }],
+    { typecast: true, knownOptions: TALENT_KNOWN_OPTIONS },
+  );
+  const rec = updated[0];
+  if (!rec?.id) throw new Error("Airtable did not return the updated record");
   return mapTalentRecord(rec);
 }
 

@@ -80,6 +80,9 @@ function toDbFields(a: TalentApplicant) {
     consent_1099: a.consent1099,
     background_check_consent: a.backgroundCheckConsent,
     pay_consent: a.payConsent,
+    willing_to_get_supplies:
+      a.willingToGetSupplies == null ? null : a.willingToGetSupplies.trim().toLowerCase() === "yes",
+    supplies_on_hand: a.suppliesOnHand,
     reliability_note: a.reliabilityNote,
     reason_note: a.reasonNote,
     submission: a.submission,

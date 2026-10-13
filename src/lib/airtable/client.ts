@@ -168,7 +168,15 @@ export async function airtableRequest<T = unknown>(path: string, opts: RequestOp
 
 // ─── Record types ─────────────────────────────────────────────────────────────
 
-export type FieldValue = string | number | boolean | string[] | null | undefined;
+export type AttachmentWrite = { url: string; filename?: string };
+export type FieldValue =
+  | string
+  | number
+  | boolean
+  | string[]
+  | AttachmentWrite[]
+  | null
+  | undefined;
 export type Fields = Record<string, FieldValue>;
 
 export interface AirtableRecord {
@@ -331,13 +339,14 @@ export async function createRecords(
 export async function updateRecords(
   tableId: string,
   records: { id: string; fields: Fields }[],
-  options: { typecast?: boolean; baseId?: string } = {},
+  options: { typecast?: boolean; baseId?: string; knownOptions?: Record<string, readonly string[]> } = {},
 ): Promise<AirtableRecord[]> {
   const baseId = options.baseId || getBaseId();
   const typecast = options.typecast ?? true;
   const prepared = records
     .map((r) => ({ id: r.id, fields: clean(r.fields) }))
     .filter((r) => r.id && Object.keys(r.fields).length > 0);
+  reviewUnknownOptions(tableId, prepared, options.knownOptions);
   const out: AirtableRecord[] = [];
   for (let i = 0; i < prepared.length; i += MAX_RECORDS_PER_REQUEST) {
     const batch = prepared.slice(i, i + MAX_RECORDS_PER_REQUEST);
