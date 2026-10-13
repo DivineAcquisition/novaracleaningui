@@ -14,6 +14,8 @@ import {
   visibleSteps,
   type HiringApplicationDraft,
 } from "../src/lib/hiring/application";
+import { parseIndeedApplicant, splitPersonName } from "../src/lib/hiring/indeed";
+import { hiringApplyUrl, isHiringToken, sanitizeAnswers } from "../src/lib/hiring/session";
 
 let failures = 0;
 function check(name: string, actual: unknown, expected: unknown) {
@@ -113,6 +115,29 @@ check(
   "suppliesOnHand",
 );
 check("car step rejects no vehicle before the ID", issuesForStep("car", draft({ transportation: TRANSPORTATION_NONE }))?.code, "no_car");
+check("California is an allowed state", codeOf({ state: "California" }), "ok");
+
+const indeed = parseIndeedApplicant({
+  sender: "Conversation-CassaundraWoodward-5gfay@indeedemail.com",
+  subject: "[Action required] New application for House Cleaners Needed, Los Angeles, CA",
+  snippet: "Cassaundra Woodward applied",
+  messageId: "m1",
+  threadId: "t1",
+  date: "2026-10-13T16:59:44Z",
+});
+check("indeed relay email is kept", indeed?.email, "conversation-cassaundrawoodward-5gfay@indeedemail.com");
+check("indeed name is parsed", indeed?.fullName, "Cassaundra Woodward");
+check("indeed message is not an application when the subject is billing", parseIndeedApplicant({
+  sender: "usbilling-no_reply@indeed.com",
+  subject: "Payment declined",
+  snippet: "Update billing",
+  messageId: "m",
+  threadId: "t",
+}), null);
+check("split name", splitPersonName("María Perez"), { firstName: "María", lastName: "Perez" });
+check("session token shape", isHiringToken("a".repeat(48)), true);
+check("apply url uses the hiring host", hiringApplyUrl("abc"), "https://hiring.novaracleaning.com/hiring/apply/abc");
+check("saved answers drop the uploaded file", sanitizeAnswers({ firstName: "Ada", idFile: { name: "x" } }), { firstName: "Ada" });
 
 if (failures > 0) {
   console.error(`\n${failures} failed`);

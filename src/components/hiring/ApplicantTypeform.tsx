@@ -39,6 +39,7 @@ import {
 } from "@/lib/hiring/application";
 import { formatPhoneNumber } from "@/lib/input-formatters";
 import { HIRING_GRADIENT } from "@/components/hiring/HiringChrome";
+import type { PublicHiringSession } from "@/lib/hiring/session";
 import { cn } from "@/lib/utils";
 
 const LOGO = "/novara-logo.png";
@@ -81,39 +82,44 @@ function toDraft(answers: Answers, hiringRole: string | null): HiringApplication
   };
 }
 
-export function ApplicantTypeform() {
+function blankAnswers(hiringRole: string | null, session?: PublicHiringSession | null): Answers {
+  const saved = session?.answers || {};
+  return {
+    role: saved.role || presetRoleForHiringPage(hiringRole),
+    firstName: saved.firstName || session?.firstName || "",
+    lastName: saved.lastName || session?.lastName || "",
+    email: saved.email || session?.email || "",
+    phone: saved.phone || session?.phone || "",
+    address: saved.address || "",
+    zipCode: saved.zipCode || "",
+    state: saved.state || "",
+    contractorType: saved.contractorType || "",
+    transportation: saved.transportation || "",
+    authorizedToWork: saved.authorizedToWork || "",
+    experience: saved.experience || "",
+    availability: saved.availability || "",
+    preferredDays: saved.preferredDays || [],
+    consent1099: Boolean(saved.consent1099),
+    backgroundCheckConsent: Boolean(saved.backgroundCheckConsent),
+    payConsent: Boolean(saved.payConsent),
+    willingToGetSupplies: saved.willingToGetSupplies || "",
+    suppliesOnHand: saved.suppliesOnHand || "",
+    reliabilityNote: saved.reliabilityNote || "",
+    reasonNote: saved.reasonNote || "",
+    idConfirmed: Boolean(saved.idConfirmed),
+    idFile: null,
+  };
+}
+
+export function ApplicantTypeform({ session }: { session?: PublicHiringSession | null }) {
   const params = useSearchParams();
   const hiringRole = params.get("role");
   const intent = hiringIntentNote(hiringRole);
-  const [answers, setAnswers] = useState<Answers>(() => ({
-    role: presetRoleForHiringPage(hiringRole),
-    firstName: "",
-    lastName: "",
-    email: "",
-    phone: "",
-    address: "",
-    zipCode: "",
-    state: "",
-    contractorType: "",
-    transportation: "",
-    authorizedToWork: "",
-    experience: "",
-    availability: "",
-    preferredDays: [],
-    consent1099: false,
-    backgroundCheckConsent: false,
-    payConsent: false,
-    willingToGetSupplies: "",
-    suppliesOnHand: "",
-    reliabilityNote: "",
-    reasonNote: "",
-    idConfirmed: false,
-    idFile: null,
-  }));
-  const [stepIndex, setStepIndex] = useState(0);
+  const [answers, setAnswers] = useState<Answers>(() => blankAnswers(hiringRole, session));
+  const [stepIndex, setStepIndex] = useState(() => session?.stepIndex || 0);
   const [error, setError] = useState<string | null>(null);
   const [gate, setGate] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
+  const [done, setDone] = useState(session?.status === "submitted");
   const [submitting, setSubmitting] = useState(false);
   const [fax, setFax] = useState("");
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -129,6 +135,20 @@ export function ApplicantTypeform() {
   }, [step, gate, done]);
 
   const draft = useMemo(() => toDraft(answers, hiringRole), [answers, hiringRole]);
+
+  useEffect(() => {
+    if (!session?.token || session.status === "submitted") return;
+    const handle = window.setTimeout(() => {
+      const { idFile, ...rest } = answers;
+      void idFile;
+      void fetch(`/api/hiring/session/${session.token}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answers: rest, stepIndex }),
+      });
+    }, 600);
+    return () => window.clearTimeout(handle);
+  }, [answers, stepIndex, session?.token, session?.status]);
 
   function back() {
     setError(null);
@@ -203,6 +223,7 @@ export function ApplicantTypeform() {
       body.set("idConfirmed", String(answers.idConfirmed));
       body.set("hiringRole", hiringRole || "");
       body.set("faxNumber", fax);
+      if (session?.token) body.set("sessionToken", session.token);
       body.set("idFile", answers.idFile);
       const res = await fetch("/api/hiring/apply", { method: "POST", body });
       const data = (await res.json().catch(() => ({}))) as { error?: string; code?: string; gate?: boolean; ok?: boolean };
@@ -258,6 +279,13 @@ export function ApplicantTypeform() {
           {done ? "Done" : gate ? "Hold" : `${index + 1} of ${steps.length}`}
         </p>
       </header>
+      {session && !done && (
+        <p className="mx-auto w-full max-w-2xl px-5 text-sm text-slate-500 sm:px-6">
+          {session.preview
+            ? "Preview link. Answers on this link are saved as you go."
+            : `Saved for ${session.firstName || "you"}${session.jobTitle ? ` · ${session.jobTitle}` : ""}. You can close this and come back.`}
+        </p>
+      )}
 
       <main className="flex flex-1 flex-col">
         <div className="m-auto w-full max-w-2xl px-5 py-6 sm:px-6 sm:py-10">
@@ -713,7 +741,7 @@ function hintFor(step: ApplicationStep): string | null {
     case "supplies":
       return "Contractors bring their own supplies. You have to be willing to get whatever you don’t already own.";
     case "state":
-      return "We hire in Maryland, Virginia, DC, and New York.";
+      return "We hire in Maryland, Virginia, DC, New York, California, and Texas.";
     default:
       return null;
   }

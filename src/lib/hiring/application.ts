@@ -54,6 +54,8 @@ export const APPLICANT_STATES = [
   { value: "Virginia", label: "Virginia" },
   { value: "DC", label: "Washington, DC" },
   { value: "New York", label: "New York" },
+  { value: "California", label: "California" },
+  { value: "Texas", label: "Texas" },
 ] as const;
 
 export const EXPERIENCE_OPTIONS = [

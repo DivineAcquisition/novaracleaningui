@@ -28,6 +28,7 @@ import {
   type HiringApplicationDraft,
   type NormalizedHiringApplication,
 } from "@/lib/hiring/application";
+import { isHiringToken } from "@/lib/hiring/session";
 import { formatRosterDate, isReapplyBlocked } from "@/lib/pulse-check/roster";
 
 export const runtime = "nodejs";
@@ -332,6 +333,37 @@ export async function POST(req: Request): Promise<NextResponse> {
 
     if (existing?.government_id_path && existing.government_id_path !== path) {
       await supabase.storage.from(APPLICANT_ID_BUCKET).remove([existing.government_id_path]);
+    }
+
+    const sessionToken = str(form, "sessionToken");
+    if (isHiringToken(sessionToken)) {
+      const { data: sess } = await supabase
+        .from("hiring_application_sessions")
+        .select("source, job_title")
+        .eq("token", sessionToken)
+        .maybeSingle();
+      if (sess?.source === "indeed" && applicantId) {
+        await supabase
+          .from("cleaner_applicants")
+          .update({
+            submission: {
+              ...fields.submission,
+              source: "indeed",
+              indeedJob: sess.job_title,
+            },
+          })
+          .eq("id", applicantId);
+      }
+      await supabase
+        .from("hiring_application_sessions")
+        .update({
+          status: "submitted",
+          submitted_at: new Date().toISOString(),
+          applicant_id: applicantId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("token", sessionToken)
+        .eq("status", "open");
     }
 
     return NextResponse.json({ ok: true, applicantId, updated: Boolean(existing) });
