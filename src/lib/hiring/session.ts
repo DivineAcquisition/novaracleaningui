@@ -6,7 +6,7 @@
 
 import { randomBytes } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { splitPersonName } from "./indeed";
+import { splitPersonName, stateFromIndeedJob } from "./indeed";
 
 export const HIRING_APPLY_ORIGIN = "https://hiring.novaracleaning.com";
 export const SESSION_TTL_DAYS = 30;
@@ -124,6 +124,8 @@ export function toPublicSession(row: HiringSessionRow): PublicHiringSession {
   const fromName = splitPersonName(row.full_name || "");
   const answers = sanitizeAnswers(row.answers);
   const status: HiringSessionStatus = row.status === "submitted" ? "submitted" : "open";
+  const state =
+    answers.state || (row.source === "indeed" ? stateFromIndeedJob(row.job_title) || "" : "");
   return {
     token: row.token,
     email: row.email,
@@ -139,6 +141,7 @@ export function toPublicSession(row: HiringSessionRow): PublicHiringSession {
       lastName: answers.lastName || fromName.lastName,
       email: answers.email || row.email,
       phone: answers.phone || row.phone || "",
+      ...(state ? { state } : {}),
     },
     stepIndex: Math.max(0, Number(row.step_index) || 0),
     status,

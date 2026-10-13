@@ -14,7 +14,7 @@ import {
   visibleSteps,
   type HiringApplicationDraft,
 } from "../src/lib/hiring/application";
-import { parseIndeedApplicant, splitPersonName } from "../src/lib/hiring/indeed";
+import { parseIndeedApplicant, splitPersonName, stateFromIndeedJob } from "../src/lib/hiring/indeed";
 import { hiringApplyUrl, isHiringToken, sanitizeAnswers } from "../src/lib/hiring/session";
 
 let failures = 0;
@@ -135,6 +135,51 @@ check("indeed message is not an application when the subject is billing", parseI
   threadId: "t",
 }), null);
 check("split name", splitPersonName("María Perez"), { firstName: "María", lastName: "Perez" });
+check(
+  "Baltimore posting is Maryland",
+  stateFromIndeedJob("House Cleaners Needed – Flexible Schedule (DMV), Baltimore, MD"),
+  "Maryland",
+);
+check(
+  "Lanham posting is Maryland",
+  stateFromIndeedJob("House Cleaners Needed – Flexible Schedule (Maryland), Lanham, MD"),
+  "Maryland",
+);
+check(
+  "Hyattsville posting is Maryland",
+  stateFromIndeedJob("House Cleaners Needed – Flexible Schedule (DMV), Hyattsville, MD"),
+  "Maryland",
+);
+check(
+  "Beaver Creek posting is Maryland",
+  stateFromIndeedJob("House Cleaners Needed – Flexible Schedule (DMV), Beaver Creek, MD"),
+  "Maryland",
+);
+check(
+  "DMV posting with no other state is Maryland",
+  stateFromIndeedJob("House Cleaners Needed – Flexible Schedule (DMV)"),
+  "Maryland",
+);
+check(
+  "DMV posting across 3 locations is Maryland",
+  stateFromIndeedJob("House Cleaners Needed – Flexible Schedule (DMV), 3 locations"),
+  "Maryland",
+);
+check(
+  "Arlington posting stays Virginia",
+  stateFromIndeedJob("House Cleaners Needed – Flexible Schedule (DMV), Arlington, VA"),
+  "Virginia",
+);
+check(
+  "Dallas posting stays Texas",
+  stateFromIndeedJob("House Cleaners Needed – Flexible Schedule (Dallas), Dallas, TX"),
+  "Texas",
+);
+check(
+  "Los Angeles posting stays California",
+  stateFromIndeedJob("House Cleaners Needed – Flexible Schedule (LA), Los Angeles, CA"),
+  "California",
+);
 check("session token shape", isHiringToken("a".repeat(48)), true);
 check("apply url uses the hiring host", hiringApplyUrl("abc"), "https://hiring.novaracleaning.com/hiring/apply/abc");
 check("saved answers drop the uploaded file", sanitizeAnswers({ firstName: "Ada", idFile: { name: "x" } }), { firstName: "Ada" });
