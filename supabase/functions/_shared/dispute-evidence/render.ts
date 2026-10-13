@@ -2,6 +2,7 @@
 // packet record. Photos are drawn at or above the minimum size, or dropped.
 
 import { photoDisplaySize, type PacketDoc } from "./build.ts";
+import { NOVARA_LOGO_PNG } from "./logo.ts";
 
 function pdfSafe(value: string): string {
   return String(value ?? "")
@@ -25,6 +26,7 @@ interface PdfFont {
 interface PdfPage {
   drawText(text: string, opts: Record<string, unknown>): void;
   drawLine(opts: Record<string, unknown>): void;
+  drawRectangle?(opts: Record<string, unknown>): void;
   drawImage(image: unknown, opts: Record<string, unknown>): void;
 }
 interface PdfImage {
@@ -79,28 +81,45 @@ export async function renderPacketPdf(lib: PdfLibLike, packet: PacketDoc): Promi
   const bold = await pdf.embedFont(lib.StandardFonts.HelveticaBold);
   const black = lib.rgb(0.08, 0.08, 0.08);
   const gray = lib.rgb(0.35, 0.35, 0.38);
+  const brand = lib.rgb(92 / 255, 15 / 255, 254 / 255);
+  const brandSoft = lib.rgb(143 / 255, 123 / 255, 253 / 255);
+  let logo: PdfImage | null = null;
+  try {
+    logo = await pdf.embedPng(NOVARA_LOGO_PNG);
+  } catch {
+    logo = null;
+  }
   let page = pdf.addPage([PAGE_W, PAGE_H]);
-  let y = PAGE_H - 40;
+  let y = PAGE_H - 56;
   let pages = 1;
 
   const header = () => {
-    const [brand, packetLine, who, record] = identificationStrip(packet, pages);
-    page.drawText(pdfSafe(brand), { x: MARGIN, y, size: 11, font: bold, color: black });
-    y -= 13;
-    page.drawText(pdfSafe(packetLine), { x: MARGIN, y, size: 8, font, color: gray });
-    y -= 11;
+    const [, packetLine, who, record] = identificationStrip(packet, pages);
+    if (page.drawRectangle) {
+      page.drawRectangle({ x: 0, y: PAGE_H - 7, width: PAGE_W, height: 7, color: brand });
+    }
+    const logoSize = 18;
+    const textX = MARGIN + (logo ? logoSize + 8 : 0);
+    y = PAGE_H - 28;
+    if (logo) {
+      page.drawImage(logo, { x: MARGIN, y: y - 4, width: logoSize, height: logoSize });
+    }
+    page.drawText("Novara Cleaning", { x: textX, y: y + 4, size: 11, font: bold, color: brand });
+    y -= 14;
+    page.drawText(pdfSafe(packetLine), { x: textX, y, size: 8, font, color: brandSoft });
+    y -= 12;
     page.drawText(pdfSafe(who), { x: MARGIN, y, size: 8, font, color: black });
     y -= 11;
     page.drawText(pdfSafe(record), { x: MARGIN, y, size: 8, font, color: black });
     y -= 8;
-    page.drawLine({ start: { x: MARGIN, y }, end: { x: PAGE_W - MARGIN, y }, thickness: 0.6, color: gray });
+    page.drawLine({ start: { x: MARGIN, y }, end: { x: PAGE_W - MARGIN, y }, thickness: 1.25, color: brand });
     y -= 14;
   };
   const next = () => {
     if (pages >= packet.pageCap) return false;
     page = pdf.addPage([PAGE_W, PAGE_H]);
     pages++;
-    y = PAGE_H - 40;
+    y = PAGE_H - 56;
     header();
     return true;
   };
