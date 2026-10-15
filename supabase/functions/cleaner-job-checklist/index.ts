@@ -210,23 +210,42 @@ serve(async (req) => {
     let canWrite = false;
     let assignmentRole = "";
 
-    const { data: assignment } = await supabase
+    const assignmentSelect =
+      "id, job_id, cleaner_id, status, role, pay_percentage_snapshot, cleaners(id, first_name, last_name, pay_percentage)";
+    let assignmentResult = await supabase
       .from("job_assignments")
-      .select("id, job_id, cleaner_id, status, role, pay_percentage_snapshot, cleaners(id, first_name, last_name, pay_percentage)")
+      .select(assignmentSelect)
       .eq("response_token", token)
       .maybeSingle();
+    if (assignmentResult.error) {
+      console.error("[cleaner-job-checklist] assignment lookup", assignmentResult.error.message);
+      assignmentResult = await supabase
+        .from("job_assignments")
+        .select("id, job_id, cleaner_id, status, role, pay_percentage_snapshot")
+        .eq("response_token", token)
+        .maybeSingle();
+    }
+    if (!assignmentResult.data?.job_id) {
+      const byCompletion = await supabase
+        .from("job_assignments")
+        .select("id, job_id, cleaner_id, status, role, pay_percentage_snapshot")
+        .eq("completion_token", token)
+        .maybeSingle();
+      if (byCompletion.data?.job_id) assignmentResult = byCompletion;
+    }
+    const assignment = assignmentResult.data;
 
     if (assignment?.job_id) {
       const s = String(assignment.status || "").toLowerCase();
-      if (!WRITE_STATUSES.includes(s)) {
-        return json({ ok: false, reason: "not_assigned", error: "This job isn't assigned to you (yet). Accept the offer first." }, 403);
-      }
+      // Opening the page is a read. A withdrawn, offered, or reassignment
+      // status used to 403 the whole request, so the checklist never loaded.
+      // Writes stay blocked until the assignment is actually accepted.
       jobId = assignment.job_id;
       const c = Array.isArray(assignment.cleaners) ? assignment.cleaners[0] : assignment.cleaners;
       if (c?.id) cleaner = c;
       assignmentPct = assignment.pay_percentage_snapshot != null ? Number(assignment.pay_percentage_snapshot) : null;
       assignmentRole = String(assignment.role || "");
-      canWrite = true;
+      canWrite = WRITE_STATUSES.includes(s);
     } else {
       const { data: byChecklistToken } = await supabase
         .from("job_checklists")

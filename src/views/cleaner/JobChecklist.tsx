@@ -30,6 +30,7 @@ import {
   RiTimeLine,
 } from "@remixicon/react";
 import { supabase } from "@/integrations/supabase/client";
+import { describeEdgeError } from "@/lib/edge-invoke";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { SEO } from "@/components/SEO";
@@ -248,9 +249,8 @@ export default function CleanerJobChecklistPage() {
       const { data, error: invokeError } = await supabase.functions.invoke("cleaner-job-checklist", {
         body: { token, ...body },
       });
-      if (invokeError) throw invokeError;
-      if ((data as { ok?: boolean; error?: string })?.ok === false) {
-        throw new Error((data as { error?: string })?.error || "Request failed");
+      if (invokeError || (data as { ok?: boolean })?.ok === false) {
+        throw new Error(await describeEdgeError(invokeError, data));
       }
       return data as ChecklistState;
     },
