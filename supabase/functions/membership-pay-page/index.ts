@@ -52,6 +52,21 @@ const PLAN_LABELS: Record<string, string> = {
   monthly: "Glow Monthly",
 };
 
+// Dollars per month, same catalog as supabase/functions/_shared/pricing.ts.
+const MEMBERSHIP_DOLLARS: Record<string, { monthly: number; biweekly: number; weekly: number }> = {
+  "0_999": { monthly: 129, biweekly: 199, weekly: 349 },
+  "1000_1500": { monthly: 159, biweekly: 249, weekly: 449 },
+  "1501_2000": { monthly: 199, biweekly: 319, weekly: 569 },
+  "2001_2500": { monthly: 229, biweekly: 369, weekly: 659 },
+  "2501_3000": { monthly: 279, biweekly: 449, weekly: 799 },
+  "3001_3500": { monthly: 319, biweekly: 499, weekly: 899 },
+  "3501_4000": { monthly: 369, biweekly: 579, weekly: 1039 },
+  "4001_4500": { monthly: 409, biweekly: 649, weekly: 1159 },
+  "4501_5000": { monthly: 459, biweekly: 719, weekly: 1279 },
+};
+
+const CADENCE_ORDER = ["weekly", "biweekly", "monthly"] as const;
+
 // deno-lint-ignore no-explicit-any
 async function loadSchedule(supabase: any, token: string): Promise<Row | null> {
   if (!token || token.length < 16) return null;
@@ -61,6 +76,25 @@ async function loadSchedule(supabase: any, token: string): Promise<Row | null> {
     .eq("pay_token", token)
     .maybeSingle();
   return data || null;
+}
+
+function planOptions(s: Row) {
+  const catalog = MEMBERSHIP_DOLLARS[String(s.home_size_id || "")];
+  const current = String(s.membership_plan || s.cadence || "monthly");
+  if (!catalog) {
+    return [{
+      cadence: current,
+      label: PLAN_LABELS[current] || "Recurring membership",
+      cents: Number(s.price_cents) || 0,
+      selected: true,
+    }];
+  }
+  return CADENCE_ORDER.map((cadence) => ({
+    cadence,
+    label: PLAN_LABELS[cadence],
+    cents: catalog[cadence] * 100,
+    selected: cadence === current,
+  }));
 }
 
 function summarize(s: Row) {
@@ -81,9 +115,56 @@ function summarize(s: Row) {
     state: s.state || "",
     agreementSigned: signed,
     active: s.active !== false,
+    plans: planOptions(s),
     // The pay link is the whole point of the gate — never leak it pre-signature.
     payUrl: signed ? (s.pay_url || null) : null,
   };
+}
+
+async function ensurePayUrl(supabase: any, schedule: Row): Promise<string | null> {
+  if (schedule.pay_url) return String(schedule.pay_url);
+  const plan = String(schedule.membership_plan || schedule.cadence || "monthly");
+  const base = Deno.env.get("SUPABASE_URL") ?? "";
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  if (!base || !key || !schedule.home_size_id) return null;
+  const res = await fetch(`${base}/functions/v1/create-checkout`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${key}`,
+      apikey: key,
+      "Content-Type": "application/json",
+      Origin: "https://try.novaracleaning.com",
+    },
+    body: JSON.stringify({
+      mode: "subscription",
+      membershipPlan: plan,
+      homeSizeId: schedule.home_size_id,
+      email: schedule.email,
+      firstName: schedule.first_name,
+      lastName: schedule.last_name,
+      phone: schedule.phone,
+      address: schedule.address,
+      city: schedule.city,
+      state: schedule.state,
+      zipCode: schedule.zip_code,
+      firstTimeSlot: schedule.preferred_time_slot,
+      notifyCustomer: false,
+      sendChecklistEmail: false,
+      priceOverride: Number(schedule.price_cents) > 0 ? { total: Number(schedule.price_cents) } : undefined,
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  const url = String((data as Row)?.url || "");
+  if (!res.ok || !url) {
+    log("checkout create failed", { status: res.status, error: (data as Row)?.error || null });
+    return null;
+  }
+  await supabase
+    .from("customer_recurring_schedules")
+    .update({ pay_url: url, updated_at: new Date().toISOString() })
+    .eq("id", schedule.id);
+  schedule.pay_url = url;
+  return url;
 }
 
 serve(async (req) => {
@@ -103,10 +184,38 @@ serve(async (req) => {
 
     const schedule = await loadSchedule(supabase, token);
     if (!schedule) return json({ ok: false, error: "not_found" }, 404);
-    if (schedule.active === false) return json({ ok: false, error: "cancelled" }, 410);
 
     // ── get: plan summary + agreement/pay status ────────────────────────
+    // Inactive schedules stay reachable so a cancelled member can pick a
+    // plan and pay to reinstate. The page does not turn the schedule back
+    // on; payment does.
     if (action === "get") {
+      return json({ ok: true, membership: summarize(schedule) });
+    }
+
+    if (action === "set_plan") {
+      const cadence = String((body as Row)?.cadence || "").toLowerCase();
+      if (!CADENCE_ORDER.includes(cadence as (typeof CADENCE_ORDER)[number])) {
+        return json({ ok: false, error: "invalid_plan" }, 400);
+      }
+      const catalog = MEMBERSHIP_DOLLARS[String(schedule.home_size_id || "")];
+      const cents = catalog ? catalog[cadence as keyof typeof catalog] * 100 : Number(schedule.price_cents) || 0;
+      const nowIso = new Date().toISOString();
+      const { error } = await supabase
+        .from("customer_recurring_schedules")
+        .update({
+          cadence,
+          membership_plan: cadence,
+          price_cents: cents,
+          pay_url: null,
+          updated_at: nowIso,
+        })
+        .eq("id", schedule.id);
+      if (error) return json({ ok: false, error: "plan_update_failed" }, 500);
+      schedule.cadence = cadence;
+      schedule.membership_plan = cadence;
+      schedule.price_cents = cents;
+      schedule.pay_url = null;
       return json({ ok: true, membership: summarize(schedule) });
     }
 
@@ -160,7 +269,8 @@ serve(async (req) => {
         data: { schedule_id: schedule.id, email: schedule.email, agreement_id: (res as Row)?.id || null },
       }).then(() => undefined, () => undefined);
 
-      return json({ ok: true, signed: true, payUrl: schedule.pay_url || null });
+      const payUrl = await ensurePayUrl(supabase, schedule);
+      return json({ ok: true, signed: true, payUrl });
     }
 
     return json({ ok: false, error: "unknown_action" }, 400);
