@@ -28,16 +28,18 @@ function decode(value: string): string {
 /**
  * State named on the Indeed job in the application email.
  * Maryland cities and DMV postings with no other state are Maryland.
- * A city the email places in Virginia, Texas, or California keeps that state.
+ * A city the email places in Virginia stays Virginia.
+ * Texas and California are not service states, so those postings do not prefill.
  */
 export function stateFromIndeedJob(jobTitle: string | null | undefined): ApplicantState | null {
   const title = String(jobTitle || "");
   if (!title.trim()) return null;
+  if (/,\s*TX\b|\(Dallas\)|\(Texas\)/i.test(title)) return null;
+  if (/,\s*CA\b|\(LA\)|\(California\)|Los Angeles/i.test(title)) return null;
   if (/,\s*MD\b|\(Maryland\)/i.test(title)) return "Maryland";
   if (/,\s*VA\b|\(Virginia\)/i.test(title)) return "Virginia";
-  if (/,\s*TX\b|\(Dallas\)|\(Texas\)/i.test(title)) return "Texas";
-  if (/,\s*CA\b|\(LA\)|\(California\)|Los Angeles/i.test(title)) return "California";
   if (/,\s*DC\b|\(Washington,\s*DC\)/i.test(title)) return "DC";
+  if (/,\s*NY\b|\(New York\)/i.test(title)) return "New York";
   if (/\(DMV\)|\bDMV\b/i.test(title)) return "Maryland";
   return null;
 }

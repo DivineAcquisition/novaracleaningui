@@ -51,13 +51,12 @@ export const CONTRACTOR_TYPES = [
   { value: "Company", label: "A company", hint: "I have a crew or a business" },
 ] as const;
 
+/** States Novara currently hires in. Texas and California are not on this list. */
 export const APPLICANT_STATES = [
   { value: "Maryland", label: "Maryland" },
   { value: "Virginia", label: "Virginia" },
   { value: "DC", label: "Washington, DC" },
   { value: "New York", label: "New York" },
-  { value: "California", label: "California" },
-  { value: "Texas", label: "Texas" },
 ] as const;
 
 export const EXPERIENCE_OPTIONS = [
@@ -147,6 +146,7 @@ export interface HiringApplicationDraft {
   email: string;
   phone: string;
   address: string;
+  city: string;
   zipCode: string;
   state: string;
   contractorType: string;
@@ -252,9 +252,13 @@ const APPLICANT_STATE_BY_POSTAL: Record<string, ApplicantState> = {
   VA: "Virginia",
   DC: "DC",
   NY: "New York",
-  CA: "California",
-  TX: "Texas",
 };
+
+/** Short line for a saved application. Never the Indeed job title. */
+export function savedApplicationNote(firstName: string | null | undefined): string {
+  const name = (firstName || "").trim() || "you";
+  return `Saved for ${name} · Field Cleaner, residential homes in the DMV. You can close this and come back.`;
+}
 
 /** Map a Google Places state ("MD" or "Maryland") onto an Airtable applicant state. */
 export function applicantStateFromAddress(raw: string | null | undefined): ApplicantState | "" {
@@ -390,13 +394,16 @@ export function issuesForStep(step: ApplicationStep, draft: HiringApplicationDra
       return null;
     case "address": {
       const address = oneLine(draft.address);
-      if (address.length < 5) return issue(400, "missing_address", "Enter your street address.");
+      const city = oneLine(draft.city || "");
+      if (address.length < 5) return issue(400, "missing_address", "Search for your address so we can fill this in.");
       if (address.length > 200) return issue(400, "missing_address", "Keep the address under 200 characters.");
+      if (city.length < 2) return issue(400, "missing_city", "Enter your city.");
+      if (city.length > 80) return issue(400, "missing_city", "Keep the city under 80 characters.");
       if (!/^\d{5}$/.test(draft.zipCode.trim())) {
         return issue(400, "invalid_zip", "Enter a 5-digit ZIP code.");
       }
       if (!includesValue(APPLICANT_STATES, draft.state)) {
-        return issue(400, "invalid_state", "Choose the state you live in.");
+        return issue(400, "invalid_state", "Choose Maryland, Virginia, DC, or New York.");
       }
       return null;
     }
@@ -525,6 +532,9 @@ export function validateHiringApplication(draft: HiringApplicationDraft): Applic
 
   const firstName = oneLine(draft.firstName);
   const lastName = oneLine(draft.lastName);
+  const street = oneLine(draft.address);
+  const city = oneLine(draft.city || "");
+  const address = city && !street.toLowerCase().includes(city.toLowerCase()) ? `${street}, ${city}` : street;
   const supplies = multiLine(draft.suppliesOnHand);
   const contentType = idContentType(draft.idFile!.name, draft.idFile!.type)!;
 
@@ -536,7 +546,7 @@ export function validateHiringApplication(draft: HiringApplicationDraft): Applic
       lastName,
       email: draft.email.trim().toLowerCase(),
       phone: toE164Us(draft.phone)!,
-      address: oneLine(draft.address),
+      address,
       zipCode: draft.zipCode.trim(),
       state: draft.state as ApplicantState,
       role: draft.role as ApplicantRole,

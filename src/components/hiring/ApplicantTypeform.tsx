@@ -34,6 +34,7 @@ import {
   isOpenApplicantRole,
   issuesForStep,
   presetRoleForHiringPage,
+  savedApplicationNote,
   validateHiringApplication,
   roleLabel,
   visibleSteps,
@@ -45,8 +46,17 @@ import { useAddressAutocomplete } from "@/hooks/use-address-autocomplete";
 import type { AddressSuggestion } from "@/lib/google-places-loader";
 import { formatPhoneNumber } from "@/lib/input-formatters";
 import { HIRING_GRADIENT } from "@/components/hiring/HiringChrome";
+import { MagicCard } from "@/components/magicui/magic-card";
+import { ShimmerButton } from "@/components/magicui/shimmer-button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { SUPPLY_CATEGORY_LABEL, SUPPLY_ITEMS, type SupplyCategory } from "@/lib/cleaner-supplies";
 import type { PublicHiringSession } from "@/lib/hiring/session";
 import { cn } from "@/lib/utils";
+
+const PAGE_TITLE =
+  "font-heading text-[1.65rem] font-semibold leading-snug tracking-tight text-slate-900 outline-none focus-visible:!ring-0 focus-visible:!ring-offset-0 sm:text-[1.85rem]";
+
+const SUPPLY_GROUPS: SupplyCategory[] = ["solutions", "tools", "safety", "optional", "commercial_equipment"];
 
 const LOGO = "/novara-logo.png";
 
@@ -57,8 +67,10 @@ type Answers = {
   email: string;
   phone: string;
   address: string;
+  city: string;
   zipCode: string;
   state: string;
+  suppliesOwned: string[];
   contractorType: string;
   transportation: string;
   authorizedToWork: string;
@@ -104,8 +116,10 @@ function blankAnswers(hiringRole: string | null, session?: PublicHiringSession |
     email: emailForForm(saved.email, session?.email),
     phone: saved.phone || session?.phone || "",
     address: saved.address || "",
+    city: saved.city || "",
     zipCode: saved.zipCode || "",
     state: saved.state || "",
+    suppliesOwned: saved.suppliesOwned || [],
     contractorType: saved.contractorType || "",
     transportation: saved.transportation || "",
     authorizedToWork: saved.authorizedToWork || "",
@@ -218,6 +232,7 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
       body.set("email", answers.email);
       body.set("phone", answers.phone);
       body.set("address", answers.address);
+      body.set("city", answers.city);
       body.set("zipCode", answers.zipCode);
       body.set("state", answers.state);
       body.set("contractorType", answers.contractorType);
@@ -296,7 +311,7 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
         <p className="mx-auto w-full max-w-2xl px-5 text-sm text-slate-500 sm:px-6">
           {session.preview
             ? "Preview link. Answers on this link are saved as you go."
-            : `Saved for ${session.firstName || "you"}${session.jobTitle ? ` · ${session.jobTitle}` : ""}. You can close this and come back.`}
+            : savedApplicationNote(session.firstName)}
         </p>
       )}
 
@@ -357,7 +372,7 @@ function Success({ name }: { name: string }) {
   return (
     <div className="nv-q py-10 text-center">
       <RiCheckboxCircleFill className="mx-auto h-14 w-14 text-emerald-500" />
-      <h1 className="mt-5 font-heading text-4xl font-extrabold tracking-tight text-slate-900 sm:text-5xl">
+      <h1 className="mt-5 font-heading text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
         Application received{name ? `, ${name}` : ""}
       </h1>
       <p className="mx-auto mt-4 max-w-md text-base leading-relaxed text-slate-600">
@@ -380,7 +395,7 @@ function GateScreen({ code, onBack }: { code: string; onBack: () => void }) {
   return (
     <div className="nv-q py-8">
       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-700">Not a match yet</p>
-      <h1 className="mt-3 font-heading text-4xl font-extrabold tracking-tight text-slate-900 sm:text-5xl">
+      <h1 className="mt-3 font-heading text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
         {copy.title}
       </h1>
       <p className="mt-4 max-w-lg text-base leading-relaxed text-slate-600">{copy.body}</p>
@@ -429,7 +444,7 @@ function Question({
     return (
       <div>
         <Kicker n={n} />
-        <h1 ref={headingRef} tabIndex={-1} className="font-heading text-4xl font-extrabold tracking-tight outline-none focus-visible:!ring-0 focus-visible:!ring-offset-0 sm:text-5xl">
+        <h1 ref={headingRef} tabIndex={-1} className={PAGE_TITLE}>
           Look over your application
         </h1>
         <p className="mt-3 text-base text-slate-500">Change anything before you send it.</p>
@@ -440,7 +455,7 @@ function Question({
           <ReviewRow label="Phone" value={answers.phone} onEdit={() => onEdit("phone")} />
           <ReviewRow
             label="Address"
-            value={[answers.address, [answers.zipCode, answers.state].filter(Boolean).join(" ")].filter(Boolean).join(", ")}
+            value={[answers.address, answers.city, answers.zipCode, answers.state].filter(Boolean).join(", ")}
             onEdit={() => onEdit("address")}
           />
           <ReviewRow label="Applying as" value={answers.contractorType === "Individual" ? "Just me" : answers.contractorType} onEdit={() => onEdit("contractorType")} />
@@ -502,31 +517,47 @@ function Question({
 
   if (step === "address") {
     return (
-      <TextStep n={n} title="Where do you live?" hint="Search for your street. ZIP and state fill in from the result, and you can correct them here." error={error} headingRef={headingRef} onOk={onAdvance}>
-        <div className="space-y-5">
+      <TextStep n={n} title="Where do you live?" hint="Search once. City, ZIP, and state fill in. We hire in Maryland, Virginia, DC, and New York." error={error} headingRef={headingRef} onOk={onAdvance}>
+        <div className="space-y-4">
           <AddressSearchField
-            value={answers.address}
-            onChange={(address) => onPatch({ address })}
             onResolved={(partial) => onPatch(partial)}
-            onEnter={onAdvance}
           />
+          {answers.address && (
+            <p className="text-sm text-slate-600">
+              Found · <span className="font-medium text-slate-900">{answers.address}</span>
+            </p>
+          )}
           <Field
-            label="ZIP code"
-            autoComplete="postal-code"
-            inputMode="numeric"
-            placeholder="21213"
-            value={answers.zipCode}
-            onChange={(v) => onPatch({ zipCode: v.replace(/\D/g, "").slice(0, 5) })}
+            label="City"
+            autoComplete="address-level2"
+            placeholder="Baltimore"
+            value={answers.city}
+            onChange={(v) => onPatch({ city: v })}
             onEnter={onAdvance}
           />
-          <div>
-            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">State</p>
-            <ChoiceList
-              compact
-              choices={APPLICANT_STATES.map((s) => ({ value: s.value, label: s.label }))}
-              selected={answers.state}
-              onPick={(value) => onPatch({ state: value })}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field
+              label="ZIP code"
+              autoComplete="postal-code"
+              inputMode="numeric"
+              placeholder="21213"
+              value={answers.zipCode}
+              onChange={(v) => onPatch({ zipCode: v.replace(/\D/g, "").slice(0, 5) })}
+              onEnter={onAdvance}
             />
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">State</span>
+              <select
+                value={answers.state}
+                onChange={(e) => onPatch({ state: e.target.value })}
+                className="h-12 w-full rounded-xl border border-slate-200 bg-white px-3 text-base text-slate-900 outline-none transition focus:border-[#5C0FFE] focus:ring-4 focus:ring-[#5C0FFE]/10"
+              >
+                <option value="">Select a state</option>
+                {APPLICANT_STATES.map((s) => (
+                  <option key={s.value} value={s.value}>{s.label}</option>
+                ))}
+              </select>
+            </label>
           </div>
         </div>
       </TextStep>
@@ -537,14 +568,16 @@ function Question({
     return (
       <TextStep
         n={n}
-        title="What supplies do you currently have?"
-        hint="List what you already own. If you’re starting from scratch, write “none yet.”"
+        title="Which supplies do you already have?"
+        hint="Same checklist we use in onboarding. Check what you own. Leave the rest — you’ll get those before your first job."
         error={error}
         headingRef={headingRef}
-        onOk={onAdvance}
+        onOk={() => onPatch({ suppliesOnHand: supplySummary(answers.suppliesOwned) }, true)}
       >
-        <Area value={answers.suppliesOnHand} placeholder="Vacuum, all-purpose cleaner, microfiber cloths…" onChange={(v) => onPatch({ suppliesOnHand: v })} />
-        <ChecklistLink />
+        <SupplyPicker
+          owned={answers.suppliesOwned}
+          onChange={(suppliesOwned) => onPatch({ suppliesOwned, suppliesOnHand: supplySummary(suppliesOwned) })}
+        />
       </TextStep>
     );
   }
@@ -582,7 +615,7 @@ function Question({
     return (
       <div>
         <Kicker n={n} />
-        <h1 ref={headingRef} tabIndex={-1} className="font-heading text-4xl font-extrabold tracking-tight outline-none focus-visible:!ring-0 focus-visible:!ring-offset-0 sm:text-5xl">
+        <h1 ref={headingRef} tabIndex={-1} className={PAGE_TITLE}>
           Which days can you work?
         </h1>
         <p className="mt-3 text-base text-slate-500">Pick every day that’s usually open. You can change this later.</p>
@@ -625,8 +658,8 @@ function Question({
     const spec = {
       consent1099: {
         title: "This is a 1099 contractor role",
-        body: "You’re not a W-2 employee. Taxes aren’t withheld, and you handle your own at tax time. Pay is for completed jobs.",
-        label: "I understand this is a 1099 contractor role, not employment.",
+        body: "You work with Novara as an independent contractor, not as a W-2 employee. Novara does not withhold taxes, and you are not on payroll or benefits. You accept jobs, bring your own supplies, and get paid for completed work. At tax time you file your own return. If your pay for the year meets the IRS threshold, we file a 1099-NEC that reports what we paid you — you use that form when you file.",
+        label: "I understand this is 1099 contractor work, not employment, and that I handle my own taxes.",
         checked: answers.consent1099,
         key: "consent1099" as const,
       },
@@ -639,8 +672,8 @@ function Question({
       },
       consentPay: {
         title: "Are you comfortable with how pay works?",
-        body: "Pay is a percentage of each job’s value, based on your tier, paid weekly. It starts at 35% and can rise to 45%. Travel time isn’t paid.",
-        label: "I’m comfortable with revenue-share pay.",
+        body: "Everyone starts between 40% and 45% of the job’s value. Pay is weekly, for completed jobs. Travel time is not paid.",
+        label: "I’m comfortable starting at 40–45% of each job.",
         checked: answers.payConsent,
         key: "payConsent" as const,
       },
@@ -648,10 +681,11 @@ function Question({
     return (
       <div>
         <Kicker n={n} />
-        <h1 ref={headingRef} tabIndex={-1} className="font-heading text-4xl font-extrabold tracking-tight outline-none focus-visible:!ring-0 focus-visible:!ring-offset-0 sm:text-5xl">
+        <h1 ref={headingRef} tabIndex={-1} className={PAGE_TITLE}>
           {spec.title}
         </h1>
         <p className="mt-3 max-w-xl text-base leading-relaxed text-slate-500">{spec.body}</p>
+        {step === "consentPay" && <PayExample />}
         <label className="mt-8 flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-base text-slate-800 shadow-sm">
           <input
             type="checkbox"
@@ -689,7 +723,7 @@ function Question({
   return (
     <div>
       <Kicker n={n} />
-      <h1 ref={headingRef} tabIndex={-1} className="font-heading text-4xl font-extrabold tracking-tight outline-none focus-visible:!ring-0 focus-visible:!ring-offset-0 sm:text-5xl">
+      <h1 ref={headingRef} tabIndex={-1} className={PAGE_TITLE}>
         {titleFor(step)}
       </h1>
       {(hintFor(step) || intent) && (
@@ -780,7 +814,7 @@ function hintFor(step: ApplicationStep): string | null {
     case "role":
       return "Field Cleaner is open now. The other roles are opening soon.";
     case "state":
-      return "We hire in Maryland, Virginia, DC, New York, California, and Texas.";
+      return "We hire in Maryland, Virginia, DC, and New York.";
     default:
       return null;
   }
@@ -946,7 +980,7 @@ function IdStep({
   return (
     <div>
       <Kicker n={n} />
-      <h1 ref={headingRef} tabIndex={-1} className="font-heading text-4xl font-extrabold tracking-tight outline-none focus-visible:!ring-0 focus-visible:!ring-offset-0 sm:text-5xl">
+      <h1 ref={headingRef} tabIndex={-1} className={PAGE_TITLE}>
         Upload a valid government-issued photo ID
       </h1>
       <p className="mt-3 max-w-xl text-base leading-relaxed text-slate-500">
@@ -1021,7 +1055,7 @@ function TextStep({
   return (
     <div>
       <Kicker n={n} />
-      <h1 ref={headingRef} tabIndex={-1} className="font-heading text-4xl font-extrabold tracking-tight outline-none focus-visible:!ring-0 focus-visible:!ring-offset-0 sm:text-5xl">
+      <h1 ref={headingRef} tabIndex={-1} className={PAGE_TITLE}>
         {title}
       </h1>
       {hint && <p className="mt-3 max-w-xl text-base leading-relaxed text-slate-500">{hint}</p>}
@@ -1035,54 +1069,51 @@ function TextStep({
 }
 
 function AddressSearchField({
-  value,
-  onChange,
   onResolved,
-  onEnter,
 }: {
-  value: string;
-  onChange: (value: string) => void;
   onResolved: (partial: Partial<Answers>) => void;
-  onEnter: () => void;
 }) {
   const { suggestions, query, resolve, clear } = useAddressAutocomplete();
   const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
 
   async function pick(suggestion: AddressSuggestion) {
     setOpen(false);
     const parsed = await resolve(suggestion);
     clear();
     if (!parsed) return;
-    const street = parsed.street || parsed.formattedAddress || value;
+    const street = parsed.street || parsed.formattedAddress || text;
     const zipCode = String(parsed.zipCode || "").replace(/\D/g, "").slice(0, 5);
     const state = applicantStateFromAddress(parsed.state);
+    setText("");
     onResolved({
       address: street,
+      ...(parsed.city ? { city: parsed.city } : {}),
       ...(zipCode ? { zipCode } : {}),
-      ...(state ? { state } : {}),
+      ...(state ? { state } : { state: "" }),
     });
   }
 
   return (
     <div className="relative">
       <label className="block">
-        <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">Street address</span>
+        <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">Search your address</span>
         <input
           type="text"
-          value={value}
-          placeholder="Start typing your address"
+          value={text}
+          placeholder="Start typing a street, city, or ZIP"
           autoComplete="off"
           role="combobox"
           aria-expanded={open && suggestions.length > 0}
           aria-autocomplete="list"
           onChange={(e) => {
-            onChange(e.target.value);
+            setText(e.target.value);
             query(e.target.value);
             setOpen(true);
           }}
           onFocus={() => {
-            if (value.trim().length >= 3) {
-              query(value);
+            if (text.trim().length >= 3) {
+              query(text);
               setOpen(true);
             }
           }}
@@ -1094,13 +1125,9 @@ function AddressSearchField({
             }
             if (e.key !== "Enter") return;
             e.preventDefault();
-            if (open && suggestions[0]) {
-              void pick(suggestions[0]);
-              return;
-            }
-            onEnter();
+            if (open && suggestions[0]) void pick(suggestions[0]);
           }}
-          className="h-14 w-full rounded-2xl border border-slate-200 bg-white px-4 text-lg text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-[#5C0FFE] focus:ring-4 focus:ring-[#5C0FFE]/10"
+          className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-base text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-[#5C0FFE] focus:ring-4 focus:ring-[#5C0FFE]/10"
         />
       </label>
       {open && suggestions.length > 0 && (
@@ -1177,22 +1204,102 @@ function Area({
 }
 
 function Kicker({ n }: { n: string }) {
-  return <p className="mb-3 text-sm font-bold tracking-[0.18em] text-[#5C0FFE]">{n}</p>;
+  return (
+    <p className="mb-3 inline-flex rounded-md border border-violet-200 bg-violet-50 px-2 py-0.5 text-[11px] font-semibold tracking-wide text-violet-700">
+      {n}
+    </p>
+  );
+}
+
+function supplySummary(ids: string[]): string {
+  const labels = SUPPLY_ITEMS.filter((item) => ids.includes(item.id)).map((item) => item.label);
+  const text = labels.join(", ");
+  if (!text) return "none yet";
+  return text.length > 2000 ? `${text.slice(0, 1997)}...` : text;
+}
+
+function PayExample() {
+  const rows = [
+    { pct: 40, note: "Where everyone starts" },
+    { pct: 45, note: "The top of the starting range" },
+  ];
+  return (
+    <MagicCard className="mt-5 overflow-hidden rounded-2xl border border-violet-200 bg-white">
+      <div className="relative z-[2] p-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">Example · a $100 job</p>
+        <div className="mt-3 space-y-3">
+          {rows.map((row) => (
+            <div key={row.pct}>
+              <div className="flex items-baseline justify-between text-sm">
+                <span className="font-medium text-slate-800">{row.pct}% · ${row.pct}</span>
+                <span className="text-xs text-slate-500">{row.note}</span>
+              </div>
+              <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-violet-100">
+                <div className="h-full rounded-full" style={{ width: `${row.pct}%`, background: HIRING_GRADIENT }} />
+              </div>
+            </div>
+          ))}
+        </div>
+        <p className="mt-3 text-xs leading-relaxed text-slate-500">You keep that share of the job. Drive time between homes is not added on top.</p>
+      </div>
+    </MagicCard>
+  );
+}
+
+function SupplyPicker({ owned, onChange }: { owned: string[]; onChange: (ids: string[]) => void }) {
+  const selected = new Set(owned);
+  return (
+    <div className="max-h-[28rem] space-y-4 overflow-y-auto pr-1">
+      {SUPPLY_GROUPS.map((category) => {
+        const rows = SUPPLY_ITEMS.filter((item) => item.category === category);
+        if (!rows.length) return null;
+        return (
+          <div key={category}>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{SUPPLY_CATEGORY_LABEL[category]}</p>
+            <ul className="mt-2 space-y-1.5">
+              {rows.map((item) => {
+                const on = selected.has(item.id);
+                return (
+                  <li key={item.id}>
+                    <button
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => {
+                        const next = new Set(selected);
+                        if (on) next.delete(item.id);
+                        else next.add(item.id);
+                        onChange([...next]);
+                      }}
+                      className={cn("flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-left text-sm", on ? "border-violet-400 bg-violet-50" : "border-slate-200 bg-white hover:border-violet-200")}
+                    >
+                      <Checkbox checked={on} className="pointer-events-none" tabIndex={-1} />
+                      <span className="text-slate-800">{item.label}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function OkButton({ onClick, label = "OK", busy = false }: { onClick: () => void; label?: string; busy?: boolean }) {
   return (
-    <button
+    <ShimmerButton
       type="button"
       onClick={onClick}
       disabled={busy}
-      className="inline-flex h-12 items-center gap-2 rounded-xl px-5 text-sm font-semibold text-white shadow-[0_12px_28px_-14px_rgba(92,15,254,0.85)] transition hover:opacity-95 disabled:opacity-60"
-      style={{ background: HIRING_GRADIENT }}
+      background="#5C0FFE"
+      borderRadius="0.75rem"
+      className="h-11 px-5 text-sm font-semibold disabled:opacity-60"
     >
       {busy && <RiLoader4Line className="h-4 w-4 animate-spin" />}
       {label}
       {!busy && <span className="text-white/70">↵</span>}
-    </button>
+    </ShimmerButton>
   );
 }
 

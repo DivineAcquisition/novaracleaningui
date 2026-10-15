@@ -95,6 +95,7 @@ function draftFromForm(form: FormData, file: File | null): HiringApplicationDraf
     email: str(form, "email"),
     phone: str(form, "phone"),
     address: str(form, "address"),
+    city: str(form, "city"),
     zipCode: str(form, "zipCode"),
     state: str(form, "state"),
     contractorType: str(form, "contractorType"),

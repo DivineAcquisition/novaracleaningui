@@ -20,8 +20,10 @@ export interface HiringSessionAnswers {
   email?: string;
   phone?: string;
   address?: string;
+  city?: string;
   zipCode?: string;
   state?: string;
+  suppliesOwned?: string[];
   contractorType?: string;
   transportation?: string;
   authorizedToWork?: string;
@@ -100,6 +102,7 @@ export function sanitizeAnswers(input: unknown): HiringSessionAnswers {
   text("email", 200);
   text("phone", 40);
   text("address", 200);
+  text("city", 80);
   text("zipCode", 10);
   text("state", 40);
   text("contractorType", 40);
@@ -113,6 +116,9 @@ export function sanitizeAnswers(input: unknown): HiringSessionAnswers {
   text("reasonNote", 1000);
   if (Array.isArray(raw.preferredDays)) {
     out.preferredDays = raw.preferredDays.map((d) => String(d)).slice(0, 7);
+  }
+  if (Array.isArray(raw.suppliesOwned)) {
+    out.suppliesOwned = raw.suppliesOwned.map((id) => String(id)).filter(Boolean).slice(0, 80);
   }
   for (const key of ["consent1099", "backgroundCheckConsent", "payConsent", "idConfirmed"] as const) {
     if (typeof raw[key] === "boolean") out[key] = raw[key];

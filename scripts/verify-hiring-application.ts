@@ -12,6 +12,7 @@ import {
   TRANSPORTATION_NONE,
   applicantStateFromAddress,
   issuesForStep,
+  savedApplicationNote,
   presetRoleForHiringPage,
   validateHiringApplication,
   visibleSteps,
@@ -41,6 +42,7 @@ function draft(overrides: Partial<HiringApplicationDraft> = {}): HiringApplicati
     email: "jordan@example.com",
     phone: "(301) 555-0123",
     address: "2805 Mayfield Ave",
+    city: "Baltimore",
     zipCode: "21213",
     state: "Maryland",
     contractorType: "Individual",
@@ -118,11 +120,25 @@ check(
   "suppliesOnHand",
 );
 check("car step rejects no vehicle before the ID", issuesForStep("car", draft({ transportation: TRANSPORTATION_NONE }))?.code, "no_car");
-check("California is an allowed state", codeOf({ state: "California" }), "ok");
+check("California is not a service state", codeOf({ state: "California" }), "invalid_state");
+check("Texas is not a service state", codeOf({ state: "Texas" }), "invalid_state");
+check("address step asks for the city", issuesForStep("address", draft({ city: "" }))?.code, "missing_city");
+check(
+  "saved note uses the role, not the Indeed title",
+  savedApplicationNote("Farryl").includes("House Cleaners"),
+  false,
+);
+check(
+  "saved note names the role",
+  savedApplicationNote("Farryl"),
+  "Saved for Farryl · Field Cleaner, residential homes in the DMV. You can close this and come back.",
+);
 check("hiring pages open Field Cleaner only", presetRoleForHiringPage("specialized-contractors"), OPEN_APPLICANT_ROLE);
 check("Google state MD prefills Maryland", applicantStateFromAddress("MD"), "Maryland");
 check("Google state name prefills Virginia", applicantStateFromAddress("Virginia"), "Virginia");
 check("Google state DC prefills DC", applicantStateFromAddress("DC"), "DC");
+check("Google state California does not prefill", applicantStateFromAddress("CA"), "");
+check("Google state Texas does not prefill", applicantStateFromAddress("TX"), "");
 check("a state we do not hire stays blank", applicantStateFromAddress("OH"), "");
 check("address step asks for the ZIP on the same page", issuesForStep("address", draft({ zipCode: "" }))?.code, "invalid_zip");
 check("address step asks for the state on the same page", issuesForStep("address", draft({ state: "" }))?.code, "invalid_state");
@@ -203,14 +219,14 @@ check(
   "Virginia",
 );
 check(
-  "Dallas posting stays Texas",
+  "Dallas posting does not prefill a state",
   stateFromIndeedJob("House Cleaners Needed – Flexible Schedule (Dallas), Dallas, TX"),
-  "Texas",
+  null,
 );
 check(
-  "Los Angeles posting stays California",
+  "Los Angeles posting does not prefill a state",
   stateFromIndeedJob("House Cleaners Needed – Flexible Schedule (LA), Los Angeles, CA"),
-  "California",
+  null,
 );
 check("session token shape", isHiringToken("a".repeat(48)), true);
 check("apply url uses the hiring host", hiringApplyUrl("abc"), "https://hiring.novaracleaning.com/hiring/apply/abc");
