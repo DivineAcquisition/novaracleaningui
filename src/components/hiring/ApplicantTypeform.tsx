@@ -309,7 +309,7 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
     >
       <SEO
         title="Apply"
-        description="Apply to clean with Novara. One question at a time — a car, a valid photo ID, and a willingness to get supplies are required."
+        description="Apply to clean with Novara. One question at a time. You need to be 18 or older, with an insured car, a valid driver’s license, and a photo ID."
         canonical="https://hiring.novaracleaning.com/hiring/apply"
       />
       <style>{`
