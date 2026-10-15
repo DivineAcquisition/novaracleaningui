@@ -15,16 +15,32 @@ import {
 } from "@remixicon/react";
 import { SEO } from "@/components/SEO";
 import {
+  AGE_18_COPY,
   APPLICANT_ROLES,
   APPLICANT_STATES,
+  AUTO_INSURED_COPY,
   AVAILABILITY_OPTIONS,
+  BACKGROUND_CONSENT_COPY,
+  BACKGROUND_DISCLOSURE,
+  CONSENT_1099_INTRO,
+  CONSENT_1099_LABEL,
+  CONFIDENTIALITY_EXPECTATION,
   CONTRACTOR_TYPES,
   DAY_LABEL,
   EXPERIENCE_OPTIONS,
+  ID_CONFIRM_COPY,
+  ID_PURPOSE_COPY,
+  INSURANCE_EXPECTATION,
+  LICENSE_COPY,
+  NON_SOLICIT_EXPECTATION,
   OPEN_APPLICANT_ROLE,
+  PAY_CONSENT_COPY,
   PREFERRED_DAYS,
+  PRIVACY_POLICY_URL,
+  SMS_CONSENT_COPY,
   TRANSPORTATION_CAR,
   TRANSPORTATION_NONE,
+  TRUTHFULNESS_COPY,
   applicantStateFromAddress,
   availabilityLabel,
   experienceLabel,
@@ -80,6 +96,11 @@ type Answers = {
   consent1099: boolean;
   backgroundCheckConsent: boolean;
   payConsent: boolean;
+  age18: boolean;
+  validDriversLicense: boolean;
+  autoInsured: boolean;
+  smsConsent: boolean;
+  answersAccurate: boolean;
   willingToGetSupplies: string;
   suppliesOnHand: string;
   reliabilityNote: string;
@@ -129,6 +150,11 @@ function blankAnswers(hiringRole: string | null, session?: PublicHiringSession |
     consent1099: Boolean(saved.consent1099),
     backgroundCheckConsent: Boolean(saved.backgroundCheckConsent),
     payConsent: Boolean(saved.payConsent),
+    age18: Boolean(saved.age18),
+    validDriversLicense: Boolean(saved.validDriversLicense),
+    autoInsured: Boolean(saved.autoInsured),
+    smsConsent: Boolean(saved.smsConsent),
+    answersAccurate: Boolean(saved.answersAccurate),
     willingToGetSupplies: saved.willingToGetSupplies || "",
     suppliesOnHand: saved.suppliesOnHand || "",
     reliabilityNote: saved.reliabilityNote || "",
@@ -244,6 +270,11 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
       body.set("consent1099", String(answers.consent1099));
       body.set("backgroundCheckConsent", String(answers.backgroundCheckConsent));
       body.set("payConsent", String(answers.payConsent));
+      body.set("age18", String(answers.age18));
+      body.set("validDriversLicense", String(answers.validDriversLicense));
+      body.set("autoInsured", String(answers.autoInsured));
+      body.set("smsConsent", String(answers.smsConsent));
+      body.set("answersAccurate", String(answers.answersAccurate));
       body.set("willingToGetSupplies", answers.willingToGetSupplies);
       body.set("suppliesOnHand", answers.suppliesOnHand);
       body.set("reliabilityNote", answers.reliabilityNote);
@@ -459,9 +490,11 @@ function Question({
             onEdit={() => onEdit("address")}
           />
           <ReviewRow label="Applying as" value={answers.contractorType === "Individual" ? "Just me" : answers.contractorType} onEdit={() => onEdit("contractorType")} />
-          <ReviewRow label="Car" value="Yes — I have my own car" onEdit={() => onEdit("car")} />
+          <ReviewRow label="Car" value="Own car, valid license, insured" onEdit={() => onEdit("car")} />
           <ReviewRow label="Photo ID" value={answers.idFile?.name || "Uploaded"} onEdit={() => onEdit("id")} />
           <ReviewRow label="Authorized to work" value="Yes" onEdit={() => onEdit("authorized")} />
+          <ReviewRow label="Age" value="18 or older" onEdit={() => onEdit("age")} />
+          <ReviewRow label="Texts and calls" value="Agreed" onEdit={() => onEdit("phone")} />
           <ReviewRow label="Experience" value={experienceLabel(answers.experience)} onEdit={() => onEdit("experience")} />
           <ReviewRow label="Availability" value={availabilityLabel(answers.availability)} onEdit={() => onEdit("availability")} />
           <ReviewRow label="Days" value={answers.preferredDays.map((d) => DAY_LABEL[d as keyof typeof DAY_LABEL] || d).join(", ")} onEdit={() => onEdit("days")} />
@@ -473,6 +506,15 @@ function Question({
           <ReviewRow label="Reliability" value={answers.reliabilityNote} onEdit={() => onEdit("reliability")} />
           <ReviewRow label="Why Novara" value={answers.reasonNote} onEdit={() => onEdit("reason")} />
         </dl>
+        <label className="mt-6 flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-base text-slate-800 shadow-sm">
+          <input
+            type="checkbox"
+            checked={answers.answersAccurate}
+            onChange={(e) => onPatch({ answersAccurate: e.target.checked })}
+            className="mt-1 h-5 w-5 rounded border-slate-300 text-[#5C0FFE] focus:ring-[#8F7BFD]"
+          />
+          <span>{TRUTHFULNESS_COPY}</span>
+        </label>
         {error && <ErrorText message={error} />}
         <div className="mt-6">
           <OkButton label={submitting ? "Submitting…" : "Submit application"} busy={submitting} onClick={onSubmit} />
@@ -509,8 +551,17 @@ function Question({
 
   if (step === "phone") {
     return (
-      <TextStep n={n} title="What’s your phone number?" hint="A mobile number works best — we text when it’s time to talk." error={error} headingRef={headingRef} onOk={onAdvance}>
+      <TextStep n={n} title="What’s your phone number?" hint="A mobile number works best. We’ll use it for this application." error={error} headingRef={headingRef} onOk={onAdvance}>
         <Field label="Phone" type="tel" autoComplete="tel" inputMode="tel" placeholder="(301) 555-0123" value={answers.phone} onChange={(v) => onPatch({ phone: formatPhoneNumber(v) })} onEnter={onAdvance} />
+        <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm leading-relaxed text-slate-800">
+          <input
+            type="checkbox"
+            checked={answers.smsConsent}
+            onChange={(e) => onPatch({ smsConsent: e.target.checked })}
+            className="mt-0.5 h-5 w-5 rounded border-slate-300 text-[#5C0FFE] focus:ring-[#8F7BFD]"
+          />
+          <span>{SMS_CONSENT_COPY}</span>
+        </label>
       </TextStep>
     );
   }
@@ -658,22 +709,25 @@ function Question({
     const spec = {
       consent1099: {
         title: "This is a 1099 contractor role",
-        body: "You work with Novara as an independent contractor, not as a W-2 employee. Novara does not withhold taxes, and you are not on payroll or benefits. You accept jobs, bring your own supplies, and get paid for completed work. At tax time you file your own return. If your pay for the year meets the IRS threshold, we file a 1099-NEC that reports what we paid you — you use that form when you file.",
-        label: "I understand this is 1099 contractor work, not employment, and that I handle my own taxes.",
+        body: CONSENT_1099_INTRO,
+        extra: [NON_SOLICIT_EXPECTATION, CONFIDENTIALITY_EXPECTATION, INSURANCE_EXPECTATION],
+        label: CONSENT_1099_LABEL,
         checked: answers.consent1099,
         key: "consent1099" as const,
       },
       consentBg: {
-        title: "Do you consent to a background check?",
-        body: "We run a background check before anyone is offered work. Nothing is assigned until it clears.",
-        label: "I consent to a background check.",
+        title: "Background check disclosure",
+        body: BACKGROUND_DISCLOSURE,
+        extra: [] as string[],
+        label: BACKGROUND_CONSENT_COPY,
         checked: answers.backgroundCheckConsent,
         key: "backgroundCheckConsent" as const,
       },
       consentPay: {
         title: "Are you comfortable with how pay works?",
         body: "Everyone starts between 40% and 45% of the job’s value. Pay is weekly, for completed jobs. Travel time is not paid.",
-        label: "I’m comfortable starting at 40–45% of each job.",
+        extra: [] as string[],
+        label: PAY_CONSENT_COPY,
         checked: answers.payConsent,
         key: "payConsent" as const,
       },
@@ -685,6 +739,13 @@ function Question({
           {spec.title}
         </h1>
         <p className="mt-3 max-w-xl text-base leading-relaxed text-slate-500">{spec.body}</p>
+        {spec.extra.length > 0 && (
+          <div className="mt-4 max-w-xl space-y-3 text-base leading-relaxed text-slate-600">
+            {spec.extra.map((line) => (
+              <p key={line}>{line}</p>
+            ))}
+          </div>
+        )}
         {step === "consentPay" && <PayExample />}
         <label className="mt-8 flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-base text-slate-800 shadow-sm">
           <input
@@ -714,6 +775,123 @@ function Question({
             I don’t agree
           </button>
         </div>
+      </div>
+    );
+  }
+
+  if (step === "age") {
+    return (
+      <div>
+        <Kicker n={n} />
+        <h1 ref={headingRef} tabIndex={-1} className={PAGE_TITLE}>
+          Are you 18 or older?
+        </h1>
+        <p className="mt-3 max-w-xl text-base leading-relaxed text-slate-500">
+          This role is only open to adults. We don’t ask for your birth date.
+        </p>
+        <label className="mt-8 flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-base text-slate-800 shadow-sm">
+          <input
+            type="checkbox"
+            checked={answers.age18}
+            onChange={(e) => onPatch({ age18: e.target.checked })}
+            className="mt-1 h-5 w-5 rounded border-slate-300 text-[#5C0FFE] focus:ring-[#8F7BFD]"
+          />
+          <span>{AGE_18_COPY}</span>
+        </label>
+        {error && <ErrorText message={error} />}
+        <div className="mt-6 flex flex-wrap items-center gap-4">
+          <OkButton
+            onClick={() => {
+              if (!answers.age18) {
+                onError("Check the box to continue.");
+                return;
+              }
+              onAdvance();
+            }}
+          />
+          <button
+            type="button"
+            className="text-sm font-semibold text-slate-500 underline-offset-4 hover:text-slate-800 hover:underline"
+            onClick={() => onPatch({ age18: false }, true)}
+          >
+            I am under 18
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === "car") {
+    return (
+      <div>
+        <Kicker n={n} />
+        <h1 ref={headingRef} tabIndex={-1} className={PAGE_TITLE}>
+          Do you have a car you can drive to jobs?
+        </h1>
+        <p className="mt-3 max-w-xl text-base leading-relaxed text-slate-500">
+          A car is the only transportation we accept. You need a valid driver’s license, and the car has to be insured. Rideshare doesn’t count.
+        </p>
+        <ChoiceList
+          choices={choicesFor("car")}
+          selected={answers.transportation}
+          onPick={(value) => {
+            if (value !== TRANSPORTATION_CAR) {
+              onPatch({ transportation: value, validDriversLicense: false, autoInsured: false }, true);
+              return;
+            }
+            onPatch({ transportation: value });
+          }}
+        />
+        {answers.transportation === TRANSPORTATION_CAR && (
+          <div className="mt-4 space-y-3">
+            <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-base text-slate-800 shadow-sm">
+              <input
+                type="checkbox"
+                checked={answers.validDriversLicense}
+                onChange={(e) => onPatch({ validDriversLicense: e.target.checked })}
+                className="mt-1 h-5 w-5 rounded border-slate-300 text-[#5C0FFE] focus:ring-[#8F7BFD]"
+              />
+              <span>{LICENSE_COPY}</span>
+            </label>
+            <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-base text-slate-800 shadow-sm">
+              <input
+                type="checkbox"
+                checked={answers.autoInsured}
+                onChange={(e) => onPatch({ autoInsured: e.target.checked })}
+                className="mt-1 h-5 w-5 rounded border-slate-300 text-[#5C0FFE] focus:ring-[#8F7BFD]"
+              />
+              <span>{AUTO_INSURED_COPY}</span>
+            </label>
+          </div>
+        )}
+        {error && <ErrorText message={error} />}
+        {answers.transportation === TRANSPORTATION_CAR && (
+          <div className="mt-6 flex flex-col items-start gap-3">
+            <OkButton
+              onClick={() => {
+                if (!answers.validDriversLicense || !answers.autoInsured) {
+                  onError("Check both boxes to continue.");
+                  return;
+                }
+                onAdvance();
+              }}
+            />
+            <button
+              type="button"
+              className="text-sm font-semibold text-slate-500 underline-offset-4 hover:text-slate-800 hover:underline"
+              onClick={() => onPatch({ transportation: TRANSPORTATION_CAR, validDriversLicense: false }, true)}
+            >
+              I don’t have a valid driver’s license
+            </button>
+            <button
+              type="button"
+              className="text-sm font-semibold text-slate-500 underline-offset-4 hover:text-slate-800 hover:underline"
+              onClick={() => onPatch({ transportation: TRANSPORTATION_CAR, validDriversLicense: true, autoInsured: false }, true)}
+            >
+              My car isn’t insured
+            </button>
+          </div>
+        )}
       </div>
     );
   }
@@ -986,6 +1164,12 @@ function IdStep({
       <p className="mt-3 max-w-xl text-base leading-relaxed text-slate-500">
         Driver’s license, state ID, or passport. It needs to be current, and the photo needs to be readable. JPG, PNG, or PDF, up to 4 MB.
       </p>
+      <p className="mt-3 max-w-xl text-base leading-relaxed text-slate-600">
+        {ID_PURPOSE_COPY}{" "}
+        <a href={PRIVACY_POLICY_URL} target="_blank" rel="noreferrer" className="font-semibold text-[#5C0FFE] underline-offset-2 hover:underline">
+          Privacy policy
+        </a>
+      </p>
       <label
         htmlFor={inputId}
         onDragOver={(e) => {
@@ -1009,7 +1193,7 @@ function IdStep({
         <span className="text-sm font-semibold text-slate-800">
           {answers.idFile ? answers.idFile.name : "Drop your ID here, or click to upload"}
         </span>
-        <span className="mt-1 text-xs text-slate-500">Stored privately. Our team is the only one who can open it.</span>
+        <span className="mt-1 text-xs text-slate-500">Stored privately. Only Novara hiring staff can open it.</span>
         <input
           id={inputId}
           type="file"
@@ -1025,7 +1209,7 @@ function IdStep({
           onChange={(e) => onPatch({ idConfirmed: e.target.checked })}
           className="mt-0.5 h-5 w-5 rounded border-slate-300 text-[#5C0FFE] focus:ring-[#8F7BFD]"
         />
-        <span>This is my valid, unexpired government-issued photo ID.</span>
+        <span>{ID_CONFIRM_COPY}</span>
       </label>
       {error && <ErrorText message={error} />}
       <div className="mt-6">

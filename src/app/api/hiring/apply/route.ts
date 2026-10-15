@@ -5,9 +5,11 @@
 // private bucket, then writes the Applicants row in Airtable and
 // public.cleaner_applicants.
 //
-// Hard stops (422): no car, not authorized to work, declined a consent,
-// not willing to get supplies. A current government-issued photo ID is
-// required. Saying yes to supplies asks what they already have.
+// Hard stops (422): no car, no valid license, uninsured car, under 18,
+// not authorized to work, declined a consent, not willing to get supplies.
+// A current government-issued photo ID is required. Texts about the
+// application, and a truthfulness attestation, are required to submit.
+// The exact consent wording, time, IP, and user agent are stored with the row.
 
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
@@ -24,6 +26,7 @@ import {
   phoneDigits,
   safeIdFilename,
   isApplicationIssue,
+  buildHiringConsentRecord,
   validateHiringApplication,
   type HiringApplicationDraft,
   type NormalizedHiringApplication,
@@ -42,6 +45,67 @@ function str(form: FormData, key: string): string {
 
 function flag(form: FormData, key: string): boolean {
   return str(form, key) === "true";
+}
+
+function clientIp(req: Request): string | null {
+  const forwarded = req.headers.get("x-forwarded-for");
+  const first = forwarded?.split(",")[0]?.trim();
+  if (first) return first.slice(0, 64);
+  const real = req.headers.get("x-real-ip")?.trim();
+  return real ? real.slice(0, 64) : null;
+}
+
+function isMissingConsentColumn(message: string): boolean {
+  return /age_18|valid_drivers_license|auto_insured|sms_consent|answers_accurate|consent_version|consent_accepted_at|consent_ip|consent_user_agent|consent_record/.test(
+    message,
+  ) && /does not exist|schema cache|Could not find/i.test(message);
+}
+
+type ApplicantRow = {
+  id: string;
+  stage: string;
+  airtable_record_id: string | null;
+  government_id_path: string | null;
+};
+
+async function writeApplicant(
+  supabase: ReturnType<typeof getAdminSupabase>,
+  existing: ApplicantRow | null,
+  fields: Record<string, unknown>,
+  consentColumns: Record<string, unknown>,
+): Promise<{ applicantId: string; created: boolean }> {
+  const write = async (includeConsentColumns: boolean) => {
+    const payload = includeConsentColumns ? { ...fields, ...consentColumns } : fields;
+    if (existing) {
+      const { error } = await supabase
+        .from("cleaner_applicants")
+        .update({ ...payload, updated_at: new Date().toISOString() })
+        .eq("id", existing.id);
+      return { error, applicantId: existing.id, created: false };
+    }
+    const { data: created, error } = await supabase
+      .from("cleaner_applicants")
+      .insert({
+        ...payload,
+        stage: "applicant",
+        stage_changed_at: new Date().toISOString(),
+        stage_changed_by: "hiring-site",
+      })
+      .select("id")
+      .single();
+    return { error, applicantId: created?.id as string | undefined, created: true };
+  };
+
+  let result = await write(true);
+  if (result.error && isMissingConsentColumn(result.error.message)) {
+    // eslint-disable-next-line no-console
+    console.warn("[hiring/apply] consent columns missing; saved wording on submission jsonb");
+    result = await write(false);
+  }
+  if (result.error || !result.applicantId) {
+    throw new Error(result.error?.message || "Could not save the applicant");
+  }
+  return { applicantId: result.applicantId, created: result.created };
 }
 
 function isAirtableId(id: string | null | undefined): id is string {
@@ -107,6 +171,11 @@ function draftFromForm(form: FormData, file: File | null): HiringApplicationDraf
     consent1099: flag(form, "consent1099"),
     backgroundCheckConsent: flag(form, "backgroundCheckConsent"),
     payConsent: flag(form, "payConsent"),
+    age18: flag(form, "age18"),
+    validDriversLicense: flag(form, "validDriversLicense"),
+    autoInsured: flag(form, "autoInsured"),
+    smsConsent: flag(form, "smsConsent"),
+    answersAccurate: flag(form, "answersAccurate"),
     willingToGetSupplies: str(form, "willingToGetSupplies"),
     suppliesOnHand: str(form, "suppliesOnHand"),
     reliabilityNote: str(form, "reliabilityNote"),
@@ -140,6 +209,12 @@ export async function POST(req: Request): Promise<NextResponse> {
     );
   }
   const app = validated.value;
+  const acceptedAt = new Date().toISOString();
+  const consentRecord = buildHiringConsentRecord({
+    acceptedAt,
+    ip: clientIp(req),
+    userAgent: req.headers.get("user-agent"),
+  });
   if (!file) {
     return NextResponse.json({ error: "Upload a photo or PDF of your government-issued photo ID.", code: "missing_id" }, { status: 400 });
   }
@@ -288,33 +363,31 @@ export async function POST(req: Request): Promise<NextResponse> {
       source: "hiring.novaracleaning.com",
       hiringRole: app.hiringRole,
       governmentIdPath: path,
+      consentRecord,
     },
     synced_at: new Date().toISOString(),
     ...(!existing || existing.stage === "applicant" ? { applied_at: new Date().toISOString() } : {}),
   };
 
+  const consentColumns = {
+    age_18: true,
+    valid_drivers_license: true,
+    auto_insured: true,
+    sms_consent: true,
+    answers_accurate: true,
+    consent_version: app.consentVersion,
+    consent_accepted_at: acceptedAt,
+    consent_ip: consentRecord.ip,
+    consent_user_agent: consentRecord.userAgent,
+    consent_record: consentRecord,
+  };
+
   try {
     let applicantId = existing?.id;
-    if (existing) {
-      const { error } = await supabase
-        .from("cleaner_applicants")
-        .update({ ...fields, updated_at: new Date().toISOString() })
-        .eq("id", existing.id);
-      if (error) throw new Error(error.message);
-    } else {
-      const { data: created, error } = await supabase
-        .from("cleaner_applicants")
-        .insert({
-          ...fields,
-          stage: "applicant",
-          stage_changed_at: new Date().toISOString(),
-          stage_changed_by: "hiring-site",
-        })
-        .select("id")
-        .single();
-      if (error) throw new Error(error.message);
-      applicantId = created.id as string;
+    const saved = await writeApplicant(supabase, existing, fields, consentColumns);
+    applicantId = saved.applicantId;
 
+    if (saved.created) {
       await supabase.from("events").insert({
         event_type: "applicant.created",
         source: "hiring-site",
@@ -325,6 +398,7 @@ export async function POST(req: Request): Promise<NextResponse> {
           applicant_phone: app.phone,
           role: app.role,
           hiring_role: app.hiringRole,
+          consent_version: app.consentVersion,
           transportation: app.transportation,
           willing_to_get_supplies: true,
           airtable_record_id: airtable.airtableRecordId,
