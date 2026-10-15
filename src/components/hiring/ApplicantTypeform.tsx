@@ -1219,6 +1219,7 @@ function supplySummary(ids: string[]): string {
 }
 
 function PayExample() {
+  const job = 250;
   const rows = [
     { pct: 40, note: "Where everyone starts" },
     { pct: 45, note: "The top of the starting range" },
@@ -1226,21 +1227,24 @@ function PayExample() {
   return (
     <MagicCard className="mt-5 overflow-hidden rounded-2xl border border-violet-200 bg-white">
       <div className="relative z-[2] p-4">
-        <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">Example · a $100 job</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">Example · a $250 job</p>
         <div className="mt-3 space-y-3">
-          {rows.map((row) => (
-            <div key={row.pct}>
-              <div className="flex items-baseline justify-between text-sm">
-                <span className="font-medium text-slate-800">{row.pct}% · ${row.pct}</span>
-                <span className="text-xs text-slate-500">{row.note}</span>
+          {rows.map((row) => {
+            const pay = (job * row.pct) / 100;
+            return (
+              <div key={row.pct}>
+                <div className="flex items-baseline justify-between text-sm">
+                  <span className="font-medium text-slate-800">{row.pct}% · ${pay.toFixed(2)}</span>
+                  <span className="text-xs text-slate-500">{row.note}</span>
+                </div>
+                <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-violet-100">
+                  <div className="h-full rounded-full" style={{ width: `${row.pct}%`, background: HIRING_GRADIENT }} />
+                </div>
               </div>
-              <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-violet-100">
-                <div className="h-full rounded-full" style={{ width: `${row.pct}%`, background: HIRING_GRADIENT }} />
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
-        <p className="mt-3 text-xs leading-relaxed text-slate-500">You keep that share of the job. Drive time between homes is not added on top.</p>
+        <p className="mt-3 text-xs leading-relaxed text-slate-500">You keep that share of the $250. Drive time between homes is not added on top.</p>
       </div>
     </MagicCard>
   );
