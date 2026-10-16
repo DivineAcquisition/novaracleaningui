@@ -4,8 +4,7 @@ import { serviceCards } from "../lib/content";
 
 export function ServiceGrid() {
   return (
-    <div className="bento">
-      <div className="service-grid">
+    <div className="service-grid">
         {serviceCards.map((service) => (
           <TiltCard className="service-tilt" key={service.slug}>
             <MagicCard className="service-slot">
@@ -19,7 +18,6 @@ export function ServiceGrid() {
             </MagicCard>
           </TiltCard>
         ))}
-      </div>
     </div>
   );
 }
