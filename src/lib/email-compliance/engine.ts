@@ -615,6 +615,8 @@ export interface FooterModel {
   lines: string[];
   links: Array<{ href: string; label: string; prominent?: boolean }>;
   after: string[];
+  /** Name and postal line, rendered on the two lines directly above the links. */
+  closing: string[];
 }
 
 export interface FooterContext {
@@ -656,6 +658,7 @@ export function footerModel(
   const lines: string[] = [];
   const links: FooterModel["links"] = [];
   const after: string[] = [];
+  const closing: string[] = [];
   const extra = {
     reason: ctx.reason || marketingReason(identity, null),
     taxYear: ctx.taxYear || "",
@@ -667,35 +670,30 @@ export function footerModel(
 
   if (type === "internal_admin") {
     lines.push(fillTemplate(identity.why.internal_admin, identity, extra));
-    return { lines, links, after };
+    return { lines, links, after, closing };
   }
 
   if (type === "contractor_operational" || type === "contractor_tax") {
-    lines.push(fillTemplate(identity.contractorOnBehalf, identity, extra));
-    const place = [address, identity.contractor.address].filter(Boolean).join(" | ");
-    if (place) lines.push(place);
-    if (identity.licenseLine.trim()) lines.push(identity.licenseLine.trim());
     lines.push(fillTemplate(identity.contractorRelationshipLine, identity, extra));
     if (PAYOUT_TEMPLATE_KEYS.has(key)) lines.push(fillTemplate(identity.payoutTaxLine, identity, extra));
     if (type === "contractor_tax") {
       lines.push(fillTemplate(identity.taxDocumentLine, identity, extra));
       if (urls.withdraw) links.push({ href: urls.withdraw, label: "Withdraw electronic tax-form consent" });
     }
+    if (identity.licenseLine.trim()) lines.push(identity.licenseLine.trim());
+    closing.push(fillTemplate(identity.contractorOnBehalf, identity, extra));
+    const place = [address, identity.contractor.address].filter(Boolean).join(" | ");
+    if (place) closing.push(place);
     if (identity.privacyUrl) links.push({ href: identity.privacyUrl, label: "Privacy Policy" });
-    return { lines, links, after };
+    return { lines, links, after, closing };
   }
 
-  lines.push(`${brand} | ${legal}`);
-  const support = [identity.supportEmail, identity.phone].filter(Boolean).join(" ");
-  if (type === "customer_marketing") {
-    if (address) lines.push(address);
-    if (support) lines.push(support);
-  } else {
-    const combined = [address, support].filter(Boolean).join(" | ");
-    if (combined) lines.push(combined);
-  }
   if (identity.licenseLine.trim()) lines.push(identity.licenseLine.trim());
   lines.push(fillTemplate(identity.why[type] || "", identity, extra));
+  closing.push(`${brand} | ${legal}`);
+  const support = [identity.supportEmail, identity.phone].filter(Boolean).join(" ");
+  const place = [address, support].filter(Boolean).join(" | ");
+  if (place) closing.push(place);
 
   if (type === "customer_marketing") {
     if (urls.unsubscribe) links.push({ href: urls.unsubscribe, label: "Unsubscribe", prominent: true });
@@ -722,7 +720,7 @@ export function footerModel(
   }
   if (REFUND_TEMPLATE_KEYS.has(key)) after.push(fillTemplate(identity.refundQuestionsLine, identity, extra));
   if (PARTNER_TEMPLATE_KEYS.has(key)) after.push(fillTemplate(identity.partnerGovernsLine, identity, extra));
-  return { lines, links, after };
+  return { lines, links, after, closing };
 }
 
 function renderFooter(model: FooterModel, theme: "light" | "dark"): string {
@@ -730,14 +728,20 @@ function renderFooter(model: FooterModel, theme: "light" | "dark"): string {
   const bg = dark ? "#18181b" : "#2a2a2e";
   const fg = dark ? "#e4e4e7" : "#c8c8d0";
   const brand = dark ? "#ddd6fe" : "#ddd6fe";
-  const lineHtml = model.lines.map((line, index) => {
+  const lineHtml = model.lines.map((line) =>
+    `<p style="margin:0 0 6px;font-family:Inter,Arial,sans-serif;font-size:13px;line-height:1.5;font-weight:400;color:${fg};">${escapeHtml(line)}</p>`,
+  ).join("");
+  const closingHtml = model.closing.map((line, index) => {
     const color = index === 0 ? brand : fg;
     const weight = index === 0 ? "600" : "400";
     const size = index === 0 ? "14px" : "13px";
-    return `<p style="margin:0 0 6px;font-family:Inter,Arial,sans-serif;font-size:${size};line-height:1.5;font-weight:${weight};color:${color};">${escapeHtml(line)}</p>`;
+    const margin = index === 0
+      ? "margin:16px 0 4px;padding-top:12px;border-top:1px solid #3f3f46;"
+      : "margin:0 0 2px;";
+    return `<p class="novara-footer-identity" style="${margin}font-family:Inter,Arial,sans-serif;font-size:${size};line-height:1.5;font-weight:${weight};color:${color};">${escapeHtml(line)}</p>`;
   }).join("");
   const linkHtml = model.links.length
-    ? `<p class="novara-footer-links" style="margin:14px 0 0;padding-top:12px;border-top:1px solid #3f3f46;font-family:Inter,Arial,sans-serif;font-size:13px;line-height:1.7;">${
+    ? `<p class="novara-footer-links" style="margin:8px 0 0;font-family:Inter,Arial,sans-serif;font-size:13px;line-height:1.7;">${
       model.links.map((item) => {
         const style = item.prominent
           ? `color:${brand};font-size:13px;font-weight:700;text-decoration:underline;`
@@ -753,6 +757,7 @@ function renderFooter(model: FooterModel, theme: "light" | "dark"): string {
   <tr><td style="padding:16px 8px 12px;font-family:Inter,Arial,sans-serif;">
     ${lineHtml}
     ${afterHtml}
+    ${closingHtml}
     ${linkHtml}
   </td></tr>
 </table>`;
@@ -770,6 +775,7 @@ export function buildFooter(
   const text = [
     ...model.lines,
     ...model.after,
+    ...model.closing,
     ...model.links.map((item) => `${item.label}: ${item.href}`),
   ].join("\n");
   const versionKeySource = `${type}\n${text}\n${identity.legalName}\n${formatAddress(identity.mailingAddress)}`;
