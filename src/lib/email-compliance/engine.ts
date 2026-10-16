@@ -740,7 +740,7 @@ function renderFooter(model: FooterModel, theme: "light" | "dark"): string {
     const style = item.prominent
       ? `color:${brand};font-size:15px;font-weight:700;text-decoration:underline;`
       : `color:${brand};font-size:13px;text-decoration:underline;`;
-    return `<a class="novara-footer-link" href="${escapeHtml(item.href)}" style="${style}">${escapeHtml(item.label)} (${escapeHtml(item.href)})</a>`;
+    return `<a class="novara-footer-link" href="${escapeHtml(item.href)}" style="${style}">${escapeHtml(item.label)}</a>`;
   }).join("<br/>");
   const afterHtml = model.after.map((line) =>
     `<p style="margin:8px 0 0;font-family:Inter,Arial,sans-serif;font-size:13px;line-height:1.5;color:${fg};">${escapeHtml(line)}</p>`,
@@ -778,7 +778,7 @@ export function visibleText(html: string): string {
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/(p|div|tr|li|h1|h2|h3)>/gi, "\n")
-    .replace(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (_, href, label) => `${label} (${href})`)
+    .replace(/<a\b[^>]*>([\s\S]*?)<\/a>/gi, (_, label) => label)
     .replace(/<[^>]+>/g, " ")
     .replace(/&amp;/g, "&")
     .replace(/&nbsp;/g, " ")
