@@ -98,8 +98,9 @@ assert("service footer warns about card numbers", confirmation.text.includes("fu
 assert("service footer links the refund policy", confirmation.footer.text.includes("https://novaracleaning.com/refund-policy"));
 assert("policy words carry the address", confirmation.footer.html.includes(">Refund Policy</a>") && !/>Refund Policy \(http/.test(confirmation.footer.html));
 assert("legal links sit under the service text", confirmation.footer.html.indexOf("full card number") < confirmation.footer.html.indexOf(">Privacy Policy</a>"));
-assert("the business name sits directly above the legal links", confirmation.footer.html.indexOf("full card number") < confirmation.footer.html.indexOf("NovaraCleaning | Novara Cleaning LLC") && confirmation.footer.html.indexOf("NovaraCleaning | Novara Cleaning LLC") < confirmation.footer.html.indexOf(">Privacy Policy</a>"));
-assert("the address line sits between the name and the links", confirmation.footer.html.indexOf("NovaraCleaning | Novara Cleaning LLC") < confirmation.footer.html.indexOf("support@novaracleaning.com") && confirmation.footer.html.indexOf("support@novaracleaning.com") < confirmation.footer.html.indexOf(">Privacy Policy</a>"));
+assert("the business name sits directly above the legal links", confirmation.footer.html.indexOf("full card number") < confirmation.footer.html.indexOf("NovaraCleaning LLC") && confirmation.footer.html.indexOf("NovaraCleaning LLC") < confirmation.footer.html.indexOf(">Privacy Policy</a>"));
+assert("the name is listed once", !confirmation.footer.html.includes("NovaraCleaning | Novara Cleaning LLC"));
+assert("the address line sits between the name and the links", confirmation.footer.html.indexOf("NovaraCleaning LLC") < confirmation.footer.html.indexOf("support@novaracleaning.com") && confirmation.footer.html.indexOf("support@novaracleaning.com") < confirmation.footer.html.indexOf(">Privacy Policy</a>"));
 assert("applied discount is not treated as a promotion", confirmation.promoRemoved === false);
 assert("booking mail is sent from support@", confirmation.from.includes("support@novaracleaning.com") && !confirmation.from.includes("hello@"));
 assert("reply-to is the support inbox", confirmation.replyTo === "support@novaracleaning.com");

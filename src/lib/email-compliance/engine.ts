@@ -639,6 +639,19 @@ export function marketingReason(identity: BusinessIdentity, consent?: ConsentRec
   return `you signed up at ${host}`;
 }
 
+function footerBusinessName(brand: string, legal: string): string {
+  const brandName = brand.trim();
+  const legalName = legal.trim();
+  if (!brandName) return legalName;
+  if (!legalName) return brandName;
+  const compactLegal = legalName.toLowerCase().replace(/\s+/g, "");
+  const compactBrand = brandName.toLowerCase().replace(/\s+/g, "");
+  if (compactLegal.includes(compactBrand)) {
+    return /llc/i.test(legalName) ? `${brandName} LLC` : brandName;
+  }
+  return legalName;
+}
+
 function extractOfferTerms(value: string): string {
   const text = visibleText(value);
   const match = text.match(/(?:new customers only|first[- ]time customers only|one per household|standard clean only)[^.\n]{0,120}/i);
@@ -690,7 +703,7 @@ export function footerModel(
 
   if (identity.licenseLine.trim()) lines.push(identity.licenseLine.trim());
   lines.push(fillTemplate(identity.why[type] || "", identity, extra));
-  closing.push(`${brand} | ${legal}`);
+  closing.push(footerBusinessName(brand, legal));
   const support = [identity.supportEmail, identity.phone].filter(Boolean).join(" ");
   const place = [address, support].filter(Boolean).join(" | ");
   if (place) closing.push(place);
