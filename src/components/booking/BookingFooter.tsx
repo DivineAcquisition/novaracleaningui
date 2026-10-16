@@ -1,6 +1,8 @@
 "use client";
 
-export function BookingFooter() {
+import { openCookieSettings } from "@/components/compliance/CookieNotice";
+
+export function BookingFooter({ licenseLine = "" }: { licenseLine?: string }) {
   return (
     <footer className="mt-auto py-6 px-4 border-t border-[color:var(--hairline)] bg-background/60 hairline-glow">
       <div className="container max-w-4xl mx-auto">
@@ -23,10 +25,25 @@ export function BookingFooter() {
             >
               Terms of Service
             </a>
+            <span className="hidden sm:inline">•</span>
+            <a
+              href="/privacy-request"
+              className="hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded"
+            >
+              Privacy request
+            </a>
+            <button
+              type="button"
+              onClick={openCookieSettings}
+              className="hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded"
+            >
+              Cookie settings
+            </button>
           </div>
-          <p className="text-center sm:text-right">
-            © 2025 NovaraCleaning. All Rights Reserved.
-          </p>
+          <div className="text-center sm:text-right">
+            {licenseLine ? <p>{licenseLine}</p> : null}
+            <p>© 2025 NovaraCleaning. All Rights Reserved.</p>
+          </div>
         </div>
       </div>
     </footer>

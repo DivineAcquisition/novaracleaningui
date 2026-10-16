@@ -55,6 +55,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MediaThumb } from "@/components/job-media/MediaThumb";
+import { SensitiveAccess } from "@/components/compliance/SensitiveAccess";
 import { isVideoFile, videoTooLargeMessage } from "@/lib/job-media";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -2862,7 +2863,7 @@ function BookingSheet({
                     {/* Gate codes and parking, so wrap rather than truncate —
                         a half-shown door code is useless. */}
                     <span className="text-right whitespace-pre-wrap break-words">
-                      {moneyRow.access_notes}
+                      <SensitiveAccess bookingId={booking.id} value={moneyRow.access_notes} viewerRole="admin" />
                     </span>
                   </>
                 ) : null}

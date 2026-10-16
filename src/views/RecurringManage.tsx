@@ -40,6 +40,8 @@ import { BrandAtmosphere } from "@/components/brand/atmosphere";
 
 interface ManageState {
   ok: boolean;
+  cancellation?: { effectiveOn: string; text: string } | null;
+  url?: string;
   schedule: {
     first_name: string | null;
     cadence: string;
@@ -402,6 +404,43 @@ export default function RecurringManagePage() {
             }}
           >
             {(busy === "pause" || busy === "resume") ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : schedule.active ? "Pause" : "Resume"}
+          </Button>
+        </div>
+        <div className="p-4 flex flex-wrap items-center justify-between gap-2 border-t border-border">
+          <span className="text-sm font-semibold">Cancel membership</span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={busy === "cancel"}
+            onClick={() => {
+              if (!confirm("Cancel this membership? Future automatic charges stop. You do not need to call.")) return;
+              void act("cancel", { action: "cancel" }, "Membership canceled. A confirmation email is on its way.");
+            }}
+          >
+            {busy === "cancel" ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : "Cancel online"}
+          </Button>
+        </div>
+        <div className="p-4 flex flex-wrap items-center justify-between gap-2 border-t border-border">
+          <span className="text-sm font-semibold">Change card</span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={busy === "card"}
+            onClick={() => {
+              void (async () => {
+                setBusy("card");
+                try {
+                  const result = await call({ action: "card_link" });
+                  if (result.url) window.location.href = result.url;
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : "Could not open the card page");
+                } finally {
+                  setBusy(null);
+                }
+              })();
+            }}
+          >
+            {busy === "card" ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : "Change card"}
           </Button>
         </div>
       </div>

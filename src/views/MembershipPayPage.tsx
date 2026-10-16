@@ -34,7 +34,8 @@ import { SignaturePad } from "@/components/booking/SignaturePad";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
+import { AcceptanceChecklist, type AcceptanceGateState } from "@/components/compliance/AcceptanceChecklist";
+import { submitAcceptances, submitSignedCopy } from "@/lib/compliance/record-client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SEO } from "@/components/SEO";
 import { IncludedValueStack } from "@/components/booking/IncludedValueStack";
@@ -69,10 +70,8 @@ export default function MembershipPayPage() {
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Legal step state
-  const [agreeService, setAgreeService] = useState(false);
-  const [agreeTerms, setAgreeTerms] = useState(false);
-  const [agreeDisclaimer, setAgreeDisclaimer] = useState(false);
+  const [acceptanceGate, setAcceptanceGate] = useState<AcceptanceGateState | null>(null);
+  const [showAcceptanceErrors, setShowAcceptanceErrors] = useState(false);
   const [legalName, setLegalName] = useState("");
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null);
   const [signing, setSigning] = useState(false);
@@ -127,7 +126,7 @@ export default function MembershipPayPage() {
     }
   };
 
-  const allAccepted = agreeService && agreeTerms && agreeDisclaimer;
+  const allAccepted = acceptanceGate?.ready === true;
   const canSign = allAccepted && legalName.trim().length >= 3 && !!signatureDataUrl;
 
   const handleSign = async () => {
@@ -150,13 +149,46 @@ export default function MembershipPayPage() {
           action: "sign",
           token,
           name: legalName.trim(),
-          agreed: { terms: agreeTerms, disclaimer: agreeDisclaimer, serviceAgreement: agreeService, refund: true },
+          agreed: acceptanceGate?.legacy || { terms: false, disclaimer: false, refund: false, serviceAgreement: false },
           pdfBase64,
         },
       });
       if (error) throw error;
       const d = data as { ok?: boolean; error?: string; payUrl?: string | null };
       if (!d?.ok) throw new Error(d?.error || "Could not record your agreement");
+      if (acceptanceGate) {
+        const lines = acceptanceGate.items
+          .filter((item) => acceptanceGate.checked[item.kind])
+          .map((item) => item.wordingShown);
+        void submitAcceptances({
+          surface: "membership_pay",
+          context: {
+            relationship: "residential",
+            includeMembership: true,
+            includeCard: true,
+            propertyLabel: summary.city ? `${summary.city}, ${summary.state}` : "this home",
+            charge: {
+              dueNowLabel: money(summary.perCleanCents),
+              dueNowWhen: "when the membership payment is submitted",
+              amountBasis: `${summary.planLabel} at ${money(summary.perCleanCents)} per visit`,
+              savedFor: "for recurring membership charges until you cancel",
+            },
+            membership: {
+              pricePerVisit: money(summary.perCleanCents),
+              frequency: summary.planLabel,
+              firstChargeLabel: money(summary.perCleanCents),
+              firstChargeWhen: "when you submit payment",
+              nextChargeWhen: "on the next billing date",
+            },
+          },
+          items: acceptanceGate.items,
+          checked: acceptanceGate.checked,
+          personName: legalName.trim(),
+          email: summary.email,
+          bookingId: summary.scheduleId,
+        }).catch(() => undefined);
+        void submitSignedCopy({ email: summary.email, bookingId: summary.scheduleId, lines }).catch(() => undefined);
+      }
       toast.success("Agreement signed. One more step — activate your membership.");
       setSummary((s) => (s ? { ...s, agreementSigned: true } : s));
       if (d.payUrl) setPayUrl(d.payUrl);
@@ -262,40 +294,30 @@ export default function MembershipPayPage() {
               <p className="text-sm font-semibold text-foreground">Step 1 of 2 — Review &amp; sign</p>
             </div>
 
-            <div className="space-y-3">
-              <label className="flex items-start gap-2.5 cursor-pointer">
-                <Checkbox checked={agreeService} onCheckedChange={(v) => setAgreeService(v === true)} className="mt-0.5" />
-                <span className="text-xs text-foreground/80 leading-snug">
-                  I have read and agree to the{" "}
-                  <a href="https://novaracleaning.com/terms" target="_blank" rel="noopener noreferrer" className="text-primary underline font-medium">
-                    Membership / Recurring Service Agreement
-                  </a>
-                  , including recurring billing each cycle and the cancellation policy.
-                </span>
-              </label>
-              <label className="flex items-start gap-2.5 cursor-pointer">
-                <Checkbox checked={agreeTerms} onCheckedChange={(v) => setAgreeTerms(v === true)} className="mt-0.5" />
-                <span className="text-xs text-foreground/80 leading-snug">
-                  I agree to the{" "}
-                  <a href="https://novaracleaning.com/terms" target="_blank" rel="noopener noreferrer" className="text-primary underline font-medium">
-                    Terms of Service
-                  </a>{" "}
-                  and{" "}
-                  <a href="https://novaracleaning.com/refund-policy" target="_blank" rel="noopener noreferrer" className="text-primary underline font-medium">
-                    Refund Policy
-                  </a>.
-                </span>
-              </label>
-              <label className="flex items-start gap-2.5 cursor-pointer">
-                <Checkbox checked={agreeDisclaimer} onCheckedChange={(v) => setAgreeDisclaimer(v === true)} className="mt-0.5" />
-                <span className="text-xs text-foreground/80 leading-snug">
-                  I acknowledge the{" "}
-                  <a href="https://novaracleaning.com/disclaimer" target="_blank" rel="noopener noreferrer" className="text-primary underline font-medium">
-                    Disclaimer
-                  </a>.
-                </span>
-              </label>
-            </div>
+            <AcceptanceChecklist
+              surface="membership_pay"
+              showErrors={showAcceptanceErrors}
+              onChange={setAcceptanceGate}
+              context={{
+                relationship: "residential",
+                includeMembership: true,
+                includeCard: true,
+                propertyLabel: summary.city ? `${summary.city}, ${summary.state}` : "this home",
+                charge: {
+                  dueNowLabel: money(summary.perCleanCents),
+                  dueNowWhen: "when the membership payment is submitted",
+                  amountBasis: `${summary.planLabel} at ${money(summary.perCleanCents)} per visit`,
+                  savedFor: "for recurring membership charges until you cancel",
+                },
+                membership: {
+                  pricePerVisit: money(summary.perCleanCents),
+                  frequency: summary.planLabel,
+                  firstChargeLabel: money(summary.perCleanCents),
+                  firstChargeWhen: "when you submit payment",
+                  nextChargeWhen: "on the next billing date",
+                },
+              }}
+            />
 
             <div className="space-y-2">
               <Label className="text-xs text-muted-foreground">Your full legal name</Label>
@@ -316,8 +338,14 @@ export default function MembershipPayPage() {
 
             <Button
               className="w-full h-12"
-              disabled={!canSign || signing}
-              onClick={handleSign}
+              disabled={signing || legalName.trim().length < 3 || !signatureDataUrl}
+              onClick={() => {
+                if (!allAccepted) {
+                  setShowAcceptanceErrors(true);
+                  return;
+                }
+                void handleSign();
+              }}
             >
               {signing ? (
                 <><RiLoader4Line className="w-5 h-5 mr-2 animate-spin" /> Saving your agreement…</>
@@ -327,7 +355,7 @@ export default function MembershipPayPage() {
             </Button>
             {!allAccepted && (
               <p className="text-[11px] text-muted-foreground text-center">
-                All three boxes must be checked — and your signature added — before payment unlocks.
+                Check each required agreement, including the membership terms beside this button, then sign.
               </p>
             )}
           </div>

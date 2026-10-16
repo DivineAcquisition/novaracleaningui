@@ -266,7 +266,7 @@ serve(async (req) => {
       booking.add_ons && booking.add_ons.length
         ? `Add-ons: ${(booking.add_ons as string[]).join(", ")}`
         : null,
-      booking.access_notes ? `Access: ${booking.access_notes}` : null,
+      null,
       booking.team_notes ? `Internal: ${booking.team_notes}` : null,
       booking.total_estimate_cents
         ? `Total: $${(booking.total_estimate_cents / 100).toFixed(2)}`

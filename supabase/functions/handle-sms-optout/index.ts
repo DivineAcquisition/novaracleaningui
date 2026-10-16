@@ -48,42 +48,47 @@ serve(async (req) => {
       );
     }
 
-    // Find cleaner by phone
-    const { data: cleaner, error: cleanerError } = await supabase
+    const digits = cleanPhone.length > 10 ? cleanPhone.slice(-10) : cleanPhone;
+    const nowIso = new Date().toISOString();
+    await supabase.from("compliance_sms_suppressions").upsert({
+      phone_digits: digits,
+      suppressed_at: nowIso,
+      source: "stop",
+      lifted_at: null,
+    }, { onConflict: "phone_digits" });
+
+    // Find cleaner by phone. Customer numbers are not cleaners, and STOP
+    // still has to suppress them.
+    const { data: cleaner } = await supabase
       .from("cleaners")
       .select("id, email, first_name, last_name")
       .eq("phone", cleanPhone)
-      .single();
+      .maybeSingle();
 
-    if (cleanerError) {
-      console.error("Error finding cleaner:", cleanerError);
-      throw new Error("Cleaner not found");
-    }
+    if (cleaner) {
+      const { error: updateError } = await supabase
+        .from("cleaners")
+        .update({
+          sms_notifications_enabled: false,
+          updated_at: nowIso,
+        })
+        .eq("id", cleaner.id);
 
-    // Update cleaner's SMS preferences
-    const { error: updateError } = await supabase
-      .from("cleaners")
-      .update({
-        sms_notifications_enabled: false,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", cleaner.id);
-
-    if (updateError) {
-      console.error("Error updating cleaner:", updateError);
-      throw new Error("Failed to update SMS preferences");
+      if (updateError) {
+        console.error("Error updating cleaner:", updateError);
+      }
     }
 
     // Log the revocation in sms_consent_logs
     const { error: logError } = await supabase
       .from("sms_consent_logs")
       .insert({
-        phone: cleanPhone,
-        email: cleaner.email,
-        first_name: cleaner.first_name,
-        last_name: cleaner.last_name,
+        phone: digits,
+        email: cleaner?.email || null,
+        first_name: cleaner?.first_name || null,
+        last_name: cleaner?.last_name || null,
         consent_given: false,
-        revoked_at: new Date().toISOString(),
+        revoked_at: nowIso,
       });
 
     if (logError) {
@@ -91,7 +96,7 @@ serve(async (req) => {
       // Don't fail if logging fails
     }
 
-    console.log("SMS opt-out processed successfully for cleaner:", cleaner.id);
+    console.log("SMS opt-out processed", { digits, cleaner: cleaner?.id || null });
 
     return new Response(
       JSON.stringify({

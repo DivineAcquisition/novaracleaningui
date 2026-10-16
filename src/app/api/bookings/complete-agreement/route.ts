@@ -25,7 +25,12 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request): Promise<NextResponse> {
-  let body: { token?: string; signatureImage?: string };
+  let body: {
+    token?: string;
+    signatureImage?: string;
+    acknowledgments?: Array<{ label: string; accepted?: boolean }>;
+    policySnapshot?: { effectiveOn?: string | null; acceptedVersionRecorded: boolean; clauses?: Array<{ text: string; cite: string }> };
+  };
   try {
     body = await req.json();
   } catch {
@@ -195,8 +200,10 @@ export async function POST(req: Request): Promise<NextResponse> {
                 { label: "Disclaimer", accepted: signed[0].agreed_disclaimer === true },
                 { label: "Refund Policy", accepted: signed[0].agreed_refund === true },
                 { label: "Service Agreement", accepted: signed[0].agreed_service_agreement === true },
+                ...(Array.isArray(body.acknowledgments) ? body.acknowledgments : []),
               ],
             },
+            policySnapshot: body.policySnapshot?.acceptedVersionRecorded ? body.policySnapshot : undefined,
           },
         },
       }).catch(() => undefined);

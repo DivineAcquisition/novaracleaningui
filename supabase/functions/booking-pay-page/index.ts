@@ -145,7 +145,7 @@ serve(async (req) => {
       const pdfBase64 = String((body as Row)?.pdfBase64 || "");
 
       // Every legal component MUST be accepted, and the signed PDF must exist.
-      if (!agreed.terms || !agreed.disclaimer || !agreed.serviceAgreement) {
+      if (!agreed.terms || !agreed.disclaimer || !agreed.serviceAgreement || !agreed.refund) {
         return json({ ok: false, error: "all_policies_must_be_accepted" }, 400);
       }
       if (!name) return json({ ok: false, error: "signature_name_required" }, 400);
@@ -163,7 +163,7 @@ serve(async (req) => {
           agreed: {
             terms: true,
             disclaimer: true,
-            refund: Boolean(agreed.refund ?? true),
+            refund: agreed.refund === true,
             serviceAgreement: true,
           },
           pdfBase64,

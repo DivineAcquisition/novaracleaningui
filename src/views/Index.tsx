@@ -725,6 +725,16 @@ const Index = () => {
                 >
                   Terms of Service
                 </a>
+                <a href="/privacy-request" className="hover:text-foreground transition-colors">
+                  Privacy request
+                </a>
+                <button
+                  type="button"
+                  onClick={() => window.dispatchEvent(new CustomEvent("novara:cookie-settings"))}
+                  className="hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                >
+                  Cookie settings
+                </button>
                 <a
                   href="tel:+18447352070"
                   className="hover:text-foreground transition-colors"

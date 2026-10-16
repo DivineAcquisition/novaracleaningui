@@ -21,6 +21,8 @@ import {
 } from "@remixicon/react";
 
 import { Button } from "@/components/ui/button";
+import { AcceptanceChecklist, type AcceptanceGateState } from "@/components/compliance/AcceptanceChecklist";
+import { submitAcceptances } from "@/lib/compliance/record-client";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -43,7 +45,7 @@ const PLAIN_INPUT =
 const AGREEMENT_URL = "https://partner.novaracleaning.com/host-partnership-agreement";
 
 const FEATURES = [
-  { icon: RiShieldCheckLine, label: "Vetted cleaners", desc: "Background-checked and rated after every clean." },
+  { icon: RiShieldCheckLine, label: "Cleaners we send are background-checked", desc: "The people assigned to a property are background-checked." },
   { icon: RiFlashlightFill, label: "Auto dispatch", desc: "Matched to your preferred crew the moment you book." },
   { icon: RiKey2Line, label: "Secure access", desc: "Lockbox & gate codes stored safely, shared only on the job." },
 ];
@@ -78,6 +80,7 @@ export default function HostOnboarding() {
 
   // Step 3 — consent + portal account
   const [consent, setConsent] = useState(false);
+  const [complianceGate, setComplianceGate] = useState<AcceptanceGateState | null>(null);
 
   // Prefill from an admin-generated "spin up onboarding link" (query params).
   useEffect(() => {
@@ -122,6 +125,7 @@ export default function HostOnboarding() {
 
   const submit = async () => {
     if (!consent) { toast.error("Please agree to the Host Partnership Agreement."); return; }
+    if (!complianceGate?.ready) { toast.error("Check each required agreement. Marketing texts and emails are optional."); return; }
     setSubmitting(true);
     const cleanEmail = email.trim().toLowerCase();
     const payload: OnboardingFormPayload = {
@@ -135,6 +139,22 @@ export default function HostOnboarding() {
       consentAgreement: consent,
     };
     try {
+      if (complianceGate) {
+        void submitAcceptances({
+          surface: "host_signup",
+          context: {
+            relationship: "str_host",
+            includeCard: false,
+            phone,
+            propertyLabel: properties[0]?.address || "your property",
+          },
+          items: complianceGate.items,
+          checked: complianceGate.checked,
+          personName: fullName.trim(),
+          email: cleanEmail,
+          phone,
+        }).catch(() => undefined);
+      }
       const res = await fetch("/api/host-onboarding", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -189,6 +209,9 @@ export default function HostOnboarding() {
                     setConsent={setConsent}
                     propertyCount={properties.length}
                     email={email}
+                    propertyLabel={properties[0]?.address || properties[0]?.nickname || "your property"}
+                    phone={phone}
+                    onComplianceChange={setComplianceGate}
                   />
                 )}
 
@@ -399,10 +422,13 @@ function StepProperties({
 }
 
 function StepConsent({
-  consent, setConsent, propertyCount, email,
+  consent, setConsent, propertyCount, email, propertyLabel, phone, onComplianceChange,
 }: {
   consent: boolean; setConsent: (v: boolean) => void; propertyCount: number;
   email: string;
+  propertyLabel: string;
+  phone: string;
+  onComplianceChange: (state: AcceptanceGateState) => void;
 }) {
   return (
     <div className="space-y-4">
@@ -426,6 +452,16 @@ function StepConsent({
         No password is created.
       </p>
 
+      <AcceptanceChecklist
+        surface="host_signup"
+        onChange={onComplianceChange}
+        context={{
+          relationship: "str_host",
+          includeCard: false,
+          propertyLabel,
+          phone,
+        }}
+      />
       <label className="flex items-start gap-3 rounded-xl border border-slate-200 p-4">
         <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-0.5 h-4 w-4 accent-[#5500FF]" />
         <span className="text-sm text-slate-700">

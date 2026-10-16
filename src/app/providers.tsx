@@ -7,6 +7,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BookingProvider } from "@/contexts/BookingContext";
+import { CookieNotice } from "@/components/compliance/CookieNotice";
+import { TrackerGate } from "@/components/compliance/TrackerGate";
 import { useState } from "react";
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -23,6 +25,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
           <AuthProvider>
             <BookingProvider>
               {children}
+              <CookieNotice />
+              <TrackerGate />
             </BookingProvider>
           </AuthProvider>
         </TooltipProvider>

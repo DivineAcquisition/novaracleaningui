@@ -192,6 +192,12 @@ serve(async (req) => {
     try {
       await revokePartnershipOptOut(supabase, { phone: fromPhone, channel: "sms" });
     } catch (e) { log("partnership opt-in failed", { error: e instanceof Error ? e.message : String(e) }); }
+    try {
+      const digits = fromPhone.replace(/\D/g, "").slice(-10);
+      if (digits) {
+        await supabase.from("compliance_sms_suppressions").update({ lifted_at: new Date().toISOString() }).eq("phone_digits", digits);
+      }
+    } catch (e) { log("suppression lift failed", { error: e instanceof Error ? e.message : String(e) }); }
     return finalize(
       "start_optin",
       `Novara Cleaning: You are opted back in to texts. Reply STOP to opt out. Help? Call ${SUPPORT_PHONE_DISPLAY}.`,

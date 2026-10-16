@@ -33,6 +33,8 @@ import {
   checklistPathForServiceType,
 } from "@/lib/value-stack";
 import { format } from "date-fns";
+import { AcceptanceChecklist, type AcceptanceGateState } from "@/components/compliance/AcceptanceChecklist";
+import { readCheckoutAcceptances, submitAcceptances, submitSignedCopy } from "@/lib/compliance/record-client";
 
 // Customer-facing arrival windows. Mirrors the windows offered on
 // /book/offer's SchedulePicker so the second-visit slot uses the same
@@ -134,6 +136,13 @@ export default function PropertyDetails() {
   // Signed One-Time Service Agreement — captured here on the Details step
   // (moved off the Checkout page). The signature gates "Complete Booking".
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null);
+  const [acceptanceGate, setAcceptanceGate] = useState<AcceptanceGateState | null>(null);
+  const [showAcceptanceErrors, setShowAcceptanceErrors] = useState(false);
+  const [fieldError, setFieldError] = useState("");
+  const [priorAcceptances, setPriorAcceptances] = useState<ReturnType<typeof readCheckoutAcceptances>>(null);
+  useEffect(() => {
+    setPriorAcceptances(readCheckoutAcceptances());
+  }, []);
   // Authoritative figures + identity pulled from the booking row so the
   // generated agreement PDF maps the same totals the customer was charged.
   const [agreementMeta, setAgreementMeta] = useState<{
@@ -422,7 +431,15 @@ export default function PropertyDetails() {
           agreementType: isMembershipSignup ? "membership" : "one_time_service",
           // Policies are presented for review on the checkout step and the
           // customer accepts them by signing here, so each is recorded true.
-          agreed: { terms: true, disclaimer: true, refund: true, serviceAgreement: true },
+          agreed: {
+            terms: acceptanceGate?.legacy.terms === true || priorAcceptances?.checked.terms === true,
+            disclaimer: acceptanceGate?.legacy.disclaimer === true || priorAcceptances?.checked.disclaimer === true,
+            refund: acceptanceGate?.legacy.refund === true || priorAcceptances?.checked.refund_policy === true,
+            serviceAgreement:
+              acceptanceGate?.legacy.serviceAgreement === true ||
+              priorAcceptances?.checked.service_agreement === true ||
+              priorAcceptances?.checked.membership_terms === true,
+          },
           pdfBase64,
         },
       });
@@ -441,16 +458,31 @@ export default function PropertyDetails() {
     if (street && street !== address) setAddress(street);
 
     if (!street || !city || !state || !bedrooms || !bathrooms || !dwellingType) {
-      toast.error("Please fill in all required fields");
+      const missing = [
+        !street ? "street address" : null,
+        !city ? "city" : null,
+        !state ? "state" : null,
+        !bedrooms ? "bedrooms" : null,
+        !bathrooms ? "bathrooms" : null,
+        !dwellingType ? "home type" : null,
+      ].filter(Boolean).join(", ");
+      setFieldError(`Enter ${missing} to continue.`);
+      return;
+    }
+
+    if (!acceptanceGate?.ready) {
+      setShowAcceptanceErrors(true);
+      setFieldError("Check each required agreement before you sign.");
       return;
     }
 
     if (!signatureDataUrl) {
-      toast.error(isMembershipSignup
-        ? "Please sign the Membership / Recurring Service Agreement to complete your booking"
-        : "Please sign the One-Time Service Agreement to complete your booking");
+      setFieldError(isMembershipSignup
+        ? "Sign the membership agreement, or type your signature, to complete your booking."
+        : "Sign the service agreement, or type your signature, to complete your booking.");
       return;
     }
+    setFieldError("");
 
     // Combo bookings require the second-visit date + arrival window.
     if (bookingMeta.isCombo && (!secondVisitDate || !secondVisitSlot)) {
@@ -554,6 +586,29 @@ export default function PropertyDetails() {
       // Generate + store the signed One-Time Service Agreement (and email a
       // copy). Fire-and-forget so confirmation navigation isn't blocked.
       void persistServiceAgreement();
+      if (acceptanceGate) {
+        const lines = acceptanceGate.items
+          .filter((item) => acceptanceGate.checked[item.kind])
+          .map((item) => item.wordingShown);
+        void submitAcceptances({
+          surface: "residential_signature",
+          context: {
+            relationship: "residential",
+            includeCard: false,
+            policiesAlreadyAccepted: priorAcceptances?.checked.terms === true,
+            propertyLabel: [street, city, state].filter(Boolean).join(", "),
+          },
+          items: acceptanceGate.items,
+          checked: acceptanceGate.checked,
+          personName: `${bookingData.firstName || ""} ${bookingData.lastName || ""}`.trim(),
+          email: bookingData.email,
+          phone: bookingData.phone,
+          bookingId: id,
+        }).catch(() => undefined);
+        if (bookingData.email && lines.length) {
+          void submitSignedCopy({ email: bookingData.email, bookingId: id, lines }).catch(() => undefined);
+        }
+      }
 
       toast.success("Details saved! Finalizing your booking…");
 
@@ -926,6 +981,21 @@ export default function PropertyDetails() {
                   </a>
                 </div>
               </div>
+              {fieldError ? (
+                <p role="alert" className="text-sm text-destructive">{fieldError}</p>
+              ) : null}
+              <AcceptanceChecklist
+                surface="residential_signature"
+                showErrors={showAcceptanceErrors}
+                onChange={setAcceptanceGate}
+                context={{
+                  relationship: "residential",
+                  includeCard: false,
+                  includeMembership: isMembershipSignup,
+                  policiesAlreadyAccepted: priorAcceptances?.checked.terms === true,
+                  propertyLabel: [address, city, state].filter(Boolean).join(", ") || "this home",
+                }}
+              />
               <p className="text-xs text-muted-foreground">
                 By signing you agree to the{" "}
                 <a href="https://novaracleaning.com/terms" target="_blank" rel="noopener noreferrer" className="text-primary underline">Terms of Service</a>,{" "}

@@ -3,37 +3,47 @@
  * Each function safely no-ops if fbq is not loaded (e.g. ad blockers).
  */
 
-const callFbq = (event: string, params?: Record<string, unknown>, eventId?: string) => {
-  if (typeof window !== 'undefined' && window.fbq) {
-    const fbq = window.fbq as (...args: unknown[]) => void;
-    if (eventId) fbq('track', event, params, { eventID: eventId });
-    else fbq('track', event, params);
+function advertisingAllowed(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const raw = window.localStorage.getItem("novara.cookie.choice.v1");
+    if (!raw) return false;
+    const parsed = JSON.parse(raw) as { advertising?: boolean };
+    return parsed.advertising === true;
+  } catch {
+    return false;
   }
+}
+
+function safeParams(params?: Record<string, unknown>): Record<string, unknown> {
+  const safe: Record<string, unknown> = {};
+  if (typeof params?.value === "number" && Number.isFinite(params.value)) safe.value = params.value;
+  safe.currency = "USD";
+  return safe;
+}
+
+const callFbq = (event: string, params?: Record<string, unknown>, eventId?: string) => {
+  if (!advertisingAllowed()) return;
+  if (typeof window === "undefined" || !window.fbq) return;
+  const fbq = window.fbq as (...args: unknown[]) => void;
+  const payload = safeParams(params);
+  if (eventId) fbq("track", event, payload, { eventID: eventId });
+  else fbq("track", event, payload);
 };
 
 /** Fires when a user views pricing / selects a service (Offer page). */
-export function trackViewContent(value: number, contentName: string) {
-  callFbq('ViewContent', {
-    value,
-    currency: 'USD',
-    content_name: contentName,
-  });
+export function trackViewContent(value: number, _contentName: string) {
+  callFbq("booking_started", { value, currency: "USD" });
 }
 
 /** Fires when the user reaches the checkout / payment page. */
 export function trackInitiateCheckout(value: number) {
-  callFbq('InitiateCheckout', {
-    value,
-    currency: 'USD',
-  });
+  callFbq("booking_started", { value, currency: "USD" });
 }
 
 /** Fires when a user submits a valid ZIP code (early funnel signal). */
-export function trackLead(zipCode: string) {
-  callFbq('Lead', {
-    content_name: 'ZIP Entry',
-    content_category: zipCode,
-  });
+export function trackLead(_zipCode: string) {
+  callFbq("booking_started");
 }
 
 /** Fires when the booking is confirmed (Success page). */
@@ -44,11 +54,8 @@ export function trackPurchase(
   zoneId?: string,
   eventId?: string,
 ) {
-  callFbq('Purchase', {
-    value,
-    currency: 'USD',
-    content_name: serviceType,
-    content_category: frequency,
-    content_ids: zoneId ? [zoneId] : [],
-  }, eventId);
+  void serviceType;
+  void frequency;
+  void zoneId;
+  callFbq("booking_completed", { value, currency: "USD" }, eventId);
 }

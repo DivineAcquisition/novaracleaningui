@@ -41,6 +41,8 @@ import {
   type FocusedCondition,
 } from "@/lib/focused-same-day";
 import { Checkbox } from "@/components/ui/checkbox";
+import { savingsPercentFromRules, strikethroughPrice, urgencyVisible } from "@/lib/compliance";
+import { AcceptanceChecklist, type AcceptanceGateState } from "@/components/compliance/AcceptanceChecklist";
 import { SEO } from "@/components/SEO";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -75,6 +77,8 @@ export default function BookingOffer() {
       ? "membership"
       : bookingData.serviceType === 'focused' ? 'focused' : null,
   );
+  const [membershipGate, setMembershipGate] = useState<AcceptanceGateState | null>(null);
+  const [showMembershipErrors, setShowMembershipErrors] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(
     bookingData.serviceDate ? new Date(bookingData.serviceDate + 'T12:00:00') : undefined
   );
@@ -116,13 +120,11 @@ export default function BookingOffer() {
 
     // Membership prices (Zone B base — recurring tier untouched by the
     // 10% reduction in v3.4)
-    const memberPrices = MEMBERSHIP_PRICES[homeSizeId] || { monthly: 129, biweekly: 199, weekly: 349 };
+    const memberPrices = MEMBERSHIP_PRICES[homeSizeId] || { monthly: 0, biweekly: 0, weekly: 0 };
 
     // Per-clean cost for bi-weekly
     const biweeklyPerClean = Math.round((memberPrices.biweekly / 2) * 100) / 100;
-    const biweeklySavingsPercent = standardList > 0
-      ? Math.round((1 - biweeklyPerClean / standardList) * 100)
-      : 34;
+    const biweeklySavingsPercent = savingsPercentFromRules(standardList, biweeklyPerClean);
 
     return {
       standard: standardList,
@@ -166,7 +168,7 @@ export default function BookingOffer() {
       focusedAreas: [],
       paymentOption: 'deposit',
     });
-    trackViewContent(prices.standard, 'Standard Cleaning — 25% Off First Clean');
+    trackViewContent(prices.standardPromoTotal, "Standard Cleaning");
     setTimeout(() => {
       document.getElementById('schedule-section')?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
@@ -180,7 +182,7 @@ export default function BookingOffer() {
       focusedAreas: [],
       paymentOption: 'deposit',
     });
-    trackViewContent(prices.deepClean, 'Deep Cleaning — 25% Off First Clean');
+    trackViewContent(prices.deepPromoTotal, "Deep Cleaning");
     setTimeout(() => {
       document.getElementById('schedule-section')?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
@@ -194,7 +196,7 @@ export default function BookingOffer() {
       focusedAreas: [],
       paymentOption: 'deposit',
     });
-    trackViewContent(prices.combo, 'Deep + Standard Combo — 25% Off First Clean');
+    trackViewContent(prices.comboPromoTotal, "Deep + Standard Combo");
     setTimeout(() => {
       document.getElementById('schedule-section')?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
@@ -330,28 +332,25 @@ export default function BookingOffer() {
           <div className="text-center space-y-3 md:space-y-4">
             <Badge className="bg-primary/10 text-primary border border-primary/40 px-3 py-1 text-xs font-bold uppercase tracking-wider">
               <RiSparklingLine className="h-3.5 w-3.5 mr-1.5" />
-              New Customer Special — 25% Off
+              Prices from the rate card for this home
             </Badge>
 
             <h1 className="font-jakarta text-3xl md:text-4xl lg:text-5xl font-extrabold leading-tight">
-              Save{" "}
-              <span className="bg-gradient-primary bg-clip-text text-transparent">
-                25%
-              </span>{" "}
-              On Your First Cleaning
+              Choose a clean
             </h1>
 
             <p className="text-xs md:text-sm uppercase tracking-[0.22em] text-primary font-semibold">
-              New-customer discount applied automatically at checkout
+              Discounts below are the published pricing rules, not a typed promotion
             </p>
 
             <p className="text-muted-foreground text-base md:text-lg max-w-xl mx-auto">
-              Pick a one-time deep clean or join the Glow membership — either way you save 25% on the first clean.
+              Standard, deep, and combo prices are calculated for this home. The discount is not limited to first-time customers.
             </p>
 
             <div className="flex justify-center pt-1">
               <GoogleGuaranteedBadge variant="compact" />
             </div>
+            <LiveUrgency />
           </div>
 
           {/* "What's the difference?" comparison opener — sits between
@@ -471,6 +470,11 @@ export default function BookingOffer() {
               const standardDiscounted = prices.standardPromoTotal;
               const standardDepositToday = prices.standardPromoDeposit;
               const standardBalanceAfter = prices.standardPromoBalance;
+              const standardStrike = strikethroughPrice({
+                listPrice: prices.standard,
+                finalPrice: standardDiscounted,
+                source: "pricing_rules",
+              });
               const isSelected = selectedService === "standard";
               return (
                 <Card
@@ -493,7 +497,7 @@ export default function BookingOffer() {
                           className="bg-primary/10 text-primary border-primary/40 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider"
                         >
                           <RiPercentLine className="h-3 w-3 mr-1" />
-                          25% off · auto-applied
+                          {standardStrike.percent != null ? `${standardStrike.percent}% off the regular price` : "Regular price"}
                         </Badge>
                       </div>
                     </div>
@@ -501,7 +505,7 @@ export default function BookingOffer() {
                     <div>
                       <h3 className="text-xl md:text-2xl font-bold font-jakarta">Standard Clean</h3>
                       <p className="text-xs md:text-sm text-muted-foreground">
-                        Regular maintenance cleaning — first-time customers save 25%.
+                        Regular maintenance cleaning. The discount is the standard-clean rule for this home, not a first-time offer.
                       </p>
                     </div>
 
@@ -510,10 +514,15 @@ export default function BookingOffer() {
                         <span className="font-jakarta text-3xl md:text-4xl font-extrabold bg-gradient-primary bg-clip-text text-transparent">
                           ${standardDiscounted.toFixed(2)}
                         </span>
+                        {standardStrike.show ? (
+                          <span className="text-sm text-muted-foreground line-through">${standardStrike.listPrice.toFixed(2)}</span>
+                        ) : null}
                         <span className="text-sm text-muted-foreground">total / clean</span>
                       </div>
                       <p className="text-xs text-primary font-semibold mt-1.5">
-                        25% off applied automatically
+                        {standardStrike.percent != null
+                          ? `${standardStrike.percent}% off the regular price for this service and home. One rate per home. It does not expire on a timer.`
+                          : "This is the regular price for this service and home."}
                       </p>
                       <div className="mt-2 rounded-md bg-primary/5 border border-primary/15 px-3 py-2 text-xs space-y-0.5">
                         <div className="flex items-center justify-between">
@@ -551,7 +560,7 @@ export default function BookingOffer() {
                         handleSelectStandard();
                       }}
                     >
-                      Claim Offer — Save 25%
+                      Continue with this price
                       <RiArrowRightSLine className="w-4 h-4 ml-1" />
                     </Button>
                   </CardContent>
@@ -564,6 +573,11 @@ export default function BookingOffer() {
               const deepDiscounted = prices.deepPromoTotal;
               const deepDepositToday = prices.deepPromoDeposit;
               const deepBalanceAfter = prices.deepPromoBalance;
+              const deepStrike = strikethroughPrice({
+                listPrice: prices.deepClean,
+                finalPrice: deepDiscounted,
+                source: "pricing_rules",
+              });
               const isSelected = selectedService === "deep";
               return (
                 <div className="relative pt-4">
@@ -593,7 +607,7 @@ export default function BookingOffer() {
                             className="bg-primary/10 text-primary border-primary/40 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider"
                           >
                             <RiPercentLine className="h-3 w-3 mr-1" />
-                            25% off · auto-applied
+                            {deepStrike.percent != null ? `${deepStrike.percent}% off the regular price` : "Regular price"}
                           </Badge>
                         </div>
                       </div>
@@ -601,7 +615,7 @@ export default function BookingOffer() {
                       <div>
                         <h3 className="text-xl md:text-2xl font-bold font-jakarta">Deep Clean</h3>
                         <p className="text-xs md:text-sm text-muted-foreground">
-                          Thorough top-to-bottom reset — first-time customers save 25%.
+                          Thorough top-to-bottom reset. The discount is the deep-clean rule for this home.
                         </p>
                       </div>
 
@@ -610,10 +624,15 @@ export default function BookingOffer() {
                           <span className="font-jakarta text-3xl md:text-4xl font-extrabold bg-gradient-primary bg-clip-text text-transparent">
                             ${deepDiscounted.toFixed(2)}
                           </span>
+                          {deepStrike.show ? (
+                            <span className="text-sm text-muted-foreground line-through">${deepStrike.listPrice.toFixed(2)}</span>
+                          ) : null}
                           <span className="text-sm text-muted-foreground">total / clean</span>
                         </div>
                         <p className="text-xs text-primary font-semibold mt-1.5">
-                          25% off applied automatically
+                          {deepStrike.percent != null
+                            ? `${deepStrike.percent}% off the regular deep-clean price for this home. Not limited to first-time customers.`
+                            : "This is the regular price for this service and home."}
                         </p>
                         <div className="mt-2 rounded-md bg-primary/5 border border-primary/15 px-3 py-2 text-xs space-y-0.5">
                           <div className="flex items-center justify-between">
@@ -651,7 +670,7 @@ export default function BookingOffer() {
                           handleSelectDeepClean();
                         }}
                       >
-                        Claim Offer — Save 25%
+                        Continue with this price
                         <RiArrowRightSLine className="w-4 h-4 ml-1" />
                       </Button>
                     </CardContent>
@@ -671,6 +690,11 @@ export default function BookingOffer() {
               const comboDiscounted = prices.comboPromoTotal;
               const comboDepositToday = prices.comboPromoDeposit;
               const comboBalanceAfter = prices.comboPromoBalance;
+              const comboStrike = strikethroughPrice({
+                listPrice: prices.combo,
+                finalPrice: comboDiscounted,
+                source: "pricing_rules",
+              });
               const isSelected = selectedService === "combo";
               return (
                 <Card
@@ -693,7 +717,7 @@ export default function BookingOffer() {
                           className="bg-primary/10 text-primary border-primary/40 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider"
                         >
                           <RiPercentLine className="h-3 w-3 mr-1" />
-                          25% off · auto-applied
+                          {comboStrike.percent != null ? `${comboStrike.percent}% off the regular bundle price` : "Regular price"}
                         </Badge>
                       </div>
                       <Badge
@@ -710,7 +734,7 @@ export default function BookingOffer() {
                       </h3>
                       <p className="text-xs md:text-sm text-muted-foreground">
                         One Deep Clean now + a Standard follow-up within 14 days.
-                        Two visits, one price — first-time customers save 25%.
+                        Two visits, one price. The combo rule takes half off the standard visit only. Deep stays at its regular price.
                       </p>
                     </div>
 
@@ -719,12 +743,17 @@ export default function BookingOffer() {
                         <span className="font-jakarta text-3xl md:text-4xl font-extrabold bg-gradient-primary bg-clip-text text-transparent">
                           ${comboDiscounted.toFixed(2)}
                         </span>
+                        {comboStrike.show ? (
+                          <span className="text-sm text-muted-foreground line-through">${comboStrike.listPrice.toFixed(2)}</span>
+                        ) : null}
                         <span className="text-sm text-muted-foreground">
                           bundle total
                         </span>
                       </div>
                       <p className="text-xs text-primary font-semibold mt-1.5">
-                        25% off the entire bundle — applied automatically
+                        {comboStrike.percent != null
+                          ? `${comboStrike.percent}% off the regular bundle price for this home. Half off applies to the standard visit only.`
+                          : "This is the regular bundle price for this home."}
                       </p>
                       <div className="mt-2 rounded-md bg-primary/5 border border-primary/15 px-3 py-2 text-xs space-y-0.5">
                         <div className="flex items-center justify-between">
@@ -774,7 +803,7 @@ export default function BookingOffer() {
                         handleSelectCombo();
                       }}
                     >
-                      Claim Combo — Save 25%
+                      Continue with this price
                       <RiArrowRightSLine className="w-4 h-4 ml-1" />
                     </Button>
                   </CardContent>
@@ -803,7 +832,9 @@ export default function BookingOffer() {
                       className="bg-primary/10 text-primary border-primary/40 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider"
                     >
                       <RiStarLine className="h-3 w-3 mr-1" />
-                      Save up to {prices.membership.biweeklySavingsPercent}%
+                      {prices.membership.biweeklySavingsPercent != null
+                        ? `About ${prices.membership.biweeklySavingsPercent}% under the regular standard price`
+                        : "Membership price for this home"}
                     </Badge>
                   </div>
                 </div>
@@ -850,7 +881,7 @@ export default function BookingOffer() {
                     ))}
                   </div>
                   <p className="text-xs text-muted-foreground mt-2">
-                    Membership pricing already discounted — 25%-off promo does not stack.
+                    Membership uses its own rate card. The one-time discount does not stack on top of it.
                   </p>
                 </div>
 
@@ -863,12 +894,39 @@ export default function BookingOffer() {
                   ))}
                 </ul>
 
-                <div className="space-y-2 pt-1">
+                <div className="space-y-2 pt-1" onClick={(e) => e.stopPropagation()}>
+                  <AcceptanceChecklist
+                    surface="membership_offer"
+                    showErrors={showMembershipErrors}
+                    onChange={setMembershipGate}
+                    context={{
+                      relationship: "residential",
+                      includeMembership: true,
+                      includeCard: true,
+                      membership: {
+                        pricePerVisit: `$${prices.membership.biweeklyPerClean.toFixed(2)}`,
+                        frequency: "every two weeks",
+                        firstChargeLabel: `$${prices.membership.biweekly.toFixed(2)}`,
+                        firstChargeWhen: "when you pay on the next step",
+                        nextChargeWhen: "about two weeks after the first charge",
+                      },
+                      charge: {
+                        dueNowLabel: `$${prices.membership.biweekly.toFixed(2)}`,
+                        dueNowWhen: "when you pay on the next step",
+                        amountBasis: "the membership rate card for this home",
+                        savedFor: "for recurring membership charges until you cancel",
+                      },
+                    }}
+                  />
                   <Button
                     size="lg"
                     className="w-full font-semibold"
                     onClick={(e) => {
                       e.stopPropagation();
+                      if (!membershipGate?.ready) {
+                        setShowMembershipErrors(true);
+                        return;
+                      }
                       handleSelectMembership();
                     }}
                   >
@@ -1086,5 +1144,22 @@ export default function BookingOffer() {
         </Dialog>
       </div>
     </PageTransition>
+  );
+}
+
+function LiveUrgency() {
+  const [config, setConfig] = useState<{ label: string; capacityRemaining?: number | null; endsAt?: string | null } | null>(null);
+  useEffect(() => {
+    fetch("/api/compliance?view=settings")
+      .then((res) => res.json())
+      .then((json) => setConfig(json.urgency || null))
+      .catch(() => setConfig(null));
+  }, []);
+  if (!urgencyVisible(config, new Date())) return null;
+  return (
+    <p className="text-sm font-semibold text-amber-800">
+      {config?.label}
+      {typeof config?.capacityRemaining === "number" ? ` · ${config.capacityRemaining} left` : ""}
+    </p>
   );
 }

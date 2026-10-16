@@ -31,6 +31,7 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { redactAccessText } from "../_shared/access-redact.ts";
 
 const GHL_BASE = "https://services.leadconnectorhq.com";
 const GHL_VERSION = "2021-07-28";
@@ -260,6 +261,7 @@ serve(async (req) => {
     }
 
     const body: Body = await req.json();
+    body.message = redactAccessText(body.message || "");
     if (!body.message || !body.message.trim()) {
       return new Response(JSON.stringify({ error: "message required" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -271,6 +273,22 @@ serve(async (req) => {
     const normalizedPhone = toE164(body.phone);
     if (body.phone && !normalizedPhone) {
       logStep("could not normalize phone", { input: body.phone });
+    }
+    const digits = (normalizedPhone || "").replace(/\D/g, "").slice(-10);
+    if (digits.length === 10) {
+      const { data: stopped } = await supabase
+        .from("compliance_sms_suppressions")
+        .select("phone_digits")
+        .eq("phone_digits", digits)
+        .is("lifted_at", null)
+        .maybeSingle();
+      if (stopped) {
+        logStep("suppressed by STOP", { digits });
+        return new Response(JSON.stringify({ success: true, suppressed: true, reason: "stop" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
     }
 
     // 2. Resolve the verified outbound phoneNumberId. Priority:

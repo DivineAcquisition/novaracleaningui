@@ -111,7 +111,8 @@ export function SignaturePad({ onChange, height = 160 }: SignaturePadProps) {
         <canvas
           ref={canvasRef}
           style={{ width: "100%", height, touchAction: "none" }}
-          className="rounded-lg cursor-crosshair"
+          className="rounded-lg cursor-crosshair focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label="Draw your signature"
           onPointerDown={start}
           onPointerMove={move}
           onPointerUp={end}
@@ -123,6 +124,35 @@ export function SignaturePad({ onChange, height = 160 }: SignaturePadProps) {
           </div>
         )}
       </div>
+      <label className="block text-xs text-muted-foreground">
+        Or type your signature
+        <input
+          type="text"
+          className="mt-1 h-11 w-full rounded-md border border-border bg-background px-3 text-base text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          autoComplete="name"
+          onChange={(event) => {
+            const value = event.target.value.trim();
+            const canvas = canvasRef.current;
+            const ctx = ctxOf();
+            if (!canvas || !ctx) return;
+            resize();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (!value) {
+              hasInk.current = false;
+              setEmpty(true);
+              onChange(null);
+              return;
+            }
+            const dpr = window.devicePixelRatio || 1;
+            ctx.fillStyle = "#111827";
+            ctx.font = `${28 * dpr}px "Segoe Script", "Brush Script MT", cursive`;
+            ctx.fillText(value, 16 * dpr, canvas.height / 2);
+            hasInk.current = true;
+            setEmpty(false);
+            onChange(canvas.toDataURL("image/png"));
+          }}
+        />
+      </label>
       <div className="flex justify-end">
         <Button type="button" variant="ghost" size="sm" onClick={clear} disabled={empty}>
           <RiEraserLine className="w-4 h-4 mr-1.5" />

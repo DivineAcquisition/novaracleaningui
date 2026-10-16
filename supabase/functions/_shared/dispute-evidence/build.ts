@@ -10,6 +10,7 @@ import {
   type DisputeEvidenceLimits,
 } from "./limits.ts";
 import { POLICY_CITATIONS, RECORDED_POLICY_CLAUSES, VERSION_NOT_RECORDED, type PolicyClause } from "./policies.ts";
+import { redactAccessText } from "../access-redact.ts";
 
 export const NOT_RECORDED = "not recorded";
 
@@ -862,8 +863,11 @@ export function buildDisputeEvidence(input: DisputeBuildInput): DisputeEvidenceS
 
   const order = packetOrder(input.reason);
   packets.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+  for (const packet of packets) {
+    packet.lines = packet.lines.map((line) => redactAccessText(redactInternal(line, input.redact)));
+  }
 
-  const narrative = redactInternal(narrativeFor(input), input.redact);
+  const narrative = redactAccessText(redactInternal(narrativeFor(input), input.redact));
   for (const phrase of FORBIDDEN_NARRATIVE) {
     if (narrative.toLowerCase().includes(phrase)) {
       warnings.push(`Narrative contained forbidden phrasing and was rejected: ${phrase}`);

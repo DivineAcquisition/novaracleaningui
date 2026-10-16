@@ -427,7 +427,7 @@ serve(async (req) => {
         // (Partner-hub bookings carry codes in access_notes; residential
         // bookings keep prior behavior unless a code marker is present.)
         let accessNotes: string | null = b.access_notes || null;
-        if (accessNotes && b.service_date && /ACCESS:|code:/i.test(accessNotes)) {
+        if (accessNotes && b.service_date && /\b(gate|alarm|lockbox|keypad)\b|\bcode\s*[:#-]?\s*[A-Za-z0-9]{3,}|\bkey\s*location\b|\bACCESS:/i.test(accessNotes)) {
           const svc = Date.parse(`${String(b.service_date).slice(0, 10)}T00:00:00`);
           const unlockAt = svc - 48 * 3600_000;
           const relockAt = svc + 48 * 3600_000;

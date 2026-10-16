@@ -226,6 +226,46 @@ serve(async (req) => {
         patch.preferred_cleaner_id = null;
         patch.notes = `Customer requested a different cleaner on ${today} (via manage link). Admin: assign a new regular cleaner.`;
         summary = `${sched.email} requested a DIFFERENT cleaner for their recurring plan — assign a new regular in the admin hub.`;
+      } else if (action === "cancel") {
+        Object.assign(patch, {
+          active: false,
+          pause_reason: "Canceled by the customer online.",
+          pause_reason_code: "customer_cancel",
+          paused_at: new Date().toISOString(),
+        });
+        const visitLine = sched.next_service_date
+          ? ` The visit already on the calendar for ${sched.next_service_date} is the last one unless you skip it.`
+          : " No further visits will be scheduled.";
+        const text = `Your Novara Cleaning membership is canceled effective ${today}.${visitLine} There is no further automatic charge.`;
+        summary = `${sched.email} canceled their recurring plan online. Effective ${today}.`;
+        sched.cancellation_text = text;
+        sched.cancellation_effective_on = today;
+        try {
+          await admin.functions.invoke("admin-send-email", {
+            body: {
+              to: sched.email,
+              subject: "Your Novara Cleaning membership is canceled",
+              html: `<p>${text}</p>`,
+            },
+          });
+        } catch (_) { /* confirmation is still returned to the page */ }
+      } else if (action === "card_link") {
+        const { resolveSecret } = await import("../_shared/app-secrets.ts");
+        const Stripe = (await import("https://esm.sh/stripe@18.5.0")).default;
+        const stripeKey = await resolveSecret(admin, "STRIPE_SECRET_KEY");
+        if (!stripeKey) {
+          return json({ error: "The card page is not available right now. Email hello@novaracleaning.com and we will send a secure link. You do not need to call." }, 503);
+        }
+        const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+        const customers = await stripe.customers.list({ email: sched.email, limit: 1 });
+        if (!customers.data[0]) {
+          return json({ error: "There is no card on file to change yet. You can add one from your membership payment link. You do not need to call." }, 404);
+        }
+        const session = await stripe.billingPortal.sessions.create({
+          customer: customers.data[0].id,
+          return_url: "https://app.novaracleaning.com/account",
+        });
+        return json({ ok: true, url: session.url });
       } else {
         return json({ error: `Unknown action: ${action}` }, 400);
       }
@@ -261,6 +301,9 @@ serve(async (req) => {
         address: sched.address,
         city: sched.city,
       },
+      cancellation: sched.cancellation_text
+        ? { effectiveOn: sched.cancellation_effective_on, text: sched.cancellation_text }
+        : null,
       customerName,
       upcoming,
       preview,

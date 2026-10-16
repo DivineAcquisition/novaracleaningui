@@ -13,6 +13,8 @@
 // session in this same browser; the link is also sent by SMS and email.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { AcceptanceChecklist, type AcceptanceGateState } from "@/components/compliance/AcceptanceChecklist";
+import { submitAcceptances } from "@/lib/compliance/record-client";
 import {
   RiAddLine,
   RiArrowRightLine,
@@ -93,6 +95,8 @@ export default function StrLanding() {
   const [entityName, setEntityName] = useState("");
   const [notes, setNotes] = useState("");
 
+  const [claimGate, setClaimGate] = useState<AcceptanceGateState | null>(null);
+  const [showClaimErrors, setShowClaimErrors] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [claimed, setClaimed] = useState<{ onboardingUrl: string } | null>(null);
@@ -157,9 +161,30 @@ export default function StrLanding() {
         setError(contactError);
         return;
       }
+      if (!claimGate?.ready) {
+        setShowClaimErrors(true);
+        setError("Check each required agreement. Marketing texts and emails are optional.");
+        return;
+      }
     }
     setBusy(true);
     try {
+      if (mode === "claim" && claimGate) {
+        void submitAcceptances({
+          surface: "str_claim",
+          context: {
+            relationship: "str_host",
+            includeCard: false,
+            phone,
+            propertyLabel: rows[0]?.address || "the properties on this claim",
+          },
+          items: claimGate.items,
+          checked: claimGate.checked,
+          personName: fullName,
+          email,
+          phone,
+        }).catch(() => undefined);
+      }
       const res = await fetch(mode === "claim" ? "/api/str/claim" : "/api/str/call", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -491,6 +516,22 @@ export default function StrLanding() {
                   <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
                 </div>
               )}
+
+              {cta === "claim" ? (
+                <div className="mt-4">
+                  <AcceptanceChecklist
+                    surface="str_claim"
+                    showErrors={showClaimErrors}
+                    onChange={setClaimGate}
+                    context={{
+                      relationship: "str_host",
+                      includeCard: false,
+                      phone,
+                      propertyLabel: rows[0]?.address || "the properties on this claim",
+                    }}
+                  />
+                </div>
+              ) : null}
 
               {error && <p className="mt-4 text-sm text-destructive">{error}</p>}
 

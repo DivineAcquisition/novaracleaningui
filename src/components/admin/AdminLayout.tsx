@@ -197,6 +197,13 @@ const NAV_ITEMS: NavItem[] = [
     description: "Policy · review queue · assistant health",
     adminOnly: true,
   },
+  {
+    title: "Compliance",
+    url: "/admin/compliance",
+    icon: RiShieldCheckLine,
+    description: "Acceptances · wording · privacy requests",
+    adminOnly: true,
+  },
 ];
 
 // Segment-aware active check so prefix-colliding routes (e.g. /admin/partner vs

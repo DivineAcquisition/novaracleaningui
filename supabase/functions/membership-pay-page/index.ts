@@ -225,7 +225,7 @@ serve(async (req) => {
       const name = String((body as Row)?.name || "").trim();
       const pdfBase64 = String((body as Row)?.pdfBase64 || "");
 
-      if (!agreed.terms || !agreed.disclaimer || !agreed.serviceAgreement) {
+      if (!agreed.terms || !agreed.disclaimer || !agreed.serviceAgreement || !agreed.refund) {
         return json({ ok: false, error: "all_policies_must_be_accepted" }, 400);
       }
       if (!name) return json({ ok: false, error: "signature_name_required" }, 400);
@@ -244,7 +244,7 @@ serve(async (req) => {
           agreed: {
             terms: true,
             disclaimer: true,
-            refund: Boolean(agreed.refund ?? true),
+            refund: agreed.refund === true,
             serviceAgreement: true,
           },
           pdfBase64,

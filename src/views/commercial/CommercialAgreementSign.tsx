@@ -28,6 +28,8 @@ import {
   RiMailLine,
 } from "@remixicon/react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AcceptanceChecklist, type AcceptanceGateState } from "@/components/compliance/AcceptanceChecklist";
+import { submitAcceptances, submitSignedCopy } from "@/lib/compliance/record-client";
 import { useParams, useSearchParams } from "next/navigation";
 
 import { SEO } from "@/components/SEO";
@@ -140,6 +142,8 @@ export default function CommercialAgreementSign() {
   const [legalName, setLegalName] = useState("");
   const [title, setTitle] = useState("");
   const [agreed, setAgreed] = useState(false);
+  const [complianceGate, setComplianceGate] = useState<AcceptanceGateState | null>(null);
+  const [showComplianceErrors, setShowComplianceErrors] = useState(false);
 
   // Billing
   const [billingName, setBillingName] = useState("");
@@ -229,6 +233,24 @@ export default function CommercialAgreementSign() {
     setBusy(true);
     setError(null);
     try {
+      if (complianceGate) {
+        const businessName = state.data.account?.business_name || "this site";
+        const lines = complianceGate.items.filter((item) => complianceGate.checked[item.kind]).map((item) => item.wordingShown);
+        const email = state.data.account?.email;
+        void submitAcceptances({
+          surface: "commercial_sign",
+          context: {
+            relationship: "commercial",
+            includeCard: state.data.agreement.billingMethod === "auto_pay",
+            propertyLabel: businessName,
+          },
+          items: complianceGate.items,
+          checked: complianceGate.checked,
+          personName: legalName,
+          email,
+        }).catch(() => undefined);
+        if (email && lines.length) void submitSignedCopy({ email, lines }).catch(() => undefined);
+      }
       const res = await fetch(`/api/commercial-agreement/${token}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -533,6 +555,24 @@ export default function CommercialAgreementSign() {
             </div>
           </div>
 
+          <AcceptanceChecklist
+            surface="commercial_sign"
+            showErrors={showComplianceErrors}
+            onChange={setComplianceGate}
+            context={{
+              relationship: "commercial",
+              includeCard: agreement.billingMethod === "auto_pay",
+              propertyLabel: business,
+              charge: agreement.billingMethod === "auto_pay"
+                ? {
+                    dueNowLabel: "the amount on the rate schedule",
+                    dueNowWhen: "when each invoice is due",
+                    amountBasis: "the sites and rates in Exhibit A",
+                    savedFor: "for automatic charges under this agreement until you cancel or change the card",
+                  }
+                : undefined,
+            }}
+          />
           <label className="flex cursor-pointer items-start gap-2.5">
             <input
               type="checkbox"
@@ -552,7 +592,13 @@ export default function CommercialAgreementSign() {
           <ShimmerButton
             className="w-full h-11"
             disabled={busy || !signature || !agreed || legalName.trim().length < 2}
-            onClick={() => void sign()}
+            onClick={() => {
+              if (!complianceGate?.ready) {
+                setShowComplianceErrors(true);
+                return;
+              }
+              void sign();
+            }}
           >
             {busy ? <RiLoader4Line className="mr-1.5 h-4 w-4 animate-spin" /> : null}
             Sign agreement

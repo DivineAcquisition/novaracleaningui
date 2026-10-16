@@ -7,6 +7,8 @@
 // link resumes; prior pages show as completed.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AcceptanceChecklist, type AcceptanceGateState } from "@/components/compliance/AcceptanceChecklist";
+import { submitAcceptances, submitSignedCopy } from "@/lib/compliance/record-client";
 import {
   RiBankCardLine,
   RiCheckLine,
@@ -310,6 +312,7 @@ function LegalStep({
   const [agreed, setAgreed] = useState(false);
   const [acks, setAcks] = useState({ non_circumvention: false, chargebacks: false, arbitration: false });
   const [signature, setSignature] = useState<string | null>(null);
+  const [complianceGate, setComplianceGate] = useState<AcceptanceGateState | null>(null);
 
   // Entity Hosts guarantee personally; individual Hosts never see this block.
   const needsGuarantee = data.host.requiresPersonalGuarantee;
@@ -326,6 +329,7 @@ function LegalStep({
     acks.chargebacks &&
     acks.arbitration &&
     guaranteeReady &&
+    complianceGate?.ready === true &&
     Boolean(signature && signature.length > 100);
 
   const sign = async () => {
@@ -334,6 +338,30 @@ function LegalStep({
       return;
     }
     try {
+      if (complianceGate) {
+        const lines = complianceGate.items.filter((item) => complianceGate.checked[item.kind]).map((item) => item.wordingShown);
+        void submitAcceptances({
+          surface: "host_sign",
+          context: {
+            relationship: "str_host",
+            includeCard: true,
+            propertyLabel: data.host.entityName || data.host.name || "the properties on this agreement",
+            charge: {
+              dueNowLabel: "the rate on the schedule you review next",
+              dueNowWhen: "according to the payment option you choose",
+              amountBasis: "the Company-set per-turnover rate for each property",
+              savedFor: "for the payment option you select on the next step",
+            },
+          },
+          items: complianceGate.items,
+          checked: complianceGate.checked,
+          personName: name.trim(),
+          email: data.host.email,
+        }).catch(() => undefined);
+        if (data.host.email && lines.length) {
+          void submitSignedCopy({ email: data.host.email, lines }).catch(() => undefined);
+        }
+      }
       await onPost({
         action: "sign",
         signerName: name.trim(),
@@ -446,6 +474,23 @@ function LegalStep({
         </div>
       )}
 
+      <div className="mt-5">
+        <AcceptanceChecklist
+          surface="host_sign"
+          onChange={setComplianceGate}
+          context={{
+            relationship: "str_host",
+            includeCard: true,
+            propertyLabel: data.host.entityName || data.host.name || "the properties on this agreement",
+            charge: {
+              dueNowLabel: "the rate on the schedule you review next",
+              dueNowWhen: "according to the payment option you choose",
+              amountBasis: "the Company-set per-turnover rate for each property",
+              savedFor: "for the payment option you select on the next step",
+            },
+          }}
+        />
+      </div>
       <label className="mt-5 block">
         <span className="text-sm font-medium text-slate-700">Full legal name</span>
         <input className={`${inputCls} mt-1`} value={name} onChange={(e) => setName(e.target.value)} />

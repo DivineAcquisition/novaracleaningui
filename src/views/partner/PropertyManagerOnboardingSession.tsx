@@ -12,6 +12,8 @@
 // page with twenty clicks and never see a quote form.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AcceptanceChecklist, type AcceptanceGateState } from "@/components/compliance/AcceptanceChecklist";
+import { submitAcceptances, submitSignedCopy } from "@/lib/compliance/record-client";
 import {
   RiBankCardLine,
   RiBuilding2Line,
@@ -457,6 +459,7 @@ function LegalStep({
     arbitration: false,
   });
   const [signature, setSignature] = useState<string | null>(null);
+  const [complianceGate, setComplianceGate] = useState<AcceptanceGateState | null>(null);
 
   const ready =
     name.trim().length >= 2 &&
@@ -464,6 +467,7 @@ function LegalStep({
     acks.non_circumvention &&
     acks.chargebacks &&
     acks.arbitration &&
+    complianceGate?.ready === true &&
     Boolean(signature && signature.length > 100);
 
   const sign = async () => {
@@ -472,6 +476,30 @@ function LegalStep({
       return;
     }
     try {
+      if (complianceGate) {
+        const lines = complianceGate.items.filter((item) => complianceGate.checked[item.kind]).map((item) => item.wordingShown);
+        void submitAcceptances({
+          surface: "property_manager_sign",
+          context: {
+            relationship: "property_manager",
+            includeCard: true,
+            propertyLabel: entityName || "the units on this agreement",
+            charge: {
+              dueNowLabel: "the standing rate for each unit",
+              dueNowWhen: "according to the billing option you confirm",
+              amountBasis: "the Company-set standing rate for each unit",
+              savedFor: "for the billing method you confirm on the last step",
+            },
+          },
+          items: complianceGate.items,
+          checked: complianceGate.checked,
+          personName: name.trim(),
+          email: data.account.email,
+        }).catch(() => undefined);
+        if (data.account.email && lines.length) {
+          void submitSignedCopy({ email: data.account.email, lines }).catch(() => undefined);
+        }
+      }
       await onPost({
         action: "sign",
         signerName: name.trim(),
@@ -558,6 +586,23 @@ function LegalStep({
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
         <label className="block">
+          <div className="mb-4">
+            <AcceptanceChecklist
+              surface="property_manager_sign"
+              onChange={setComplianceGate}
+              context={{
+                relationship: "property_manager",
+                includeCard: true,
+                propertyLabel: entityName || "the units on this agreement",
+                charge: {
+                  dueNowLabel: "the standing rate for each unit",
+                  dueNowWhen: "according to the billing option you confirm",
+                  amountBasis: "the Company-set standing rate for each unit",
+                  savedFor: "for the billing method you confirm on the last step",
+                },
+              }}
+            />
+          </div>
           <span className="text-sm font-medium text-slate-700">Full legal name</span>
           <input className={`${inputCls} mt-1`} value={name} onChange={(e) => setName(e.target.value)} />
         </label>
