@@ -111,6 +111,8 @@ export interface OfflinePolicyInput {
   settings?: PartnershipCommsSettings;
   emailOptedOut?: boolean;
   smsOptedOut?: boolean;
+  /** Email opt-out stops marketing only. Service mail still sends. */
+  marketing?: boolean;
   recentSendCount?: number;
 }
 
@@ -122,7 +124,7 @@ export function checkPartnershipPolicy(input: OfflinePolicyInput): PartnershipPo
   const settings = input.settings || DEFAULT_PARTNERSHIP_COMMS_SETTINGS;
   const now = input.now || new Date();
   const key = partnershipRecipientKey(input.email, input.phone);
-  if (input.channel === "email" && input.email && input.emailOptedOut) {
+  if (input.channel === "email" && input.marketing && input.email && input.emailOptedOut) {
     return { action: "suppress", reason: "opted_out", recipient_key: key };
   }
   if (input.channel === "sms" && phoneDigits(input.phone) && input.smsOptedOut) {

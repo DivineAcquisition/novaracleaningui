@@ -93,7 +93,22 @@ async function commsForPhonesEmails(
     gaps.push(`partnership_messages could not be read: ${e instanceof Error ? e.message : String(e)}`);
   }
 
-  return { sms_logs: sms, partnership_messages: partnership, gaps };
+  let emailDelivery: unknown[] = [];
+  try {
+    const wanted = emails.map((value) => value.toLowerCase()).filter(Boolean);
+    if (wanted.length) {
+      const { data } = await admin.from("email_delivery_log")
+        .select("id, sent_at, contact_email, email_type, subject, text_body, status, test_send, footer_version")
+        .in("contact_email", wanted)
+        .order("sent_at", { ascending: true })
+        .limit(200);
+      emailDelivery = (data || []).filter((row: { test_send?: boolean; status?: string }) => row.test_send !== true && row.status === "sent");
+    }
+  } catch (e) {
+    gaps.push(`email_delivery_log could not be read: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  return { sms_logs: sms, partnership_messages: partnership, email_delivery: emailDelivery, gaps };
 }
 
 export async function assembleIncidentEvidence(admin: SB, opts: {
@@ -109,7 +124,7 @@ export async function assembleIncidentEvidence(admin: SB, opts: {
   photos: { before: unknown[]; after: unknown[] };
   field_reports: unknown;
   ghl: { client: GhlContactHistory; contractor: GhlContactHistory };
-  comms: { sms_logs: unknown[]; partnership_messages: unknown[]; gaps: string[] };
+  comms: { sms_logs: unknown[]; partnership_messages: unknown[]; email_delivery: unknown[]; gaps: string[] };
   contractor_dossier: Record<string, unknown>;
   incident_timeline: unknown[];
   evidence_gaps: string[];

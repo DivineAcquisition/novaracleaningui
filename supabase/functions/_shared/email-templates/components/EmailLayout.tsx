@@ -7,7 +7,6 @@ import {
   Container,
   Section,
   Text,
-  Link,
   Img,
 } from 'https://esm.sh/@react-email/components@0.0.22?deps=react@18.3.1,react-dom@18.3.1';
 import { BRAND } from '../brand.ts';
@@ -29,72 +28,32 @@ export const EmailLayout = ({
 }: EmailLayoutProps) => {
   return (
     <Html>
-      <Head />
+      <Head>
+        <style>{`
+          .novara-card p, .novara-card li, .novara-card span, .novara-card td { color: #d4d4d8 !important; }
+          .novara-card a:not(.novara-btn) { color: #ddd6fe !important; }
+          .novara-card a.novara-btn { color: #18181b !important; background: #e7e7ea !important; }
+        `}</style>
+      </Head>
       <Preview>{previewText}</Preview>
       <Body style={main}>
         <Container style={container}>
-          {/* Logo bar — sits in a white pre-header so the Novara mark
-              stays legible regardless of inbox dark-mode handling. The
-              gradient title bar below picks up the brand color cue. */}
-          <Section style={logoBar}>
-            {BRAND.logo.url && (
+          <Section style={card} className="novara-card" data-novara-card="1">
+            <Section style={accent} />
+            <Section style={inner}>
               <Img
                 src={BRAND.logo.url}
-                width={BRAND.logo.width}
-                height={BRAND.logo.height}
+                width="56"
+                height="56"
                 alt={`${BRAND.name} logo`}
                 style={logo}
               />
-            )}
-          </Section>
-
-          {/* Title bar — brand-gradient strip above the body content. */}
-          <Section style={header}>
-            <Text style={headerTitle}>{title}</Text>
-            {subtitle && <Text style={headerSubtitle}>{subtitle}</Text>}
-          </Section>
-
-          {/* Content */}
-          <Section style={content}>{children}</Section>
-
-          {/* Footer */}
-          <Section style={footer}>
-            {footerNote && (
-              <Text style={footerText}>{footerNote}</Text>
-            )}
-            <Text style={footerText}>
-              © {new Date().getFullYear()} {BRAND.name}. All rights reserved.
-            </Text>
-            <Text style={footerLinks}>
-              <Link href={BRAND.urls.website} style={footerLink}>
-                Website
-              </Link>
-              {' • '}
-              <Link href={BRAND.urls.account} style={footerLink}>
-                My Account
-              </Link>
-              {' • '}
-              <Link href={`mailto:${BRAND.contact.email}`} style={footerLink}>
-                Contact
-              </Link>
-            </Text>
-            <Text style={footerLinks}>
-              <Link href={BRAND.urls.terms} style={footerLink}>
-                Terms of Service
-              </Link>
-              {' • '}
-              <Link href={BRAND.urls.privacy} style={footerLink}>
-                Privacy Policy
-              </Link>
-              {' • '}
-              <Link href={BRAND.urls.cancellation} style={footerLink}>
-                Cancellation Policy
-              </Link>
-              {' • '}
-              <Link href={BRAND.urls.membershipPolicy} style={footerLink}>
-                Membership Terms
-              </Link>
-            </Text>
+              <Text style={headerTitle}>{title}</Text>
+              {subtitle && <Text style={headerSubtitle}>{subtitle}</Text>}
+              <Section style={content}>{children}</Section>
+              {footerNote && <Text style={note}>{footerNote}</Text>}
+              <div dangerouslySetInnerHTML={{ __html: "<!--data-novara-card--><!--NOVARA_FOOTER_START--><!--NOVARA_FOOTER_END-->" }} />
+            </Section>
           </Section>
         </Container>
       </Body>
@@ -103,84 +62,67 @@ export const EmailLayout = ({
 };
 
 const main = {
-  backgroundColor: '#F9FAFB',
-  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  backgroundColor: '#141416',
+  fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
 };
 
 const container = {
-  maxWidth: '600px',
+  maxWidth: '560px',
   margin: '0 auto',
-  padding: '20px',
+  padding: '28px 12px',
+};
+
+const card = {
+  backgroundColor: '#2a2a2e',
+  border: '1px solid #3a3a40',
+  borderRadius: '16px',
+  overflow: 'hidden',
+};
+
+const accent = {
+  backgroundColor: '#7c6af7',
+  height: '3px',
+  lineHeight: '3px',
+  fontSize: '0',
+};
+
+const inner = {
+  padding: '28px 28px 24px',
 };
 
 const logo = {
   display: 'block',
-  margin: '0 auto',
-};
-
-const logoBar = {
-  backgroundColor: '#ffffff',
-  padding: '20px 20px 12px',
-  textAlign: 'center' as const,
-  borderRadius: '8px 8px 0 0',
-  border: `1px solid ${BRAND.colors.gray[200]}`,
-  borderBottom: 'none',
-};
-
-const header = {
-  background: BRAND.gradient.primary,
-  color: 'white',
-  padding: '26px 30px',
-  textAlign: 'center' as const,
-  borderLeft: `1px solid ${BRAND.colors.gray[200]}`,
-  borderRight: `1px solid ${BRAND.colors.gray[200]}`,
+  width: '56px',
+  height: '56px',
+  borderRadius: '12px',
+  margin: '0 0 22px',
 };
 
 const headerTitle = {
-  margin: '0',
+  margin: '0 0 14px',
   fontSize: '28px',
-  fontWeight: 'bold',
-  color: 'white',
+  lineHeight: '1.2',
+  fontWeight: '700',
+  color: '#ffffff',
+  fontFamily: 'Inter, Arial, sans-serif',
 };
 
 const headerSubtitle = {
-  margin: '10px 0 0 0',
-  fontSize: '18px',
-  color: 'white',
-  opacity: 0.95,
+  margin: '-6px 0 16px',
+  fontSize: '16px',
+  lineHeight: '1.5',
+  color: '#b4b4bc',
 };
 
 const content = {
-  backgroundColor: '#ffffff',
-  padding: '30px',
-  border: `1px solid ${BRAND.colors.gray[200]}`,
-  borderTop: 'none',
+  color: '#d4d4d8',
 };
 
-const footer = {
-  textAlign: 'center' as const,
-  padding: '20px',
-  backgroundColor: '#ffffff',
-  borderRadius: '0 0 8px 8px',
-  border: `1px solid ${BRAND.colors.gray[200]}`,
-  borderTop: 'none',
-};
-
-const footerText = {
-  margin: '8px 0',
-  fontSize: '14px',
-  color: BRAND.colors.gray[600],
-};
-
-const footerLinks = {
-  margin: '12px 0',
-  fontSize: '14px',
-  color: BRAND.colors.gray[600],
-};
-
-const footerLink = {
-  color: BRAND.colors.primary,
-  textDecoration: 'none',
+const note = {
+  margin: '16px 0 0',
+  fontSize: '13px',
+  lineHeight: '1.5',
+  color: '#a1a1aa',
 };
 
 export default EmailLayout;

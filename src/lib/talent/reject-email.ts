@@ -1,12 +1,12 @@
 // ─── Applicant rejection email ────────────────────────────────────────────────
 //
 // Sent whenever an applicant moves to `rejected` (manual reject or phone-screen
-// decline). From team@, CC contact@, best-effort — a missing Resend key or
-// bounce must never block the stage change itself.
+// decline). From NVC Operations, CC contact@, best-effort — a missing Resend
+// key or bounce must never block the stage change itself.
 
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
+import { deliverCompliantEmail } from "@/lib/email-compliance/deliver";
 
-const FROM = "Novara Cleaning Team <team@novaracleaning.com>";
 const CC = ["contact@novaracleaning.com"];
 
 async function resolveResendKey(): Promise<string> {
@@ -82,24 +82,16 @@ export async function sendApplicantRejectEmail(args: {
     </div>`;
 
   try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: FROM,
-        to: [to],
-        cc: CC,
-        subject: "Update on your Novara Cleaning application",
-        html,
-      }),
+    const outcome = await deliverCompliantEmail(getAdminSupabase(), {
+      to,
+      cc: CC,
+      subject: "Update on your Novara Cleaning application",
+      html,
+      apiKey: key,
+      declaredType: "recruiting_reply",
+      templateKey: "contractor_reject",
     });
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      return { sent: false, error: `Resend ${res.status}${body ? `: ${body.slice(0, 200)}` : ""}` };
-    }
+    if (!outcome.ok) return { sent: false, error: outcome.error || "Rejection email was not sent." };
     return { sent: true, error: null };
   } catch (err) {
     return { sent: false, error: (err as Error).message || "Failed to send rejection email" };

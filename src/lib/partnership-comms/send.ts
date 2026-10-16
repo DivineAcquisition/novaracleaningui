@@ -103,6 +103,16 @@ function withEmailFooter(html: string, role: PartnershipRole, unsub: string | nu
   return `${html}<p style="margin-top:28px;font-size:12px;line-height:1.5;color:#64748b">This is a transactional notice about your Novara account. <a href="${unsub}">Unsubscribe from partnership emails</a>.</p>`;
 }
 
+function partnershipEmailType(templateKey: string, role: string): { emailType: string; staffRecipient?: boolean } {
+  if (role === "admin" || role === "walkthrough_agent") {
+    return { emailType: "internal_admin", staffRecipient: true };
+  }
+  if (templateKey === "host_onboarding_link" || templateKey === "commercial_onboarding_link") {
+    return { emailType: "agreement_account" };
+  }
+  return { emailType: "partner_service" };
+}
+
 async function deliverEmail(
   supabase: SB,
   args: {
@@ -114,6 +124,9 @@ async function deliverEmail(
     unsub: string | null;
     idempotencyKey: string;
     attachments?: Array<{ filename: string; content: string }>;
+    templateKey?: string;
+    emailType?: string;
+    staffRecipient?: boolean;
   },
 ): Promise<{ ok: boolean; id?: string; error?: string }> {
   const headers: Record<string, string> = {};
@@ -131,6 +144,9 @@ async function deliverEmail(
       headers,
       idempotencyKey: args.idempotencyKey,
       attachments: args.attachments,
+      templateKey: args.templateKey,
+      emailType: args.emailType,
+      staffRecipient: args.staffRecipient,
     },
   });
   if (error) return { ok: false, error: error.message };
@@ -220,15 +236,19 @@ export async function deliverPartnershipRow(
 
   let delivered: { ok: boolean; suppressed?: boolean; id?: string; error?: string };
   if (channel === "email") {
+    const typed = partnershipEmailType(String(row.template_key || ""), String(row.role || "partner"));
     delivered = await deliverEmail(supabase, {
       to: String(row.to_email || ""),
       subject: String(row.subject || ""),
       html: String(row.body || ""),
       from: sender.from,
       replyTo: sender.reply_to,
-      unsub: unsubHeader,
+      unsub: typed.emailType === "customer_marketing" ? unsubHeader : null,
       idempotencyKey: String(row.idempotency_key || id),
       attachments: extras?.attachments,
+      templateKey: String(row.template_key || ""),
+      emailType: typed.emailType,
+      staffRecipient: typed.staffRecipient,
     });
   } else {
     delivered = await deliverSms(supabase, {

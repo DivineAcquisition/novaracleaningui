@@ -333,17 +333,17 @@ async function sendFeedbackEmail(
     const subject = opts?.reminder
       ? "A quick reminder — how was your Novara clean?"
       : "How was your Novara clean? (3 quick questions)";
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        from: "Novara Cleaning <hello@novaracleaning.com>",
-        to: [ctx.email],
-        subject,
-        html: buildFeedbackEmailHtml(ctx, url, opts),
-      }),
+    const { deliverCompliantEmail } = await import("./email-compliance-send.ts");
+    const sent = await deliverCompliantEmail(supabase, {
+      apiKey: resendKey,
+      to: ctx.email,
+      subject,
+      html: buildFeedbackEmailHtml(ctx, url, opts),
+      templateKey: "job_feedback",
+      declaredType: "review_request",
+      bookingId: ctx.bookingId || null,
     });
-    return res.ok;
+    return sent.ok;
   } catch (e) {
     console.warn("[job-feedback-offer] email failed", e);
     return false;

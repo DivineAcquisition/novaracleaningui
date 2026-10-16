@@ -14,14 +14,13 @@
 // uses its own email and the shared closure SMS.
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { Resend } from "https://esm.sh/resend@2.0.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { deliverCompliantEmail } from "../_shared/email-compliance-send.ts";
 import { sendSms } from "../_shared/sms.ts";
 import { prepareDepartureTax } from "../_shared/departure-tax.ts";
 import {
   CONTRACTOR_LETTER_CC,
   CONTRACTOR_OPS_DISPLAY_NAME,
-  CONTRACTOR_OPS_FROM,
   CONTRACTOR_OPS_REPLY_TO,
   CONTRACTOR_SIGNER_LINE,
   DEFAULT_NOTICES,
@@ -167,20 +166,21 @@ async function sendNoticeEmail(opts: {
   body: string;
 }): Promise<{ letterSent: boolean; letterError: string | null }> {
   try {
-    const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
-    const { error: sendErr } = await resend.emails.send({
-      from: CONTRACTOR_OPS_FROM,
-      to: [opts.toEmail],
+    const admin = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    );
+    const sent = await deliverCompliantEmail(admin, {
+      apiKey: Deno.env.get("RESEND_API_KEY") || "",
+      to: opts.toEmail,
       cc: [...CONTRACTOR_LETTER_CC],
-      reply_to: CONTRACTOR_OPS_REPLY_TO,
       subject: opts.subject,
       html: letterHtml(opts.body),
+      declaredType: "contractor_operational",
+      templateKey: "contractor_engagement_end",
     });
-    if (sendErr) {
-      return {
-        letterSent: false,
-        letterError: (sendErr as { message?: string }).message || String(sendErr),
-      };
+    if (!sent.ok) {
+      return { letterSent: false, letterError: sent.error || "Notice was not sent." };
     }
     return { letterSent: true, letterError: null };
   } catch (e) {

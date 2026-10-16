@@ -27,7 +27,9 @@ export const WaitlistConfirmation = ({
 
   return (
     <Html>
-      <Head />
+      <Head>
+        <div dangerouslySetInnerHTML={{ __html: "<!--data-novara-card-->" }} />
+      </Head>
       <Preview>You're on the Novara Cleaning waitlist! We're expanding soon.</Preview>
       <Body style={main}>
         <Container style={container}>
@@ -73,17 +75,17 @@ export const WaitlistConfirmation = ({
   );
 };
 
-const main = { backgroundColor: '#f6f9fc', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' };
-const container = { backgroundColor: '#ffffff', margin: '0 auto', padding: '20px 0 48px', maxWidth: '600px' };
-const header = { padding: '32px 48px 24px', textAlign: 'center' as const, background: BRAND.gradient.primary };
-const logo = { margin: '0 auto' };
-const content = { padding: '32px 48px' };
-const heading = { fontSize: '28px', fontWeight: '700', color: BRAND.colors.gray[900], textAlign: 'center' as const, margin: '0 0 24px' };
-const paragraph = { fontSize: '16px', lineHeight: '26px', color: BRAND.colors.gray[700], margin: '0 0 16px' };
+const main = { backgroundColor: '#141416', fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' };
+const container = { backgroundColor: '#2a2a2e', margin: '0 auto', padding: '8px 0 24px', maxWidth: '560px', borderRadius: '16px', border: '1px solid #3a3a40' };
+const header = { padding: '20px 28px 0', textAlign: 'left' as const, backgroundColor: '#2a2a2e', borderTop: '3px solid #7c6af7' };
+const logo = { margin: '0 0 22px', borderRadius: '12px' };
+const content = { padding: '8px 28px 32px' };
+const heading = { fontSize: '28px', fontWeight: '700', color: '#ffffff', textAlign: 'left' as const, margin: '0 0 24px' };
+const paragraph = { fontSize: '16px', lineHeight: '26px', color: '#d4d4d8', margin: '0 0 16px' };
 const benefitsList = { backgroundColor: BRAND.colors.gray[50], borderRadius: BRAND.borderRadius.md, padding: '20px 24px', margin: '24px 0' };
 const benefitItem = { fontSize: '15px', lineHeight: '24px', color: BRAND.colors.gray[900], margin: '8px 0' };
 const ctaSection = { textAlign: 'center' as const, margin: '32px 0' };
-const button = { display: 'inline-block', background: BRAND.gradient.primary, color: '#ffffff', padding: '14px 32px', borderRadius: BRAND.borderRadius.md, textDecoration: 'none', fontWeight: '600', fontSize: '16px' };
+const button = { display: 'inline-block', backgroundColor: '#e7e7ea', color: '#18181b', padding: '14px 28px', borderRadius: '12px', textDecoration: 'none', fontWeight: '600', fontSize: '16px' };
 const footer = { padding: '24px 48px', borderTop: `1px solid ${BRAND.colors.gray[200]}` };
 const footerText = { fontSize: '13px', lineHeight: '20px', color: BRAND.colors.gray[600], textAlign: 'center' as const, margin: '4px 0' };
 const link = { color: BRAND.colors.primary, textDecoration: 'underline' };

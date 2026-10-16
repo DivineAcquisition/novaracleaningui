@@ -119,7 +119,7 @@ export function buildTestimonialOfferEmailHtml(opts: {
     <div style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;color:#1a1a1a;">
       <p>Hi ${name},</p>
       <p>Your cleaning${opts.bookingNumber ? ` (#${opts.bookingNumber})` : ""} is complete — thank you for trusting Novara!</p>
-      <p><strong>Get 50% off your next (2nd) cleaning</strong> when you send us a short video testimonial. It only takes a few minutes on your phone.</p>
+      <p><strong>Get 50% off your next (2nd) cleaning</strong> when you send us a short video testimonial. It only takes a few minutes on your phone. One per household, for your second cleaning, and the code expires 30 days after we email it.</p>
       <p style="margin:24px 0;">
         <a href="${opts.submitUrl}" style="background:#6d28d9;color:#fff;padding:14px 24px;border-radius:8px;text-decoration:none;font-weight:600;display:inline-block;">
           Record &amp; submit your video
@@ -172,6 +172,9 @@ export async function sendTestimonialOffer(
           to: booking.email,
           subject: "Share a quick video — get 50% off your next cleaning",
           html,
+          templateKey: "testimonial_offer",
+          declaredType: "review_request",
+          category: "offers",
         },
       });
     } catch (e) {

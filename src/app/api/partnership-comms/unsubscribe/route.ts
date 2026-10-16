@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import { recordPartnershipOptOut } from "@/lib/partnership-comms/server";
+import { suppressAddress } from "@/lib/email-compliance/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -80,6 +81,14 @@ export async function POST(req: Request): Promise<NextResponse> {
       channel: "email",
       source: "email_unsubscribe",
     });
+    if (row.to_email) {
+      await suppressAddress(supabase, {
+        email: row.to_email,
+        reason: "unsubscribe",
+        source: "email_unsubscribe",
+        actor: "contact",
+      });
+    }
     return NextResponse.json({ ok: true, unsubscribed: true, email: maskEmail(row.to_email) });
   } catch (e) {
     return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "Unsubscribe failed." }, { status: 500 });

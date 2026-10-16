@@ -167,13 +167,6 @@ export async function deliverPartnershipRow(
   const attempt = Number(row.attempt_count || 0) + 1;
   const sender = (settings.senders as Record<string, { from: string; reply_to: string }>)[String(row.role)]
     || settings.senders.partner;
-  const origin = String(settings.partners_origin || DEFAULT_SETTINGS.partners_origin)
-    .replace(/\/+$/, "")
-    .replace(/^(https?:\/\/)partners\.novaracleaning\.com/i, "$1partner.novaracleaning.com");
-  const unsubHeader = row.role === "partner" && row.unsubscribe_token
-    ? `${origin}/api/partnership-comms/unsubscribe?t=${encodeURIComponent(String(row.unsubscribe_token))}`
-    : null;
-
   await admin.from("partnership_messages").update({
     status: "sending",
     attempt_count: attempt,
@@ -187,6 +180,13 @@ export async function deliverPartnershipRow(
 
   try {
     if (channel === "email") {
+      const templateKey = String(row.template_key || "");
+      const role = String(row.role || "partner");
+      const emailType = role === "admin" || role === "walkthrough_agent"
+        ? "internal_admin"
+        : templateKey === "host_onboarding_link" || templateKey === "commercial_onboarding_link"
+          ? "agreement_account"
+          : "partner_service";
       const { data, error } = await admin.functions.invoke("admin-send-email", {
         body: {
           to: row.to_email,
@@ -194,11 +194,11 @@ export async function deliverPartnershipRow(
           html: row.body,
           from: sender.from,
           replyTo: sender.reply_to,
-          headers: unsubHeader
-            ? { "List-Unsubscribe": `<${unsubHeader}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" }
-            : undefined,
           idempotencyKey: row.idempotency_key || row.id,
           attachments: extras?.attachments,
+          templateKey,
+          emailType,
+          staffRecipient: emailType === "internal_admin",
         },
       });
       if (error) err = error.message;

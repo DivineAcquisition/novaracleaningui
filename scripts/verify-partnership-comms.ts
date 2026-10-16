@@ -53,14 +53,25 @@ check("phone fallback", partnershipRecipientKey(null, "(202) 555-0100"), "tel:20
 
 console.log("\nOpt-out:");
 check(
-  "email opt-out suppresses email even when urgent",
+  "email opt-out suppresses marketing email",
+  checkPartnershipPolicy({
+    email: "a@b.com",
+    channel: "email",
+    priority: "standard",
+    marketing: true,
+    emailOptedOut: true,
+  }).action,
+  "suppress",
+);
+check(
+  "email opt-out does not stop service email",
   checkPartnershipPolicy({
     email: "a@b.com",
     channel: "email",
     priority: "urgent",
     emailOptedOut: true,
   }).action,
-  "suppress",
+  "send",
 );
 check(
   "email opt-out leaves SMS available",

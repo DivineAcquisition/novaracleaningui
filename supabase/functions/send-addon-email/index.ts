@@ -99,7 +99,7 @@ function renderHtml(opts: { heading: string; bodyHtml: string; rows: Array<{ lab
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:${BRAND.gray50};padding:20px 0;"><tr><td align="center">
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;width:100%;">
 <tr><td style="background:#ffffff;border:1px solid ${BRAND.gray200};border-bottom:none;border-radius:8px 8px 0 0;padding:20px 20px 12px;text-align:center;">
-<img src="${BRAND.logo}" alt="${BRAND.name}" width="140" height="48" style="display:block;margin:0 auto;" />
+<img src="${BRAND.logo}" alt="${BRAND.name}" width="56" height="56" style="display:block;width:56px;height:56px;border-radius:12px;margin:0 0 22px;" />
 </td></tr>
 <tr><td style="background:${BRAND.gradient};color:#ffffff;padding:26px 30px;text-align:center;border-left:1px solid ${BRAND.gray200};border-right:1px solid ${BRAND.gray200};">
 <h1 style="margin:0;font-size:24px;font-weight:bold;color:#ffffff;">${opts.heading}</h1>
