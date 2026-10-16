@@ -75,7 +75,7 @@ export function Nec1099Panel({ cleanerId }: { cleanerId: string }) {
     zip: "",
   });
   const [payer, setPayer] = useState({
-    name: "NovaraCleaning LLC",
+    name: "Novara Cleaning LLC",
     tin: "",
     street: "",
     city: "",

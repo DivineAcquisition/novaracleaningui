@@ -17,6 +17,9 @@ type Identity = {
   website: string;
   privacyUrl: string;
   termsUrl: string;
+  refundPolicyUrl?: string;
+  cancellationPolicyUrl?: string;
+  refundsEmail?: string;
   publicOrigin: string;
   licenseLine: string;
   retentionMonths: number;
@@ -167,6 +170,9 @@ export default function EmailCompliance() {
           <Field label="Website" value={identity.website} onChange={(value) => setIdentity({ ...identity, website: value })} />
           <Field label="Privacy link" value={identity.privacyUrl} onChange={(value) => setIdentity({ ...identity, privacyUrl: value })} />
           <Field label="Terms link" value={identity.termsUrl} onChange={(value) => setIdentity({ ...identity, termsUrl: value })} />
+          <Field label="Refund policy" value={identity.refundPolicyUrl || ""} onChange={(value) => setIdentity({ ...identity, refundPolicyUrl: value })} />
+          <Field label="Cancellation policy" value={identity.cancellationPolicyUrl || ""} onChange={(value) => setIdentity({ ...identity, cancellationPolicyUrl: value })} />
+          <Field label="Refund questions" value={identity.refundsEmail || ""} onChange={(value) => setIdentity({ ...identity, refundsEmail: value })} />
           <Field label="License line (optional)" value={identity.licenseLine} onChange={(value) => setIdentity({ ...identity, licenseLine: value })} />
           <Field label="Keep sent mail (months)" value={String(identity.retentionMonths)} onChange={(value) => setIdentity({ ...identity, retentionMonths: Number(value) || 24 })} />
         </div>

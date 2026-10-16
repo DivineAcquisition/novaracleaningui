@@ -192,7 +192,7 @@ function payerDraft(value: unknown) {
   const src = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
   const text = (key: string) => String(src[key] ?? "").replace(/\s+/g, " ").trim();
   return {
-    name: text("name") || "NovaraCleaning LLC",
+    name: text("name") || "Novara Cleaning LLC",
     tin: text("tin"),
     street: text("street"),
     city: text("city"),

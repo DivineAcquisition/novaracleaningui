@@ -4,8 +4,8 @@
 // one type. The type picks the sender, the footer, whether an unsubscribe
 // is required, and which content rules apply. Nothing here is a legal
 // constant: addresses, sentences, claims, categories, and retention are
-// settings the owner can change. Defaults match how mail is sent today
-// and leave the postal address empty until the owner supplies one.
+// settings the owner can change. Defaults are the starting values from the
+// agreements. Clearing the postal address blocks marketing.
 
 export const EMAIL_TYPES = [
   "customer_service",
@@ -79,6 +79,9 @@ export interface BusinessIdentity {
   website: string;
   privacyUrl: string;
   termsUrl: string;
+  refundPolicyUrl: string;
+  cancellationPolicyUrl: string;
+  refundsEmail: string;
   publicOrigin: string;
   /** Empty until the owner supplies a license or registration the business must show. */
   licenseLine: string;
@@ -89,8 +92,16 @@ export interface BusinessIdentity {
   marketingCategories: MarketingCategory[];
   why: Record<EmailType, string>;
   contractorOnBehalf: string;
+  contractorRelationshipLine: string;
+  payoutTaxLine: string;
+  taxDocumentLine: string;
   paperCopyLine: string;
   withdrawConsentLine: string;
+  serviceSafetyLine: string;
+  recordKeptLine: string;
+  refundQuestionsLine: string;
+  partnerGovernsLine: string;
+  marketingStopLine: string;
   service: StreamIdentity;
   billing: StreamIdentity;
   marketing: StreamIdentity;
@@ -164,6 +175,9 @@ export interface PrepareInput {
   adminAcknowledged?: boolean;
   /** Admin-approved offer that sits below the service message, clearly separate. Default is none. */
   separatedOfferHtml?: string | null;
+  /** Offer terms printed in the marketing footer. Taken from the body when omitted. */
+  offerTerms?: string | null;
+  taxYear?: string | null;
   mode?: "save" | "send";
   testSend?: boolean;
   contractorRelationship?: "active" | "offboarded" | null;
@@ -238,14 +252,24 @@ const EMPTY_ADDRESS: PostalAddress = {
 };
 
 export const DEFAULT_BUSINESS_IDENTITY: BusinessIdentity = {
-  legalName: "NovaraCleaning",
-  brandName: "Novara Cleaning",
-  mailingAddress: { ...EMPTY_ADDRESS },
+  legalName: "Novara Cleaning LLC",
+  brandName: "NovaraCleaning",
+  mailingAddress: {
+    line1: "7404 Executive Place",
+    line2: "",
+    city: "Lanham",
+    region: "MD",
+    postalCode: "20706",
+    country: "US",
+  },
   supportEmail: "support@novaracleaning.com",
-  phone: "+1 (844) 735-2070",
+  phone: "(844) 735-2070",
   website: "https://novaracleaning.com",
   privacyUrl: "https://novaracleaning.com/privacy",
   termsUrl: "https://novaracleaning.com/terms",
+  refundPolicyUrl: "https://novaracleaning.com/refund-policy",
+  cancellationPolicyUrl: "https://novaracleaning.com/cancellation-policy",
+  refundsEmail: "refunds@novaracleaning.com",
   publicOrigin: "https://app.novaracleaning.com",
   licenseLine: "",
   retentionMonths: 24,
@@ -253,6 +277,7 @@ export const DEFAULT_BUSINESS_IDENTITY: BusinessIdentity = {
   monitoredInboxes: [
     "support@novaracleaning.com",
     "billing@novaracleaning.com",
+    "refunds@novaracleaning.com",
     "operations@novaracleaning.com",
     "ops@novaracleaning.com",
   ],
@@ -263,16 +288,24 @@ export const DEFAULT_BUSINESS_IDENTITY: BusinessIdentity = {
     { id: "referrals", label: "Referral offers" },
   ],
   why: {
-    customer_service: "You are receiving this message because of your booking or account with {{brand}}.",
-    customer_marketing: "You are receiving this promotional message from {{brand}} because you asked to hear from us.",
-    agreement_account: "You are receiving this message because of your booking or account with {{brand}}.",
-    contractor_operational: "{{contractor}} on behalf of {{brand}}.",
-    contractor_tax: "{{contractor}} on behalf of {{brand}}.",
-    internal_admin: "{{brand}} system notice for staff.",
+    customer_service: "You are receiving this service message because of your booking or account with {{brand}}.",
+    customer_marketing: "You are receiving this promotional email because {{reason}}.",
+    agreement_account: "You are receiving this service message because of your booking or account with {{brand}}.",
+    contractor_operational: "This message relates to your independent contractor relationship with {{legal}} under your Independent Contractor Agreement.",
+    contractor_tax: "This message relates to your independent contractor relationship with {{legal}} under your Independent Contractor Agreement.",
+    internal_admin: "Novara internal system notification. Not for customers or contractors.",
   },
-  contractorOnBehalf: "{{contractor}} on behalf of {{brand}}.",
-  paperCopyLine: "To request a paper copy of this tax form, reply to this email.",
-  withdrawConsentLine: "To withdraw consent to electronic delivery of tax forms, use the link below. Withdrawal does not change forms already delivered.",
+  contractorOnBehalf: "{{contractor}}, on behalf of {{legal}}",
+  contractorRelationshipLine: "This message relates to your independent contractor relationship with {{legal}} under your Independent Contractor Agreement.",
+  payoutTaxLine: "No taxes were withheld from this payment. You are responsible for your own taxes.",
+  taxDocumentLine: "Your Form 1099-NEC for {{taxYear}} is available through the secure link in this email. You are receiving it electronically because you consented on {{consentDate}}. {{paperCopy}} {{withdraw}} If anything looks wrong, reply within {{correctionDays}} days. This email does not include your full taxpayer ID.",
+  paperCopyLine: "To request a paper copy, reply to this email.",
+  withdrawConsentLine: "To withdraw your consent, reply to this email.",
+  serviceSafetyLine: "We will never ask for your full card number, or for gate or alarm codes, by email.",
+  recordKeptLine: "A copy of this message is kept in your account record.",
+  refundQuestionsLine: "Refund questions: {{refunds}}",
+  partnerGovernsLine: "Your agreement with {{legal}} governs this account.",
+  marketingStopLine: "Unsubscribing stops promotional emails only. We will still send booking, payment and account messages.",
   service: {
     displayName: "Novara Cleaning",
     address: "support@novaracleaning.com",
@@ -320,7 +353,7 @@ export const DOMAIN_AUTH_OBSERVED = {
 };
 
 export const SETUP_TASKS = [
-  "Supply a real postal mailing address in Email settings. Marketing cannot send until it is saved.",
+  "Confirm 7404 Executive Place, Lanham, MD 20706 is the postal address where Novara Cleaning LLC receives mail. Clearing it blocks marketing. Service mail still sends.",
   "Authenticate a marketing subdomain that is separate from the service From domain, then save it as the marketing sender. Apex SPF authorizes Google, not Amazon SES. send.novaracleaning.com authorizes Amazon SES. Resend DKIM is published at resend._domainkey.novaracleaning.com. Two DMARC records are published at once, which is not a valid policy.",
   "Confirm support@novaracleaning.com, billing@novaracleaning.com, and operations@novaracleaning.com are monitored. Customer mail replies to support@. The inbound mailbox webhook records those replies in the conversation history. Mail to hello@ is not auto-recorded.",
   "Point GoHighLevel workflows, campaigns, and any reactivation tool at the marketing-allowed check before they send. Those sends are not in this repository, so this app cannot stamp their footers until they move here or call the check.",
@@ -402,7 +435,9 @@ export function hasMailingAddress(address: PostalAddress | null | undefined): bo
 export function formatAddress(address: PostalAddress): string {
   const line2 = address.line2.trim();
   const cityLine = [address.city, address.region, address.postalCode].map((p) => p.trim()).filter(Boolean).join(", ").replace(/, ([A-Z]{2}),/, ", $1 ");
-  return [address.line1.trim(), line2, cityLine, address.country.trim()].filter(Boolean).join(", ");
+  const country = address.country.trim();
+  const showCountry = country && !/^us(a)?$/i.test(country);
+  return [address.line1.trim(), line2, cityLine, showCountry ? country : ""].filter(Boolean).join(", ");
 }
 
 function mergeSender<T extends SenderIdentity>(base: T, raw: unknown): T {
@@ -421,7 +456,11 @@ function mergeSender<T extends SenderIdentity>(base: T, raw: unknown): T {
 export function mergeBusinessIdentity(raw: unknown): BusinessIdentity {
   const v = asObject(raw);
   const base = DEFAULT_BUSINESS_IDENTITY;
+  const storedLegal = textOf(v.legalName || v.legal_name);
+  const legacyUnset = !storedLegal || storedLegal === "NovaraCleaning";
+  const addressProvided = v.mailingAddress != null || v.mailing_address != null;
   const address = asObject(v.mailingAddress || v.mailing_address);
+  const useStartingAddress = !addressProvided || (!textOf(address.line1).trim() && legacyUnset);
   const whyIn = asObject(v.why);
   const why = { ...base.why };
   for (const type of EMAIL_TYPES) {
@@ -438,9 +477,11 @@ export function mergeBusinessIdentity(raw: unknown): BusinessIdentity {
   const honor = Number(v.unsubscribeHonorBusinessDays ?? v.unsubscribe_honor_business_days);
   return {
     ...base,
-    legalName: textOf(v.legalName || v.legal_name || base.legalName),
-    brandName: textOf(v.brandName || v.brand_name || base.brandName),
-    mailingAddress: {
+    legalName: storedLegal && storedLegal !== "NovaraCleaning" ? storedLegal : base.legalName,
+    brandName: textOf(v.brandName || v.brand_name) && !(legacyUnset && textOf(v.brandName || v.brand_name) === "Novara Cleaning")
+      ? textOf(v.brandName || v.brand_name)
+      : base.brandName,
+    mailingAddress: useStartingAddress ? { ...base.mailingAddress } : {
       line1: textOf(address.line1),
       line2: textOf(address.line2),
       city: textOf(address.city),
@@ -453,6 +494,9 @@ export function mergeBusinessIdentity(raw: unknown): BusinessIdentity {
     website: textOf(v.website || base.website),
     privacyUrl: textOf(v.privacyUrl || v.privacy_url || base.privacyUrl),
     termsUrl: textOf(v.termsUrl || v.terms_url || base.termsUrl),
+    refundPolicyUrl: textOf(v.refundPolicyUrl || v.refund_policy_url || base.refundPolicyUrl),
+    cancellationPolicyUrl: textOf(v.cancellationPolicyUrl || v.cancellation_policy_url || base.cancellationPolicyUrl),
+    refundsEmail: textOf(v.refundsEmail || v.refunds_email || base.refundsEmail),
     publicOrigin: textOf(v.publicOrigin || v.public_origin || base.publicOrigin).replace(/\/+$/, ""),
     licenseLine: textOf(v.licenseLine ?? v.license_line ?? ""),
     retentionMonths: Number.isFinite(retention) && retention > 0 ? Math.round(retention) : base.retentionMonths,
@@ -468,8 +512,16 @@ export function mergeBusinessIdentity(raw: unknown): BusinessIdentity {
       .filter((item): item is MarketingCategory => Boolean(item)),
     why,
     contractorOnBehalf: textOf(v.contractorOnBehalf || v.contractor_on_behalf || base.contractorOnBehalf),
+    contractorRelationshipLine: textOf(v.contractorRelationshipLine || v.contractor_relationship_line || base.contractorRelationshipLine),
+    payoutTaxLine: textOf(v.payoutTaxLine || v.payout_tax_line || base.payoutTaxLine),
+    taxDocumentLine: textOf(v.taxDocumentLine || v.tax_document_line || base.taxDocumentLine),
     paperCopyLine: textOf(v.paperCopyLine || v.paper_copy_line || base.paperCopyLine),
     withdrawConsentLine: textOf(v.withdrawConsentLine || v.withdraw_consent_line || base.withdrawConsentLine),
+    serviceSafetyLine: textOf(v.serviceSafetyLine || v.service_safety_line || base.serviceSafetyLine),
+    recordKeptLine: textOf(v.recordKeptLine || v.record_kept_line || base.recordKeptLine),
+    refundQuestionsLine: textOf(v.refundQuestionsLine || v.refund_questions_line || base.refundQuestionsLine),
+    partnerGovernsLine: textOf(v.partnerGovernsLine || v.partner_governs_line || base.partnerGovernsLine),
+    marketingStopLine: textOf(v.marketingStopLine || v.marketing_stop_line || base.marketingStopLine),
     service: legacyHelloIsSupport(mergeSender(base.service, v.service)),
     billing: mergeSender(base.billing, v.billing),
     marketing: mergeSender(base.marketing, v.marketing),
@@ -478,11 +530,19 @@ export function mergeBusinessIdentity(raw: unknown): BusinessIdentity {
   };
 }
 
-export function fillTemplate(sentence: string, identity: BusinessIdentity): string {
+export function fillTemplate(sentence: string, identity: BusinessIdentity, extra: Record<string, string> = {}): string {
+  const host = identity.website.replace(/^https?:\/\//, "").replace(/\/$/, "");
   return sentence
     .replace(/\{\{brand\}\}/g, identity.brandName || identity.legalName)
     .replace(/\{\{legal\}\}/g, identity.legalName || identity.brandName)
-    .replace(/\{\{contractor\}\}/g, identity.contractor.displayName);
+    .replace(/\{\{contractor\}\}/g, identity.contractor.displayName)
+    .replace(/\{\{refunds\}\}/g, identity.refundsEmail)
+    .replace(/\{\{reason\}\}/g, extra.reason || `you signed up at ${host}`)
+    .replace(/\{\{taxYear\}\}/g, extra.taxYear || "")
+    .replace(/\{\{consentDate\}\}/g, extra.consentDate || "")
+    .replace(/\{\{paperCopy\}\}/g, extra.paperCopy || identity.paperCopyLine)
+    .replace(/\{\{withdraw\}\}/g, extra.withdraw || identity.withdrawConsentLine)
+    .replace(/\{\{correctionDays\}\}/g, extra.correctionDays || String(identity.unsubscribeHonorBusinessDays));
 }
 
 function versionKey(input: string): string {
@@ -553,67 +613,115 @@ export function replyIsMonitored(identity: BusinessIdentity, replyTo: string): b
 export interface FooterModel {
   lines: string[];
   links: Array<{ href: string; label: string; prominent?: boolean }>;
+  after: string[];
+}
+
+export interface FooterContext {
+  templateKey?: string | null;
+  reason?: string | null;
+  offerTerms?: string | null;
+  taxYear?: string | null;
+  consentDate?: string | null;
+}
+
+const REFUND_TEMPLATE_KEYS = new Set(["credit_allocated", "credit_expiry"]);
+const PAYOUT_TEMPLATE_KEYS = new Set(["contractor_payout", "contractor_payment_summary", "contractor_final_payment"]);
+const PARTNER_TEMPLATE_KEYS = new Set(["partner_service", "partner_agreement", "commercial_account"]);
+
+export function marketingReason(identity: BusinessIdentity, consent?: ConsentRecord | null): string {
+  const host = identity.website.replace(/^https?:\/\//, "").replace(/\/$/, "");
+  if (consent?.source === "booking_form") return `you booked with ${identity.brandName}`;
+  if (consent?.source === "lead_form") return "you requested a quote";
+  if (consent?.source === "import" && consent.sourceNote.trim()) return consent.sourceNote.trim();
+  return `you signed up at ${host}`;
+}
+
+function extractOfferTerms(value: string): string {
+  const text = visibleText(value);
+  const match = text.match(/(?:new customers only|first[- ]time customers only|one per household|standard clean only)[^.\n]{0,120}/i);
+  return match ? match[0].replace(/\s+/g, " ").trim() : "";
 }
 
 export function footerModel(
   identity: BusinessIdentity,
   type: EmailType,
   urls: { unsubscribe?: string | null; preferences?: string | null; withdraw?: string | null },
+  ctx: FooterContext = {},
 ): FooterModel {
-  const brand = identity.brandName || identity.legalName || "Novara Cleaning";
+  const brand = identity.brandName || identity.legalName || "NovaraCleaning";
   const legal = identity.legalName || brand;
   const address = hasMailingAddress(identity.mailingAddress) ? formatAddress(identity.mailingAddress) : "";
-  const why = fillTemplate(identity.why[type] || "", identity);
+  const key = textOf(ctx.templateKey);
   const lines: string[] = [];
   const links: FooterModel["links"] = [];
+  const after: string[] = [];
+  const extra = {
+    reason: ctx.reason || marketingReason(identity, null),
+    taxYear: ctx.taxYear || "",
+    consentDate: ctx.consentDate || "",
+    paperCopy: identity.paperCopyLine,
+    withdraw: identity.withdrawConsentLine,
+    correctionDays: String(identity.unsubscribeHonorBusinessDays),
+  };
 
   if (type === "internal_admin") {
-    lines.push(why || `${brand} system notice for staff.`);
-    return { lines, links };
+    lines.push(fillTemplate(identity.why.internal_admin, identity, extra));
+    return { lines, links, after };
   }
 
   if (type === "contractor_operational" || type === "contractor_tax") {
-    lines.push(fillTemplate(identity.contractorOnBehalf, identity));
-  } else {
-    lines.push(legal);
+    lines.push(fillTemplate(identity.contractorOnBehalf, identity, extra));
+    const place = [address, identity.contractor.address].filter(Boolean).join(" | ");
+    if (place) lines.push(place);
+    if (identity.licenseLine.trim()) lines.push(identity.licenseLine.trim());
+    lines.push(fillTemplate(identity.contractorRelationshipLine, identity, extra));
+    if (PAYOUT_TEMPLATE_KEYS.has(key)) lines.push(fillTemplate(identity.payoutTaxLine, identity, extra));
+    if (type === "contractor_tax") {
+      lines.push(fillTemplate(identity.taxDocumentLine, identity, extra));
+      if (urls.withdraw) links.push({ href: urls.withdraw, label: "Withdraw electronic tax-form consent" });
+    }
+    if (identity.privacyUrl) links.push({ href: identity.privacyUrl, label: "Privacy Policy" });
+    return { lines, links, after };
   }
-  if (address) lines.push(address);
-  if (identity.licenseLine.trim()) lines.push(identity.licenseLine.trim());
 
-  if (type === "customer_service" || type === "agreement_account") {
-    const contact = [identity.supportEmail, identity.phone].filter(Boolean).join(" · ");
-    if (contact) lines.push(contact);
-    lines.push(why);
+  lines.push(`${brand} | ${legal}`);
+  const support = [identity.supportEmail, identity.phone].filter(Boolean).join(" ");
+  if (type === "customer_marketing") {
+    if (address) lines.push(address);
+    if (support) lines.push(support);
+  } else {
+    const combined = [address, support].filter(Boolean).join(" | ");
+    if (combined) lines.push(combined);
   }
+  if (identity.licenseLine.trim()) lines.push(identity.licenseLine.trim());
+  lines.push(fillTemplate(identity.why[type] || "", identity, extra));
 
   if (type === "customer_marketing") {
-    lines.push(why);
-    lines.push("This is a promotional message.");
     if (urls.unsubscribe) links.push({ href: urls.unsubscribe, label: "Unsubscribe", prominent: true });
     if (urls.preferences) links.push({ href: urls.preferences, label: "Email preferences" });
   }
-
-  if (type === "contractor_operational" || type === "contractor_tax") {
-    const reply = identity.contractor.replyTo || identity.contractor.address;
-    lines.push(reply ? `Reply to this email and it reaches ${reply}.` : "Reply to this email.");
+  if (identity.privacyUrl) links.push({ href: identity.privacyUrl, label: "Privacy Policy" });
+  if (identity.termsUrl) links.push({ href: identity.termsUrl, label: "Terms" });
+  if (type !== "customer_marketing" && identity.refundPolicyUrl) {
+    links.push({ href: identity.refundPolicyUrl, label: "Refund Policy" });
+  }
+  if (type !== "customer_marketing" && identity.cancellationPolicyUrl) {
+    links.push({ href: identity.cancellationPolicyUrl, label: "Cancellation Policy" });
   }
 
-  if (type === "contractor_tax") {
-    lines.push(identity.paperCopyLine);
-    lines.push(identity.withdrawConsentLine);
-    if (urls.withdraw) links.push({ href: urls.withdraw, label: "Withdraw electronic tax-form consent" });
+  if (type === "customer_marketing") {
+    after.push(fillTemplate(identity.marketingStopLine, identity, extra));
+    const terms = textOf(ctx.offerTerms).trim();
+    if (terms) after.push(`Offer terms: ${terms}`);
+  } else {
+    after.push(fillTemplate(identity.serviceSafetyLine, identity, extra));
   }
-
-  if (identity.privacyUrl && type !== "internal_admin") {
-    links.push({ href: identity.privacyUrl, label: "Privacy policy" });
+  if (type === "agreement_account" || REFUND_TEMPLATE_KEYS.has(key)) {
+    after.push(fillTemplate(identity.recordKeptLine, identity, extra));
   }
-  if ((type === "customer_service" || type === "agreement_account") && identity.termsUrl) {
-    links.push({ href: identity.termsUrl, label: "Terms" });
-  }
-  if (identity.website && type !== "internal_admin" && type !== "contractor_tax") {
-    links.push({ href: identity.website, label: brand });
-  }
-  return { lines, links };
+  if (REFUND_TEMPLATE_KEYS.has(key)) after.push(fillTemplate(identity.refundQuestionsLine, identity, extra));
+  if (PARTNER_TEMPLATE_KEYS.has(key)) after.push(fillTemplate(identity.partnerGovernsLine, identity, extra));
+  return { lines, links, after };
 }
 
 function renderFooter(model: FooterModel, theme: "light" | "dark"): string {
@@ -633,10 +741,14 @@ function renderFooter(model: FooterModel, theme: "light" | "dark"): string {
       : `color:${brand};font-size:13px;text-decoration:underline;`;
     return `<a class="novara-footer-link" href="${escapeHtml(item.href)}" style="${style}">${escapeHtml(item.label)} (${escapeHtml(item.href)})</a>`;
   }).join("<br/>");
+  const afterHtml = model.after.map((line) =>
+    `<p style="margin:8px 0 0;font-family:Inter,Arial,sans-serif;font-size:13px;line-height:1.5;color:${fg};">${escapeHtml(line)}</p>`,
+  ).join("");
   return `<table role="presentation" class="novara-footer" data-novara-footer="1" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background:${bg};border-top:1px solid ${dark ? "#3f3f46" : "#e4e4e7"};">
   <tr><td style="padding:16px 8px 8px;font-family:Inter,Arial,sans-serif;">
     ${lineHtml}
     ${linkHtml ? `<p style="margin:8px 0 0;">${linkHtml}</p>` : ""}
+    ${afterHtml}
   </td></tr>
 </table>`;
 }
@@ -645,13 +757,15 @@ export function buildFooter(
   identity: BusinessIdentity,
   type: EmailType,
   urls: { unsubscribe?: string | null; preferences?: string | null; withdraw?: string | null },
+  ctx: FooterContext = {},
 ): FooterBundle {
-  const model = footerModel(identity, type, urls);
+  const model = footerModel(identity, type, urls, ctx);
   const html = `<!--NOVARA_FOOTER_START--><style>@media (prefers-color-scheme: dark){.novara-footer{background:#18181b !important;}.novara-footer p{color:#e4e4e7 !important;}.novara-footer a{color:#ddd6fe !important;}}</style>${renderFooter(model, "light")}<!--NOVARA_FOOTER_END-->`;
   const darkHtml = renderFooter(model, "dark");
   const text = [
     ...model.lines,
     ...model.links.map((item) => `${item.label}: ${item.href}`),
+    ...model.after,
   ].join("\n");
   const versionKeySource = `${type}\n${text}\n${identity.legalName}\n${formatAddress(identity.mailingAddress)}`;
   return { versionKey: versionKey(versionKeySource), html, darkHtml, text };
@@ -868,7 +982,16 @@ export function evaluateEmail(input: PrepareInput): PrepareResult {
     preferences: input.preferencesUrl || null,
     withdraw: input.preferencesUrl ? `${input.preferencesUrl}${input.preferencesUrl.includes("?") ? "&" : "?"}tax=1` : null,
   };
-  const footer = buildFooter(identity, type, urls);
+  const consentDate = input.taxElectronicConsentAt
+    ? new Date(input.taxElectronicConsentAt).toLocaleDateString("en-US", { timeZone: "America/New_York", year: "numeric", month: "long", day: "numeric" })
+    : "";
+  const footer = buildFooter(identity, type, urls, {
+    templateKey: input.templateKey,
+    reason: marketingReason(identity, input.consent),
+    offerTerms: textOf(input.offerTerms).trim() || (type === "customer_marketing" ? extractOfferTerms(html) : ""),
+    taxYear: textOf(input.taxYear).trim() || String(new Date(input.now || Date.now()).getFullYear() - 1),
+    consentDate,
+  });
   html = applyEmailChrome(html);
   html = stampFooter(html, footer.html);
   if (marketing) {
@@ -902,7 +1025,7 @@ export function evaluateEmail(input: PrepareInput): PrepareResult {
   if (marketing) {
     checklist.push(item("unsubscribe", "One-step unsubscribe link", Boolean(input.unsubscribeUrl), true));
     checklist.push(item("preferences", "Email preferences link", Boolean(input.preferencesUrl), true));
-    checklist.push(item("promo_id", "Identified as a promotional message", /promotional message/i.test(combined), true));
+    checklist.push(item("promo_id", "Identified as a promotional message", /promotional (message|email)/i.test(combined), true));
     checklist.push(item("stream", "Marketing stream is separate from service", marketingStreamReady(identity), true, marketingStreamReady(identity) ? "" : "Set a marketing From address that is not the support or billing address."));
     const badClaims = unapprovedClaims(combined, claims);
     checklist.push(item("claims", "Claims are on the approved list", badClaims.length === 0, true, badClaims.map((c) => c.label).join(", ")));
@@ -1272,13 +1395,13 @@ export function buildAuditReport(): { findings: AuditFinding[]; setupTasks: stri
       id: "claims",
       status: "partial",
       title: "Claims in email",
-      detail: "Email templates did not say licensed, insured, background-checked, or limited spots. They did say exclusive discounts (membership welcome), 5% off (second abandoned-cart note), save $30 / new-customer discount (one reminder), and 50% off (testimonial offer). Receipt lines that state a discount already applied on a booking are not promotions. No approved-claims list existed.",
+      detail: "Email templates did not say licensed, insured, background-checked, or limited spots. The agreements state the company maintains commercial general liability insurance, so insured can be approved on that basis. Background checks are required by the screening policy, but a hiring path can still skip one, so background-checked is not approved for every cleaner. Licensed stays empty until a real license is supplied. Templates did say exclusive discounts, 5% off, save $30, and 50% off. Those stay blocked until each one is approved.",
     },
     {
       id: "address",
-      status: "missing",
+      status: "present",
       title: "Mailing address",
-      detail: "No postal address was stored for email footers. The 1099 payer address is a separate tax setting and is not reused here. Marketing cannot send until the owner saves an address.",
+      detail: "Starting postal address is 7404 Executive Place, Lanham, MD 20706, the principal office in the service, host, and partner agreements. Legal name is Novara Cleaning LLC. Brand name is NovaraCleaning. The owner confirms both in Email settings. Clearing the address blocks marketing. Policy pages already publish privacy, terms, refund, and cancellation links. Some agreement screens still say NovaraCleaning LLC.",
     },
   ];
   return { findings, setupTasks: SETUP_TASKS, catalog: EMAIL_CATALOG, domain: DOMAIN_AUTH_OBSERVED };

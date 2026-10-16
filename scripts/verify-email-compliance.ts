@@ -94,6 +94,8 @@ check("booking confirmation is service", confirmation.type, "customer_service");
 assert("service footer names the booking", confirmation.text.includes("because of your booking or account"));
 assert("service footer has the address", confirmation.text.includes("100 King St"));
 assert("service footer has no unsubscribe", !/Unsubscribe/.test(confirmation.footer.text));
+assert("service footer warns about card numbers", confirmation.text.includes("full card number"));
+assert("service footer links the refund policy", confirmation.footer.text.includes("https://novaracleaning.com/refund-policy"));
 assert("applied discount is not treated as a promotion", confirmation.promoRemoved === false);
 assert("booking mail is sent from support@", confirmation.from.includes("support@novaracleaning.com") && !confirmation.from.includes("hello@"));
 assert("reply-to is the support inbox", confirmation.replyTo === "support@novaracleaning.com");
@@ -101,15 +103,23 @@ assert("plain text carries the footer", confirmation.text.includes(confirmation.
 assert("the novara mark is on the message", confirmation.html.includes("novara-logo.png"));
 assert("the message sits in the card", confirmation.html.includes("data-novara-card"));
 
+const defaults = mergeBusinessIdentity(null);
+assert("starting address is the Lanham office", defaults.mailingAddress.line1 === "7404 Executive Place" && defaults.mailingAddress.city === "Lanham" && defaults.mailingAddress.postalCode === "20706");
+assert("legal name is Novara Cleaning LLC", defaults.legalName === "Novara Cleaning LLC");
+const cleared = mergeBusinessIdentity({
+  legalName: "Novara Cleaning LLC",
+  mailingAddress: { line1: "", line2: "", city: "", region: "", postalCode: "", country: "US" },
+});
+assert("a cleared address stays empty", !hasMailingAddress(cleared.mailingAddress));
 const missingAddress = evaluateEmail({
   declaredType: "customer_service",
   templateKey: "booking_confirmation",
   subject: "Confirmed",
   html: "<p>Your cleaning is confirmed.</p>",
+  identity: cleared,
   ...urls,
 });
 check("service still sends without a mailing address", missingAddress.decision, "send");
-assert("mailing address is not invented", !hasMailingAddress(missingAddress ? mergeBusinessIdentity(null).mailingAddress : null));
 
 const offered = evaluateEmail({
   declaredType: "customer_service",
@@ -135,6 +145,27 @@ check("a receipt sends", receipt.decision, "send");
 assert("a receipt is sent from billing@", receipt.from.includes("billing@novaracleaning.com"));
 assert("a receipt replies to billing@", receipt.replyTo === "billing@novaracleaning.com");
 
+const credit = evaluateEmail({
+  declaredType: "customer_service",
+  templateKey: "credit_allocated",
+  subject: "A credit was added",
+  html: "<p>A credit was added to your account.</p>",
+  identity: ready,
+  ...urls,
+});
+assert("a credit notice names the refunds inbox", credit.text.includes("refunds@novaracleaning.com"));
+assert("a credit notice is kept on the account", credit.text.includes("kept in your account record"));
+
+const partner = evaluateEmail({
+  declaredType: "agreement_account",
+  templateKey: "partner_agreement",
+  subject: "Your agreement",
+  html: "<p>Please review the agreement.</p>",
+  identity: ready,
+  ...urls,
+});
+assert("a partner agreement names the governing contract", partner.text.includes("Your agreement with Novara Cleaning LLC governs this account"));
+
 console.log("\nMarketing:");
 const promo = evaluateEmail({
   declaredType: "customer_marketing",
@@ -151,7 +182,10 @@ check("promotional email sends when the rules pass", promo.decision, "send");
 assert("marketing footer has unsubscribe", /Unsubscribe/.test(promo.footer.text));
 assert("marketing footer has preferences", promo.footer.text.includes("Email preferences"));
 assert("marketing footer has the address", promo.footer.text.includes("Alexandria"));
-assert("marketing footer says it is promotional", /promotional message/i.test(promo.text));
+assert("marketing footer says it is promotional", /promotional email/i.test(promo.text));
+assert("marketing footer names why", promo.text.includes("you booked with NovaraCleaning"));
+assert("marketing footer says unsubscribe stops promotions only", promo.text.includes("Unsubscribing stops promotional emails only"));
+assert("marketing footer carries the offer terms", promo.text.includes("Offer terms:") && promo.text.includes("one per household"));
 assert("mail apps get a one-click header", promo.headers["List-Unsubscribe-Post"] === "List-Unsubscribe=One-Click");
 assert("marketing uses the marketing stream", promo.stream === "marketing");
 assert("unsubscribe link is not tiny", promo.footer.html.includes("font-size:15px"));
@@ -164,6 +198,8 @@ const noAddress = evaluateEmail({
   claims: [{ ...offerClaim, phrase: "5% off", requiredWording: "one per household" }],
   consent: subscribed,
   identity: mergeBusinessIdentity({
+    legalName: "Novara Cleaning LLC",
+    mailingAddress: { line1: "", line2: "", city: "", region: "", postalCode: "", country: "US" },
     marketing: ready.marketing,
   }),
 });
@@ -257,7 +293,8 @@ check("payout sends", payout.decision, "send");
 assert("payout is from NVC Operations", payout.from.includes("NVC Operations") && payout.from.includes("operations@novaracleaning.com"));
 assert("payout has no unsubscribe", !/Unsubscribe/.test(payout.footer.text));
 assert("payout reference is masked", !payout.html.includes("tr_1234567890abcd"));
-assert("contractor footer names operations", payout.text.includes("NVC Operations on behalf of"));
+assert("contractor footer names operations", payout.text.includes("NVC Operations, on behalf of Novara Cleaning LLC"));
+assert("payout footer states no taxes were withheld", payout.text.includes("No taxes were withheld"));
 
 const stub = evaluateEmail({
   declaredType: "contractor_operational",
@@ -305,7 +342,7 @@ const light = buildFooter(ready, "customer_marketing", urls);
 const darkIdentity = mergeBusinessIdentity({ ...ready, mailingAddress: { ...address, line1: "200 Queen St" } });
 const nextFooter = buildFooter(darkIdentity, "customer_marketing", urls);
 assert("dark preview is a separate render", light.darkHtml.includes("#18181b"));
-assert("plain text matches the footer lines", light.text.includes("promotional message"));
+assert("plain text matches the footer lines", light.text.includes("promotional email"));
 assert("a changed address creates a new footer version", light.versionKey !== nextFooter.versionKey);
 const oldAgain = buildFooter(ready, "customer_marketing", urls);
 check("the previous footer is still reproducible", oldAgain.versionKey, light.versionKey);
