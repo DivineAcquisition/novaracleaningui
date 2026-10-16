@@ -37,12 +37,13 @@ export function Particles({ color = "rgba(255,255,255,0.85)", density = 42 }) {
       const { width, height } = canvas.parentElement.getBoundingClientRect();
       ctx.clearRect(0, 0, width, height);
       ctx.fillStyle = color;
+      const drift = window.scrollY * 0.08;
       for (const dot of dots) {
         dot.y -= dot.s;
         if (dot.y < -2) dot.y = height + 2;
         ctx.globalAlpha = 0.35 + dot.r / 3;
         ctx.beginPath();
-        ctx.arc(dot.x, dot.y, dot.r, 0, Math.PI * 2);
+        ctx.arc(dot.x, dot.y - drift, dot.r, 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.globalAlpha = 1;
@@ -92,6 +93,31 @@ export function BorderBeam({ size = 88, duration = 7, colorFrom = "#ffffff", col
         transition={{ repeat: Infinity, ease: "linear", duration }}
       />
     </div>
+  );
+}
+
+export function TiltCard({ children, className = "" }) {
+  const rx = useMotionValue(0);
+  const ry = useMotionValue(0);
+  return (
+    <motion.div
+      className={className}
+      style={{ rotateX: rx, rotateY: ry, transformPerspective: 900 }}
+      onMouseMove={(event) => {
+        if (reducedMotion()) return;
+        const rect = event.currentTarget.getBoundingClientRect();
+        const px = (event.clientX - rect.left) / rect.width - 0.5;
+        const py = (event.clientY - rect.top) / rect.height - 0.5;
+        ry.set(px * 7);
+        rx.set(py * -7);
+      }}
+      onMouseLeave={() => {
+        rx.set(0);
+        ry.set(0);
+      }}
+    >
+      {children}
+    </motion.div>
   );
 }
 
