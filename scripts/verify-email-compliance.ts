@@ -97,6 +97,8 @@ assert("service footer has no unsubscribe", !/Unsubscribe/.test(confirmation.foo
 assert("applied discount is not treated as a promotion", confirmation.promoRemoved === false);
 assert("reply-to is the monitored support inbox", confirmation.replyTo === "support@novaracleaning.com");
 assert("plain text carries the footer", confirmation.text.includes(confirmation.footer.text.split("\n")[0]));
+assert("the novara mark is on the message", confirmation.html.includes("novara-logo.png"));
+assert("the message sits in the card", confirmation.html.includes("data-novara-card"));
 
 const missingAddress = evaluateEmail({
   declaredType: "customer_service",

@@ -573,9 +573,9 @@ export function footerModel(
 
 function renderFooter(model: FooterModel, theme: "light" | "dark"): string {
   const dark = theme === "dark";
-  const bg = dark ? "#18181b" : "#f4f4f5";
-  const fg = dark ? "#e4e4e7" : "#3f3f46";
-  const brand = dark ? "#ddd6fe" : "#5b21b6";
+  const bg = dark ? "#18181b" : "#2a2a2e";
+  const fg = dark ? "#e4e4e7" : "#c8c8d0";
+  const brand = dark ? "#ddd6fe" : "#ddd6fe";
   const lineHtml = model.lines.map((line, index) => {
     const color = index === 0 ? brand : fg;
     const weight = index === 0 ? "600" : "400";
@@ -824,6 +824,7 @@ export function evaluateEmail(input: PrepareInput): PrepareResult {
     withdraw: input.preferencesUrl ? `${input.preferencesUrl}${input.preferencesUrl.includes("?") ? "&" : "?"}tax=1` : null,
   };
   const footer = buildFooter(identity, type, urls);
+  html = applyEmailChrome(html);
   html = stampFooter(html, footer.html);
   if (marketing) {
     html = html.replace(/<!--NOVARA_FOOTER_START-->/, `${footer.html.includes("promotional") ? "" : ""}<!--NOVARA_FOOTER_START-->`);
@@ -972,11 +973,12 @@ function chooseSender(
 }
 
 function stampFooter(html: string, footerHtml: string): string {
-  let next = html
-    .replace(/<!--NOVARA_FOOTER_START-->[\s\S]*?<!--NOVARA_FOOTER_END-->/g, "")
-    .replace(/NOVARA_FOOTER_START[\s\S]*?NOVARA_FOOTER_END/g, "");
-  next = next.replace(/<p\b[^>]*>[\s\S]*?Unsubscribe from partnership emails[\s\S]*?<\/p>/gi, "");
+  let next = html.replace(/<p\b[^>]*>[\s\S]*?Unsubscribe from partnership emails[\s\S]*?<\/p>/gi, "");
   next = next.replace(/<[^>]+>[^<]*All rights reserved\.?[^<]*<\/[^>]+>/gi, "");
+  const commentSlot = /<!--NOVARA_FOOTER_START-->[\s\S]*?<!--NOVARA_FOOTER_END-->/;
+  const textSlot = /NOVARA_FOOTER_START[\s\S]*?NOVARA_FOOTER_END/;
+  if (commentSlot.test(next)) return next.replace(commentSlot, footerHtml);
+  if (textSlot.test(next)) return next.replace(textSlot, footerHtml);
   if (/<\/body>/i.test(next)) return next.replace(/<\/body>/i, `${footerHtml}</body>`);
   return `${next}\n${footerHtml}`;
 }
@@ -1238,3 +1240,65 @@ export function buildAuditReport(): { findings: AuditFinding[]; setupTasks: stri
 
 export const IDENTITY_SETTING_KEY = "email_business_identity";
 export const CLAIMS_SETTING_KEY = "email_approved_claims";
+
+/** Square Novara mark. File lives at public/novara-logo.png. */
+export const EMAIL_LOGO_URL = "https://app.novaracleaning.com/novara-logo.png";
+
+export interface EmailCardInput {
+  preheader?: string | null;
+  title?: string | null;
+  bodyHtml: string;
+  buttonHref?: string | null;
+  buttonLabel?: string | null;
+  footerHtml?: string | null;
+}
+
+/**
+ * The email box: dark card, purple bar, logo, then the message.
+ * Matches the sign-in card — mark at the top left, title, body, light button.
+ */
+export function buildEmailCard(input: EmailCardInput): string {
+  const title = textOf(input.title).trim();
+  const button = input.buttonHref && input.buttonLabel
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:22px 0 0;"><tr><td style="background:#e7e7ea;border-radius:12px;">
+        <a class="novara-btn" href="${escapeHtml(input.buttonHref)}" style="display:inline-block;padding:14px 28px;font-family:Inter,Arial,sans-serif;font-size:16px;font-weight:600;color:#18181b;text-decoration:none;border-radius:12px;">${escapeHtml(input.buttonLabel)}</a>
+      </td></tr></table>
+      <p style="margin:14px 0 0;font-family:Inter,Arial,sans-serif;font-size:12px;line-height:1.5;color:#a1a1aa;word-break:break-all;">${escapeHtml(input.buttonHref)}</p>`
+    : "";
+  const heading = title
+    ? `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">${escapeHtml(title)}</h1>`
+    : "";
+  const footer = input.footerHtml ?? "<!--NOVARA_FOOTER_START--><!--NOVARA_FOOTER_END-->";
+  const preheader = textOf(input.preheader).trim();
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<style>
+  .novara-card p, .novara-card li, .novara-card span, .novara-card td { color:#d4d4d8 !important; }
+  .novara-card a:not(.novara-btn) { color:#ddd6fe; }
+  .novara-card a.novara-btn { color:#18181b !important; }
+</style></head>
+<body style="margin:0;padding:0;background:#141416;">
+${preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(preheader)}</div>` : ""}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#141416;"><tr><td align="center" style="padding:28px 12px;">
+<table data-novara-card="1" role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#2a2a2e;border:1px solid #3a3a40;border-radius:16px;">
+<tr><td style="height:3px;background:#7c6af7;border-radius:16px 16px 0 0;font-size:0;line-height:3px;">&nbsp;</td></tr>
+<tr><td class="novara-card" style="padding:28px 28px 24px;font-family:Inter,Arial,sans-serif;">
+<img src="${EMAIL_LOGO_URL}" width="56" height="56" alt="Novara Cleaning" style="display:block;width:56px;height:56px;border-radius:12px;margin:0 0 22px;" />
+${heading}
+<div style="font-family:Inter,Arial,sans-serif;font-size:16px;line-height:1.5;color:#d4d4d8;">${input.bodyHtml}</div>
+${button}
+${footer}
+</td></tr></table>
+</td></tr></table></body></html>`;
+}
+
+/** Put fragment mail in the card. Leave a message that already uses the card. */
+export function applyEmailChrome(html: string): string {
+  const next = html.replace(/novara-email-logo\.png/g, "novara-logo.png");
+  if (/data-novara-card/.test(next)) return next;
+  if (/<html[\s>]/i.test(next) || /<!doctype/i.test(next)) {
+    const body = next.replace(/[\s\S]*?<body[^>]*>/i, "").replace(/<\/body>[\s\S]*/i, "");
+    const inner = body.trim() || next;
+    return buildEmailCard({ bodyHtml: inner });
+  }
+  return buildEmailCard({ bodyHtml: next });
+}

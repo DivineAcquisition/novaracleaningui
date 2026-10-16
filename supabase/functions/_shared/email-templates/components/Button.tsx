@@ -10,7 +10,7 @@ interface ButtonProps {
 
 export const Button = ({ href, children, variant = 'primary' }: ButtonProps) => {
   return (
-    <Link href={href} style={variant === 'primary' ? buttonPrimary : buttonSecondary}>
+    <Link href={href} className="novara-btn" style={variant === 'primary' ? buttonPrimary : buttonSecondary}>
       {children}
     </Link>
   );
@@ -18,14 +18,15 @@ export const Button = ({ href, children, variant = 'primary' }: ButtonProps) => 
 
 const buttonPrimary = {
   display: 'inline-block',
-  background: BRAND.gradient.primary,
-  color: 'white',
-  padding: '16px 40px',
+  backgroundColor: '#e7e7ea',
+  color: '#18181b',
+  padding: '14px 28px',
   textDecoration: 'none',
-  borderRadius: BRAND.borderRadius.md,
+  borderRadius: '12px',
   fontWeight: '600',
   fontSize: '16px',
   textAlign: 'center' as const,
+  fontFamily: 'Inter, Arial, sans-serif',
 };
 
 const buttonSecondary = {

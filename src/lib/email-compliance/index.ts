@@ -1,8 +1,11 @@
 export {
   applyConsentChange,
   asEvidenceExcerpt,
+  applyEmailChrome,
   buildAuditReport,
+  buildEmailCard,
   buildFooter,
+  EMAIL_LOGO_URL,
   canReceiveMarketing,
   CLAIMS_SETTING_KEY,
   DEFAULT_BUSINESS_IDENTITY,
