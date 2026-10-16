@@ -4,6 +4,7 @@ import { BlurFade, HeroSpotlight, MagicCard, Marquee, Particles, ShinyText, Tilt
 import { Faq } from "../components/Faq";
 import { Glyph, Spark } from "../components/Icons";
 import { LeadForm } from "../components/LeadForm";
+import { ProductStage } from "../components/ProductStage";
 import { BOOK_URL, places, serviceCards, steps, values } from "../lib/content";
 
 export default function HomePage() {
@@ -44,6 +45,8 @@ export default function HomePage() {
           <div className="rule" />
         </div>
       </section>
+
+      <ProductStage />
 
       <section className="section" id="services">
         <div className="wrap">
