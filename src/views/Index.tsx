@@ -21,7 +21,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBooking } from "@/contexts/BookingContext";
@@ -686,76 +685,33 @@ const Index = () => {
 
       {/* Footer */}
       <footer className="border-t border-border/40 bg-muted/20">
-        <div className="container mx-auto px-4 py-10 md:py-14">
-          <div className="max-w-4xl mx-auto">
-            <div className="flex flex-col md:flex-row items-center md:items-start justify-between gap-8">
-              {/* Brand */}
-              <div className="flex flex-col items-center md:items-start gap-3">
-                <div className="flex items-center gap-3">
-                  <img
-                    src={logo}
-                    alt="Novara Cleaning"
-                    className="w-8 h-8 rounded-lg"
-                  />
-                  <span className="text-base font-bold font-heading">
-                    Novara<span className="text-primary">Cleaning</span>
-                  </span>
-                </div>
-                <p className="text-sm text-muted-foreground text-center md:text-left max-w-xs">
-                  Premium residential cleaning service. Trusted, insured, and
-                  Google Guaranteed.
-                </p>
-              </div>
-
-              {/* Links */}
-              <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-muted-foreground">
-                <a
-                  href="https://novaracleaning.com/privacy"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-foreground transition-colors"
-                >
-                  Privacy Policy
-                </a>
-                <a
-                  href="https://novaracleaning.com/terms"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-foreground transition-colors"
-                >
-                  Terms of Service
-                </a>
-                <a href="/privacy-request" className="hover:text-foreground transition-colors">
-                  Privacy request
-                </a>
-                <button
-                  type="button"
-                  onClick={() => window.dispatchEvent(new CustomEvent("novara:cookie-settings"))}
-                  className="hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
-                >
-                  Cookie settings
-                </button>
-                <a
-                  href="tel:+18447352070"
-                  className="hover:text-foreground transition-colors"
-                >
-                  (844) 735-2070
-                </a>
-                <a
-                  href="mailto:support@novaracleaning.com"
-                  className="hover:text-foreground transition-colors"
-                >
-                  support@novaracleaning.com
-                </a>
-              </div>
+        <div className="container mx-auto max-w-4xl px-4 py-8">
+          <div className="flex flex-col items-center gap-3 text-center">
+            <div className="flex items-center gap-3">
+              <img src={logo} alt="Novara Cleaning" className="w-8 h-8 rounded-lg" />
+              <span className="text-base font-bold font-heading">
+                Novara<span className="text-primary">Cleaning</span>
+              </span>
             </div>
-
-            <Separator className="my-6" />
-
-            <p className="text-xs text-center text-muted-foreground">
-              &copy; {new Date().getFullYear()} Novara Cleaning LLC. All rights
-              reserved.
+            <p className="max-w-md text-sm text-muted-foreground">
+              Premium residential cleaning service. Insured. Cleaners we send are background-checked.
             </p>
+            <p className="text-sm text-muted-foreground">
+              <a href="tel:+18447352070" className="hover:text-foreground">(844) 735-2070</a>
+              <span className="mx-2">·</span>
+              <a href="mailto:support@novaracleaning.com" className="hover:text-foreground">support@novaracleaning.com</a>
+            </p>
+          </div>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 border-t border-border/40 pt-4 text-sm text-muted-foreground">
+            <span>© {new Date().getFullYear()} Novara Cleaning LLC</span>
+            <a href="https://novaracleaning.com/privacy" target="_blank" rel="noopener noreferrer" className="hover:text-foreground">Privacy Policy</a>
+            <a href="https://novaracleaning.com/terms" target="_blank" rel="noopener noreferrer" className="hover:text-foreground">Terms</a>
+            <a href="https://novaracleaning.com/refund-policy" target="_blank" rel="noopener noreferrer" className="hover:text-foreground">Refund Policy</a>
+            <a href="https://novaracleaning.com/cancellation-policy" target="_blank" rel="noopener noreferrer" className="hover:text-foreground">Cancellation Policy</a>
+            <a href="/privacy-request" className="hover:text-foreground">Privacy request</a>
+            <button type="button" onClick={() => window.dispatchEvent(new CustomEvent("novara:cookie-settings"))} className="hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded">
+              Cookie settings
+            </button>
           </div>
         </div>
       </footer>

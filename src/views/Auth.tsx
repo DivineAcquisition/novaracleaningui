@@ -227,7 +227,12 @@ export default function Auth() {
           Are you a cleaner?{" "}
           <Link href="/cleaner/auth" className="font-medium text-[#5C0FFE] hover:underline">Cleaner Portal</Link>
         </p>
-        <p className="text-[11px] text-slate-400">By continuing, you agree to our Terms of Service and Privacy Policy.</p>
+        <p className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] text-slate-400">
+          <span>© {new Date().getFullYear()} Novara Cleaning LLC</span>
+          <a href="https://novaracleaning.com/privacy" target="_blank" rel="noopener noreferrer" className="underline">Privacy Policy</a>
+          <a href="https://novaracleaning.com/terms" target="_blank" rel="noopener noreferrer" className="underline">Terms</a>
+          <button type="button" className="underline" onClick={() => window.dispatchEvent(new CustomEvent("novara:cookie-settings"))}>Cookie settings</button>
+        </p>
       </div>
     </AuthScaffold>
   );

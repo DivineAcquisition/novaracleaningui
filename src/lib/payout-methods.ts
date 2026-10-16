@@ -386,9 +386,9 @@ export function validateManualSubmission(input: {
     return { ok: false, error: "The two identifiers don't match. Enter the same one twice." };
   }
   const identifier = validateIdentifier(input.identifier, input.method.identifierFormat);
-  if (!identifier.ok) return identifier;
+  if (identifier.ok === false) return { ok: false, error: identifier.error };
   const accountName = validateAccountName(input.accountName);
-  if (!accountName.ok) return accountName;
+  if (accountName.ok === false) return { ok: false, error: accountName.error };
   if (!input.acknowledged) {
     return { ok: false, error: "Check the acknowledgment before saving these details." };
   }
@@ -813,7 +813,7 @@ export function applyPaid(
   if (sent !== line.amountDueCents && !cleanText(input.differenceReason, 400)) {
     return { ok: false, error: "The amount sent differs from the amount due. A reason is required.", flags: line.flags };
   }
-  const flags = line.flags.filter((flag) => flag !== "name_mismatch");
+  const flags: PayFlag[] = line.flags.filter((flag) => flag !== "name_mismatch");
   if (line.firstPayment) {
     const recipient = cleanText(input.recipientName, 80);
     if (!recipient) {

@@ -22,7 +22,6 @@ import {
   existingStripeOptionsNotice,
   findMethod,
   isStalledAtPayoutStep,
-  issueVerificationCode,
   methodsForChoice,
   missingSetupReminder,
   monthlyTotalsByMethod,
@@ -226,7 +225,7 @@ export async function submitManualMethod(
     acknowledgmentText: input.acknowledgmentText,
     activeAcknowledgmentText: ack.text,
   });
-  if (!checked.ok) return { ok: false as const, error: checked.error };
+  if (checked.ok === false) return { ok: false as const, error: checked.error };
   const preview = confirmationPreview({
     method: method!,
     identifier: checked.identifier,
@@ -942,7 +941,7 @@ export async function stripeOptionsOutreach(db: DB, input: { cleanerId: string; 
   if (!cleaner) return { ok: false as const, error: "Contractor not found." };
   const origin = process.env.NEXT_PUBLIC_SITE_URL || "https://contractor.novaracleaning.com";
   const notice = existingStripeOptionsNotice(String(cleaner.first_name || ""), `${origin}/cleaner/profile`);
-  if (!gate.ok) return { ok: false as const, error: gate.error, draft: { subject: notice.subject, text: notice.text } };
+  if (gate.ok === false) return { ok: false as const, error: gate.error, draft: { subject: notice.subject, text: notice.text } };
   const sent = await deliver(db, cleaner, notice);
   await from(db, "payout_outreach").insert({ cleaner_id: input.cleanerId, kind: "stripe_options", sent_by: input.actorId });
   await logEvent(db, {

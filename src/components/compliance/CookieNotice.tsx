@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { SEEDED_WORDING, wordingByKind } from "@/lib/compliance";
 
 export const COOKIE_STORAGE_KEY = "novara.cookie.choice.v1";
@@ -33,6 +34,8 @@ export function readStoredCookieChoice(): StoredCookieChoice | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as StoredCookieChoice;
     if (parsed?.essential !== true) return null;
+    // A silent Global Privacy Control record is not a choice the person made.
+    if (parsed.source === "gpc") return null;
     return parsed;
   } catch {
     return null;
@@ -51,41 +54,26 @@ function persist(choice: StoredCookieChoice) {
 }
 
 export function CookieNotice() {
-  const [choice, setChoice] = useState<StoredCookieChoice | null>(null);
+  const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
   const [manage, setManage] = useState(false);
   const [analytics, setAnalytics] = useState(false);
   const [advertising, setAdvertising] = useState(false);
   const version = bannerVersion();
   const summary = wordingByKind(SEEDED_WORDING, "cookie_banner")?.body || "";
+  const gpc = mounted && gpcOn();
 
   useEffect(() => {
+    setMounted(true);
     const stored = readStoredCookieChoice();
     if (stored) {
-      setChoice(stored);
       setAnalytics(stored.analytics);
       setAdvertising(stored.advertising);
       setOpen(false);
       return;
     }
-    if (gpcOn()) {
-      const declined: StoredCookieChoice = {
-        essential: true,
-        analytics: false,
-        advertising: false,
-        gpc: true,
-        source: "gpc",
-        bannerVersion: version,
-        chosenAt: new Date().toISOString(),
-        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-      };
-      persist(declined);
-      setChoice(declined);
-      setOpen(false);
-      return;
-    }
     setOpen(true);
-  }, [version]);
+  }, []);
 
   useEffect(() => {
     const openSettings = () => {
@@ -101,7 +89,6 @@ export function CookieNotice() {
 
   const save = (next: StoredCookieChoice) => {
     persist(next);
-    setChoice(next);
     setOpen(false);
     setManage(false);
   };
@@ -110,59 +97,48 @@ export function CookieNotice() {
     essential: true,
     analytics: partial.analytics,
     advertising: partial.advertising,
-    gpc: gpcOn(),
+    gpc,
     source: partial.source,
     bannerVersion: version,
     chosenAt: new Date().toISOString(),
     timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
   });
 
-  if (!open) return null;
+  if (!mounted || !open || typeof document === "undefined") return null;
 
   const buttonClass =
-    "h-11 flex-1 rounded-md border border-foreground/20 bg-background px-3 text-sm font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
+    "h-11 flex-1 rounded-md border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2";
 
-  return (
-    <div className="fixed inset-x-0 bottom-0 z-[80] p-3 md:p-4" role="dialog" aria-labelledby="cookie-notice-title">
-      <div className="mx-auto max-w-3xl rounded-xl border border-border bg-background p-4 shadow-lg">
-        <h2 id="cookie-notice-title" className="text-sm font-semibold text-foreground">
-          Cookies
+  return createPortal(
+    <div className="fixed inset-0 z-[300] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="cookie-notice-title">
+      <div className="absolute inset-0 bg-black/60" />
+      <div className="relative w-full max-w-lg rounded-2xl border border-zinc-200 bg-white p-5 text-zinc-900 shadow-2xl">
+        <h2 id="cookie-notice-title" className="text-lg font-semibold">
+          Cookie choices
         </h2>
-        <p className="mt-1 text-sm text-muted-foreground">{summary}</p>
-        {choice?.gpc ? (
-          <p className="mt-2 text-xs text-muted-foreground">
-            Your browser sent Global Privacy Control, so optional cookies stay off unless you accept them here.
+        <p className="mt-2 text-sm leading-relaxed text-zinc-600">{summary}</p>
+        {gpc ? (
+          <p className="mt-2 text-sm text-zinc-600">
+            Your browser sent Global Privacy Control, so analytics and advertising stay off unless you accept them here.
           </p>
         ) : null}
         {manage ? (
-          <div className="mt-3 space-y-2 text-sm">
-            <label className="flex items-center justify-between gap-3 rounded-md border border-border p-3">
-              <span>Essential (booking, security, payments). Always on.</span>
+          <div className="mt-4 space-y-2 text-sm">
+            <label className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 p-3">
+              <span>Essential. Booking, security, and payments. Always on.</span>
               <input type="checkbox" checked disabled aria-label="Essential cookies always on" />
             </label>
-            <label className="flex items-center justify-between gap-3 rounded-md border border-border p-3">
+            <label className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 p-3">
               <span>Analytics</span>
-              <input
-                type="checkbox"
-                checked={analytics}
-                onChange={(event) => setAnalytics(event.target.checked)}
-                aria-label="Analytics cookies"
-                className="h-5 w-5"
-              />
+              <input type="checkbox" checked={analytics} onChange={(event) => setAnalytics(event.target.checked)} aria-label="Analytics cookies" className="h-5 w-5" />
             </label>
-            <label className="flex items-center justify-between gap-3 rounded-md border border-border p-3">
+            <label className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 p-3">
               <span>Advertising and tracking</span>
-              <input
-                type="checkbox"
-                checked={advertising}
-                onChange={(event) => setAdvertising(event.target.checked)}
-                aria-label="Advertising and tracking cookies"
-                className="h-5 w-5"
-              />
+              <input type="checkbox" checked={advertising} onChange={(event) => setAdvertising(event.target.checked)} aria-label="Advertising and tracking cookies" className="h-5 w-5" />
             </label>
           </div>
         ) : null}
-        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row">
           <button type="button" className={buttonClass} onClick={() => save(stamp({ analytics: false, advertising: false, source: "decline" }))}>
             Decline
           </button>
@@ -170,11 +146,7 @@ export function CookieNotice() {
             Manage preferences
           </button>
           {manage ? (
-            <button
-              type="button"
-              className={buttonClass}
-              onClick={() => save(stamp({ analytics, advertising, source: "custom" }))}
-            >
+            <button type="button" className={buttonClass} onClick={() => save(stamp({ analytics, advertising, source: "custom" }))}>
               Save choices
             </button>
           ) : (
@@ -184,7 +156,8 @@ export function CookieNotice() {
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
