@@ -1,0 +1,8 @@
+---
+description: Novara sends every email through the Novara Resend account
+alwaysApply: true
+---
+
+Novara’s email sending system is Resend, on the Novara Resend account. Do not add or switch to another email vendor.
+
+Send with the Resend API using `RESEND_API_KEY` from `app_secrets` (the NovaraCleaning Supabase project). From addresses are on `novaracleaning.com`, normally `Novara Cleaning <hello@novaracleaning.com>`. If Resend accepts a send but the inbox never gets it, check that address on the Novara suppression list before sending again.
