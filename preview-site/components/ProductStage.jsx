@@ -50,7 +50,7 @@ export function ProductStage() {
           <h2>Watch a clean get booked</h2>
           <p>The same three steps, shown the way they move in the Novara app.</p>
         </div>
-        <div className="stage">
+        <div className="stage shine-frame">
           <div className="stage-bar">
             <span />
             <span />

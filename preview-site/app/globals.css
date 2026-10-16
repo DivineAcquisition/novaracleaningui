@@ -140,21 +140,38 @@ img { max-width: 100%; display: block; }
   z-index: 1;
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.28);
 }
-.btn-primary { overflow: hidden; }
+.btn-primary {
+  overflow: hidden;
+  background-image:
+    linear-gradient(100deg, rgba(255,255,255,0) 38%, rgba(255,255,255,0.38) 50%, rgba(255,255,255,0) 62%),
+    linear-gradient(180deg, #8d5cff 0%, #6d35f3 100%);
+  background-size: 220% 100%, 100% 100%;
+  background-position: 120% 0, 0 0;
+  animation: shimmer-sweep 2.8s linear infinite;
+}
 .btn-primary::after {
   content: "";
   position: absolute;
   inset: 0;
   border-radius: inherit;
+  padding: 1px;
   pointer-events: none;
   z-index: 2;
-  background: linear-gradient(110deg, transparent 32%, rgba(255,255,255,0.55) 50%, transparent 68%);
-  background-size: 220% 100%;
-  animation: shimmer-sweep 2.6s linear infinite;
+  background: conic-gradient(
+    from var(--trail-angle),
+    transparent 0deg,
+    transparent 250deg,
+    rgba(255, 255, 255, 0.95) 300deg,
+    transparent 340deg
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: trail-orbit 2.8s linear infinite;
 }
 @keyframes shimmer-sweep {
-  from { background-position: 120% 0; }
-  to { background-position: -120% 0; }
+  from { background-position: 120% 0, 0 0; }
+  to { background-position: -120% 0, 0 0; }
 }
 .btn-primary:hover { filter: brightness(1.05); }
 .btn > * , .btn { position: relative; }
@@ -309,7 +326,12 @@ input:focus, select:focus, textarea:focus {
 .center-copy p { margin: 0; line-height: 1.6; }
 .muted-word { color: #b7b3c2; font-weight: 650; }
 
-.lav { background: linear-gradient(#f7f4fd, #f3eefb); }
+.lav {
+  background-image:
+    radial-gradient(rgba(122, 69, 246, 0.16) 1px, transparent 1px),
+    linear-gradient(#f7f4fd, #f3eefb);
+  background-size: 22px 22px, auto;
+}
 .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; margin-top: 36px; }
 .step { text-align: center; padding: 8px 18px 0; }
 .step h3 { margin: 14px 0 8px; font-size: 20px; letter-spacing: -0.03em; }
@@ -365,6 +387,21 @@ input:focus, select:focus, textarea:focus {
   font-size: 12px;
   color: #7a45f6;
   margin-bottom: 8px;
+}
+.shine-frame { position: relative; }
+.shine-frame::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1.5px;
+  pointer-events: none;
+  z-index: 2;
+  background: conic-gradient(from var(--trail-angle), transparent 0 72%, #ddd6fe 86%, #7a45f6 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: trail-orbit 7s linear infinite;
 }
 .stage {
   border: 1px solid #ece6f6;
@@ -487,6 +524,8 @@ input:focus, select:focus, textarea:focus {
 
 .value-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .value-card {
+  position: relative;
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 20px;
   padding: 22px;
@@ -628,7 +667,7 @@ input:focus, select:focus, textarea:focus {
 .mobile-panel { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
-  .btn-primary::after, .shiny, .marquee-track, .cta-band { animation: none; }
+  .btn-primary, .btn-primary::after, .shine-frame::before, .shiny, .marquee-track, .cta-band { animation: none; }
   .service-slot { transform: none !important; }
 }
 
@@ -649,4 +688,22 @@ input:focus, select:focus, textarea:focus {
   .hero { padding-top: 18px; }
   .compare { aspect-ratio: 4 / 3; }
   .faq-intro h2 { text-align: center; }
+  .cookie-actions { flex-direction: column; }
 }
+
+.cookie {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 50;
+  width: min(400px, calc(100% - 32px));
+  padding: 18px;
+  border-radius: 8px;
+  border: 1px solid #ece6f6;
+  background: linear-gradient(180deg, rgba(122, 69, 246, 0.05), #fff 36%);
+  box-shadow: inset 0 1px 0 #fff, 0 18px 44px -16px rgba(92, 15, 254, 0.28);
+}
+.cookie p { margin: 0 0 8px; color: var(--muted); line-height: 1.5; font-size: 14px; }
+#cookie-title { color: var(--ink); font-weight: 800; letter-spacing: -0.02em; font-size: 16px; }
+.cookie-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+.cookie .btn { min-height: 44px; }

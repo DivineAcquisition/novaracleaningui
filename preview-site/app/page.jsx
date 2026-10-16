@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Compare } from "../components/Compare";
-import { BlurFade, HeroSpotlight, Marquee, ShinyText } from "../components/effects";
+import { BlurFade, HeroSpotlight, MagicCard, Marquee, ShinyText } from "../components/effects";
 import { Faq } from "../components/Faq";
 import { Glyph } from "../components/Icons";
 import { LeadForm } from "../components/LeadForm";
@@ -81,11 +81,11 @@ export default function HomePage() {
           <div className="value-grid">
             {values.map((value, index) => (
               <BlurFade delay={index * 0.08} key={value.title}>
-                <article className="value-card">
+                <MagicCard className="value-card">
                   <div className="mini-icon"><Glyph name={value.icon} /></div>
                   <h3>{value.title}</h3>
                   <p>{value.body}</p>
-                </article>
+                </MagicCard>
               </BlurFade>
             ))}
           </div>
@@ -94,7 +94,7 @@ export default function HomePage() {
 
       <section className="section" style={{ paddingTop: 0 }}>
         <div className="wrap">
-          <div className="trust">
+          <div className="trust shine-frame">
             <h2>Trust, Insured & Secure</h2>
             <p>We’re fully insured and bonded, ensuring your property and our team are protected. Our background-checked professionals are trained to deliver reliable, secure, and top-quality cleaning services you can trust.</p>
             <div className="badges" aria-hidden="true">

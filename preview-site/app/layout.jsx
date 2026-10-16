@@ -1,4 +1,5 @@
 import { Figtree } from "next/font/google";
+import { CookieConsent } from "../components/CookieConsent";
 import { CtaBand, Footer, Header } from "../components/Chrome";
 import { ScrollProgress } from "../components/effects";
 import "./globals.css";
@@ -27,6 +28,7 @@ export default function RootLayout({ children }) {
         {children}
         <CtaBand />
         <Footer />
+        <CookieConsent />
       </body>
     </html>
   );
