@@ -6,6 +6,7 @@ import { documentBookingAddonsInQcSafe } from "../_shared/addon-qc.ts";
 import { resolveSecret } from "../_shared/app-secrets.ts";
 import { sendSms, formatServiceDate, formatTimeSlot } from "../_shared/sms.ts";
 import { SUPPORT_PHONE_DISPLAY } from "../_shared/booking-policy.ts";
+import { sendThroughCompliance } from "../_shared/email-compliance-send.ts";
 import { invoicePaymentSettingsSaveCard } from "../_shared/stripe-invoice-save-card.ts";
 
 // admin-modify-booking
@@ -549,23 +550,16 @@ serve(async (req) => {
         try {
           const resendKey = await resolveSecret(admin, "RESEND_API_KEY");
           if (resendKey) {
-            await fetch("https://api.resend.com/emails", {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${resendKey}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                from: "Novara Cleaning <support@novaracleaning.com>",
-                to: [booking.email],
-                subject: `Your Novara cleaning is reopened — deposit needed`,
-                html: `<div style="font-family:Arial,sans-serif;font-size:15px;color:#0f172a;line-height:1.55;max-width:560px">
-                  <p>Hi ${booking.first_name || "there"},</p>
+            await sendThroughCompliance(resendKey, {
+              to: booking.email,
+              subject: "Your Novara cleaning is reopened — deposit needed",
+              html: `<p>Hi ${booking.first_name || "there"},</p>
                   <p>We reopened your cleaning${when ? ` on <strong>${when}</strong>` : ""}. It stays pending until we receive the ${money} deposit.</p>
-                  <p style="margin:20px 0"><a href="${link}" style="display:inline-block;background:#5C0FFE;color:#fff;text-decoration:none;padding:12px 18px;border-radius:6px;font-weight:600">Pay deposit ${money}</a></p>
-                  <p style="font-size:12px;color:#94a3b8">Questions? Call ${SUPPORT_PHONE_DISPLAY}</p>
-                </div>`,
-              }),
+                  <p><a href="${link}">Pay deposit ${money}</a></p>
+                  <p>Questions? Call ${SUPPORT_PHONE_DISPLAY}</p>`,
+              templateKey: "pending_deposit",
+              declaredType: "customer_service",
+              bookingId: booking.id,
             });
           }
         } catch (emailErr) {

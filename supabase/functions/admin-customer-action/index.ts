@@ -9,7 +9,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.80.0";
-import { Resend } from "https://esm.sh/resend@4.0.0";
+import { sendThroughCompliance } from "../_shared/email-compliance-send.ts";
 import { resolveSecret } from "../_shared/app-secrets.ts";
 import { sendSms } from "../_shared/sms.ts";
 import { isStaffCustomerEmail, STAFF_CUSTOMER_ERROR } from "../_shared/staff-customer.ts";
@@ -339,22 +339,20 @@ serve(async (req) => {
         const resendKey = await resolveSecret(admin, "RESEND_API_KEY");
         if (!resendKey) return json({ error: "RESEND_API_KEY not configured" }, 500);
 
-        const resend = new Resend(resendKey);
         const html = renderBillingPortalEmail(firstName, url);
         const text =
           `Hi ${firstName},\n\n` +
           `Use this secure link to update the card on file for your Novara Cleaning account:\n${url}\n\n` +
           `You can also view invoices and manage billing details from the same page.\n\n` +
           `This link expires after a short time. Questions? billing@novaracleaning.com`;
-
-        const result = await resend.emails.send({
-          from: FROM_ADDRESS,
-          to: [email],
+        const result = await sendThroughCompliance(resendKey, {
+          to: email,
           subject: "Update your Novara Cleaning payment method",
           html,
           text,
-          replyTo: "billing@novaracleaning.com",
-        });
+          templateKey: "booking_payment_receipt",
+          declaredType: "customer_service",
+        }, admin);
         if ((result as { error?: unknown })?.error) {
           console.error("[admin-customer-action] resend error", (result as { error?: unknown }).error);
           return json({ error: "Failed to send billing portal email" }, 500);

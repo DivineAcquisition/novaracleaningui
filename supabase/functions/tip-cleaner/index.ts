@@ -32,6 +32,7 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { sendThroughCompliance } from "../_shared/email-compliance-send.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -270,18 +271,15 @@ async function sendCustomerTipInvite(
             </p>
             <p style="font-size:13px;color:#6b7280;">This link is personal to your job and expires after a short window.</p>
           </div>`;
-        const res = await fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            from: "Novara Cleaning <support@novaracleaning.com>",
-            to: [opts.email],
-            subject: `Tip ${crew} for your Novara clean`,
-            html,
-          }),
+        const res = await sendThroughCompliance(resendKey, {
+          to: opts.email,
+          subject: `Tip ${crew} for your Novara clean`,
+          html,
+          templateKey: "booking_completion",
+          declaredType: "customer_service",
         });
-        emailSent = res.ok;
-        if (!res.ok) log("invite email failed", await res.text().catch(() => ""));
+        emailSent = !res.error;
+        if (res.error) log("invite email failed", res.error.message);
       }
     } catch (e) {
       log("invite email error", String(e));

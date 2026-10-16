@@ -36,6 +36,7 @@ import { resolveSecret } from "../_shared/app-secrets.ts";
 import { mirrorToLeadConnector } from "../_shared/leadconnector-mirror.ts";
 import { upsertContact } from "../_shared/ghl-client.ts";
 import { remainingDueAtCompletionCents } from "../_shared/booking-balance.ts";
+import { sendThroughCompliance } from "../_shared/email-compliance-send.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -198,20 +199,15 @@ async function notifyCustomer(
   try {
     const resendKey = Deno.env.get("RESEND_API_KEY");
     if (resendKey && booking.email) {
-      const res = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${resendKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: "Novara Cleaning <billing@novaracleaning.com>",
-          to: [booking.email],
-          subject,
-          html: emailHtml,
-        }),
+      const sent = await sendThroughCompliance(resendKey, {
+        to: booking.email,
+        subject,
+        html: emailHtml,
+        templateKey: "booking_payment_receipt",
+        declaredType: "customer_service",
+        bookingId: booking.id,
       });
-      if (!res.ok) log("resend non-ok", { status: res.status });
+      if (sent.error) log("resend non-ok", { error: sent.error.message });
     }
   } catch (e) {
     log("notify email failed (non-blocking)", { error: e instanceof Error ? e.message : String(e) });
