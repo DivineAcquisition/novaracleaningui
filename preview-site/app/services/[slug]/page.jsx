@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { Particles } from "../../../components/effects";
 import { LeadForm } from "../../../components/LeadForm";
 import { services } from "../../../lib/content";
 
@@ -21,6 +22,7 @@ export default async function ServicePage({ params }) {
   return (
     <main>
       <section className="hero page-hero">
+        <Particles density={28} />
         <div className="wrap">
           <h1>{service.title}</h1>
           <p className="lede">{service.eyebrow}</p>

@@ -556,6 +556,19 @@ export const legalPages = {
   "membership-policy": { title: "Membership Policy", file: "membership-policy.txt" },
 };
 
+export const places = [
+  "Bethesda",
+  "Silver Spring",
+  "Rockville",
+  "Arlington",
+  "Alexandria",
+  "Washington, DC",
+  "College Park",
+  "Chevy Chase",
+  "Potomac",
+  "Hyattsville",
+];
+
 export const areas = [
   { name: "Maryland", query: "Maryland" },
   { name: "Virginia", query: "Virginia" },

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { AnimatePresence, motion } from "motion/react";
 import { faqs } from "../lib/content";
 
 export function Faq() {
@@ -23,7 +24,19 @@ export function Faq() {
                   <span>{item.q}</span>
                   <span aria-hidden="true">{expanded ? "–" : "→"}</span>
                 </button>
-                {expanded ? <div className="answer">{item.a}</div> : null}
+                <AnimatePresence initial={false}>
+                  {expanded ? (
+                    <motion.div
+                      className="answer"
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.22, ease: "easeOut" }}
+                    >
+                      {item.a}
+                    </motion.div>
+                  ) : null}
+                </AnimatePresence>
               </div>
             );
           })}

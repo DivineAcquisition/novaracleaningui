@@ -1,17 +1,19 @@
 import Link from "next/link";
 import { Compare } from "../components/Compare";
+import { BlurFade, MagicCard, Marquee, Particles, ShinyText } from "../components/effects";
 import { Faq } from "../components/Faq";
 import { Glyph, Spark } from "../components/Icons";
 import { LeadForm } from "../components/LeadForm";
-import { BOOK_URL, serviceCards, steps, values } from "../lib/content";
+import { BOOK_URL, places, serviceCards, steps, values } from "../lib/content";
 
 export default function HomePage() {
   return (
     <main>
       <section className="hero">
+        <Particles />
         <div className="wrap hero-grid">
           <div>
-            <p className="kicker">Book Your First Cleaning 50% Off.</p>
+            <p className="kicker"><ShinyText>Book Your First Cleaning 50% Off.</ShinyText></p>
             <h1>Your Newly Started Trusted DMV Area Premium Cleaning Service</h1>
             <p className="lede">
               We connect homeowners with trusted, vetted cleaners through Novara.
@@ -22,17 +24,20 @@ export default function HomePage() {
           <LeadForm />
         </div>
       </section>
+      <Marquee items={places} />
 
       <section className="section lav" style={{ paddingBottom: 28 }}>
         <div className="wrap">
           <h2>Book Your Service In 3 <span className="muted-word">Easy Steps</span></h2>
           <div className="steps">
-            {steps.map((step) => (
-              <article className="step" key={step.title}>
-                <div className="icon-blob"><Glyph name={step.icon} /></div>
-                <h3>{step.title}</h3>
-                <p>{step.body}</p>
-              </article>
+            {steps.map((step, index) => (
+              <BlurFade delay={index * 0.08} key={step.title}>
+                <article className="step">
+                  <div className="icon-blob"><Glyph name={step.icon} /></div>
+                  <h3>{step.title}</h3>
+                  <p>{step.body}</p>
+                </article>
+              </BlurFade>
             ))}
           </div>
           <div className="rule" />
@@ -49,11 +54,13 @@ export default function HomePage() {
           </div>
           <div className="service-grid">
             {serviceCards.map((service) => (
-              <Link className="service-card" href={`/services/${service.slug}`} key={service.slug}>
-                <Spark />
-                <h3>{service.title}</h3>
-                <p>{service.blurb}</p>
-              </Link>
+              <MagicCard className="service-slot" key={service.slug}>
+                <Link className="service-card" href={`/services/${service.slug}`}>
+                  <Spark />
+                  <h3>{service.title}</h3>
+                  <p>{service.blurb}</p>
+                </Link>
+              </MagicCard>
             ))}
           </div>
         </div>
@@ -62,7 +69,7 @@ export default function HomePage() {
       <section className="section" style={{ paddingTop: 10 }}>
         <div className="wrap mid-cta">
           <h2>Ready to enjoy a cleaner, <span className="muted-word">fresher</span> home?</h2>
-          <p>Book your cleaning in under 60 seconds, pay just <strong>50% off today</strong>, and let our team handle the rest.</p>
+          <p>Book your cleaning in under 60 seconds, pay just <ShinyText light>50% off today</ShinyText>, and let our team handle the rest.</p>
           <a className="btn btn-primary" href={BOOK_URL}>Book My 50% Off Cleaning</a>
         </div>
       </section>
@@ -78,12 +85,14 @@ export default function HomePage() {
             </p>
           </div>
           <div className="value-grid">
-            {values.map((value) => (
-              <article className="value-card" key={value.title}>
-                <div className="mini-icon"><Glyph name={value.icon} /></div>
-                <h3>{value.title}</h3>
-                <p>{value.body}</p>
-              </article>
+            {values.map((value, index) => (
+              <BlurFade delay={index * 0.08} key={value.title}>
+                <article className="value-card">
+                  <div className="mini-icon"><Glyph name={value.icon} /></div>
+                  <h3>{value.title}</h3>
+                  <p>{value.body}</p>
+                </article>
+              </BlurFade>
             ))}
           </div>
         </div>

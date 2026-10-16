@@ -1,5 +1,5 @@
-import { areas, BOOK_URL, plans } from "../../lib/content";
-import { Glyph } from "../../components/Icons";
+import { areas, plans } from "../../lib/content";
+import { PlanCard } from "../../components/PlanCard";
 
 export const metadata = { title: "Membership Plans | NovaraCleaning™" };
 
@@ -16,22 +16,7 @@ export default function MembershipPage() {
           </div>
           <div className="plans">
             {plans.map((plan) => (
-              <article className={plan.featured ? "plan featured" : "plan"} key={plan.name}>
-                {plan.featured ? <div className="plan-flag">Novara Recommended</div> : null}
-                <div className="plan-body">
-                  <div className="mini-icon"><Glyph name="calendar" /></div>
-                  <h3>{plan.name}</h3>
-                  <p className="who">{plan.audience}</p>
-                  <p className="price">{plan.price} <span>/month</span></p>
-                </div>
-                <div className="plan-foot">
-                  <h4>What’s in it for you?</h4>
-                  <ul>
-                    {plan.features.map((feature) => <li key={feature}>{feature}</li>)}
-                  </ul>
-                  <a className="btn btn-primary btn-block" href={BOOK_URL}>Get started</a>
-                </div>
-              </article>
+              <PlanCard key={plan.name} plan={plan} />
             ))}
           </div>
         </div>

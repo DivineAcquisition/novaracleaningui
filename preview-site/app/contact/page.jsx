@@ -1,3 +1,4 @@
+import { Particles } from "../../components/effects";
 import { LeadForm } from "../../components/LeadForm";
 import { PHONE_DISPLAY, PHONE_TEL, SUPPORT_EMAIL } from "../../lib/content";
 
@@ -7,6 +8,7 @@ export default function ContactPage() {
   return (
     <main>
       <section className="hero page-hero">
+        <Particles density={28} />
         <div className="wrap">
           <h1>Contact Us</h1>
           <p className="lede">Questions about booking, pricing, or your upcoming clean? Reach out and we’ll get back within 1 business hour (9am–6pm).</p>

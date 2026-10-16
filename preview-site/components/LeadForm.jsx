@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { BorderBeam } from "./effects";
 import { quoteServices } from "../lib/content";
 
 export function LeadForm({
@@ -25,7 +26,8 @@ export function LeadForm({
 
   if (done) {
     return (
-      <div className={tone === "soft" ? "quote-card" : "card"}>
+      <div className={`${tone === "soft" ? "quote-card" : "card"} beam-host`}>
+        <BorderBeam />
         <div className="success">
           <strong>Got it — this is a preview.</strong>
           Nothing was sent, and no live inbox was contacted. On the published site this form would reach the NovaraCleaning team.
@@ -35,7 +37,8 @@ export function LeadForm({
   }
 
   return (
-    <form className={tone === "soft" ? "quote-card" : "card"} onSubmit={onSubmit}>
+    <form className={`${tone === "soft" ? "quote-card" : "card"} beam-host`} onSubmit={onSubmit}>
+      <BorderBeam />
       <h2 className="form-title">{title}</h2>
       {names ? (
         <>
