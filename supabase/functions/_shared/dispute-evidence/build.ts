@@ -155,7 +155,7 @@ export interface DisputeBuildInput {
   charges?: ChargeLine[];
   disputedAmountCents?: number | null;
   /** Names and phones that must never appear (contractor, other customers). */
-  redact?: { names?: string[]; phones?: string[] };
+  redact?: { names?: string[]; phones?: string[]; payoutIdentifiers?: string[] };
   /** Verified items for the optional Other Evidence file. */
   otherItems?: Array<{ priority: number; source: string; at: string; text: string; addedBy?: string | null }>;
   limits?: Partial<DisputeEvidenceLimits>;
@@ -207,8 +207,15 @@ export function isServerRuntime(userAgent: string | null | undefined): boolean {
   return /^\s*deno\//i.test(userAgent || "");
 }
 
-export function redactInternal(text: string, redact?: { names?: string[]; phones?: string[] }): string {
+export function redactInternal(text: string, redact?: { names?: string[]; phones?: string[]; payoutIdentifiers?: string[] }): string {
   let out = text || "";
+  for (const identifier of redact?.payoutIdentifiers || []) {
+    const raw = identifier.trim();
+    if (raw.length < 3) continue;
+    out = out.replace(new RegExp(raw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), "[payout id removed]");
+  }
+  // $Cashtag and $ChimeSign. Dollar amounts ($12.00) are left alone.
+  out = out.replace(/\$[A-Za-z][A-Za-z0-9_]{2,30}/g, "[payout id removed]");
   for (const name of redact?.names || []) {
     const n = name.trim();
     if (n.length < 3) continue;

@@ -15,6 +15,8 @@ import SimplePayoutTab from "@/components/admin/payroll/SimplePayoutTab";
 import RunPayrollTab from "@/components/admin/payroll/RunPayrollTab";
 import ExtraPayTab from "@/components/admin/payroll/ExtraPayTab";
 import CrewPayRatesCard from "@/components/admin/payroll/CrewPayRatesCard";
+import PayRunTab from "@/components/admin/payroll/PayRunTab";
+import PayoutMethodSettings from "@/components/admin/payroll/PayoutMethodSettings";
 import { loadActiveCleaners, type PayrollCleaner } from "@/components/admin/payroll/shared";
 
 export default function AdminPayroll() {
@@ -42,11 +44,15 @@ export default function AdminPayroll() {
           <TabsTrigger value="cleaner">Extra Pay</TabsTrigger>
           <TabsTrigger value="rates">Pay Rates</TabsTrigger>
           <TabsTrigger value="run">Run Payroll</TabsTrigger>
+          <TabsTrigger value="payrun">Pay Run</TabsTrigger>
+          <TabsTrigger value="methods">Payout Methods</TabsTrigger>
         </TabsList>
         <TabsContent value="payout"><SimplePayoutTab /></TabsContent>
         <TabsContent value="cleaner"><ExtraPayTab cleaners={cleaners} /></TabsContent>
         <TabsContent value="rates"><CrewPayRatesCard /></TabsContent>
         <TabsContent value="run"><RunPayrollTab cleaners={cleaners} /></TabsContent>
+        <TabsContent value="payrun"><PayRunTab /></TabsContent>
+        <TabsContent value="methods"><PayoutMethodSettings /></TabsContent>
       </Tabs>
     </div>
   );

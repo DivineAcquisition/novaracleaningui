@@ -894,7 +894,7 @@ serve(async (req) => {
       }
 
       // ─── SEND ACCOUNT SETUP LINK ─────────────────────────────────────
-      // Agreement → phone → supplies → job-day → dress → W-9 → Stripe → training.
+      // Agreement → phone → supplies → job-day → dress → W-9 → payout method → training.
       // Same sequence cleanerSetupSteps() defines for the portal. Tokenized
       // link lands on a short setup page, then auth → onboarding portal.
       case "send_setup": {
@@ -910,7 +910,10 @@ serve(async (req) => {
         const w9Ok = cleaner.w9_status === "complete";
         const trainingOk = cleaner.ob_training_complete === true;
         const stripeOk = Boolean(
-          cleaner.payouts_enabled || cleaner.ob_payouts_setup || cleaner.stripe_account_id,
+          cleaner.payouts_enabled ||
+            cleaner.ob_payouts_setup ||
+            cleaner.stripe_account_id ||
+            cleaner.payout_method_status === "verified",
         );
         if (agreementOk && phoneOk && suppliesOk && dressOk && jobDayOk && w9Ok && trainingOk && stripeOk) {
           return json({
@@ -1001,7 +1004,7 @@ serve(async (req) => {
             !jobDayOk ? "read Day To Day Job Operations" : null,
             !dressOk ? "agree to the dress code" : null,
             !w9Ok ? "submit your W-9" : null,
-            !stripeOk ? "set up Stripe payouts" : null,
+            !stripeOk ? "choose how you get paid" : null,
             !trainingOk ? "watch the training videos" : null,
           ].filter(Boolean) as string[];
           const missing = outstanding.length > 1

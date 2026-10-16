@@ -253,7 +253,7 @@ serve(async (req) => {
         if (data.needsJobDay !== false) needs.push("Read Day To Day Job Operations");
         if (data.needsDressCode !== false) needs.push("Agree to the dress code");
         if (data.needsW9 !== false) needs.push("Submit your W-9");
-        if (data.needsStripe !== false) needs.push("Set up Stripe payouts");
+        if (data.needsStripe !== false) needs.push("How would you like to get paid?");
         if (data.needsTraining !== false) needs.push("Watch the training videos");
         const stepsList = needs.length
           ? `<ol style="margin:0 0 16px;padding-left:20px;color:#475569">${
@@ -465,6 +465,15 @@ serve(async (req) => {
             </p>
             <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">Novara Cleaning</p>
           </div>`;
+        break;
+      }
+
+      case "contractor_notice": {
+        subject = String(data?.subject || "A note from Novara");
+        const bodyHtml = String(data?.html || "");
+        if (!bodyHtml.trim()) throw new Error("Notice was empty.");
+        // Payout identifiers never travel in a notification, even if a caller included one.
+        html = bodyHtml.replace(/\$[A-Za-z][A-Za-z0-9_]{2,30}/g, "[payout id removed]");
         break;
       }
 

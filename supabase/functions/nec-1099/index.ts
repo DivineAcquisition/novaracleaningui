@@ -101,7 +101,7 @@ async function readPages(label: string, build: () => DB): Promise<Record<string,
 }
 
 async function loadLedgers(admin: DB, cleanerId: string, year: number) {
-  const payoutSelect = "id, cleaner_id, amount_cents, status, service_date, paid_at, created_at, cleaner_breakdown";
+  const payoutSelect = "id, cleaner_id, amount_cents, amount_sent_cents, status, service_date, paid_at, created_at, cleaner_breakdown, payout_method_code, counts_toward_own_1099";
   const [payoutsByCleaner, payoutsByCrew, extras, tips] = await Promise.all([
     readPages("the pay ledger", () =>
       admin.from("manual_payouts").select(payoutSelect).eq("status", "paid").eq("cleaner_id", cleanerId).order("id"),
@@ -117,7 +117,7 @@ async function loadLedgers(admin: DB, cleanerId: string, year: number) {
     readPages("extra pay", () =>
       admin
         .from("job_extra_pay")
-        .select("id, cleaner_id, status, paid_at, created_at, surge_cents, job_value_cents, overtime_cents, supply_cents, mileage_cents")
+        .select("id, cleaner_id, status, paid_at, created_at, surge_cents, job_value_cents, overtime_cents, supply_cents, mileage_cents, payout_method_code, counts_toward_own_1099")
         .eq("cleaner_id", cleanerId)
         .eq("status", "paid")
         .order("id"),
@@ -146,6 +146,9 @@ async function loadLedgers(admin: DB, cleanerId: string, year: number) {
     paidAt: row.paid_at as string | null,
     createdAt: row.created_at as string | null,
     breakdown: row.cleaner_breakdown,
+    amountSentCents: row.amount_sent_cents as number | null,
+    methodCode: row.payout_method_code as string | null,
+    countsTowardOwn1099: row.counts_toward_own_1099 as boolean | null,
   }));
   const extraRows: ExtraPayRow[] = extras.map((row: Record<string, unknown>) => ({
     status: row.status as string | null,
@@ -156,6 +159,8 @@ async function loadLedgers(admin: DB, cleanerId: string, year: number) {
     overtimeCents: row.overtime_cents as number | null,
     supplyCents: row.supply_cents as number | null,
     mileageCents: row.mileage_cents as number | null,
+    methodCode: row.payout_method_code as string | null,
+    countsTowardOwn1099: row.counts_toward_own_1099 as boolean | null,
   }));
   const tipRows: TipRow[] = tips.map((row: Record<string, unknown>) => ({
     amountCents: row.amount_cents as number | null,
@@ -314,6 +319,9 @@ async function buildForm(
     loadW9(admin, cleanerId),
   ]);
   const ttoc: TtocSetting = parseTtocSetting(ttocValue);
+  if ((ledgers.unresolvedCents || 0) > 0) {
+    return { ok: false, status: 409, error: blockerMessage("nec_method_unclassified") };
+  }
   const assembled = assembleNecForm({
     taxYear: year,
     corrected,
@@ -480,6 +488,7 @@ serve(async (req) => {
       if (!recipient.ok) blockers.push(blockerMessage("w9_required"));
       if (!payer.ok) blockers.push(blockerMessage("payer_incomplete", payer.missing));
       if (ledgers.tipCents > 0 && !occupation.ok) blockers.push(blockerMessage(occupation.reason));
+      if ((ledgers.unresolvedCents || 0) > 0) blockers.push(blockerMessage("nec_method_unclassified"));
       return json({
         taxYear: year,
         thresholdCents: NEC_ELIGIBILITY_THRESHOLD_CENTS,

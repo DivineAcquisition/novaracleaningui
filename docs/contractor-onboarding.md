@@ -8,12 +8,12 @@ Eight steps, in this order:
 4. **Read Day To Day Job Operations** — what a job looks like from offer to payout. Same stretch of the portal, right after supplies.
 5. **Agree to the dress code** — the graphic, with an explicit agree tick. Viewing is not enough.
 6. **Submit your W-9** — legal name, TIN type (SSN, EIN, or ITIN), TIN, and street address. This is the recipient block a 1099-NEC is filed with.
-7. **Set up Stripe payouts** — how completed-job pay is deposited. Finishing this opens the training hub.
+7. **How would you like to get paid?** — Stripe is first and recommended, and pays automatically. Cash App, Zelle, and Chime are paid on the weekly pay run. Finishing a method opens the training hub.
 8. **Watch the training videos** — last. All seven walkthroughs on the training hub. Skipping does not count.
 
 A contractor with zero completed jobs **cannot be offered a first job** until the W-9 and the videos are done. People who have already completed a job are past this gate — we do not yank offers from the roster.
 
-Stripe is the step before training. Finishing it routes to the training hub. It is not itself part of the first-job gate. The W-9 is.
+How you get paid is the step before training. Stripe is listed first. Finishing Stripe, or confirming Cash App, Zelle, or Chime, routes to the training hub. That step is not itself part of the first-job gate. The W-9 is.
 
 Payer name, EIN, address, and the Treasury Tipped Occupation Code stay on admin filing settings. They are not collected from the contractor. The form does not use a federal tax classification, exemption codes, or a separate business-name line, so onboarding does not ask for those.
 
@@ -129,7 +129,7 @@ a yes/no eligibility fact for a first job.
 mint_cleaner_setup_token
   → https://contractor.novaracleaning.com/cleaner/setup/<token>   (email + SMS)
   → /cleaner/auth?setup=<token>                                    (sign in / create login)
-  → /cleaner/ob-portal                                             (phone next, then supplies and Day To Day; W-9 before Stripe; Stripe opens training)
+  → /cleaner/ob-portal                                             (phone next, then supplies and Day To Day; W-9 before payout method; a finished method opens training)
 ```
 
 The email and the SMS both list what is outstanding in portal order, so the

@@ -132,10 +132,13 @@ serve(async (req) => {
 
     const { data: cleaner } = await admin
       .from("cleaners")
-      .select("id, first_name, last_name, email, phone, stripe_account_id, payouts_enabled, onboarding_complete, total_earnings_cents")
+      .select("id, first_name, last_name, email, phone, stripe_account_id, payouts_enabled, onboarding_complete, total_earnings_cents, w9_status")
       .eq("id", cleanerId)
       .maybeSingle();
     if (!cleaner) return json({ error: "Cleaner not found" }, 404);
+    if (cleaner.w9_status !== "complete") {
+      return json({ error: "A W-9 must be on file before any payout." }, 409);
+    }
 
     let stripeAccountId = cleaner.stripe_account_id as string | null;
     let payoutsEnabled = !!cleaner.payouts_enabled;

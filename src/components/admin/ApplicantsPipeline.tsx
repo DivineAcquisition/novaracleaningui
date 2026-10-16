@@ -121,6 +121,7 @@ interface LinkedCleaner {
   ob_payouts_setup: boolean | null;
   payouts_enabled: boolean | null;
   stripe_account_id: string | null;
+  payout_method_status?: string | null;
   onboarding_complete: boolean | null;
 }
 
@@ -161,7 +162,7 @@ const applicantName = (a: ApplicantRow) =>
   a.full_name || [a.first_name, a.last_name].filter(Boolean).join(" ") || a.email || "—";
 
 const payoutsReady = (c: LinkedCleaner | undefined): boolean =>
-  Boolean(c && (c.payouts_enabled || c.ob_payouts_setup || c.stripe_account_id));
+  Boolean(c && (c.payouts_enabled || c.ob_payouts_setup || c.stripe_account_id || c.payout_method_status === "verified"));
 
 function effectiveStage(a: ApplicantRow, c: LinkedCleaner | undefined): EffectiveStage {
   if (a.stage === "onboarding" && c?.ob_agreement_signed) return "agreement_signed";
@@ -276,7 +277,7 @@ export default function ApplicantsPipeline() {
       const { data: linked } = await supabase
         .from("cleaners")
         .select(
-          "id,user_id,status,approved,ob_agreement_signed,ob_agreement_signed_at,ob_payouts_setup,payouts_enabled,stripe_account_id,onboarding_complete",
+          "id,user_id,status,approved,ob_agreement_signed,ob_agreement_signed_at,ob_payouts_setup,payouts_enabled,stripe_account_id,payout_method_status,onboarding_complete",
         )
         .in("id", cleanerIds);
       setCleaners(new Map(((linked || []) as unknown as LinkedCleaner[]).map((c) => [c.id, c])));
@@ -748,7 +749,7 @@ export default function ApplicantsPipeline() {
                           label="Agreement signed"
                           detail={selectedCleaner?.ob_agreement_signed_at ? fmtDate(selectedCleaner.ob_agreement_signed_at) : undefined}
                         />
-                        <ChecklistRow ok={payoutsReady(selectedCleaner)} label="Payout setup (Stripe Connect / W-9)" />
+                        <ChecklistRow ok={payoutsReady(selectedCleaner)} label="Payout setup (Stripe, Cash App, Zelle, or Chime)" />
                         <ChecklistRow ok={Boolean(selectedCleaner?.user_id)} label="Portal account created" />
                       </div>
                       <p className="text-xs text-slate-400">

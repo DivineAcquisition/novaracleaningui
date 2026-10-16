@@ -69,6 +69,7 @@ interface CleanerRow {
   ob_payouts_setup: boolean | null;
   payouts_enabled: boolean | null;
   stripe_account_id: string | null;
+  payout_method_status?: string | null;
 }
 
 async function logEvent(
@@ -519,7 +520,7 @@ export async function POST(req: Request): Promise<NextResponse> {
         }
         const { data: cleanerData, error: clErr } = await supabase
           .from("cleaners")
-          .select("id, status, approved, ob_agreement_signed, ob_payouts_setup, payouts_enabled, stripe_account_id")
+          .select("id, status, approved, ob_agreement_signed, ob_payouts_setup, payouts_enabled, stripe_account_id, payout_method_status")
           .eq("id", applicant.cleaner_id)
           .maybeSingle();
         if (clErr) return NextResponse.json({ error: clErr.message }, { status: 500 });
@@ -534,11 +535,14 @@ export async function POST(req: Request): Promise<NextResponse> {
           );
         }
         const payoutsReady = Boolean(
-          cleaner.payouts_enabled || cleaner.ob_payouts_setup || cleaner.stripe_account_id,
+          cleaner.payouts_enabled ||
+            cleaner.ob_payouts_setup ||
+            cleaner.stripe_account_id ||
+            cleaner.payout_method_status === "verified",
         );
         if (!payoutsReady) {
           return NextResponse.json(
-            { error: "Payout setup (Stripe Connect) is not complete yet." },
+            { error: "Payout setup is not complete yet. Finish Stripe, or confirm Cash App, Zelle, or Chime." },
             { status: 409 },
           );
         }
