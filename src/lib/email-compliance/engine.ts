@@ -278,6 +278,7 @@ export const DEFAULT_BUSINESS_IDENTITY: BusinessIdentity = {
     "support@novaracleaning.com",
     "billing@novaracleaning.com",
     "refunds@novaracleaning.com",
+    "hello@novaracleaning.com",
     "operations@novaracleaning.com",
     "ops@novaracleaning.com",
   ],
