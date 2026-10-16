@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Icon } from "./Icons";
 
 const BEATS = [
   { label: "Checking 20814", detail: "Bethesda, MD is in range" },
@@ -63,7 +64,7 @@ export function ProductStage() {
               <ul className="stage-checks">
                 {CHECKS.map((item, index) => (
                   <li key={item} data-on={index < done}>
-                    <i>{index < done ? "✓" : ""}</i>
+                    <i>{index < done ? <Icon name="check" size={14} /> : null}</i>
                     {item}
                   </li>
                 ))}

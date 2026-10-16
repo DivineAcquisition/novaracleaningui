@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Icon } from "./Icons";
 import { comparisons } from "../lib/content";
 
 function Pair({ item }) {
@@ -11,7 +12,7 @@ function Pair({ item }) {
       <img className="after" src={item.after} alt={`${item.label} after cleaning`} />
       <span className="tag before">Before</span>
       <span className="tag after">After</span>
-      <div className="handle"><i>↔</i></div>
+      <div className="handle"><i><Icon name="swap" size={16} /></i></div>
       <input
         type="range"
         min="5"

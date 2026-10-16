@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { BorderBeam, Marquee, ShinyText } from "./effects";
+import { Icon } from "./Icons";
 import { BOOK_URL, footer, nav, promises, SIGN_IN_URL } from "../lib/content";
 
 function currentNav(pathname, href) {
@@ -82,9 +83,9 @@ export function Footer() {
           </Link>
           <p style={{ marginTop: 10 }}>Top-notch premium residential cleaning service</p>
           <div className="socials" aria-label="Social">
-            <a href="https://facebook.com/" aria-label="Facebook">f</a>
-            <a href="https://twitter.com/" aria-label="X">𝕏</a>
-            <a href="https://instagram.com/" aria-label="Instagram">◎</a>
+            <a href="https://facebook.com/" aria-label="Facebook"><Icon name="facebook" size={16} /></a>
+            <a href="https://twitter.com/" aria-label="X"><Icon name="x" size={16} /></a>
+            <a href="https://instagram.com/" aria-label="Instagram"><Icon name="instagram" size={16} /></a>
           </div>
           <img className="guarantee" src="/images/google-guaranteed.png" alt="Google Guaranteed. Professionals that are licensed, pre-screened, and insured." />
         </div>

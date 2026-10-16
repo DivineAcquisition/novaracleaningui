@@ -467,17 +467,17 @@ export const values = [
   {
     title: "Honest Transparency",
     body: "We believe Maryland families deserve clarity. That means upfront pricing, no hidden fees, and straightforward communication at every step — from booking to payment to follow-up.",
-    icon: "hands",
+    icon: "handshake",
   },
   {
     title: "Care with Consistency",
     body: "A clean home isn’t just about today, it’s about peace of mind week after week. We focus on reliable recurring service, background-checked cleaners, and eco-friendly supplies that protect both families and their homes.",
-    icon: "clock",
+    icon: "repeat",
   },
   {
     title: "Local Roots, Lasting Trust",
     body: "We’re Marylanders serving Marylanders. Our goal is to make quality cleaning accessible without cutting corners — delivering work that earns repeat trust and referrals across the neighborhoods we serve.",
-    icon: "people",
+    icon: "users",
   },
 ];
 

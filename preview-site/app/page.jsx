@@ -98,8 +98,8 @@ export default function HomePage() {
             <h2>Trust, Insured & Secure</h2>
             <p>We’re fully insured and bonded, ensuring your property and our team are protected. Our background-checked professionals are trained to deliver reliable, secure, and top-quality cleaning services you can trust.</p>
             <div className="badges" aria-hidden="true">
-              {["shield", "card", "shield", "hands", "home"].map((name, index) => (
-                <div className="badge" key={`${name}-${index}`}><Glyph name={name} /></div>
+              {["home", "clipboard", "shield", "users", "badge"].map((name) => (
+                <div className="badge" key={name}><Glyph name={name} /></div>
               ))}
             </div>
           </div>

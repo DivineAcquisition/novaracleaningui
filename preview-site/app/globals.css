@@ -522,8 +522,10 @@ input:focus, select:focus, textarea:focus {
   width: 100%; text-align: left; background: transparent; border: 0; padding: 16px 18px;
   display: flex; justify-content: space-between; gap: 16px; cursor: pointer; font-weight: 700;
 }
-.faq-item button span:last-child { transition: transform 0.2s ease; display: inline-block; }
-.faq-item button[aria-expanded="true"] span:last-child { transform: rotate(90deg); }
+.faq-chevron { display: grid; place-items: center; transition: transform 0.2s ease; }
+.faq-item button[aria-expanded="true"] .faq-chevron { transform: rotate(90deg); }
+.meta-row span { display: inline-flex; align-items: center; gap: 6px; }
+.socials svg { display: block; }
 .faq-item .answer { padding: 0 18px 16px; color: var(--muted); line-height: 1.55; overflow: hidden; }
 
 .cta-band {
@@ -595,8 +597,8 @@ input:focus, select:focus, textarea:focus {
 .price span { font-size: 16px; color: var(--muted); font-weight: 600; letter-spacing: 0; }
 .plan-foot { background: #f7f5fb; padding: 18px 20px 20px; margin-top: auto; }
 .plan-foot h4 { margin: 0 0 10px; }
-.plan-foot li { list-style: none; margin: 8px 0; padding-left: 22px; position: relative; line-height: 1.4; }
-.plan-foot li:before { content: "✓"; position: absolute; left: 0; color: #16a34a; font-weight: 800; }
+.plan-foot li { list-style: none; display: flex; gap: 8px; align-items: flex-start; margin: 8px 0; line-height: 1.4; }
+.plan-foot li svg { color: #16a34a; flex: none; margin-top: 2px; }
 .plan-foot ul { margin: 0 0 16px; padding: 0; }
 
 .jobs { border: 1px solid #eee8f6; border-radius: 24px; overflow: hidden; }

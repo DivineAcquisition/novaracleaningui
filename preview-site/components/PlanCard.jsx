@@ -2,7 +2,7 @@
 
 import { BOOK_URL } from "../lib/content";
 import { BorderBeam, NumberTicker } from "./effects";
-import { Glyph } from "./Icons";
+import { Glyph, Icon } from "./Icons";
 
 export function PlanCard({ plan }) {
   return (
@@ -18,7 +18,7 @@ export function PlanCard({ plan }) {
       <div className="plan-foot">
         <h4>What’s in it for you?</h4>
         <ul>
-          {plan.features.map((feature) => <li key={feature}>{feature}</li>)}
+          {plan.features.map((feature) => <li key={feature}><Icon name="check" size={16} />{feature}</li>)}
         </ul>
         <a className="btn btn-primary btn-block" href={BOOK_URL}>Get started</a>
       </div>

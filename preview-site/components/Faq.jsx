@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
+import { Icon } from "./Icons";
 import { faqs } from "../lib/content";
 
 export function Faq() {
@@ -22,7 +23,7 @@ export function Faq() {
               <div className="faq-item" key={item.q}>
                 <button aria-expanded={expanded} onClick={() => setOpen(expanded ? -1 : index)}>
                   <span>{item.q}</span>
-                  <span aria-hidden="true">{expanded ? "–" : "→"}</span>
+                  <span className="faq-chevron" aria-hidden="true"><Icon name="chevron" size={18} /></span>
                 </button>
                 <AnimatePresence initial={false}>
                   {expanded ? (

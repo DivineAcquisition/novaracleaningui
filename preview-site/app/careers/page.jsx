@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Icon } from "../../components/Icons";
 import { jobs } from "../../lib/content";
 
 export const metadata = { title: "Careers | NovaraCleaning™" };
@@ -21,15 +22,15 @@ export default function CareersPage() {
                   <h3>{job.title}</h3>
                   <p>{job.body}</p>
                   <div className="meta-row">
-                    <span>📍 {job.place}</span>
-                    <span>💼 {job.mode}</span>
-                    <span>💲 {job.pay}</span>
+                    <span><Icon name="pin" size={16} /> {job.place}</span>
+                    <span><Icon name="briefcase" size={16} /> {job.mode}</span>
+                    <span><Icon name="money" size={16} /> {job.pay}</span>
                   </div>
                 </div>
                 {job.external ? (
-                  <a className="btn btn-primary" href={job.href}>Apply Now →</a>
+                  <a className="btn btn-primary" href={job.href}>Apply Now <Icon name="arrow" size={16} /></a>
                 ) : (
-                  <Link className="btn btn-primary" href={job.href}>Apply Now →</Link>
+                  <Link className="btn btn-primary" href={job.href}>Apply Now <Icon name="arrow" size={16} /></Link>
                 )}
               </article>
             ))}
