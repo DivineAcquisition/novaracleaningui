@@ -88,7 +88,7 @@ async function notifyAdminQuoteOverride(
     method: "POST",
     headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      from: "Novara Cleaning <hello@novaracleaning.com>",
+      from: "Novara Cleaning <support@novaracleaning.com>",
       to: [ADMIN_OVERRIDE_NOTIFY_EMAIL],
       subject,
       html,

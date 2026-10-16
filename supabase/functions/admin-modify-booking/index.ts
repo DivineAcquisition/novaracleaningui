@@ -560,7 +560,7 @@ serve(async (req) => {
                 "Content-Type": "application/json",
               },
               body: JSON.stringify({
-                from: "Novara Cleaning <hello@novaracleaning.com>",
+                from: "Novara Cleaning <support@novaracleaning.com>",
                 to: [booking.email],
                 subject: `Your Novara cleaning is reopened — deposit needed`,
                 html: `<div style="font-family:Arial,sans-serif;font-size:15px;color:#0f172a;line-height:1.55;max-width:560px">

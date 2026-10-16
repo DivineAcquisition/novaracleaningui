@@ -205,7 +205,7 @@ async function notifyCustomer(
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          from: "Novara Cleaning <hello@novaracleaning.com>",
+          from: "Novara Cleaning <billing@novaracleaning.com>",
           to: [booking.email],
           subject,
           html: emailHtml,

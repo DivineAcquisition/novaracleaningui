@@ -37,7 +37,7 @@ const BRAND = {
   supportEmail: "support@novaracleaning.com",
   supportPhone: "+1 (844) 735-2070",
 };
-const FROM_ADDRESS = "Novara Cleaning <hello@novaracleaning.com>";
+const FROM_ADDRESS = "Novara Cleaning <support@novaracleaning.com>";
 const PARTNER_HOST = "https://partner.novaracleaning.com";
 const CALLBACK = `${PARTNER_HOST}/partner/auth/callback`;
 

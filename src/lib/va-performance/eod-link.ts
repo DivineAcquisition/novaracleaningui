@@ -24,7 +24,7 @@ import { getEodSettings, localDate, primePerformanceSecrets } from "./settings";
 import { listTrackedVas, type VaRecord } from "./vas";
 
 const DEFAULT_PUBLIC_BASE = "https://eod.novaracleaning.com";
-const FROM_ADDRESS = "Novara Team <hello@novaracleaning.com>";
+const FROM_ADDRESS = "Novara Team <ops@novaracleaning.com>";
 
 async function readSecret(key: string): Promise<string> {
   const fromEnv = (process.env[key] || "").trim();

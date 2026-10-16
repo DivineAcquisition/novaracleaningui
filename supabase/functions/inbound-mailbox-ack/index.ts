@@ -20,7 +20,6 @@ import {
   extractEmailAddresses,
   parseResendReceivedEvent,
   primaryFromAddress,
-  SEND_AS,
   type InboundMail,
 } from "../_shared/mailbox-ack.ts";
 
@@ -198,7 +197,7 @@ serve(async (req) => {
 
   const resend = new Resend(resendKey);
   const { data: sent, error: sendError } = await resend.emails.send({
-    from: SEND_AS,
+    from: decision.from,
     to: [decision.to],
     replyTo: decision.replyTo,
     subject: decision.subject,

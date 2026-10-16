@@ -48,7 +48,7 @@ const DEFAULT_SETTINGS = {
   urgent_max_attempts: 5,
   partners_origin: "https://partner.novaracleaning.com",
   senders: {
-    partner: { from: "Novara Cleaning <hello@novaracleaning.com>", reply_to: "support@novaracleaning.com" },
+    partner: { from: "Novara Cleaning <support@novaracleaning.com>", reply_to: "support@novaracleaning.com" },
     walkthrough_agent: { from: "Novara Ops <ops@novaracleaning.com>", reply_to: "ops@novaracleaning.com" },
     admin: { from: "Novara Cleaning <ops@novaracleaning.com>", reply_to: "ops@novaracleaning.com" },
   },
@@ -82,6 +82,21 @@ function backoffMs(attempt: number, priority: string): number {
   return [60_000, 300_000, 900_000, 3_600_000][Math.max(0, attempt)] ?? 3_600_000;
 }
 
+function mergeStoredSenders(stored: Partial<typeof DEFAULT_SETTINGS.senders>): typeof DEFAULT_SETTINGS.senders {
+  const roles = ["partner", "walkthrough_agent", "admin"] as const;
+  const senders = { ...DEFAULT_SETTINGS.senders };
+  for (const role of roles) {
+    const row = stored[role];
+    if (!row?.from) continue;
+    if (/hello@novaracleaning\.com/i.test(row.from)) continue;
+    senders[role] = {
+      from: row.from,
+      reply_to: row.reply_to || DEFAULT_SETTINGS.senders[role].reply_to,
+    };
+  }
+  return senders;
+}
+
 async function loadSettings(admin: SB) {
   const { data } = await admin.from("app_settings").select("value")
     .eq("key", "partnership_comms_settings").maybeSingle();
@@ -89,10 +104,9 @@ async function loadSettings(admin: SB) {
   return {
     ...DEFAULT_SETTINGS,
     ...v,
-    senders: {
-      ...DEFAULT_SETTINGS.senders,
-      ...((v.senders && typeof v.senders === "object") ? v.senders as typeof DEFAULT_SETTINGS.senders : {}),
-    },
+    senders: mergeStoredSenders(
+      (v.senders && typeof v.senders === "object") ? v.senders as typeof DEFAULT_SETTINGS.senders : {},
+    ),
   };
 }
 

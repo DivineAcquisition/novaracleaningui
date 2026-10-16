@@ -215,7 +215,7 @@ export async function notifyStaffNoCleanersAvailable(
 
   try {
     await resend.emails.send({
-      from: "Novara Cleaning Ops <hello@novaracleaning.com>",
+      from: "Novara Cleaning Ops <ops@novaracleaning.com>",
       to: recipients,
       subject,
       html,

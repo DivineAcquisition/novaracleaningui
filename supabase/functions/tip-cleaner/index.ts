@@ -274,7 +274,7 @@ async function sendCustomerTipInvite(
           method: "POST",
           headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
           body: JSON.stringify({
-            from: "Novara Cleaning <hello@novaracleaning.com>",
+            from: "Novara Cleaning <support@novaracleaning.com>",
             to: [opts.email],
             subject: `Tip ${crew} for your Novara clean`,
             html,
@@ -558,7 +558,7 @@ serve(async (req) => {
                 method: "POST",
                 headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
                 body: JSON.stringify({
-                  from: "Novara Cleaning <hello@novaracleaning.com>",
+                  from: "NVC Operations <operations@novaracleaning.com>",
                   to: [c.email],
                   subject: `You received a ${shareStr} tip 💜`,
                   html,

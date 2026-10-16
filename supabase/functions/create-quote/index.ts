@@ -134,7 +134,7 @@ serve(async (req) => {
         const { Resend } = await import("https://esm.sh/resend@4.0.0");
         const resend = new Resend(resendApiKey);
         await resend.emails.send({
-          from: "Novara Cleaning <hello@novaracleaning.com>",
+          from: "Novara Cleaning <support@novaracleaning.com>",
           to: ["admin@novaracleaning.com"],
           subject: `New Custom Quote Request - ${fullName} (${sqft} sqft)`,
           html: notificationHtml,

@@ -35,7 +35,7 @@ export const DEFAULT_PARTNERSHIP_COMMS_SETTINGS: PartnershipCommsSettings = {
   partners_origin: "https://partner.novaracleaning.com",
   senders: {
     partner: {
-      from: "Novara Cleaning <hello@novaracleaning.com>",
+      from: "Novara Cleaning <support@novaracleaning.com>",
       reply_to: "support@novaracleaning.com",
     },
     walkthrough_agent: {

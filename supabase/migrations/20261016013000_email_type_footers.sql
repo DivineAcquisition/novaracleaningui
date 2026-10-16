@@ -29,8 +29,9 @@ VALUES (
       jsonb_build_object('id','reactivation','label','Reactivation'),
       jsonb_build_object('id','referrals','label','Referral offers')
     ),
-    'service', jsonb_build_object('displayName','Novara Cleaning','address','hello@novaracleaning.com','replyTo','support@novaracleaning.com','streamKey','service'),
-    'marketing', jsonb_build_object('displayName','Novara Cleaning','address','','replyTo','support@novaracleaning.com','streamKey','marketing'),
+    'service', jsonb_build_object('displayName','Novara Cleaning','address','support@novaracleaning.com','replyTo','support@novaracleaning.com','streamKey','service'),
+    'billing', jsonb_build_object('displayName','Novara Cleaning','address','billing@novaracleaning.com','replyTo','billing@novaracleaning.com','streamKey','billing'),
+    'marketing', jsonb_build_object('displayName','Novara Cleaning','address','hello@novaracleaning.com','replyTo','hello@novaracleaning.com','streamKey','marketing'),
     'contractor', jsonb_build_object('displayName','NVC Operations','address','operations@novaracleaning.com','replyTo','operations@novaracleaning.com'),
     'internal', jsonb_build_object('displayName','NovaraCleaning','address','ops@novaracleaning.com','replyTo','ops@novaracleaning.com')
   ),

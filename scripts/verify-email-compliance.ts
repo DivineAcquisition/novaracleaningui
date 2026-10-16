@@ -95,7 +95,8 @@ assert("service footer names the booking", confirmation.text.includes("because o
 assert("service footer has the address", confirmation.text.includes("100 King St"));
 assert("service footer has no unsubscribe", !/Unsubscribe/.test(confirmation.footer.text));
 assert("applied discount is not treated as a promotion", confirmation.promoRemoved === false);
-assert("reply-to is the monitored support inbox", confirmation.replyTo === "support@novaracleaning.com");
+assert("booking mail is sent from support@", confirmation.from.includes("support@novaracleaning.com") && !confirmation.from.includes("hello@"));
+assert("reply-to is the support inbox", confirmation.replyTo === "support@novaracleaning.com");
 assert("plain text carries the footer", confirmation.text.includes(confirmation.footer.text.split("\n")[0]));
 assert("the novara mark is on the message", confirmation.html.includes("novara-logo.png"));
 assert("the message sits in the card", confirmation.html.includes("data-novara-card"));
@@ -121,6 +122,18 @@ const offered = evaluateEmail({
 check("a service email with an offer still sends after the offer is removed", offered.decision, "send");
 assert("the offer is flagged", offered.promoRemoved === true || offered.warnings.some((line) => /promotional/i.test(line)));
 assert("the sent service body no longer offers 5% off", !/5% off/i.test(offered.html));
+
+const receipt = evaluateEmail({
+  declaredType: "customer_service",
+  templateKey: "booking_payment_receipt",
+  subject: "Payment received",
+  html: "<p>We received your payment.</p>",
+  identity: ready,
+  ...urls,
+});
+check("a receipt sends", receipt.decision, "send");
+assert("a receipt is sent from billing@", receipt.from.includes("billing@novaracleaning.com"));
+assert("a receipt replies to billing@", receipt.replyTo === "billing@novaracleaning.com");
 
 console.log("\nMarketing:");
 const promo = evaluateEmail({

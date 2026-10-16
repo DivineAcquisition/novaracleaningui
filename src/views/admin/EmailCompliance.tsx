@@ -21,6 +21,7 @@ type Identity = {
   licenseLine: string;
   retentionMonths: number;
   service: { displayName: string; address: string; replyTo: string; streamKey: string };
+  billing: { displayName: string; address: string; replyTo: string; streamKey: string };
   marketing: { displayName: string; address: string; replyTo: string; streamKey: string };
   contractor: { displayName: string; address: string; replyTo: string };
   why: Record<string, string>;
@@ -171,8 +172,9 @@ export default function EmailCompliance() {
         </div>
         <p className="text-xs text-slate-500">Marketing cannot send while the street, city, state, and postal code are empty. Service mail still sends.</p>
         <h3 className="text-sm font-semibold">Senders</h3>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <SenderFields title="Service" sender={identity.service} onChange={(service) => setIdentity({ ...identity, service: { ...identity.service, ...service } })} />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <SenderFields title="Support" sender={identity.service} onChange={(service) => setIdentity({ ...identity, service: { ...identity.service, ...service } })} />
+          <SenderFields title="Billing" sender={identity.billing} onChange={(billing) => setIdentity({ ...identity, billing: { ...identity.billing, ...billing } })} />
           <SenderFields title="Marketing" sender={identity.marketing} onChange={(marketing) => setIdentity({ ...identity, marketing: { ...identity.marketing, ...marketing } })} />
           <SenderFields title="Contractor" sender={identity.contractor} onChange={(contractor) => setIdentity({ ...identity, contractor })} />
         </div>

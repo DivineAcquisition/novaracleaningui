@@ -318,7 +318,7 @@ export async function POST(req: Request): Promise<NextResponse> {
             method: "POST",
             headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
             body: JSON.stringify({
-              from: "Novara Team <hello@novaracleaning.com>",
+              from: "Novara Team <ops@novaracleaning.com>",
               to: ["admin@novaracleaning.com"],
               subject: `VA onboarding pending approval — ${name} (${row.va_role})`,
               html: `<p><strong>${name}</strong> (${row.email}) finished VA onboarding for the <strong>${row.va_role}</strong> role and signed the VA Independent Contractor Agreement.</p><p>No access has been granted. Review &amp; approve in <a href="https://admin.novaracleaning.com/admin/team">Admin → Team</a>.</p>`,

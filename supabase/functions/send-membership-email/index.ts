@@ -139,7 +139,7 @@ ${charged}
     }
 
     const emailResponse = await resend.emails.send({
-      from: "Novara Cleaning <hello@novaracleaning.com>",
+      from: "Novara Cleaning <billing@novaracleaning.com>",
       to: [email],
       subject,
       html,

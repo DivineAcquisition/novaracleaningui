@@ -136,7 +136,7 @@ async function sendReminderEmail(opts: {
     serviceDate: opts.serviceDate,
   });
   await resend.emails.send({
-    from: "Novara Cleaning <hello@novaracleaning.com>",
+    from: "Novara Cleaning <support@novaracleaning.com>",
     to: [opts.to],
     subject: "Finish your Novara booking — home details needed",
     html,

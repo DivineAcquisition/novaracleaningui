@@ -328,7 +328,8 @@ serve(async (req) => {
         if (inviteResendKey) {
           const resend = new Resend(inviteResendKey);
           await resend.emails.send({
-            from: "Novara Team <hello@novaracleaning.com>",
+            from: "Novara Team <ops@novaracleaning.com>",
+            replyTo: "ops@novaracleaning.com",
             to: [email],
             subject: `Your offer from Novara Cleaning — ${roleLabel[vaRole] || "VA"} 🎉`,
             html: `
@@ -529,7 +530,8 @@ serve(async (req) => {
           const discordInvite = await secret(admin, "DISCORD_INVITE_URL");
           const resend = new Resend(resendKey);
           await resend.emails.send({
-            from: "Novara Team <hello@novaracleaning.com>",
+            from: "Novara Team <ops@novaracleaning.com>",
+            replyTo: "ops@novaracleaning.com",
             to: [row.email],
             subject: "You're approved — your Novara access is ready 🎉",
             html: `

@@ -29,7 +29,7 @@ const corsHeaders = {
 const PORTAL_ROLES = new Set(["admin", "va"]);
 const ADMIN_PORTAL_URL = "https://admin.novaracleaning.com";
 const ADMIN_CALLBACK = `${ADMIN_PORTAL_URL}/admin/auth/callback`;
-const FROM_ADDRESS = "Novara Cleaning <hello@novaracleaning.com>";
+const FROM_ADDRESS = "NovaraCleaning <ops@novaracleaning.com>";
 const NOVARA_EMAIL_RE = /^[^@\s]+@novaracleaning\.com$/i;
 
 function isNovaraEmail(email: string): boolean {
@@ -178,7 +178,7 @@ async function sendWorkspaceInviteEmail(
       subject,
       html,
       text,
-      replyTo: BRAND.supportEmail,
+      replyTo: "ops@novaracleaning.com",
     });
     if ((result as any)?.error) {
       return { sent: false, error: String((result as any).error?.message || (result as any).error) };

@@ -144,7 +144,7 @@ serve(async (req) => {
       if (resendKey) {
         const resend = new Resend(resendKey);
         await resend.emails.send({
-          from: "Novara Dispatch <hello@novaracleaning.com>",
+          from: "Novara Dispatch <ops@novaracleaning.com>",
           to: [ADMIN_EMAIL],
           subject: `🚨 ${lateDrop ? "LATE DROP (<48h)" : "Job dropped"} — ${bookingRef} needs URGENT reassignment`,
           html: `

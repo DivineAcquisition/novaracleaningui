@@ -377,7 +377,7 @@ async function packetFor(admin: SB, issue: Record<string, unknown>, original: Re
 
 async function sendCustomerEmail(admin: SB, to: string, subject: string, html: string) {
   const { error } = await admin.functions.invoke("admin-send-email", {
-    body: { to, subject, html, from: "Novara Cleaning <contact@novaracleaning.com>" },
+    body: { to, subject, html, from: "Novara Cleaning <support@novaracleaning.com>" },
   });
   if (error) log("email failed", error.message || String(error));
 }

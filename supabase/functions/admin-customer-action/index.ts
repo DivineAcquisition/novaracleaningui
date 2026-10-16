@@ -21,7 +21,7 @@ const corsHeaders = {
 };
 
 const PORTAL_RETURN_ORIGIN = "https://app.novaracleaning.com";
-const FROM_ADDRESS = "Novara Cleaning <hello@novaracleaning.com>";
+const FROM_ADDRESS = "Novara Cleaning <billing@novaracleaning.com>";
 
 function json(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -156,7 +156,7 @@ function renderBillingPortalEmail(firstName: string, portalUrl: string) {
     gray600: "#6B7280",
     gray200: "#E5E7EB",
     logoUrl: "https://app.novaracleaning.com/novara-logo.png",
-    supportEmail: "support@novaracleaning.com",
+    supportEmail: "billing@novaracleaning.com",
     supportPhone: "+1 (844) 735-2070",
   };
   const safeName = escapeHtml(firstName || "there");
@@ -345,7 +345,7 @@ serve(async (req) => {
           `Hi ${firstName},\n\n` +
           `Use this secure link to update the card on file for your Novara Cleaning account:\n${url}\n\n` +
           `You can also view invoices and manage billing details from the same page.\n\n` +
-          `This link expires after a short time. Questions? support@novaracleaning.com`;
+          `This link expires after a short time. Questions? billing@novaracleaning.com`;
 
         const result = await resend.emails.send({
           from: FROM_ADDRESS,
@@ -353,7 +353,7 @@ serve(async (req) => {
           subject: "Update your Novara Cleaning payment method",
           html,
           text,
-          replyTo: "support@novaracleaning.com",
+          replyTo: "billing@novaracleaning.com",
         });
         if ((result as { error?: unknown })?.error) {
           console.error("[admin-customer-action] resend error", (result as { error?: unknown }).error);

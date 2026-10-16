@@ -676,7 +676,7 @@ function renderHtml(opts: {
           <p style="margin:0;font-size:12px;color:#9CA3AF;line-height:1.5">© NovaraCleaning · All Rights Reserved. This document is the exclusive property of NovaraCleaning and intended solely for use by authorized employees, contractors, and the recipient customer.</p>
         </td></tr>
         <tr><td style="background:#F9FAFB;padding:20px 32px;text-align:center;font-size:12px;color:#6B7280">
-          Novara Cleaning &middot; hello@novaracleaning.com &middot; +1 (844) 735-2070<br/>
+          Novara Cleaning &middot; support@novaracleaning.com &middot; +1 (844) 735-2070<br/>
           Reply to this email any time — we love hearing from our customers.
         </td></tr>
       </table>
@@ -859,7 +859,7 @@ serve(async (req) => {
       const text = plainText({ firstName, content, viewUrl });
 
       const result = await resend.emails.send({
-        from: "Novara Cleaning <hello@novaracleaning.com>",
+        from: "Novara Cleaning <support@novaracleaning.com>",
         to: [email],
         subject: content.subject,
         html,

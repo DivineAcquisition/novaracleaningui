@@ -92,6 +92,7 @@ export interface BusinessIdentity {
   paperCopyLine: string;
   withdrawConsentLine: string;
   service: StreamIdentity;
+  billing: StreamIdentity;
   marketing: StreamIdentity;
   contractor: SenderIdentity;
   internal: SenderIdentity;
@@ -190,7 +191,7 @@ export interface PrepareResult {
   checklist: CheckItem[];
   from: string;
   replyTo: string;
-  stream: "service" | "marketing";
+  stream: "service" | "billing" | "marketing";
   subject: string;
   html: string;
   text: string;
@@ -214,7 +215,7 @@ export interface DeliveryRecord {
   text: string;
   footerVersion: string;
   footerHtml: string;
-  stream: "service" | "marketing";
+  stream: "service" | "billing" | "marketing";
   sentAt: string;
   testSend: boolean;
 }
@@ -274,14 +275,20 @@ export const DEFAULT_BUSINESS_IDENTITY: BusinessIdentity = {
   withdrawConsentLine: "To withdraw consent to electronic delivery of tax forms, use the link below. Withdrawal does not change forms already delivered.",
   service: {
     displayName: "Novara Cleaning",
-    address: "hello@novaracleaning.com",
+    address: "support@novaracleaning.com",
     replyTo: "support@novaracleaning.com",
     streamKey: "service",
   },
+  billing: {
+    displayName: "Novara Cleaning",
+    address: "billing@novaracleaning.com",
+    replyTo: "billing@novaracleaning.com",
+    streamKey: "billing",
+  },
   marketing: {
     displayName: "Novara Cleaning",
-    address: "",
-    replyTo: "support@novaracleaning.com",
+    address: "hello@novaracleaning.com",
+    replyTo: "hello@novaracleaning.com",
     streamKey: "marketing",
   },
   contractor: {
@@ -463,7 +470,8 @@ export function mergeBusinessIdentity(raw: unknown): BusinessIdentity {
     contractorOnBehalf: textOf(v.contractorOnBehalf || v.contractor_on_behalf || base.contractorOnBehalf),
     paperCopyLine: textOf(v.paperCopyLine || v.paper_copy_line || base.paperCopyLine),
     withdrawConsentLine: textOf(v.withdrawConsentLine || v.withdraw_consent_line || base.withdrawConsentLine),
-    service: mergeSender(base.service, v.service),
+    service: legacyHelloIsSupport(mergeSender(base.service, v.service)),
+    billing: mergeSender(base.billing, v.billing),
     marketing: mergeSender(base.marketing, v.marketing),
     contractor: mergeSender(base.contractor, v.contractor),
     internal: mergeSender(base.internal, v.internal),
@@ -495,9 +503,46 @@ function escapeHtml(value: string): string {
 }
 
 export function marketingStreamReady(identity: BusinessIdentity): boolean {
-  const marketing = emailDomain(identity.marketing.address);
-  const service = emailDomain(identity.service.address);
-  return Boolean(identity.marketing.address.trim() && marketing && service && marketing !== service && identity.marketing.streamKey !== identity.service.streamKey);
+  const marketing = normalizeEmail(identity.marketing.address);
+  const service = normalizeEmail(identity.service.address);
+  const billing = normalizeEmail(identity.billing.address);
+  return Boolean(
+    marketing &&
+    marketing !== service &&
+    marketing !== billing &&
+    identity.marketing.streamKey !== identity.service.streamKey,
+  );
+}
+
+/** Receipts, invoices, deposits, and membership charges. */
+export const BILLING_TEMPLATE_KEYS = new Set([
+  "booking_payment_receipt",
+  "credit_allocated",
+  "credit_expiry",
+  "pending_deposit",
+  "membership_welcome",
+  "membership_renewal",
+  "membership_cancelled",
+  "membership_benefits",
+  "addon_email",
+  "overdue_booking",
+]);
+
+export type MailboxRole = "support" | "billing" | "marketing" | "operations" | "internal";
+
+export function mailboxRole(type: EmailType, templateKey?: string | null, subject?: string | null): MailboxRole {
+  if (type === "contractor_operational" || type === "contractor_tax") return "operations";
+  if (type === "internal_admin") return "internal";
+  if (type === "customer_marketing") return "marketing";
+  const key = textOf(templateKey);
+  const aboutMoney = BILLING_TEMPLATE_KEYS.has(key) || /\b(receipt|invoice|payment|deposit|billing|refund)\b/i.test(textOf(subject));
+  if (aboutMoney) return "billing";
+  return "support";
+}
+
+function legacyHelloIsSupport<T extends SenderIdentity>(sender: T): T {
+  if (normalizeEmail(sender.address) !== "hello@novaracleaning.com") return sender;
+  return { ...sender, address: "support@novaracleaning.com", replyTo: "support@novaracleaning.com" };
 }
 
 export function replyIsMonitored(identity: BusinessIdentity, replyTo: string): boolean {
@@ -832,8 +877,9 @@ export function evaluateEmail(input: PrepareInput): PrepareResult {
   const textBody = `${visibleText(html)}\n\n${footer.text}`.replace(/\n{3,}/g, "\n\n").trim();
   const maskedText = maskSensitive(textBody);
 
-  const sender = chooseSender(identity, type, input.personalFrom);
-  const stream: "service" | "marketing" = marketing ? "marketing" : "service";
+  const role = mailboxRole(type, input.templateKey, subject);
+  const sender = chooseSender(identity, type, input.personalFrom, role);
+  const stream: "service" | "billing" | "marketing" = role === "marketing" ? "marketing" : role === "billing" ? "billing" : "service";
   const headers: Record<string, string> = { "X-Novara-Stream": stream, "X-Novara-Email-Type": type };
   if (marketing && input.oneClickUrl) {
     headers["List-Unsubscribe"] = `<${input.oneClickUrl}>`;
@@ -857,7 +903,7 @@ export function evaluateEmail(input: PrepareInput): PrepareResult {
     checklist.push(item("unsubscribe", "One-step unsubscribe link", Boolean(input.unsubscribeUrl), true));
     checklist.push(item("preferences", "Email preferences link", Boolean(input.preferencesUrl), true));
     checklist.push(item("promo_id", "Identified as a promotional message", /promotional message/i.test(combined), true));
-    checklist.push(item("stream", "Marketing stream is separate from service", marketingStreamReady(identity), true, marketingStreamReady(identity) ? "" : "Set a marketing From address on a different domain than service mail."));
+    checklist.push(item("stream", "Marketing stream is separate from service", marketingStreamReady(identity), true, marketingStreamReady(identity) ? "" : "Set a marketing From address that is not the support or billing address."));
     const badClaims = unapprovedClaims(combined, claims);
     checklist.push(item("claims", "Claims are on the approved list", badClaims.length === 0, true, badClaims.map((c) => c.label).join(", ")));
     const missingTerms = offerMissingTerms(visibleText(originalHtml) + "\n" + visibleText(html));
@@ -951,7 +997,8 @@ export function evaluateEmail(input: PrepareInput): PrepareResult {
 function chooseSender(
   identity: BusinessIdentity,
   type: EmailType,
-  personalFrom?: { displayName?: string; address?: string; replyTo?: string } | null,
+  personalFrom: { displayName?: string; address?: string; replyTo?: string } | null | undefined,
+  role: MailboxRole,
 ): { from: string; replyTo: string } {
   if ((type === "agreement_account" || type === "customer_service") && personalFrom?.address?.trim()) {
     return {
@@ -959,17 +1006,16 @@ function chooseSender(
       replyTo: personalFrom.replyTo || personalFrom.address,
     };
   }
-  if (type === "contractor_operational" || type === "contractor_tax") {
-    return { from: formatFrom(identity.contractor), replyTo: identity.contractor.replyTo || identity.contractor.address };
-  }
-  if (type === "internal_admin") {
-    return { from: formatFrom(identity.internal), replyTo: identity.internal.replyTo || identity.internal.address };
-  }
-  if (type === "customer_marketing") {
-    const sender = identity.marketing.address.trim() ? identity.marketing : identity.service;
-    return { from: formatFrom(sender), replyTo: sender.replyTo || identity.supportEmail };
-  }
-  return { from: formatFrom(identity.service), replyTo: identity.service.replyTo || identity.supportEmail };
+  const mailbox = role === "billing"
+    ? identity.billing
+    : role === "marketing"
+      ? identity.marketing
+      : role === "operations"
+        ? identity.contractor
+        : role === "internal"
+          ? identity.internal
+          : identity.service;
+  return { from: formatFrom(mailbox), replyTo: mailbox.replyTo || mailbox.address };
 }
 
 function stampFooter(html: string, footerHtml: string): string {
@@ -1148,7 +1194,7 @@ export const EMAIL_CATALOG: CatalogEntry[] = [
   entry({ key: "cleaning_checklist", name: "Cleaning checklist", where: "send-cleaning-checklist", senderBefore: "Novara Cleaning <hello@novaracleaning.com>", replyToBefore: "none", footerBefore: "Inline.", unsubscribeBefore: false, promotionalBefore: false, plainTextBefore: false, assignedType: "customer_service", ownerDecisionNeeded: false, external: false, changed: "Service footer." }),
   entry({ key: "addon_email", name: "Add-on notice", where: "send-addon-email", senderBefore: "Novara Cleaning <hello@novaracleaning.com>", replyToBefore: "none", footerBefore: "Inline.", unsubscribeBefore: false, promotionalBefore: false, plainTextBefore: false, assignedType: "customer_service", ownerDecisionNeeded: false, external: false, changed: "Service footer." }),
   entry({ key: "lead_capture", name: "Lead capture mail", where: "send-lead-capture-webhook", senderBefore: "Novara Cleaning <hello@novaracleaning.com>", replyToBefore: "none", footerBefore: "Inline.", unsubscribeBefore: false, promotionalBefore: false, plainTextBefore: false, assignedType: "customer_service", ownerDecisionNeeded: true, external: false, changed: "Sends as a service message with promotional content removed until the owner assigns a type." }),
-  entry({ key: "mailbox_ack", name: "Inbound mailbox acknowledgement", where: "inbound-mailbox-ack", senderBefore: "NovaraCleaning <hello@novaracleaning.com>", replyToBefore: "support@ or billing@", footerBefore: "Signature only. Copy is fixed and factual.", unsubscribeBefore: false, promotionalBefore: false, plainTextBefore: true, assignedType: "customer_service", ownerDecisionNeeded: false, external: false, changed: "Copy unchanged. The inbound message is stored in the conversation history." }),
+  entry({ key: "mailbox_ack", name: "Inbound mailbox acknowledgement", where: "inbound-mailbox-ack", senderBefore: "NovaraCleaning <hello@novaracleaning.com>", replyToBefore: "support@ or billing@", footerBefore: "Signature only. Copy is fixed and factual.", unsubscribeBefore: false, promotionalBefore: false, plainTextBefore: true, assignedType: "customer_service", ownerDecisionNeeded: false, external: false, changed: "Copy unchanged. The acknowledgement is sent from the mailbox that received the message. The inbound message is stored in the conversation history." }),
   entry({ key: "contractor_payout", name: "Contractor payout", where: "PayoutConfirmation / send-cleaner-email", senderBefore: "NVC Operations <operations@novaracleaning.com>", replyToBefore: "operations@novaracleaning.com", footerBefore: "Shared customer layout, no operations line.", unsubscribeBefore: false, promotionalBefore: false, plainTextBefore: false, assignedType: "contractor_operational", ownerDecisionNeeded: false, external: false, changed: "Contractor footer. Payout reference is masked. Independent-contractor wording. No unsubscribe while active." }),
   entry({ key: "contractor_assignment", name: "Contractor assignment", where: "CleanerAssignment / send-cleaner-email", senderBefore: "NVC Operations <operations@novaracleaning.com>", replyToBefore: "operations@novaracleaning.com", footerBefore: "Shared layout or a short sign-off.", unsubscribeBefore: false, promotionalBefore: false, plainTextBefore: false, assignedType: "contractor_operational", ownerDecisionNeeded: false, external: false, changed: "Contractor footer. No unsubscribe." }),
   entry({ key: "contractor_invitation", name: "Contractor onboarding invite", where: "CleanerInvitation / talent onboarding email", senderBefore: "NVC Operations <operations@novaracleaning.com>", replyToBefore: "operations@novaracleaning.com", footerBefore: "Short sign-off.", unsubscribeBefore: false, promotionalBefore: false, plainTextBefore: false, assignedType: "contractor_operational", ownerDecisionNeeded: false, external: false, changed: "Contractor footer. Replies to people who applied stay operational." }),

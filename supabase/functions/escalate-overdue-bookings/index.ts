@@ -52,7 +52,7 @@ async function sendStaffEmail(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: "Novara Cleaning <hello@novaracleaning.com>",
+        from: "NovaraCleaning <ops@novaracleaning.com>",
         to,
         subject,
         html,

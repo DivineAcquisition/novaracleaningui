@@ -217,9 +217,9 @@ export async function POST(req: Request): Promise<NextResponse> {
           method: "POST",
           headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
           body: JSON.stringify({
-            from: "Novara Cleaning <hello@novaracleaning.com>",
+            from: "Novara Cleaning <billing@novaracleaning.com>",
             to: [account.email],
-            reply_to: "contact@novaracleaning.com",
+            reply_to: "billing@novaracleaning.com",
             subject: `Set up payment for ${account.business_name} — Novara Cleaning`,
             html: `<p>Hi ${account.contact_name || "there"},</p><p>To activate cleaning service for <strong>${account.business_name}</strong>, add a payment method on this page. It stays on our site — a Stripe Pre-Auth hold verifies the card and nothing is captured now:</p><p><a href="${setupUrl}">${setupUrl}</a></p><p>— Novara Cleaning</p>`,
           }),

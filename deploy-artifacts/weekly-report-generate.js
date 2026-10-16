@@ -1152,7 +1152,7 @@ ${payload.driveUrl}` : "") : `Generation failed: ${payload.error || "unknown err
   try {
     const resend = new Resend(apiKey);
     await resend.emails.send({
-      from: "Novara Cleaning <hello@novaracleaning.com>",
+      from: "NovaraCleaning <ops@novaracleaning.com>",
       to: settings.recipients,
       subject: title,
       html: `<p>${description.replace(/\n/g, "<br/>")}</p>
