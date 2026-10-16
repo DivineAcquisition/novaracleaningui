@@ -556,6 +556,16 @@ export const legalPages = {
   "membership-policy": { title: "Membership Policy", file: "membership-policy.txt" },
 };
 
+export const promises = [
+  "Insured & bonded",
+  "Background-checked cleaners",
+  "48-hour reclean",
+  "Upfront pricing",
+  "Maryland, Virginia & DC",
+  "Eco-friendly supplies",
+  "Hotel-grade detail",
+];
+
 export const places = [
   "Bethesda",
   "Silver Spring",

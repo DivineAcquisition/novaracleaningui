@@ -1,22 +1,32 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { BOOK_URL, footer, nav, SIGN_IN_URL } from "../lib/content";
+import { BorderBeam, Marquee, ShinyText } from "./effects";
+import { BOOK_URL, footer, nav, promises, SIGN_IN_URL } from "../lib/content";
+
+function currentNav(pathname, href) {
+  if (href === "/") return pathname === "/";
+  if (href.startsWith("/#")) return false;
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
 
 export function Header() {
   const [open, setOpen] = useState(false);
+  const pathname = usePathname();
   return (
     <header className="site-header">
       <div className="wrap">
         <div className="nav-pill">
+          <BorderBeam size={70} duration={8} colorFrom="#8d5cff" colorTo="#ffffff" />
           <Link className="brand" href="/" onClick={() => setOpen(false)}>
             <img src="/images/logo.png" alt="" />
             NovaraCleaning
           </Link>
           <nav className="nav-links" aria-label="Primary">
             {nav.map((item) => (
-              <Link key={item.label} href={item.href}>{item.label}</Link>
+              <Link className={currentNav(pathname, item.href) ? "is-current" : undefined} key={item.label} href={item.href}>{item.label}</Link>
             ))}
           </nav>
           <div className="nav-actions">
@@ -43,7 +53,7 @@ export function CtaBand() {
   return (
     <section className="cta-band">
       <div className="wrap cta-inner">
-        <h2>Book Your Cleaning Now For Only 50% Off</h2>
+        <h2>Book Your Cleaning Now For Only <ShinyText>50% Off</ShinyText></h2>
         <a className="btn btn-light" href={BOOK_URL}>Book My Cleaning Now!</a>
       </div>
     </section>
@@ -63,6 +73,7 @@ export function Footer() {
   ];
   return (
     <footer className="site-footer">
+      <Marquee items={promises} />
       <div className="wrap footer-grid">
         <div>
           <Link className="brand" href="/">

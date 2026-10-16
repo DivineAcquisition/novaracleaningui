@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { notFound } from "next/navigation";
+import { PageHero } from "../../../components/effects";
 import { legalPages } from "../../../lib/content";
 
 export function generateStaticParams() {
@@ -33,9 +34,9 @@ export default async function LegalPage({ params }) {
 
   return (
     <main>
+      <PageHero title={page.title} lede="Last updated on the live NovaraCleaning policies. This preview copies that text so you can read it here." />
       <section className="section">
         <article className="wrap legal">
-          <h1>{page.title}</h1>
           {lines.map((line, index) => {
             const notice = /^IMPORTANT LEGAL NOTICE/i.test(line) || /^Questions about booking/i.test(line);
             const heading = isHeading(line);

@@ -1,5 +1,6 @@
 import { Figtree } from "next/font/google";
 import { CtaBand, Footer, Header } from "../components/Chrome";
+import { BookDock, ScrollProgress } from "../components/effects";
 import "./globals.css";
 
 const figtree = Figtree({
@@ -21,10 +22,12 @@ export default function RootLayout({ children }) {
         <div className="preview-bar">
           Preview only. This temporary site is <strong>not</strong> connected to novaracleaning.com or any other live domain.
         </div>
+        <ScrollProgress />
         <Header />
         {children}
         <CtaBand />
         <Footer />
+        <BookDock />
       </body>
     </html>
   );

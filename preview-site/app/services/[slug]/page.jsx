@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { Particles } from "../../../components/effects";
+import { BlurFade, Particles } from "../../../components/effects";
 import { LeadForm } from "../../../components/LeadForm";
 import { services } from "../../../lib/content";
 
@@ -42,13 +42,13 @@ export default async function ServicePage({ params }) {
             <h2 style={{ textAlign: "left", fontSize: 32 }}>{service.summaryTitle}</h2>
             <p>{service.summary}</p>
             {service.meta ? <p className="meta">{service.meta}</p> : null}
-            {service.groups.map((group) => (
-              <div key={group.title}>
+            {service.groups.map((group, index) => (
+              <BlurFade delay={index * 0.05} key={group.title}>
                 <h3>{group.title}</h3>
                 <ul>
                   {group.items.map((item) => <li key={item}>{item}</li>)}
                 </ul>
-              </div>
+              </BlurFade>
             ))}
           </article>
         </div>

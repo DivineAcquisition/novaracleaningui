@@ -1,13 +1,12 @@
 import Link from "next/link";
+import { PageHero } from "../components/effects";
 
 export default function NotFound() {
   return (
-    <main className="section">
-      <div className="wrap center-copy">
-        <h1>Page not found</h1>
-        <p>That page is not part of this preview.</p>
-        <Link className="btn btn-primary" href="/">Back home</Link>
-      </div>
+    <main>
+      <PageHero title="Page not found" lede="That page is not part of this preview.">
+        <Link className="btn btn-light" href="/">Back home</Link>
+      </PageHero>
     </main>
   );
 }

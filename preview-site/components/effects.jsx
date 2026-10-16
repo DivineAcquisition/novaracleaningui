@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { motion, useMotionTemplate, useMotionValue } from "motion/react";
+import { BOOK_URL } from "../lib/content";
 
 function reducedMotion() {
   return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -120,6 +121,58 @@ export function MagicCard({ children, className = "" }) {
 
 export function ShinyText({ children, light = false }) {
   return <span className={light ? "shiny shiny-light" : "shiny"}>{children}</span>;
+}
+
+export function ScrollProgress() {
+  const [progress, setProgress] = useState(0);
+  useEffect(() => {
+    function onScroll() {
+      const height = document.documentElement.scrollHeight - window.innerHeight;
+      setProgress(height > 0 ? window.scrollY / height : 0);
+    }
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+  return <div className="scroll-progress" style={{ transform: `scaleX(${progress})` }} />;
+}
+
+export function BookDock() {
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    function onScroll() {
+      setShow(window.scrollY > 640);
+    }
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+  if (!show) return null;
+  return (
+    <a className="book-dock btn btn-primary" href={BOOK_URL}>
+      Book 50% Off
+    </a>
+  );
+}
+
+export function PageHero({ title, lede, children }) {
+  return (
+    <section className="hero page-hero">
+      <Particles density={28} />
+      <BlurFade>
+        <div className="wrap">
+          {title ? <h1>{title}</h1> : null}
+          {lede ? <p className="lede">{lede}</p> : null}
+          <div className="promise-row">
+            <span>Insured</span>
+            <span>Bonded</span>
+            <span>Background-checked</span>
+          </div>
+          {children}
+        </div>
+      </BlurFade>
+    </section>
+  );
 }
 
 export function Marquee({ items }) {
