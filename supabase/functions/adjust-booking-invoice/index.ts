@@ -126,8 +126,7 @@ serve(async (req) => {
         if (status === "draft") {
           const finalized = await stripe.invoices.finalizeInvoice(existingInvoiceId);
           hostedInvoiceUrl = finalized.hosted_invoice_url ?? hostedInvoiceUrl;
-          await stripe.invoices.sendInvoice(existingInvoiceId);
-          invoiceAction = "finalized_and_sent";
+          invoiceAction = "finalized";
         } else {
           // open — Stripe recalculates totals when items are added
           const refreshed = await stripe.invoices.retrieve(existingInvoiceId);
@@ -155,7 +154,6 @@ serve(async (req) => {
           });
           if (supplemental.id) {
             const fin = await stripe.invoices.finalizeInvoice(supplemental.id);
-            await stripe.invoices.sendInvoice(supplemental.id);
             invoiceId = supplemental.id;
             hostedInvoiceUrl = fin.hosted_invoice_url ?? hostedInvoiceUrl;
             invoiceAction = "supplemental_invoice_created";
@@ -193,7 +191,6 @@ serve(async (req) => {
         });
         if (fresh.id) {
           const fin = await stripe.invoices.finalizeInvoice(fresh.id);
-          await stripe.invoices.sendInvoice(fresh.id);
           invoiceId = fresh.id;
           hostedInvoiceUrl = fin.hosted_invoice_url ?? null;
           invoiceAction = status === "missing" ? "reissued_after_missing" : "new_invoice_created";
@@ -229,7 +226,6 @@ serve(async (req) => {
       });
       if (created.id) {
         const fin = await stripe.invoices.finalizeInvoice(created.id);
-        await stripe.invoices.sendInvoice(created.id);
         invoiceId = created.id;
         hostedInvoiceUrl = fin.hosted_invoice_url ?? null;
         invoiceAction = "invoice_created";

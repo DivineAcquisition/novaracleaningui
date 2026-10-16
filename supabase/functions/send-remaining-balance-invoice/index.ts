@@ -310,7 +310,6 @@ serve(async (req) => {
     const finalized = await stripe.invoices.finalizeInvoice(invoice.id, {
       auto_advance: true,
     });
-    await stripe.invoices.sendInvoice(invoice.id);
 
     const hostedInvoiceUrl = finalized.hosted_invoice_url || null;
 

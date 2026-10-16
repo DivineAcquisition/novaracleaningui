@@ -387,7 +387,6 @@ async function createAndSendInvoice(
     const finalized = await stripe.invoices.finalizeInvoice(invoice.id, {
       auto_advance: true,
     });
-    await stripe.invoices.sendInvoice(invoice.id);
     return {
       invoiceId: invoice.id,
       hostedInvoiceUrl: finalized.hosted_invoice_url || null,

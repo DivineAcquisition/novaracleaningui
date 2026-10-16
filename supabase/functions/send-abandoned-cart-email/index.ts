@@ -205,28 +205,9 @@ const handler = async (req: Request): Promise<Response> => {
 
     logStep(`Sending ${isSecondReminder ? 'second' : 'first'} reminder to ${cart.email}`);
 
-    // Try Migma template first, fall back to React Email
+    // The in-app card is the reminder. The remote Migma layout is the old template.
     let html: string;
-
-    const migmaHtml = await fetchMigmaTemplate(MIGMA_CONVERSATION_ID);
-
-    if (migmaHtml) {
-      const serviceTypeLabels: Record<string, string> = {
-        standard: 'Standard Cleaning',
-        deep: 'Deep Cleaning',
-        moveInOut: 'Move In/Out Cleaning',
-      };
-
-      html = populateAbandonedCartTemplate(migmaHtml, {
-        first_name: cart.first_name || 'there',
-        service_type: serviceTypeLabels[cart.service_type] || cart.service_type || 'Cleaning',
-        home_size: cart.home_size || '',
-        resume_url: resumeUrl,
-        zip_code: cart.zip_code || '',
-      });
-      logStep("Using Migma template for abandoned cart email");
-    } else {
-      html = await renderAsync(
+    html = await renderAsync(
         React.createElement(AbandonedCartReminder, {
           firstName: cart.first_name || undefined,
           homeSize: cart.home_size || undefined,
@@ -235,8 +216,7 @@ const handler = async (req: Request): Promise<Response> => {
           isSecondReminder,
         })
       );
-      logStep("Using React Email fallback for abandoned cart email");
-    }
+      logStep("Using the Novara card for abandoned cart email");
 
     const subject = isSecondReminder
       ? "Your Novara Cleaning booking is still open — 5% off for 24 hours"

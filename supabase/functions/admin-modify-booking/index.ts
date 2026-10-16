@@ -162,9 +162,6 @@ async function reissueDepositInvoice(
       try {
         const inv = await stripe.invoices.retrieve(existingId);
         if ((inv.status === "open" || inv.status === "paid") && inv.hosted_invoice_url) {
-          if (inv.status === "open") {
-            await stripe.invoices.sendInvoice(existingId).catch(() => undefined);
-          }
           return { url: inv.hosted_invoice_url, invoiceId: existingId, warning: null };
         }
       } catch {
@@ -222,7 +219,6 @@ async function reissueDepositInvoice(
         description,
       });
       const finalized = await stripe.invoices.finalizeInvoice(invoice.id);
-      await stripe.invoices.sendInvoice(invoice.id).catch(() => undefined);
       return {
         url: finalized.hosted_invoice_url || existingUrl,
         invoiceId: invoice.id,

@@ -248,7 +248,6 @@ serve(async (req) => {
         // Save the card for the later manual-capture pre-auth hold.
         setup_future_usage: "off_session",
         automatic_payment_methods: { enabled: true },
-        receipt_email: booking.email || undefined,
         description: `NVC-${String(booking.booking_number || "").padStart(4, "0")} — Deposit (Novara Cleaning)`,
         metadata: {
           booking_id: booking.id,

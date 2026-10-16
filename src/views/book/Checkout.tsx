@@ -74,9 +74,7 @@ import {
   saveCheckoutSnapshot,
 } from "@/lib/checkout-funnel-guard";
 import { capturePageForEvidence } from "@/lib/page-capture";
-import { AcceptanceChecklist, type AcceptanceGateState } from "@/components/compliance/AcceptanceChecklist";
 import { PriceBreakdown } from "@/components/compliance/PriceBreakdown";
-import { stashCheckoutAcceptances, submitAcceptances, submitSignedCopy } from "@/lib/compliance/record-client";
 const BOOKING_STEPS = [{
   number: 1,
   label: "Location",
@@ -131,9 +129,6 @@ export default function BookingCheckout() {
   // Wraps the whole checkout body so it can be screenshotted for the packet.
   const checkoutCaptureRef = useRef<HTMLDivElement>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
-  const [acceptanceGate, setAcceptanceGate] = useState<AcceptanceGateState | null>(null);
-  const [showAcceptanceErrors, setShowAcceptanceErrors] = useState(false);
-  const acceptanceReady = acceptanceGate?.ready === true;
   const [paymentAmount, setPaymentAmount] = useState(0);
   const [bookingId, setBookingId] = useState<string | null>(null);
   const [initError, setInitError] = useState<string | null>(null);
@@ -566,38 +561,6 @@ export default function BookingCheckout() {
     : 0;
   const membershipDeepDollars = isNewMembershipSignup && deepClean.includeDeepClean ? 75 : 0;
   const membershipDueDollars = membershipMonthlyDollars + membershipDeepDollars;
-  const membershipPlanMeta = MEMBERSHIP_PLANS[bookingData.membershipPlan as keyof typeof MEMBERSHIP_PLANS];
-  const membershipCleans = membershipPlanMeta?.cleansPerMonth || 1;
-  const acceptanceContext = {
-    relationship: "residential" as const,
-    propertyLabel: [bookingData.address, bookingData.city, bookingData.state].filter(Boolean).join(", ") || "this home",
-    phone: bookingData.phone,
-    includeCard: true,
-    includeMembership: isNewMembershipSignup,
-    charge: {
-      dueNowLabel: `$${(isNewMembershipSignup ? membershipDueDollars : depositPricing.deposit).toFixed(2)}`,
-      dueNowWhen: "today, when I submit payment",
-      balanceLabel: !isNewMembershipSignup && !isFocused && depositPricing.balanceDue > 0
-        ? `$${depositPricing.balanceDue.toFixed(2)}`
-        : null,
-      balanceWhen: "after the cleaning is complete",
-      amountBasis: isNewMembershipSignup
-        ? `${membershipPlanMeta?.label || "membership"} at $${(membershipMonthlyDollars / membershipCleans).toFixed(2)} per visit`
-        : "the pricing rules for this service and home, plus any add-ons and same-day fee shown",
-      savedFor: isNewMembershipSignup
-        ? "for the recurring membership charges until I cancel"
-        : "to collect the balance after the cleaning and for later visits I book",
-    },
-    membership: isNewMembershipSignup
-      ? {
-          pricePerVisit: `$${(membershipMonthlyDollars / membershipCleans).toFixed(2)}`,
-          frequency: membershipPlanMeta?.label || bookingData.membershipPlan || "monthly",
-          firstChargeLabel: `$${membershipDueDollars.toFixed(2)}`,
-          firstChargeWhen: "today",
-          nextChargeWhen: "on the next billing date after today",
-        }
-      : null,
-  };
 
   // Handle Referral Code
   const handleApplyReferral = async () => {
@@ -869,25 +832,6 @@ export default function BookingCheckout() {
   const handlePaymentSuccess = async () => {
     toast.success("Payment successful!");
     const id = bookingId || bookingData.bookingId;
-    if (acceptanceGate) {
-      stashCheckoutAcceptances({ checked: acceptanceGate.checked, items: acceptanceGate.items });
-      const lines = acceptanceGate.items
-        .filter((item) => acceptanceGate.checked[item.kind])
-        .map((item) => item.wordingShown);
-      void submitAcceptances({
-        surface: "residential_checkout",
-        context: acceptanceContext,
-        items: acceptanceGate.items,
-        checked: acceptanceGate.checked,
-        personName: `${bookingData.firstName || ""} ${bookingData.lastName || ""}`.trim(),
-        email: bookingData.email,
-        phone: bookingData.phone,
-        bookingId: id,
-      }).catch(() => undefined);
-      if (bookingData.email && lines.length) {
-        void submitSignedCopy({ email: bookingData.email, bookingId: id, lines }).catch(() => undefined);
-      }
-    }
     if (id) {
       updateBookingData({ bookingId: id });
     }
@@ -907,7 +851,6 @@ export default function BookingCheckout() {
   useEffect(() => {
     // Existing members redeeming a credit don't pay here.
     if (isMemberUsingCredit) return;
-    if (!acceptanceReady) return;
     const email = bookingData.email?.trim();
     const hasRequiredData = email && bookingData.homeSizeId && bookingData.serviceDate && bookingData.timeSlot;
     if (!hasRequiredData) {
@@ -942,7 +885,6 @@ export default function BookingCheckout() {
     applyWallet,
     walletBalanceCents,
     isNewMembershipSignup,
-    acceptanceReady,
     isMemberUsingCredit,
     deepClean.includeDeepClean,
   ]);
@@ -1482,23 +1424,8 @@ export default function BookingCheckout() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <AcceptanceChecklist
-                surface="residential_checkout"
-                context={acceptanceContext}
-                showErrors={showAcceptanceErrors}
-                onChange={setAcceptanceGate}
-              />
-              {!acceptanceReady ? (
-                <Button
-                  type="button"
-                  className="w-full"
-                  onClick={() => setShowAcceptanceErrors(true)}
-                >
-                  Review the required agreements
-                </Button>
-              ) : null}
               {/* Member Using Credit */}
-              {isMemberUsingCredit && acceptanceReady && <div className="text-center space-y-4">
+              {isMemberUsingCredit && <div className="text-center space-y-4">
                   <div className="bg-green-50 border border-green-200 rounded-lg p-6">
                     <RiSparklingLine className="w-10 h-10 text-green-600 mx-auto mb-3" />
                     <p className="text-3xl font-bold text-green-700">$0.00</p>
@@ -1510,7 +1437,7 @@ export default function BookingCheckout() {
                 </div>}
 
               {/* Stripe Payment Element — one-time deposit and Glow first month */}
-              {!isMemberUsingCredit && acceptanceReady && <>
+              {!isMemberUsingCredit && <>
                   {isNewMembershipSignup && (
                     <DeepCleanPrompt value={deepClean} onChange={setDeepClean} priceDollars={75} />
                   )}
@@ -1591,7 +1518,10 @@ export default function BookingCheckout() {
                         )}
 
                         <p className="text-xs text-muted-foreground">
-                          You will sign on the next step. A copy of what you accepted is emailed to you.
+                          You will sign on the next page. You will also confirm the cancellation policy, card authorization, authority to book, photos and recordings{isNewMembershipSignup ? ", membership billing" : ""}, and optional service texts, promotional texts, and email.
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          A copy of what you accept is emailed to you.
                         </p>
                       </div>
                     </div>

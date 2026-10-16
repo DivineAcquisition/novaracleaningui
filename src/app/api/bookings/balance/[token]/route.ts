@@ -423,7 +423,6 @@ export async function POST(
       "metadata[booking_id]": booking.id,
       "metadata[purpose]": "final_balance",
       "metadata[source]": "balance_pay_page",
-      ...(booking.email ? { receipt_email: booking.email } : {}),
     });
 
     await supabase

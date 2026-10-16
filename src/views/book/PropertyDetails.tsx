@@ -594,8 +594,9 @@ export default function PropertyDetails() {
           surface: "residential_signature",
           context: {
             relationship: "residential",
-            includeCard: false,
-            policiesAlreadyAccepted: priorAcceptances?.checked.terms === true,
+            includeCard: true,
+            includeMembership: isMembershipSignup,
+            policiesAlreadyAccepted: false,
             propertyLabel: [street, city, state].filter(Boolean).join(", "),
           },
           items: acceptanceGate.items,
@@ -984,18 +985,6 @@ export default function PropertyDetails() {
               {fieldError ? (
                 <p role="alert" className="text-sm text-destructive">{fieldError}</p>
               ) : null}
-              <AcceptanceChecklist
-                surface="residential_signature"
-                showErrors={showAcceptanceErrors}
-                onChange={setAcceptanceGate}
-                context={{
-                  relationship: "residential",
-                  includeCard: false,
-                  includeMembership: isMembershipSignup,
-                  policiesAlreadyAccepted: priorAcceptances?.checked.terms === true,
-                  propertyLabel: [address, city, state].filter(Boolean).join(", ") || "this home",
-                }}
-              />
               <p className="text-xs text-muted-foreground">
                 By signing you agree to the{" "}
                 <a href="https://novaracleaning.com/terms" target="_blank" rel="noopener noreferrer" className="text-primary underline">Terms of Service</a>,{" "}
@@ -1017,6 +1006,31 @@ export default function PropertyDetails() {
                 </Label>
                 <SignaturePad onChange={setSignatureDataUrl} />
               </div>
+              <AcceptanceChecklist
+                surface="residential_signature"
+                showErrors={showAcceptanceErrors}
+                onChange={setAcceptanceGate}
+                context={{
+                  relationship: "residential",
+                  includeCard: true,
+                  includeMembership: isMembershipSignup,
+                  policiesAlreadyAccepted: false,
+                  propertyLabel: [address, city, state].filter(Boolean).join(", ") || "this home",
+                  phone: bookingData.phone,
+                  charge: {
+                    dueNowLabel: agreementMeta.depositCents
+                      ? `$${(agreementMeta.depositCents / 100).toFixed(2)}`
+                      : "the amount already paid",
+                    dueNowWhen: "when you paid on the previous page",
+                    balanceLabel: agreementMeta.totalCents > agreementMeta.depositCents
+                      ? `$${((agreementMeta.totalCents - agreementMeta.depositCents) / 100).toFixed(2)}`
+                      : null,
+                    balanceWhen: "after the cleaning is complete",
+                    amountBasis: "the pricing rules for this service and home",
+                    savedFor: "to collect the balance after the cleaning and for later visits",
+                  },
+                }}
+              />
             </div>
 
             <Button

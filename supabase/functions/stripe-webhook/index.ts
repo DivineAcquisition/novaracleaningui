@@ -382,14 +382,12 @@ serve(async (req) => {
                 description: `Remaining Balance - ${confirmedBooking.service_type} Cleaning Service`,
               });
 
-              // Finalize and send invoice
+              // Finalize the invoice for the hosted link. Do not email it from Stripe.
               const finalizedInvoice = await stripe.invoices.finalizeInvoice(invoice.id, {
                 auto_advance: true,
               });
 
-              await stripe.invoices.sendInvoice(invoice.id);
-
-              // Update booking with invoice ID and hosted invoice URL
+              // Keep the hosted link for our own email. Do not send Stripe's invoice email.
               await supabase
                 .from('bookings')
                 .update({ 
@@ -398,7 +396,7 @@ serve(async (req) => {
                 })
                 .eq('id', confirmedBooking.id);
 
-              logStep("Invoice created and sent", { 
+              logStep("Invoice created", { 
                 invoiceId: invoice.id,
                 invoiceUrl: finalizedInvoice.hosted_invoice_url 
               });

@@ -63,6 +63,15 @@ check("booking cannot proceed with nothing checked", acceptanceGate(checkout, no
 const requiredOnly = Object.fromEntries(checkout.map((item) => [item.kind, item.required])) as Record<string, boolean>;
 check("booking can proceed without marketing or cookie consent", acceptanceGate(checkout, requiredOnly).ready === true);
 
+const details = acceptancesForSurface("residential_signature", {
+  relationship: "residential",
+  includeCard: true,
+  includeMembership: false,
+  policiesAlreadyAccepted: false,
+  propertyLabel: "12 Oak Street",
+});
+check("details page has the checkout agreements", details.some((item) => item.kind === "terms") && details.some((item) => item.kind === "card_authorization") && details.some((item) => item.kind === "email_marketing") && details.some((item) => item.kind === "electronic_consent"));
+
 const card = checkout.find((item) => item.kind === "card_authorization")!;
 check("card wording names the amount", card.wordingShown.includes("$75.00"));
 check("card wording names when", card.wordingShown.includes("today"));

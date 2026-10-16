@@ -199,18 +199,11 @@ serve(async (req: Request) => {
     let attachments: any[] = [];
 
     if (type === 'confirmation') {
-      // Try Migma template first, fall back to React Email
-      const migmaHtml = await fetchMigmaTemplate(MIGMA_TEMPLATES.booking_confirmation);
-      
-      if (migmaHtml) {
-        html = populateMigmaTemplate(migmaHtml, data);
-        logStep("Using Migma template for confirmation email");
-      } else {
-        // Fallback to React Email
-        const { BookingConfirmation } = await import('../_shared/email-templates/BookingConfirmation.tsx');
-        html = await renderAsync(React.createElement(BookingConfirmation, data));
-        logStep("Using React Email fallback for confirmation email");
-      }
+      // The in-app card is the confirmation. The remote Migma layout is the
+      // old template and does not carry this footer.
+      const { BookingConfirmation } = await import('../_shared/email-templates/BookingConfirmation.tsx');
+      html = await renderAsync(React.createElement(BookingConfirmation, data));
+      logStep("Using the Novara card for confirmation email");
 
       // service_date is a calendar day ("2026-08-05"), not an instant. Parsing
       // it bare gives UTC midnight, which formats as the day BEFORE in every

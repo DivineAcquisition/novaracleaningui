@@ -244,16 +244,22 @@ export function acceptancesForSurface(
   if (surface === "residential_checkout" && ctx.includeMembership) {
     kinds.splice(4, 0, "membership_terms");
   }
-  if (surface === "residential_signature" && ctx.policiesAlreadyAccepted === false) {
-    kinds.unshift(
+  if (surface === "residential_signature" && ctx.policiesAlreadyAccepted !== true) {
+    const extra: AcceptanceKind[] = [
       "terms",
       "refund_policy",
       "cancellation_policy",
       "disclaimer",
       "service_agreement",
+      "card_authorization",
       "authority_to_book",
       "photos_recordings",
-    );
+      "sms_service",
+      "sms_promo",
+      "email_marketing",
+    ];
+    if (ctx.includeMembership) extra.splice(4, 0, "membership_terms");
+    kinds.unshift(...extra);
   }
   const seen = new Set<AcceptanceKind>();
   const items: RenderedAcceptance[] = [];
