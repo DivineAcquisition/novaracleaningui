@@ -73,6 +73,21 @@ async function readAcceptances(filter?: { bookingId?: string; email?: string }):
   }
 }
 
+async function readSettings(): Promise<ComplianceSettings | null> {
+  try {
+    const { getAdminSupabase } = await import("@/lib/airtable/sources/admin-client");
+    const { data, error } = await getAdminSupabase()
+      .from("compliance_settings")
+      .select("value")
+      .eq("id", "default")
+      .maybeSingle();
+    if (error || !data?.value || typeof data.value !== "object") return null;
+    return { ...DEFAULT_SETTINGS, ...(data.value as Partial<ComplianceSettings>) };
+  } catch {
+    return null;
+  }
+}
+
 async function mirror(table: string, row: Record<string, unknown>, conflict?: string) {
   try {
     const { getAdminSupabase } = await import("@/lib/airtable/sources/admin-client");
@@ -138,7 +153,7 @@ export async function GET(req: Request) {
   const view = url.searchParams.get("view") || "settings";
   const store = getProcessStore();
   if (view === "settings") {
-    const settings = store.getSettings();
+    const settings = (await readSettings()) || store.getSettings();
     return NextResponse.json({
       salesTaxEnabled: settings.salesTaxEnabled,
       salesTaxRate: settings.salesTaxRate,
@@ -175,10 +190,10 @@ export async function GET(req: Request) {
       findings: AUDIT_FINDINGS,
       accessibility: ACCESSIBILITY_PLAN,
       claims: APPROVED_CLAIMS,
-      settings: store.getSettings(),
+      settings: (await readSettings()) || store.getSettings(),
     });
   }
-  return NextResponse.json({ settings: store.getSettings() });
+  return NextResponse.json({ settings: (await readSettings()) || store.getSettings() });
 }
 
 export async function POST(req: Request) {
@@ -298,7 +313,7 @@ export async function POST(req: Request) {
       kind: kind as "access" | "correct" | "delete",
       details: String(body.details || ""),
       now,
-      dueDays: store.getSettings().dataRequestDueDays,
+      dueDays: ((await readSettings()) || store.getSettings()).dataRequestDueDays,
     });
     store.addDataRequest(request);
     await mirror("compliance_data_requests", {

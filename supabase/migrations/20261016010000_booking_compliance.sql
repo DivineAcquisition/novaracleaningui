@@ -142,3 +142,6 @@ ALTER TABLE public.compliance_signed_copies ENABLE ROW LEVEL SECURITY;
 
 -- Service role writes from the Next API. Admins read through that API.
 -- No anon policies: these rows are not public.
+
+REVOKE ALL ON FUNCTION public.compliance_acceptances_immutable() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.compliance_wording_body_immutable() FROM PUBLIC, anon, authenticated;
