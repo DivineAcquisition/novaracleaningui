@@ -13,6 +13,7 @@ import {
   type ConsentRecord,
   type PrepareInput,
 } from "./email-compliance.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 
 type SB = { from: (table: string) => any };
 
@@ -199,4 +200,47 @@ export async function deliverCompliantEmail(supabase: SB, input: EdgeDeliverInpu
   } catch { /* resend id is optional */ }
   await log(input.testSend ? "test" : "sent", id);
   return { ok: true, blocked: false, id, error: "", warnings: result.warnings, type: result.type };
+}
+
+/** Apply the Novara card and type footer, then send. From and Reply-To follow the email type. */
+export async function sendThroughCompliance(
+  apiKey: string,
+  input: {
+    to: string | string[];
+    subject: string;
+    html: string;
+    text?: string | null;
+    templateKey?: string | null;
+    declaredType?: string | null;
+    cc?: string[];
+    bookingId?: string | null;
+    staffRecipient?: boolean;
+    isReply?: boolean;
+  },
+  supabase?: SB,
+): Promise<{ data: { id: string } | null; error: { message: string } | null }> {
+  const db = supabase || createServiceDb();
+  const to = (Array.isArray(input.to) ? input.to[0] : input.to) || "";
+  const outcome = await deliverCompliantEmail(db, {
+    apiKey,
+    to,
+    cc: input.cc,
+    subject: input.subject,
+    html: input.html,
+    text: input.text,
+    templateKey: input.templateKey,
+    declaredType: input.declaredType || "customer_service",
+    bookingId: input.bookingId,
+    staffRecipient: input.staffRecipient,
+    isReply: input.isReply,
+  });
+  if (!outcome.ok) return { data: null, error: { message: outcome.error } };
+  return { data: { id: outcome.id }, error: null };
+}
+
+function createServiceDb(): SB {
+  return createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+  );
 }

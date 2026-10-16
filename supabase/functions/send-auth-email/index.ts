@@ -24,8 +24,8 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-import { Resend } from "https://esm.sh/resend@4.0.0";
 import { buildEmailCard } from "../_shared/email-compliance.ts";
+import { sendThroughCompliance } from "../_shared/email-compliance-send.ts";
 import { isStaffCustomerEmail } from "../_shared/staff-customer.ts";
 
 const corsHeaders = {
@@ -147,7 +147,6 @@ function renderHtml(cfg: EmailConfig, link: string): string {
     bodyHtml: body,
     buttonHref: link,
     buttonLabel: cfg.ctaLabel,
-    footerHtml: `<p style="margin:28px 0 0;padding-top:16px;border-top:1px solid #3f3f46;font-family:Inter,Arial,sans-serif;font-size:13px;line-height:1.5;color:#a1a1aa;">Novara Cleaning<br/>Questions: <a href="mailto:${BRAND.supportEmail}" style="color:#ddd6fe;">${BRAND.supportEmail}</a> · ${BRAND.supportPhone}</p>`,
   });
 }
 
@@ -265,19 +264,17 @@ serve(async (req) => {
     console.error("[send-auth-email] RESEND_API_KEY missing — cannot send");
     return json({ ok: true });
   }
-  const resend = new Resend(resendKey);
-
   const cfg = configFor(kind, linkResult.link, linkResult.firstName);
   const html = renderHtml(cfg, linkResult.link);
 
   try {
-    const result = await resend.emails.send({
-      from: FROM_ADDRESS,
-      to: [email],
+    const result = await sendThroughCompliance(resendKey, {
+      to: email,
       subject: cfg.subject,
       html,
       text: cfg.textVersion,
-      replyTo: BRAND.supportEmail,
+      templateKey: "auth_email",
+      declaredType: isContractor ? "contractor_operational" : "customer_service",
     });
     if ((result as any)?.error) {
       console.error("[send-auth-email] resend error", kind, email, (result as any).error);

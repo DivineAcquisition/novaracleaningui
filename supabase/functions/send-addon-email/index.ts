@@ -10,7 +10,7 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-import { Resend } from "https://esm.sh/resend@4.0.0";
+import { sendThroughCompliance } from "../_shared/email-compliance-send.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -271,16 +271,20 @@ serve(async (req) => {
 
   const resendKey = await resolveSecret(admin, "RESEND_API_KEY");
   if (!resendKey) { console.error("[send-addon-email] RESEND_API_KEY missing"); return json({ ok: true }); }
-  const resend = new Resend(resendKey);
 
   const isReview = Boolean(body.data?.reviewFor);
   const extraCc = (body.cc || []).map((e) => String(e).trim().toLowerCase()).filter((e) => e.includes("@"));
   const cc = isReview ? [] : (extraCc.length > 0 ? extraCc : (body.skipBillingCc ? [] : [BILLING_CC]));
 
   try {
-    const result = await resend.emails.send({
-      from: FROM_ADDRESS, to: [email], cc, subject: built.subject, html: built.html, replyTo: "billing@novaracleaning.com",
-    });
+    const result = await sendThroughCompliance(resendKey, {
+      to: email,
+      cc,
+      subject: built.subject,
+      html: built.html,
+      templateKey: "addon_email",
+      declaredType: "customer_service",
+    }, admin);
     if ((result as { error?: unknown })?.error) console.error("[send-addon-email] resend error", type, (result as { error?: unknown }).error);
     else console.log("[send-addon-email] sent", type, email);
   } catch (e) {

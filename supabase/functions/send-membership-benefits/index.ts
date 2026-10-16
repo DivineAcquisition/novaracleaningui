@@ -21,7 +21,7 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-import { Resend } from "https://esm.sh/resend@4.0.0";
+import { sendThroughCompliance } from "../_shared/email-compliance-send.ts";
 import { sendSms } from "../_shared/sms.ts";
 
 const corsHeaders = {
@@ -257,13 +257,13 @@ serve(async (req) => {
     let messageId: string | null = null;
     let emailed = false;
     if (doEmail) {
-      const resend = new Resend(Deno.env.get("RESEND_API_KEY") || "");
-      const result = await resend.emails.send({
-        from: "Novara Cleaning <billing@novaracleaning.com>",
-        to: [email],
-        subject: "Your Glow Membership Benefits — everything included ✨",
+      const result = await sendThroughCompliance(Deno.env.get("RESEND_API_KEY") || "", {
+        to: email,
+        subject: "Your Glow Membership Benefits — everything included",
         html: renderHtml({ firstName }),
         text: plainText({ firstName }),
+        templateKey: "membership_benefits",
+        declaredType: "customer_service",
       });
 
       if (result?.error) {

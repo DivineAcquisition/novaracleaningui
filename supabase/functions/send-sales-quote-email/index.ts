@@ -1,7 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { Resend } from "https://esm.sh/resend@4.0.0";
-
-const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
+import { sendThroughCompliance } from "../_shared/email-compliance-send.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -107,11 +105,12 @@ serve(async (req: Request) => {
 
     const html = buildQuoteHtml(data);
 
-    const emailResponse = await resend.emails.send({
-      from: "Novara Cleaning <support@novaracleaning.com>",
-      to: [data.email],
-      subject: `Your NovaraCleaning Quote - ${formatCurrency(data.finalPriceCents)}/clean ✨`,
+    const emailResponse = await sendThroughCompliance(Deno.env.get("RESEND_API_KEY") || "", {
+      to: data.email,
+      subject: `Your NovaraCleaning Quote - ${formatCurrency(data.finalPriceCents)}/clean`,
       html,
+      templateKey: "quote_customer",
+      declaredType: "customer_service",
     });
 
     console.log("[SEND-SALES-QUOTE-EMAIL] Sent successfully", emailResponse);

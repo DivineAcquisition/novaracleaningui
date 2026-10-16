@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { Resend } from "https://esm.sh/resend@2.0.0";
+import { sendThroughCompliance } from "../_shared/email-compliance-send.ts";
 import * as React from "https://esm.sh/react@18.3.1";
 import { renderAsync } from "https://esm.sh/@react-email/components@0.0.22";
 import { WaitlistConfirmation } from "../_shared/email-templates/WaitlistConfirmation.tsx";
@@ -119,8 +119,6 @@ const handler = async (req: Request): Promise<Response> => {
     // Send confirmation email
     if (resendApiKey) {
       try {
-        const resend = new Resend(resendApiKey);
-        
         const html = await renderAsync(
           React.createElement(WaitlistConfirmation, {
             firstName: firstName || undefined,
@@ -129,11 +127,12 @@ const handler = async (req: Request): Promise<Response> => {
           })
         );
 
-        const emailResult = await resend.emails.send({
-          from: "Novara Cleaning <support@novaracleaning.com>",
-          to: [email],
-          subject: "You're on the Novara Cleaning Waitlist! 🎉",
+        const emailResult = await sendThroughCompliance(resendApiKey, {
+          to: email,
+          subject: "You're on the Novara Cleaning Waitlist!",
           html,
+          templateKey: "waitlist_confirmation",
+          declaredType: "customer_service",
         });
 
         console.log("Waitlist confirmation email sent:", emailResult);

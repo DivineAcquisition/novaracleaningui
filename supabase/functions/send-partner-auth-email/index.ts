@@ -14,8 +14,8 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-import { Resend } from "https://esm.sh/resend@4.0.0";
 import { buildEmailCard } from "../_shared/email-compliance.ts";
+import { sendThroughCompliance } from "../_shared/email-compliance-send.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -107,7 +107,6 @@ function renderHtml(cfg: EmailConfig, link: string): string {
     bodyHtml: body,
     buttonHref: link,
     buttonLabel: cfg.ctaLabel,
-    footerHtml: `<p style="margin:28px 0 0;padding-top:16px;border-top:1px solid #3f3f46;font-family:Inter,Arial,sans-serif;font-size:13px;line-height:1.5;color:#a1a1aa;">Novara Cleaning<br/>Questions: <a href="mailto:${BRAND.supportEmail}" style="color:#ddd6fe;">${BRAND.supportEmail}</a> · ${BRAND.supportPhone}</p>`,
   });
 }
 
@@ -168,13 +167,16 @@ serve(async (req) => {
 
   const resendKey = await resolveSecret(adminClient, "RESEND_API_KEY");
   if (!resendKey) { console.error("[send-partner-auth-email] RESEND_API_KEY missing"); return json({ ok: true }); }
-  const resend = new Resend(resendKey);
 
   const cfg = configFor(kind, linkResult.link, linkResult.firstName);
   try {
-    const result = await resend.emails.send({
-      from: FROM_ADDRESS, to: [email], subject: cfg.subject,
-      html: renderHtml(cfg, linkResult.link), text: cfg.textVersion, replyTo: BRAND.supportEmail,
+    const result = await sendThroughCompliance(resendKey, {
+      to: email,
+      subject: cfg.subject,
+      html: renderHtml(cfg, linkResult.link),
+      text: cfg.textVersion,
+      templateKey: "auth_email",
+      declaredType: "customer_service",
     });
     if ((result as { error?: unknown })?.error) console.error("[send-partner-auth-email] resend error", kind, (result as { error?: unknown }).error);
     else console.log("[send-partner-auth-email] sent", kind, email);

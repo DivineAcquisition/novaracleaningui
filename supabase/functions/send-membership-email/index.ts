@@ -1,16 +1,14 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { Resend } from "https://esm.sh/resend@4.0.0";
-import React from 'https://esm.sh/react@18.3.1';
-import { renderAsync } from 'https://esm.sh/@react-email/components@0.0.22';
-import { MembershipWelcome } from '../_shared/email-templates/MembershipWelcome.tsx';
-import { MembershipRenewal } from '../_shared/email-templates/MembershipRenewal.tsx';
-import { CreditAllocated } from '../_shared/email-templates/CreditAllocated.tsx';
-import { SubscriptionCancelled } from '../_shared/email-templates/SubscriptionCancelled.tsx';
-import { CreditExpiryWarning } from '../_shared/email-templates/CreditExpiryWarning.tsx';
-import { RecurringPaused } from '../_shared/email-templates/RecurringPaused.tsx';
-import { buildEmailCard } from '../_shared/email-compliance.ts';
-
-const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
+import React from "https://esm.sh/react@18.3.1";
+import { renderAsync } from "https://esm.sh/@react-email/components@0.0.22";
+import { MembershipWelcome } from "../_shared/email-templates/MembershipWelcome.tsx";
+import { MembershipRenewal } from "../_shared/email-templates/MembershipRenewal.tsx";
+import { CreditAllocated } from "../_shared/email-templates/CreditAllocated.tsx";
+import { SubscriptionCancelled } from "../_shared/email-templates/SubscriptionCancelled.tsx";
+import { CreditExpiryWarning } from "../_shared/email-templates/CreditExpiryWarning.tsx";
+import { RecurringPaused } from "../_shared/email-templates/RecurringPaused.tsx";
+import { buildEmailCard } from "../_shared/email-compliance.ts";
+import { sendThroughCompliance } from "../_shared/email-compliance-send.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -138,11 +136,19 @@ ${charged}
         throw new Error(`Unknown email type: ${type}`);
     }
 
-    const emailResponse = await resend.emails.send({
-      from: "Novara Cleaning <billing@novaracleaning.com>",
-      to: [email],
+    const templateKey = type === "welcome" ? "membership_welcome"
+      : type === "renewal" ? "membership_renewal"
+      : type === "credit_allocated" ? "credit_allocated"
+      : type === "subscription_cancelled" ? "membership_cancelled"
+      : type === "credit_expiry_warning" ? "credit_expiry"
+      : type === "recurring_paused" ? "recurring_paused"
+      : "membership_welcome";
+    const emailResponse = await sendThroughCompliance(Deno.env.get("RESEND_API_KEY") || "", {
+      to: email,
       subject,
       html,
+      templateKey,
+      declaredType: "customer_service",
     });
 
     logStep("Email sent successfully", { messageId: emailResponse });

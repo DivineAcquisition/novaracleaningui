@@ -24,7 +24,7 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-import { Resend } from "https://esm.sh/resend@4.0.0";
+import { sendThroughCompliance } from "../_shared/email-compliance-send.ts";
 import { sendSms } from "../_shared/sms.ts";
 
 const corsHeaders = {
@@ -129,17 +129,18 @@ async function sendReminderEmail(opts: {
     logStep("RESEND_API_KEY missing — skipping email");
     return;
   }
-  const resend = new Resend(resendKey);
   const html = renderDetailsReminderEmail({
     firstName: opts.firstName,
     url: COMPLETE_DETAILS_URL(opts.bookingId),
     serviceDate: opts.serviceDate,
   });
-  await resend.emails.send({
-    from: "Novara Cleaning <support@novaracleaning.com>",
-    to: [opts.to],
+  await sendThroughCompliance(resendKey, {
+    to: opts.to,
     subject: "Finish your Novara booking — home details needed",
     html,
+    templateKey: "details_reminder",
+    declaredType: "customer_service",
+    bookingId: opts.bookingId,
   });
 }
 

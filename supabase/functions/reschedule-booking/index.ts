@@ -4,6 +4,7 @@ import { Resend } from "https://esm.sh/resend@4.0.0";
 import React from 'https://esm.sh/react@18.3.1';
 import { renderAsync } from 'https://esm.sh/@react-email/components@0.0.22';
 import { RescheduleConfirmation } from '../_shared/email-templates/RescheduleConfirmation.tsx';
+import { sendThroughCompliance } from '../_shared/email-compliance-send.ts';
 import { syncBookingLifecycle } from '../_shared/ghl-client.ts';
 import { buildGhlCustomFields } from '../_shared/ghl-field-map.ts';
 import { sendSms, formatServiceDate, formatTimeSlot } from '../_shared/sms.ts';
@@ -371,12 +372,13 @@ serve(async (req) => {
 
       const html = await renderAsync(React.createElement(RescheduleConfirmation, emailData));
 
-      await resend.emails.send({
-        from: 'Novara Cleaning <support@novaracleaning.com>',
-        replyTo: 'support@novaracleaning.com',
-        to: [booking.email],
+      await sendThroughCompliance(Deno.env.get("RESEND_API_KEY") || "", {
+        to: booking.email,
         subject: 'Booking Rescheduled - Novara Cleaning',
         html,
+        templateKey: 'reschedule_confirmation',
+        declaredType: 'customer_service',
+        bookingId,
       });
 
       console.log('Reschedule confirmation email sent');

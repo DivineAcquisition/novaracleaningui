@@ -89,6 +89,7 @@ const logStep = (step: string, details?: unknown) => {
 // version is active — base + zone pricing must keep working even if
 // dynamic pricing is unconfigured or disabled.
 import { calculatePriceCents } from "../_shared/pricing.ts";
+import { sendThroughCompliance } from "../_shared/email-compliance-send.ts";
 import {
   checkOverride,
   computeServerQuote,
@@ -297,30 +298,23 @@ async function sendPendingUntilDepositEmail(
       ${remainingNote}
       <p style="margin:20px 0 0;font-size:12px;color:#94a3b8">Booking ${opts.bookingRef} · Novara Cleaning</p>
     </div>`;
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${resendKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from: "Novara Cleaning <billing@novaracleaning.com>",
-      to: [opts.to],
-      subject,
-      html,
-    }),
+  const sent = await sendThroughCompliance(resendKey, {
+    to: opts.to,
+    subject,
+    html,
+    templateKey: "pending_deposit",
+    declaredType: "customer_service",
   });
-  if (!res.ok) {
-    return { ok: false, error: `resend ${res.status}: ${(await res.text()).slice(0, 200)}` };
+  if (sent.error) {
+    return { ok: false, error: sent.error.message };
   }
-  const json = await res.json().catch(() => ({}));
   logStep("pending-until-deposit email sent", {
     to: opts.to,
     bookingRef: opts.bookingRef,
     invoiceMode: opts.invoiceMode,
-    id: (json as { id?: string }).id,
+    id: sent.data?.id,
   });
-  return { ok: true, id: (json as { id?: string }).id };
+  return { ok: true, id: sent.data?.id };
 }
 
 // ─── Stripe + invoice helpers ───────────────────────────────────────

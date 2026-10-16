@@ -4,6 +4,7 @@ import Stripe from "https://esm.sh/stripe@18.5.0";
 import { sendSms, formatServiceDate, formatTimeSlot } from "../_shared/sms.ts";
 import { SUPPORT_PHONE_DISPLAY } from "../_shared/booking-policy.ts";
 import { resolveSecret } from "../_shared/app-secrets.ts";
+import { sendThroughCompliance } from "../_shared/email-compliance-send.ts";
 
 // pending-deposit-reminders
 //
@@ -125,20 +126,14 @@ async function sendDepositEmail(
 ): Promise<boolean> {
   const resendKey = await resolveSecret(supabase, "RESEND_API_KEY");
   if (!resendKey || !to) return false;
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${resendKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from: "Novara Cleaning <billing@novaracleaning.com>",
-      to: [to],
-      subject,
-      html,
-    }),
-  });
-  return res.ok;
+  const sent = await sendThroughCompliance(resendKey, {
+    to,
+    subject,
+    html,
+    templateKey: "pending_deposit",
+    declaredType: "customer_service",
+  }, supabase);
+  return sent.error == null;
 }
 
 serve(async (req) => {

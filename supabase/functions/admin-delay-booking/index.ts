@@ -26,7 +26,7 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-import { Resend } from "https://esm.sh/resend@4.0.0";
+import { sendThroughCompliance } from "../_shared/email-compliance-send.ts";
 import { sendSms, formatServiceDate } from "../_shared/sms.ts";
 import {
   bufferConflictBody,
@@ -389,7 +389,6 @@ serve(async (req) => {
 
     if (booking.email) {
       try {
-        const resend = new Resend(Deno.env.get("RESEND_API_KEY") ?? "");
         const compBlock =
           compensation === "discount"
             ? `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:14px;margin:0 0 16px">
@@ -419,13 +418,15 @@ serve(async (req) => {
             <p style="margin:0 0 16px;color:#475569;font-size:14px">Thanks for your patience — reply to this email or text us if the new time doesn't work.</p>
             <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">Novara Cleaning</p>
           </div>`;
-        const { error: emailErr } = await resend.emails.send({
-          from: "Novara Cleaning <support@novaracleaning.com>",
-          to: [booking.email],
+        const sent = await sendThroughCompliance(Deno.env.get("RESEND_API_KEY") || "", {
+          to: booking.email,
           subject: `Your Novara appointment moved to ${newSlot}`,
           html,
+          templateKey: "booking_modification",
+          declaredType: "customer_service",
+          bookingId: booking.id,
         });
-        emailSent = !emailErr;
+        emailSent = !sent.error;
       } catch (err) {
         console.warn("[admin-delay-booking] email send failed:", (err as Error).message);
       }
