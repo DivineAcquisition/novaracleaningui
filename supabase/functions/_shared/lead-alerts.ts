@@ -41,7 +41,6 @@ export interface LeadAlertResult {
 const FACEBOOK_SOURCE_RE =
   /(fb_lead|facebook|^fb$|fb[-_ ]?ads|meta|instagram|ig_lead)/i;
 
-const FROM_ADDRESS = "NovaraCleaning <ops@novaracleaning.com>";
 const ADMIN_CSR_URL = "https://admin.novaracleaning.com/admin/csr";
 const FACEBOOK_BLUE = 1752220;
 
@@ -189,38 +188,25 @@ export function renderFacebookLeadEmail(lead: LeadAlertInput): { subject: string
   const zip = lead.zipCode || "ZIP n/a";
   const subject = `New Facebook lead: ${subjectName} — ${zip}`;
   const row = (label: string, value: string) =>
-    `<tr><td style="padding:8px;border-bottom:1px solid #E5E7EB;font-weight:600;width:160px;color:#334155">${escapeHtml(label)}</td><td style="padding:8px;border-bottom:1px solid #E5E7EB;color:#0F172A">${value}</td></tr>`;
+    `<tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;font-weight:600;width:160px;">${escapeHtml(label)}</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${value}</td></tr>`;
 
   const phone = (lead.phone || "").trim();
   const email = (lead.email || "").trim();
-  const html = `<!doctype html>
-<html>
-  <body style="margin:0;padding:24px;background:#FAFAFC;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0F172A;">
-    <div style="max-width:600px;margin:0 auto;background:#fff;border:1px solid #E2E8F0;border-radius:16px;overflow:hidden;">
-      <div style="background:linear-gradient(135deg,#1877F2 0%,#5C0FFE 100%);padding:20px 24px;">
-        <p style="margin:0;color:#fff;font-size:16px;font-weight:700;">New Facebook lead</p>
-        <p style="margin:6px 0 0;color:#E0E7FF;font-size:13px;">Call within 2 minutes — speed-to-lead.</p>
-      </div>
-      <div style="padding:8px 16px 20px;">
-        <table style="width:100%;border-collapse:collapse;margin-top:8px;">
-          ${row("Name", escapeHtml(name))}
-          ${row("Phone", phone ? `<a href="tel:${escapeHtml(phone)}">${escapeHtml(phone)}</a>` : "—")}
-          ${row("Email", email ? `<a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a>` : "—")}
-          ${row("ZIP", escapeHtml(lead.zipCode || "—"))}
-          ${row("City / State", escapeHtml([lead.city, lead.state].filter(Boolean).join(", ") || "—"))}
-          ${row("Service", escapeHtml(lead.serviceType || "—"))}
-          ${row("Score", escapeHtml(lead.leadScore || "hot"))}
-          ${row("Assigned VA", escapeHtml(lead.assignedVaName || "Unassigned (no VA on shift)"))}
-          ${row("Source", escapeHtml(lead.source || "fb_lead_ads"))}
-          ${row("Captured", escapeHtml(new Date().toLocaleString("en-US", { timeZone: "America/New_York" })) + " ET")}
-        </table>
-        <p style="margin:20px 8px 0;">
-          <a href="${ADMIN_CSR_URL}" style="display:inline-block;background:#5C0FFE;color:#fff;text-decoration:none;font-weight:600;font-size:14px;padding:11px 20px;border-radius:10px;">Open Internal Booking</a>
-        </p>
-      </div>
-    </div>
-  </body>
-</html>`;
+  const html = `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">New Facebook lead</h1>
+<p>Call within 2 minutes.</p>
+<table style="width:100%;border-collapse:collapse;margin-top:8px;">
+  ${row("Name", escapeHtml(name))}
+  ${row("Phone", phone ? `<a href="tel:${escapeHtml(phone)}">${escapeHtml(phone)}</a>` : "—")}
+  ${row("Email", email ? `<a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a>` : "—")}
+  ${row("ZIP", escapeHtml(lead.zipCode || "—"))}
+  ${row("City / State", escapeHtml([lead.city, lead.state].filter(Boolean).join(", ") || "—"))}
+  ${row("Service", escapeHtml(lead.serviceType || "—"))}
+  ${row("Score", escapeHtml(lead.leadScore || "hot"))}
+  ${row("Assigned VA", escapeHtml(lead.assignedVaName || "Unassigned (no VA on shift)"))}
+  ${row("Source", escapeHtml(lead.source || "fb_lead_ads"))}
+  ${row("Captured", escapeHtml(new Date().toLocaleString("en-US", { timeZone: "America/New_York" })) + " ET")}
+</table>
+<p style="margin:22px 0 0;"><a class="novara-btn" href="${ADMIN_CSR_URL}" style="display:inline-block;padding:14px 28px;background:#e7e7ea;color:#18181b;text-decoration:none;border-radius:12px;font-weight:600;">Open Internal Booking</a></p>`;
   return { subject, html };
 }
 
@@ -277,16 +263,17 @@ async function sendStaffEmail(
 ): Promise<boolean> {
   if (!apiKey || !to.length) return false;
   try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ from: FROM_ADDRESS, to, subject, html }),
+    const { sendThroughCompliance } = await import("./email-compliance-send.ts");
+    const sent = await sendThroughCompliance(apiKey, {
+      to,
+      subject,
+      html,
+      templateKey: "admin_internal_notice",
+      declaredType: "internal_admin",
+      staffRecipient: true,
     });
-    if (!res.ok) {
-      console.warn("[lead-alerts] Resend failed", res.status, await res.text());
+    if (sent.error) {
+      console.warn("[lead-alerts] Resend failed", sent.error.message);
       return false;
     }
     return true;

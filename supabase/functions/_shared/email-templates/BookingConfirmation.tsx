@@ -294,7 +294,8 @@ const paragraph = {
 };
 
 const detailBox = {
-  backgroundColor: BRAND.colors.gray[50],
+  backgroundColor: '#1c1c20',
+  border: '1px solid #3a3a40',
   padding: BRAND.spacing.lg,
   borderRadius: BRAND.borderRadius.lg,
   margin: `${BRAND.spacing.lg} 0`,
@@ -344,7 +345,8 @@ const savingsText = {
 };
 
 const savingsBox = {
-  backgroundColor: '#f0fdf4', // light green background
+  backgroundColor: '#1c1c20',
+  border: '1px solid #3a3a40',
   padding: BRAND.spacing.lg,
   borderRadius: BRAND.borderRadius.lg,
   margin: `${BRAND.spacing.lg} 0`,
@@ -376,7 +378,8 @@ const buttonContainer = {
 };
 
 const checklistBox = {
-  backgroundColor: '#ecfdf5', // emerald-50
+  backgroundColor: '#1c1c20',
+  border: '1px solid #3a3a40',
   padding: BRAND.spacing.lg,
   borderRadius: BRAND.borderRadius.lg,
   margin: `${BRAND.spacing.lg} 0`,

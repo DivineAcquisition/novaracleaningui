@@ -22,7 +22,7 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.80.0";
-import { Resend } from "https://esm.sh/resend@4.0.0";
+import { sendThroughCompliance } from "../_shared/email-compliance-send.ts";
 import { provisionGhlUserFromTemplate } from "../_shared/ghl-users.ts";
 import { deleteUnusedStaffCustomerAccount } from "../_shared/staff-customer.ts";
 
@@ -326,31 +326,22 @@ serve(async (req) => {
       try {
         const inviteResendKey = Deno.env.get("RESEND_API_KEY") || await secret(admin, "RESEND_API_KEY");
         if (inviteResendKey) {
-          const resend = new Resend(inviteResendKey);
-          await resend.emails.send({
-            from: "Novara Team <ops@novaracleaning.com>",
-            replyTo: "ops@novaracleaning.com",
-            to: [email],
-            subject: `Your offer from Novara Cleaning — ${roleLabel[vaRole] || "VA"} 🎉`,
+          const sent = await sendThroughCompliance(inviteResendKey, {
+            to: email,
+            subject: `Your offer from Novara Cleaning — ${roleLabel[vaRole] || "VA"}`,
+            templateKey: "va_onboarding",
+            declaredType: "internal_admin",
+            staffRecipient: true,
             html: `
-              <div style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;color:#1e1b2e">
-                <div style="background:linear-gradient(135deg,#6d28d9,#8b5cf6);border-radius:14px;padding:24px;color:#fff">
-                  <p style="margin:0;font-size:11px;letter-spacing:2px;text-transform:uppercase;opacity:.85">Offer letter</p>
-                  <h2 style="margin:6px 0 0">Welcome aboard, ${firstName}!</h2>
-                </div>
-                <p style="margin:18px 0 6px">We're excited to offer you the <strong>${roleLabel[vaRole] || vaRole}</strong> position with Novara Cleaning as an independent contractor.</p>
-                ${offerNote ? `<p style="font-size:14px;color:#3f3d56;border-left:3px solid #8b5cf6;padding-left:12px">${offerNote}</p>` : ""}
-                <p style="font-size:14px;color:#3f3d56">To accept, review and sign the VA Independent Contractor Agreement, then complete your onboarding details:</p>
-                <p style="text-align:center;margin:22px 0">
-                  <a href="${offerUrl}" style="background:#6d28d9;color:#fff;padding:13px 28px;border-radius:10px;text-decoration:none;font-weight:700;font-size:15px">Accept your offer &amp; sign</a>
-                </p>
-                <p style="font-size:12px;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 12px">
-                  ⏳ For security this link expires <strong>30 minutes</strong> after being sent. If it expires, reply to this email and we'll send a fresh one.
-                </p>
-                <p style="font-size:12px;color:#8a87a5">No access to our systems is granted until your agreement is signed and an admin approves your onboarding.</p>
-                <p style="font-size:13px">— Novara Cleaning</p>
-              </div>`,
-          });
+              <h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">Welcome aboard, ${firstName}</h1>
+              <p>We're excited to offer you the <strong>${roleLabel[vaRole] || vaRole}</strong> position with Novara Cleaning as an independent contractor.</p>
+              ${offerNote ? `<p style="padding-left:12px;border-left:4px solid #7c6af7;">${offerNote}</p>` : ""}
+              <p>To accept, review and sign the VA Independent Contractor Agreement, then complete your onboarding details.</p>
+              <p style="margin:22px 0 0;"><a class="novara-btn" href="${offerUrl}" style="display:inline-block;padding:14px 28px;background:#e7e7ea;color:#18181b;text-decoration:none;border-radius:12px;font-weight:600;">Accept your offer and sign</a></p>
+              <p>For security this link expires 30 minutes after being sent. If it expires, reply to this email and we'll send a fresh one.</p>
+              <p>No access to our systems is granted until your agreement is signed and an admin approves your onboarding.</p>`,
+          }, admin);
+          if (sent.error) throw new Error(sent.error.message);
           offerEmailSent = true;
         }
       } catch (e) {
@@ -528,39 +519,30 @@ serve(async (req) => {
       try {
         if (resendKey) {
           const discordInvite = await secret(admin, "DISCORD_INVITE_URL");
-          const resend = new Resend(resendKey);
-          await resend.emails.send({
-            from: "Novara Team <ops@novaracleaning.com>",
-            replyTo: "ops@novaracleaning.com",
-            to: [row.email],
-            subject: "You're approved — your Novara access is ready 🎉",
+          const sent = await sendThroughCompliance(resendKey, {
+            to: row.email,
+            subject: "You're approved — your Novara access is ready",
+            templateKey: "va_onboarding",
+            declaredType: "internal_admin",
+            staffRecipient: true,
             html: `
-              <div style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;color:#1e1b2e">
-                <h2 style="color:#6d28d9">Welcome to the Novara team, ${row.first_name || ""}!</h2>
-                <p>Your onboarding was approved and your access has been provisioned for the <strong>${row.va_role}</strong> role.</p>
-                <div style="border:1px solid #e9e6f7;border-radius:10px;padding:14px 16px;margin:14px 0">
-                  <p style="margin:0 0 6px"><strong>1. CRM (GoHighLevel)</strong></p>
-                  <p style="margin:0;font-size:14px">Log in at <a href="https://app.gohighlevel.com">app.gohighlevel.com</a><br/>
-                  Email: <strong>${ghlEmail}</strong><br/>
-                  Temporary password: <strong>${ghl.created ? ghlPassword : "use your existing password / reset via the login page"}</strong></p>
-                  <p style="margin:6px 0 0;font-size:12px;color:#64748b">Change your password after first login.</p>
-                </div>
-                <div style="border:1px solid #e9e6f7;border-radius:10px;padding:14px 16px;margin:14px 0">
-                  <p style="margin:0 0 6px"><strong>2. Admin Workspace</strong></p>
-                  <p style="margin:0;font-size:14px">${workspaceInviteSent
-                    ? "A separate invite email with your workspace access is on its way."
-                    : `Access <a href="https://admin.novaracleaning.com">admin.novaracleaning.com</a> — if you don't receive an invite, ask your admin to resend it.`}</p>
-                </div>
-                ${discordInvite ? `
-                <div style="border:1px solid #dfe2fb;border-radius:10px;padding:14px 16px;margin:14px 0;background:#f5f6ff">
-                  <p style="margin:0 0 6px"><strong>3. Team Discord</strong></p>
-                  <p style="margin:0;font-size:14px">Announcements, dispatch, and day-to-day comms happen here:<br/>
-                  <a href="${discordInvite}" style="display:inline-block;margin-top:8px;background:#5865F2;color:#fff;padding:9px 18px;border-radius:8px;text-decoration:none;font-weight:600">Join the Novara Discord</a></p>
-                </div>` : ""}
-                <p style="font-size:13px;color:#3f3d56">Your access matches your role — if something you need is missing, ask your admin.</p>
-                <p style="font-size:13px">— Novara Cleaning</p>
-              </div>`,
-          });
+              <h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">Welcome to the Novara team, ${row.first_name || ""}</h1>
+              <p>Your onboarding was approved and your access has been provisioned for the <strong>${row.va_role}</strong> role.</p>
+              <p style="margin:16px 0 6px;font-weight:700;color:#ffffff;">1. CRM (GoHighLevel)</p>
+              <p>Log in at <a href="https://app.gohighlevel.com">app.gohighlevel.com</a><br/>
+              Email: <strong>${ghlEmail}</strong><br/>
+              Temporary password: <strong>${ghl.created ? ghlPassword : "use your existing password / reset via the login page"}</strong></p>
+              <p>Change your password after first login.</p>
+              <p style="margin:16px 0 6px;font-weight:700;color:#ffffff;">2. Admin Workspace</p>
+              <p>${workspaceInviteSent
+                ? "A separate invite email with your workspace access is on its way."
+                : `Access <a href="https://admin.novaracleaning.com">admin.novaracleaning.com</a> — if you don't receive an invite, ask your admin to resend it.`}</p>
+              ${discordInvite ? `<p style="margin:16px 0 6px;font-weight:700;color:#ffffff;">3. Team Discord</p>
+              <p>Announcements, dispatch, and day-to-day comms happen here.</p>
+              <p style="margin:12px 0 0;"><a class="novara-btn" href="${discordInvite}" style="display:inline-block;padding:14px 28px;background:#e7e7ea;color:#18181b;text-decoration:none;border-radius:12px;font-weight:600;">Join the Novara Discord</a></p>` : ""}
+              <p>Your access matches your role — if something you need is missing, ask your admin.</p>`,
+          }, admin);
+          if (sent.error) throw new Error(sent.error.message);
           vaEmailSent = true;
         }
       } catch (e) {

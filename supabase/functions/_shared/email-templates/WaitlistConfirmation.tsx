@@ -1,15 +1,7 @@
 import * as React from 'https://esm.sh/react@18.3.1';
-import {
-  Html,
-  Head,
-  Body,
-  Container,
-  Section,
-  Text,
-  Link,
-  Preview,
-  Img,
-} from 'https://esm.sh/@react-email/components@0.0.22';
+import { Section, Text } from 'https://esm.sh/@react-email/components@0.0.22';
+import { EmailLayout } from './components/EmailLayout.tsx';
+import { Button } from './components/Button.tsx';
 import { BRAND } from './brand.ts';
 
 interface WaitlistConfirmationProps {
@@ -26,68 +18,35 @@ export const WaitlistConfirmation = ({
   const locationText = city ? `${city} (${zipCode})` : zipCode;
 
   return (
-    <Html>
-      <Head>
-        <div dangerouslySetInnerHTML={{ __html: "<!--data-novara-card-->" }} />
-      </Head>
-      <Preview>You're on the Novara Cleaning waitlist! We're expanding soon.</Preview>
-      <Body style={main}>
-        <Container style={container}>
-          <Section style={header}>
-            {BRAND.logo.url && (
-              <Img src={BRAND.logo.url} width={BRAND.logo.width} height={BRAND.logo.height} alt={BRAND.name} style={logo} />
-            )}
-          </Section>
-
-          <Section style={content}>
-            <Text style={heading}>You're on the List! 🎉</Text>
-            <Text style={paragraph}>Hi {firstName},</Text>
-            <Text style={paragraph}>
-              Thanks for your interest in Novara Cleaning! While we don't currently 
-              service <strong>{locationText}</strong>, we're actively expanding and 
-              your area is on our radar.
-            </Text>
-            <Text style={paragraph}>We've added you to our priority waitlist, which means:</Text>
-            <Section style={benefitsList}>
-              <Text style={benefitItem}>✓ You'll be the first to know when we launch in your area</Text>
-              <Text style={benefitItem}>✓ Exclusive early access pricing for waitlist members</Text>
-              <Text style={benefitItem}>✓ Special founding member perks</Text>
-            </Section>
-            <Text style={paragraph}>
-              We're working hard to bring our premium cleaning services to more 
-              communities in the coming months. Keep an eye on your inbox!
-            </Text>
-            <Section style={ctaSection}>
-              <Link href={`mailto:${BRAND.contact.email}`} style={button}>Learn More About Us</Link>
-            </Section>
-          </Section>
-
-          <Section style={footer}>
-            <Text style={footerText}>
-              Questions? Reply to this email or reach us at{' '}
-              <Link href={`mailto:${BRAND.contact.email}`} style={link}>{BRAND.contact.email}</Link>
-            </Text>
-            <Text style={footerText}>© {new Date().getFullYear()} {BRAND.name}. All rights reserved.</Text>
-          </Section>
-        </Container>
-      </Body>
-    </Html>
+    <EmailLayout
+      title="You're on the list"
+      previewText="You're on the Novara Cleaning waitlist. We're expanding soon."
+    >
+      <Text style={paragraph}>Hi {firstName},</Text>
+      <Text style={paragraph}>
+        Thanks for your interest in Novara Cleaning. While we don't currently
+        service <strong>{locationText}</strong>, we're actively expanding and
+        your area is on our radar.
+      </Text>
+      <Text style={paragraph}>We've added you to our priority waitlist, which means:</Text>
+      <Section style={listBox}>
+        <Text style={listItem}>You'll be the first to know when we launch in your area</Text>
+        <Text style={listItem}>Early access when booking opens for waitlist members</Text>
+        <Text style={listItem}>Founding member details when your area opens</Text>
+      </Section>
+      <Text style={paragraph}>
+        We're working to bring cleaning to more communities. We'll email you when your area opens.
+      </Text>
+      <Section style={cta}>
+        <Button href={`mailto:${BRAND.contact.email}`}>Email us</Button>
+      </Section>
+    </EmailLayout>
   );
 };
 
-const main = { backgroundColor: '#141416', fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' };
-const container = { backgroundColor: '#2a2a2e', margin: '0 auto', padding: '8px 0 24px', maxWidth: '560px', borderRadius: '16px', border: '1px solid #3a3a40' };
-const header = { padding: '20px 28px 0', textAlign: 'left' as const, backgroundColor: '#2a2a2e', borderTop: '3px solid #7c6af7' };
-const logo = { margin: '0 0 22px', borderRadius: '12px' };
-const content = { padding: '8px 28px 32px' };
-const heading = { fontSize: '28px', fontWeight: '700', color: '#ffffff', textAlign: 'left' as const, margin: '0 0 24px' };
 const paragraph = { fontSize: '16px', lineHeight: '26px', color: '#d4d4d8', margin: '0 0 16px' };
-const benefitsList = { backgroundColor: BRAND.colors.gray[50], borderRadius: BRAND.borderRadius.md, padding: '20px 24px', margin: '24px 0' };
-const benefitItem = { fontSize: '15px', lineHeight: '24px', color: BRAND.colors.gray[900], margin: '8px 0' };
-const ctaSection = { textAlign: 'center' as const, margin: '32px 0' };
-const button = { display: 'inline-block', backgroundColor: '#e7e7ea', color: '#18181b', padding: '14px 28px', borderRadius: '12px', textDecoration: 'none', fontWeight: '600', fontSize: '16px' };
-const footer = { padding: '24px 48px', borderTop: `1px solid ${BRAND.colors.gray[200]}` };
-const footerText = { fontSize: '13px', lineHeight: '20px', color: BRAND.colors.gray[600], textAlign: 'center' as const, margin: '4px 0' };
-const link = { color: BRAND.colors.primary, textDecoration: 'underline' };
+const listBox = { backgroundColor: '#1c1c20', border: '1px solid #3a3a40', borderRadius: '12px', padding: '8px 18px', margin: '8px 0 16px' };
+const listItem = { fontSize: '15px', lineHeight: '24px', color: '#d4d4d8', margin: '8px 0' };
+const cta = { margin: '22px 0 0' };
 
 export default WaitlistConfirmation;

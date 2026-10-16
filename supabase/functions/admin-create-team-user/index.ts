@@ -16,7 +16,7 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.80.0";
-import { Resend } from "https://esm.sh/resend@4.0.0";
+import { sendThroughCompliance } from "../_shared/email-compliance-send.ts";
 import { resolveSecret } from "../_shared/app-secrets.ts";
 import { deleteUnusedStaffCustomerAccount } from "../_shared/staff-customer.ts";
 
@@ -29,26 +29,11 @@ const corsHeaders = {
 const PORTAL_ROLES = new Set(["admin", "va"]);
 const ADMIN_PORTAL_URL = "https://admin.novaracleaning.com";
 const ADMIN_CALLBACK = `${ADMIN_PORTAL_URL}/admin/auth/callback`;
-const FROM_ADDRESS = "NovaraCleaning <ops@novaracleaning.com>";
 const NOVARA_EMAIL_RE = /^[^@\s]+@novaracleaning\.com$/i;
 
 function isNovaraEmail(email: string): boolean {
   return NOVARA_EMAIL_RE.test(String(email || "").trim());
 }
-
-const BRAND = {
-  name: "Novara Cleaning",
-  primary: "#16A34A",
-  primaryDark: "#0E7C3A",
-  gradient: "linear-gradient(135deg, #16A34A 0%, #0E7C3A 100%)",
-  gray50: "#F9FAFB",
-  gray200: "#E5E7EB",
-  gray600: "#6B7280",
-  gray700: "#374151",
-  gray900: "#111827",
-  logo: "https://app.novaracleaning.com/novara-logo.png",
-  supportEmail: "support@novaracleaning.com",
-};
 
 function json(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -83,7 +68,6 @@ function renderInviteHtml(opts: {
   const greeting = opts.firstName ? `Hi ${opts.firstName},` : "Hi there,";
   const roleName = roleLabel(opts.role);
   const subject = `You're invited to the Novara admin workspace`;
-  const preheader = `Accept your invitation to join the Novara ${roleName} console.`;
   const bodyHtml = opts.isExistingAccount
     ? `<p>${greeting}</p><p>You've been granted <strong>${roleName}</strong> access to the Novara admin workspace. Click below to sign in and start working in the console.</p>`
     : `<p>${greeting}</p><p>You've been invited to join the Novara team as a <strong>${roleName}</strong>. Click below to accept your invitation, set your password, and open the admin workspace.</p>`;
@@ -92,32 +76,11 @@ function renderInviteHtml(opts: {
     ? "This sign-in link expires in 1 hour and can only be used once."
     : "This invitation expires in 24 hours.";
 
-  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${subject}</title><meta name="x-preheader" content="${preheader}"></head><body style="margin:0;padding:0;background:${BRAND.gray50};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:${BRAND.gray900};">
-<div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">${preheader}</div>
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:${BRAND.gray50};padding:20px 0;">
-<tr><td align="center">
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;width:100%;">
-<tr><td style="background:#ffffff;border:1px solid ${BRAND.gray200};border-bottom:none;border-radius:8px 8px 0 0;padding:20px;text-align:center;">
-<img src="${BRAND.logo}" alt="${BRAND.name}" width="56" height="56" style="display:block;width:56px;height:56px;border-radius:12px;margin:0 0 22px;" />
-<div style="font-size:14px;font-weight:700;letter-spacing:.04em;color:${BRAND.primary};text-transform:uppercase;">Admin workspace</div>
-</td></tr>
-<tr><td style="background:${BRAND.gradient};color:#ffffff;padding:26px 30px;text-align:center;border-left:1px solid ${BRAND.gray200};border-right:1px solid ${BRAND.gray200};">
-<h1 style="margin:0;font-size:26px;font-weight:bold;color:#ffffff;">Workspace invitation</h1>
-</td></tr>
-<tr><td style="background:#ffffff;padding:30px;border-left:1px solid ${BRAND.gray200};border-right:1px solid ${BRAND.gray200};font-size:16px;line-height:1.6;color:${BRAND.gray700};">
+  const html = `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">Workspace invitation</h1>
 ${bodyHtml}
-<p style="font-size:14px;color:${BRAND.gray600};">Console URL: <a href="${ADMIN_PORTAL_URL}" style="color:${BRAND.primary};">${ADMIN_PORTAL_URL}</a></p>
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:24px auto;"><tr><td align="center" style="background:${BRAND.gradient};border-radius:8px;"><a href="${opts.link}" style="display:inline-block;padding:14px 32px;font-size:16px;font-weight:600;color:#ffffff;text-decoration:none;">${ctaLabel}</a></td></tr></table>
-<p style="font-size:13px;color:${BRAND.gray600};margin:16px 0 8px;text-align:center;">${expiryNote}</p>
-<p style="font-size:12px;color:${BRAND.gray600};word-break:break-all;margin:8px 0 0;text-align:center;"><a href="${opts.link}" style="color:${BRAND.primary};">${opts.link}</a></p>
-</td></tr>
-<tr><td style="background:#ffffff;border:1px solid ${BRAND.gray200};border-top:none;border-radius:0 0 8px 8px;padding:20px;text-align:center;font-size:13px;color:${BRAND.gray600};">
-<div style="margin:8px 0;">Questions? Email <a href="mailto:${BRAND.supportEmail}" style="color:${BRAND.primary};text-decoration:none;">${BRAND.supportEmail}</a></div>
-<div style="margin:8px 0;">&copy; ${new Date().getFullYear()} ${BRAND.name}</div>
-</td></tr>
-</table>
-</td></tr></table>
-</body></html>`;
+<p>Console: <a href="${ADMIN_PORTAL_URL}">${ADMIN_PORTAL_URL}</a></p>
+<p style="margin:22px 0 0;"><a class="novara-btn" href="${opts.link}" style="display:inline-block;padding:14px 28px;background:#e7e7ea;color:#18181b;text-decoration:none;border-radius:12px;font-weight:600;">${ctaLabel}</a></p>
+<p style="margin:16px 0 0;font-size:14px;">${expiryNote}</p>`;
 
   const text = `${greeting}\n\nYou've been invited to the Novara admin workspace as ${roleName}.\n\nAccept your invitation:\n${opts.link}\n\n${expiryNote}\n\nConsole: ${ADMIN_PORTAL_URL}`;
   return { subject, html, text };
@@ -171,15 +134,15 @@ async function sendWorkspaceInviteEmail(
   });
 
   try {
-    const resend = new Resend(resendKey);
-    const result = await resend.emails.send({
-      from: FROM_ADDRESS,
-      to: [opts.email],
+    const result = await sendThroughCompliance(resendKey, {
+      to: opts.email,
       subject,
       html,
       text,
-      replyTo: "ops@novaracleaning.com",
-    });
+      templateKey: "va_onboarding",
+      declaredType: "internal_admin",
+      staffRecipient: true,
+    }, admin);
     if ((result as any)?.error) {
       return { sent: false, error: String((result as any).error?.message || (result as any).error) };
     }

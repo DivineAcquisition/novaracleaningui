@@ -391,33 +391,30 @@ serve(async (req) => {
       try {
         const compBlock =
           compensation === "discount"
-            ? `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:14px;margin:0 0 16px">
-                 <div style="font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#166534">On us — service discount</div>
-                 <div style="font-size:22px;font-weight:700;color:#166534;margin-top:2px">${dollars(discountApplied)} off</div>
-                 <div style="font-size:12px;color:#166534;margin-top:2px">Applied to this cleaning.</div>
+            ? `<div style="margin:0 0 16px;padding-left:12px;border-left:4px solid #7c6af7">
+                 <p style="margin:0;font-size:12px;letter-spacing:.04em;text-transform:uppercase;">On us — service discount</p>
+                 <p style="margin:4px 0 0;font-size:22px;font-weight:700;color:#ffffff;">${dollars(discountApplied)} off</p>
+                 <p style="margin:4px 0 0;font-size:13px;">Applied to this cleaning.</p>
                </div>`
             : compensation === "credit"
-              ? `<div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:12px;padding:14px;margin:0 0 16px">
-                   <div style="font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#6d28d9">On us — account credit</div>
-                   <div style="font-size:22px;font-weight:700;color:#5b21b6;margin-top:2px">${dollars(compCents)} credit</div>
-                   <div style="font-size:12px;color:#6d28d9;margin-top:2px">Auto-applies at checkout on your next booking.</div>
+              ? `<div style="margin:0 0 16px;padding-left:12px;border-left:4px solid #7c6af7">
+                   <p style="margin:0;font-size:12px;letter-spacing:.04em;text-transform:uppercase;">On us — account credit</p>
+                   <p style="margin:4px 0 0;font-size:22px;font-weight:700;color:#ffffff;">${dollars(compCents)} credit</p>
+                   <p style="margin:4px 0 0;font-size:13px;">Auto-applies at checkout on your next booking.</p>
                  </div>`
               : "";
 
         const html = `
-          <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#0f172a">
-            <h2 style="margin:0 0 8px;font-size:20px">Quick update on today's cleaning</h2>
-            <p style="margin:0 0 16px;color:#475569">Hi ${first}, we need to push your Novara appointment back by ${hours} hour${hours === 1 ? "" : "s"}.</p>
-            <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:14px;margin:0 0 16px">
-              <div style="font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#9a3412">New arrival window</div>
-              <div style="font-size:20px;font-weight:700;color:#7c2d12;margin-top:2px">${dateLabel || "Today"} · ${newSlot}</div>
-              <div style="font-size:12px;color:#9a3412;margin-top:4px">Previously ${preDelay}</div>
+            <h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">Quick update on today's cleaning</h1>
+            <p style="margin:0 0 16px;">Hi ${first}, we need to push your Novara appointment back by ${hours} hour${hours === 1 ? "" : "s"}.</p>
+            <div style="margin:0 0 16px;padding-left:12px;border-left:4px solid #f59e0b">
+              <p style="margin:0;font-size:12px;letter-spacing:.04em;text-transform:uppercase;">New arrival window</p>
+              <p style="margin:4px 0 0;font-size:20px;font-weight:700;color:#ffffff;">${dateLabel || "Today"} · ${newSlot}</p>
+              <p style="margin:4px 0 0;font-size:13px;">Previously ${preDelay}</p>
             </div>
-            <p style="margin:0 0 16px;color:#475569;font-size:14px"><strong>What happened:</strong> ${reason}</p>
+            <p style="margin:0 0 16px;"><strong>What happened:</strong> ${reason}</p>
             ${compBlock}
-            <p style="margin:0 0 16px;color:#475569;font-size:14px">Thanks for your patience — reply to this email or text us if the new time doesn't work.</p>
-            <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">Novara Cleaning</p>
-          </div>`;
+            <p style="margin:0;">Thanks for your patience — reply to this email or text us if the new time doesn't work.</p>`;
         const sent = await sendThroughCompliance(Deno.env.get("RESEND_API_KEY") || "", {
           to: booking.email,
           subject: `Your Novara appointment moved to ${newSlot}`,

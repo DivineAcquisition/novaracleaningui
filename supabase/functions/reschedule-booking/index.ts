@@ -1,6 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { Resend } from "https://esm.sh/resend@4.0.0";
 import React from 'https://esm.sh/react@18.3.1';
 import { renderAsync } from 'https://esm.sh/@react-email/components@0.0.22';
 import { RescheduleConfirmation } from '../_shared/email-templates/RescheduleConfirmation.tsx';
@@ -22,8 +21,6 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Max-Age': '86400',
 };
-
-const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
 interface RescheduleRequest {
   bookingId: string;

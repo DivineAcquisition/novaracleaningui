@@ -18,7 +18,7 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-import { Resend } from "https://esm.sh/resend@4.0.0";
+import { sendThroughCompliance } from "../_shared/email-compliance-send.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -142,24 +142,25 @@ serve(async (req) => {
     try {
       const resendKey = Deno.env.get("RESEND_API_KEY");
       if (resendKey) {
-        const resend = new Resend(resendKey);
-        await resend.emails.send({
-          from: "Novara Dispatch <ops@novaracleaning.com>",
-          to: [ADMIN_EMAIL],
-          subject: `🚨 ${lateDrop ? "LATE DROP (<48h)" : "Job dropped"} — ${bookingRef} needs URGENT reassignment`,
+        await sendThroughCompliance(resendKey, {
+          to: ADMIN_EMAIL,
+          subject: `${lateDrop ? "Late drop (under 48 hours)" : "Job dropped"} — ${bookingRef} needs reassignment`,
+          templateKey: "admin_internal_notice",
+          declaredType: "internal_admin",
+          staffRecipient: true,
           html: `
-            <h2 style="color:#dc2626;margin:0 0 12px">${lateDrop ? "Late drop — less than 48 hours before service" : "Job dropped by contractor"}</h2>
+            <h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">${lateDrop ? "Late drop — less than 48 hours before service" : "Job dropped by contractor"}</h1>
             <p><strong>${cleanerName}</strong> dropped <strong>${bookingRef}</strong>. This job needs urgent reassignment.</p>
-            <table style="border-collapse:collapse;font-size:14px">
-              <tr><td style="padding:4px 12px 4px 0;color:#64748b">Customer</td><td>${customer}</td></tr>
-              <tr><td style="padding:4px 12px 4px 0;color:#64748b">When</td><td>${when}</td></tr>
-              <tr><td style="padding:4px 12px 4px 0;color:#64748b">Where</td><td>${where || "—"}</td></tr>
-              <tr><td style="padding:4px 12px 4px 0;color:#64748b">Reason</td><td>${reason || "—"}</td></tr>
-              <tr><td style="padding:4px 12px 4px 0;color:#64748b">Hours until service</td><td>${hrs != null ? Math.max(0, Math.round(hrs)) : "—"}</td></tr>
+            <table style="border-collapse:collapse;width:100%;">
+              <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">Customer</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${customer}</td></tr>
+              <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">When</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${when}</td></tr>
+              <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">Where</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${where || "—"}</td></tr>
+              <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">Reason</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${reason || "—"}</td></tr>
+              <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">Hours until service</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${hrs != null ? Math.max(0, Math.round(hrs)) : "—"}</td></tr>
             </table>
-            <p style="margin-top:14px"><a href="https://admin.novaracleaning.com/admin/dispatch" style="background:#7c3aed;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">Open Dispatch console</a></p>
+            <p style="margin:22px 0 0;"><a class="novara-btn" href="https://admin.novaracleaning.com/admin/dispatch" style="display:inline-block;padding:14px 28px;background:#e7e7ea;color:#18181b;text-decoration:none;border-radius:12px;font-weight:600;">Open Dispatch console</a></p>
           `,
-        });
+        }, admin);
       }
     } catch (emailErr) {
       console.warn("[cleaner-drop-job] admin email failed (non-blocking)", emailErr instanceof Error ? emailErr.message : String(emailErr));

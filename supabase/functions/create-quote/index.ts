@@ -120,25 +120,26 @@ serve(async (req) => {
     if (resendApiKey) {
       try {
         const notificationHtml = `
-          <h2>New Custom Quote Request</h2>
+          <h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">New custom quote request</h1>
           <table style="border-collapse:collapse;width:100%">
-            <tr><td style="padding:8px;border:1px solid #ddd;font-weight:bold">Name</td><td style="padding:8px;border:1px solid #ddd">${fullName}</td></tr>
-            <tr><td style="padding:8px;border:1px solid #ddd;font-weight:bold">Email</td><td style="padding:8px;border:1px solid #ddd">${email}</td></tr>
-            <tr><td style="padding:8px;border:1px solid #ddd;font-weight:bold">Phone</td><td style="padding:8px;border:1px solid #ddd">${phone}</td></tr>
-            <tr><td style="padding:8px;border:1px solid #ddd;font-weight:bold">Address</td><td style="padding:8px;border:1px solid #ddd">${address}</td></tr>
-            <tr><td style="padding:8px;border:1px solid #ddd;font-weight:bold">Sq Ft</td><td style="padding:8px;border:1px solid #ddd">${sqft}</td></tr>
-            ${notes ? `<tr><td style="padding:8px;border:1px solid #ddd;font-weight:bold">Notes</td><td style="padding:8px;border:1px solid #ddd">${notes}</td></tr>` : ''}
+            <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;font-weight:bold">Name</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${fullName}</td></tr>
+            <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;font-weight:bold">Email</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${email}</td></tr>
+            <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;font-weight:bold">Phone</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${phone}</td></tr>
+            <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;font-weight:bold">Address</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${address}</td></tr>
+            <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;font-weight:bold">Sq Ft</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${sqft}</td></tr>
+            ${notes ? `<tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;font-weight:bold">Notes</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${notes}</td></tr>` : ""}
           </table>
         `;
 
-        const { Resend } = await import("https://esm.sh/resend@4.0.0");
-        const resend = new Resend(resendApiKey);
-        await resend.emails.send({
-          from: "Novara Cleaning <support@novaracleaning.com>",
-          to: ["admin@novaracleaning.com"],
+        const { sendThroughCompliance } = await import("../_shared/email-compliance-send.ts");
+        await sendThroughCompliance(resendApiKey, {
+          to: "admin@novaracleaning.com",
+          templateKey: "admin_internal_notice",
+          declaredType: "internal_admin",
+          staffRecipient: true,
           subject: `New Custom Quote Request - ${fullName} (${sqft} sqft)`,
           html: notificationHtml,
-        });
+        }, supabase);
         logStep("Notification email sent to ops team");
       } catch (emailErr: any) {
         logStep("Failed to send notification email (non-critical)", { error: emailErr.message });

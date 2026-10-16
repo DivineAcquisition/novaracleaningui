@@ -540,28 +540,20 @@ serve(async (req) => {
                 ? `Your share of the ${totalStr} crew tip is below.`
                 : "100% of it goes to you.";
               const html = `
-                <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#0f172a">
-                  <h2 style="margin:0 0 8px;font-size:20px">You received a tip 💜</h2>
-                  <p style="margin:0 0 16px;color:#475569">Hi ${first},</p>
-                  <p style="margin:0 0 16px;color:#475569">${customerName} left a tip on ${ref}. ${splitLine}</p>
-                  <div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:12px;padding:18px;text-align:center;margin:0 0 16px">
-                    <div style="font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#6d28d9">Your tip</div>
-                    <div style="font-size:32px;font-weight:800;color:#5b21b6;margin-top:4px">${shareStr}</div>
-                    <div style="font-size:12px;color:#7c3aed;margin-top:4px">100% pass-through — Novara takes nothing</div>
-                  </div>
-                  <p style="margin:0 0 8px;color:#475569;font-size:14px">It will be included with your next payout.</p>
-                  <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">Novara Cleaning</p>
-                </div>`;
-              await fetch("https://api.resend.com/emails", {
-                method: "POST",
-                headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  from: "NVC Operations <operations@novaracleaning.com>",
-                  to: [c.email],
-                  subject: `You received a ${shareStr} tip 💜`,
-                  html,
-                }),
-              });
+                  <h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">You received a tip</h1>
+                  <p style="margin:0 0 16px;">Hi ${first},</p>
+                  <p style="margin:0 0 16px;">${customerName} left a tip on ${ref}. ${splitLine}</p>
+                  <p style="margin:0 0 4px;font-size:13px;letter-spacing:.04em;text-transform:uppercase;">Your tip</p>
+                  <p style="margin:0 0 8px;font-size:32px;font-weight:800;color:#ffffff;">${shareStr}</p>
+                  <p style="margin:0 0 16px;">100% pass-through — Novara takes nothing. It will be included with your next payout.</p>`;
+              await sendThroughCompliance(resendKey, {
+                to: c.email,
+                subject: `You received a ${shareStr} tip`,
+                html,
+                templateKey: "contractor_payout",
+                declaredType: "contractor_operational",
+                bookingId,
+              }, supabase);
             }
           } catch {
             /* best-effort */

@@ -33,7 +33,7 @@
 //     eligibility when a suspension window ends and ages out expired strikes.
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { Resend } from "https://esm.sh/resend@2.0.0";
+import { sendThroughCompliance } from "../_shared/email-compliance-send.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { notifyContractorTerminated } from "../_shared/termination-sms.ts";
 
@@ -68,8 +68,6 @@ type SB = any;
 const ACTION_TYPES = ["coaching_note", "strike", "suspension", "removal"] as const;
 type ActionType = (typeof ACTION_TYPES)[number];
 
-const FROM_ADDRESS = "NVC Operations <operations@novaracleaning.com>";
-const REPLY_TO = "operations@novaracleaning.com";
 // Every formal notice CCs the office + QC inboxes — the paper trail lives
 // in company mail as well as on the action row.
 const CC_ADDRESSES = ["contact@novaracleaning.com", "qc@novaracleaning.com"];
@@ -258,15 +256,8 @@ function emailHtml(bodyText: string): string {
     .filter(Boolean)
     .map((p) => `<p style="margin:0 0 14px">${p.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br/>")}</p>`)
     .join("\n");
-  return `
-  <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:600px;margin:0 auto;padding:28px;color:#0f172a;line-height:1.6">
-    <div style="border-bottom:2px solid #5C0FFE;padding-bottom:12px;margin-bottom:20px">
-      <span style="font-weight:800;font-size:18px;color:#5C0FFE">Novara Cleaning</span>
-      <span style="float:right;color:#64748b;font-size:12px">Operations</span>
-    </div>
-    <p style="margin:0 0 16px;color:#64748b;font-size:13px">${fmtDate(new Date().toISOString())}</p>
-    ${paragraphs}
-  </div>`;
+  return `<p style="margin:0 0 16px;font-size:13px;">${fmtDate(new Date().toISOString())}</p>
+${paragraphs}`;
 }
 
 async function sendFormalEmail(admin: SB, opts: {
@@ -275,17 +266,16 @@ async function sendFormalEmail(admin: SB, opts: {
   try {
     const apiKey = await resolveSecret(admin, "RESEND_API_KEY");
     if (!apiKey) return { sent: false, error: "RESEND_API_KEY not configured" };
-    const resend = new Resend(apiKey);
-    const { error } = await resend.emails.send({
-      from: FROM_ADDRESS,
-      to: [opts.to],
+    const sent = await sendThroughCompliance(apiKey, {
+      to: opts.to,
       cc: CC_ADDRESSES,
-      reply_to: REPLY_TO,
       subject: opts.subject,
       html: emailHtml(opts.body),
       text: opts.body,
-    });
-    if (error) return { sent: false, error: (error as { message?: string }).message || String(error) };
+      templateKey: "contractor_engagement_end",
+      declaredType: "contractor_operational",
+    }, admin);
+    if (sent.error) return { sent: false, error: sent.error.message };
     return { sent: true, error: null };
   } catch (e) {
     return { sent: false, error: e instanceof Error ? e.message : String(e) };

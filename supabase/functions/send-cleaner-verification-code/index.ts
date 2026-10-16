@@ -1,10 +1,9 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-import { Resend } from 'https://esm.sh/resend@4.0.0';
 import { renderAsync } from 'https://esm.sh/@react-email/components@0.0.22?deps=react@18.3.1,react-dom@18.3.1';
 import * as React from 'https://esm.sh/react@18.3.1';
 import { CleanerVerificationCode } from "../_shared/email-templates/CleanerVerificationCode.tsx";
-import { CONTRACTOR_OPS_FROM, CONTRACTOR_OPS_REPLY_TO } from "../_shared/contractor-comms.ts";
+import { sendThroughCompliance } from "../_shared/email-compliance-send.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -60,9 +59,6 @@ serve(async (req) => {
 
     logStep("Code stored in database", { email, expiresAt });
 
-    // Send email with verification code
-    const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
-    
     let html = "";
     try {
       html = await renderAsync(
@@ -101,14 +97,15 @@ serve(async (req) => {
       );
     }
 
-    const { error: emailError } = await resend.emails.send({
-      from: CONTRACTOR_OPS_FROM,
-      reply_to: CONTRACTOR_OPS_REPLY_TO,
-      to: [email],
+    const sent = await sendThroughCompliance(Deno.env.get("RESEND_API_KEY") || "", {
+      to: email,
       subject: "Your Cleaner Verification Code",
       html,
       text,
-    });
+      templateKey: "contractor_verification",
+      declaredType: "contractor_operational",
+    }, supabase);
+    const emailError = sent.error;
 
     if (emailError) {
       logStep("Email send failed", { error: emailError });

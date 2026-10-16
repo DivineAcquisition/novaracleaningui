@@ -10,19 +10,19 @@ interface HighlightProps {
 export const Highlight = ({ children, variant = 'info' }: HighlightProps) => {
   const styles = {
     info: {
-      backgroundColor: BRAND.colors.gray[100],
-      borderLeft: `4px solid ${BRAND.colors.primary}`,
+      backgroundColor: '#1c1c20',
+      borderLeft: '4px solid #7c6af7',
     },
     success: {
-      backgroundColor: '#D1FAE5',
+      backgroundColor: '#1c1c20',
       borderLeft: `4px solid ${BRAND.colors.success}`,
     },
     warning: {
-      backgroundColor: '#FEF3C7',
+      backgroundColor: '#1c1c20',
       borderLeft: `4px solid ${BRAND.colors.warning}`,
     },
     danger: {
-      backgroundColor: '#FEE2E2',
+      backgroundColor: '#1c1c20',
       borderLeft: `4px solid ${BRAND.colors.danger}`,
     },
   };

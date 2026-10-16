@@ -216,26 +216,37 @@ export async function sendThroughCompliance(
     bookingId?: string | null;
     staffRecipient?: boolean;
     isReply?: boolean;
+    personalFrom?: { displayName?: string; address?: string; replyTo?: string } | null;
   },
   supabase?: SB,
 ): Promise<{ data: { id: string } | null; error: { message: string } | null }> {
   const db = supabase || createServiceDb();
-  const to = (Array.isArray(input.to) ? input.to[0] : input.to) || "";
-  const outcome = await deliverCompliantEmail(db, {
-    apiKey,
-    to,
-    cc: input.cc,
-    subject: input.subject,
-    html: input.html,
-    text: input.text,
-    templateKey: input.templateKey,
-    declaredType: input.declaredType || "customer_service",
-    bookingId: input.bookingId,
-    staffRecipient: input.staffRecipient,
-    isReply: input.isReply,
-  });
-  if (!outcome.ok) return { data: null, error: { message: outcome.error } };
-  return { data: { id: outcome.id }, error: null };
+  const recipients = (Array.isArray(input.to) ? input.to : [input.to])
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+  if (!recipients.length) return { data: null, error: { message: "Missing recipient." } };
+  let lastId = "";
+  let lastError = "";
+  for (const to of recipients) {
+    const outcome = await deliverCompliantEmail(db, {
+      apiKey,
+      to,
+      cc: input.cc,
+      subject: input.subject,
+      html: input.html,
+      text: input.text,
+      templateKey: input.templateKey,
+      declaredType: input.declaredType || "customer_service",
+      bookingId: input.bookingId,
+      staffRecipient: input.staffRecipient,
+      isReply: input.isReply,
+      personalFrom: input.personalFrom,
+    });
+    if (!outcome.ok) lastError = outcome.error;
+    else lastId = outcome.id;
+  }
+  if (!lastId) return { data: null, error: { message: lastError || "This email cannot be sent." } };
+  return { data: { id: lastId }, error: null };
 }
 
 function createServiceDb(): SB {

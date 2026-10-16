@@ -14,6 +14,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { Resend } from "https://esm.sh/resend@4.0.0";
+import { deliverCompliantEmail } from "../_shared/email-compliance-send.ts";
 import {
   BLOCKED_CC,
   decideMailboxAck,
@@ -195,22 +196,24 @@ serve(async (req) => {
     return json({ error: "RESEND_API_KEY not configured" }, 500);
   }
 
-  const resend = new Resend(resendKey);
-  const { data: sent, error: sendError } = await resend.emails.send({
-    from: decision.from,
-    to: [decision.to],
-    replyTo: decision.replyTo,
+  const sent = await deliverCompliantEmail(supabase, {
+    apiKey: resendKey,
+    to: decision.to,
     subject: decision.subject,
     text: decision.text,
     html: decision.html,
-    headers: {
-      "X-Novara-Mailbox-Ack": "1",
-      "X-Novara-Party": decision.party,
+    templateKey: "mailbox_ack",
+    declaredType: "customer_service",
+    isReply: true,
+    personalFrom: {
+      displayName: "NovaraCleaning",
+      address: decision.mailbox,
+      replyTo: decision.replyTo,
     },
   });
 
-  if (sendError) {
-    log("send_failed", { error: sendError });
+  if (!sent.ok) {
+    log("send_failed", { error: sent.error });
     await supabase.from("mailbox_ack_log").insert({
       source_message_id: dedupeKey,
       mailbox: decision.mailbox,
@@ -218,7 +221,7 @@ serve(async (req) => {
       kind: decision.kind,
       party: decision.party,
       status: "failed",
-      skip_reason: String((sendError as { message?: string }).message || sendError),
+      skip_reason: sent.error,
     });
     return json({ error: "send_failed" }, 502);
   }
@@ -229,7 +232,7 @@ serve(async (req) => {
     party: decision.party,
     kind: decision.kind,
     blockedCc: BLOCKED_CC,
-    id: (sent as { id?: string } | null)?.id,
+    id: sent.id,
   });
 
   await supabase.from("mailbox_ack_log").insert({

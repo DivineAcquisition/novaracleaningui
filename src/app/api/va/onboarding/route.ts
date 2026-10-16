@@ -25,6 +25,7 @@
 
 import { NextResponse } from "next/server";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
+import { deliverCompliantEmail } from "@/lib/email-compliance/deliver";
 import {
   sendAgreement,
   getAgreementPreviewUrl,
@@ -314,15 +315,14 @@ export async function POST(req: Request): Promise<NextResponse> {
       try {
         const key = process.env.RESEND_API_KEY;
         if (key) {
-          await fetch("https://api.resend.com/emails", {
-            method: "POST",
-            headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-            body: JSON.stringify({
-              from: "Novara Team <ops@novaracleaning.com>",
-              to: ["admin@novaracleaning.com"],
-              subject: `VA onboarding pending approval — ${name} (${row.va_role})`,
-              html: `<p><strong>${name}</strong> (${row.email}) finished VA onboarding for the <strong>${row.va_role}</strong> role and signed the VA Independent Contractor Agreement.</p><p>No access has been granted. Review &amp; approve in <a href="https://admin.novaracleaning.com/admin/team">Admin → Team</a>.</p>`,
-            }),
+          await deliverCompliantEmail(supabase, {
+            apiKey: key,
+            to: "admin@novaracleaning.com",
+            subject: `VA onboarding pending approval — ${name} (${row.va_role})`,
+            html: `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">VA onboarding pending approval</h1><p><strong>${name}</strong> (${row.email}) finished VA onboarding for the <strong>${row.va_role}</strong> role and signed the VA Independent Contractor Agreement.</p><p>No access has been granted. Review and approve in <a href="https://admin.novaracleaning.com/admin/team">Admin → Team</a>.</p>`,
+            templateKey: "va_onboarding",
+            declaredType: "internal_admin",
+            staffRecipient: true,
           });
         }
       } catch { /* best-effort */ }

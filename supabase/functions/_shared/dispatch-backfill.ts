@@ -8,6 +8,7 @@
 // eligible pool is exhausted.
 
 import { requestDispatchApproval } from "./dispatch-approval.ts";
+import { sendThroughCompliance } from "./email-compliance-send.ts";
 
 const log = (s: string, d?: unknown) =>
   console.log(`[dispatch-backfill] ${s}${d ? ` ${JSON.stringify(d)}` : ""}`);
@@ -183,9 +184,6 @@ export async function notifyStaffNoCleanersAvailable(
     return { sent: false, recipients: 0 };
   }
 
-  const { Resend } = await import("https://esm.sh/resend@4.0.0");
-  const resend = new Resend(resendKey);
-
   const ref = booking?.booking_number
     ? `NVC-${String(booking.booking_number).padStart(4, "0")}`
     : jobId.slice(0, 8);
@@ -199,27 +197,29 @@ export async function notifyStaffNoCleanersAvailable(
 
   const subject = `URGENT: No cleaners available — ${ref} (${when})`;
   const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 640px;">
-      <h2 style="color: #b45309;">No cleaners available for dispatch</h2>
+      <h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">No cleaners available for dispatch</h1>
       <p>Auto-dispatch exhausted the active cleaner pool (offers expired, declined, or no eligible cleaners left). <strong>Hire or onboard a cleaner ASAP</strong> and assign manually in Admin.</p>
-      <p style="color:#374151;"><strong>Reason:</strong> ${context.reason}</p>
+      <p><strong>Reason:</strong> ${context.reason}</p>
       <table style="width:100%;border-collapse:collapse;margin:16px 0;">
-        <tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">Booking</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;">${ref}</td></tr>
-        <tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">Customer</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;">${customer}${booking?.phone ? ` · ${booking.phone}` : ""}</td></tr>
-        <tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">Service</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;">${job.service_type || "—"} · ${when}</td></tr>
-        <tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">Location</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;">${location || "—"}</td></tr>
-        <tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:600;">Team needed</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;">${team?.confirmed ?? 0} / ${team?.need ?? job.min_cleaners_required} confirmed</td></tr>
+        <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;font-weight:600;">Booking</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${ref}</td></tr>
+        <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;font-weight:600;">Customer</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${customer}${booking?.phone ? ` · ${booking.phone}` : ""}</td></tr>
+        <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;font-weight:600;">Service</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${job.service_type || "—"} · ${when}</td></tr>
+        <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;font-weight:600;">Location</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${location || "—"}</td></tr>
+        <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;font-weight:600;">Team needed</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${team?.confirmed ?? 0} / ${team?.need ?? job.min_cleaners_required} confirmed</td></tr>
       </table>
-      <p><a href="https://admin.novaracleaning.com/admin/bookings">Open Admin Bookings</a> · <a href="https://admin.novaracleaning.com/admin/map">Dispatch map</a></p>
-    </div>`;
+      <p><a class="novara-btn" href="https://admin.novaracleaning.com/admin/bookings" style="display:inline-block;padding:14px 28px;background:#e7e7ea;color:#18181b;text-decoration:none;border-radius:12px;font-weight:600;">Open Admin Bookings</a></p>
+      <p><a href="https://admin.novaracleaning.com/admin/map">Dispatch map</a></p>`;
 
   try {
-    await resend.emails.send({
-      from: "Novara Cleaning Ops <ops@novaracleaning.com>",
+    const sent = await sendThroughCompliance(resendKey, {
       to: recipients,
       subject,
       html,
-    });
+      templateKey: "admin_internal_notice",
+      declaredType: "internal_admin",
+      staffRecipient: true,
+    }, supabase);
+    if (sent.error) throw new Error(sent.error.message);
   } catch (e) {
     log("resend failed", e instanceof Error ? e.message : String(e));
     return { sent: false, recipients: 0 };

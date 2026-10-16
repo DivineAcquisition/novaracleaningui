@@ -92,53 +92,19 @@ const BENEFIT_SECTIONS: Array<{ title: string; items: string[] }> = [
 function renderHtml(opts: { firstName: string }): string {
   const sectionHtml = BENEFIT_SECTIONS.map(
     (g) => `
-    <h3 style="font-family:'Plus Jakarta Sans',Helvetica,Arial,sans-serif;font-size:16px;margin:24px 0 8px;color:#111827">${g.title}</h3>
-    <ul style="margin:0;padding-left:20px;color:#374151;font-size:14px;line-height:1.65">
+    <h2 style="font-family:Inter,Arial,sans-serif;font-size:18px;margin:24px 0 8px;color:#ffffff">${g.title}</h2>
+    <ul style="margin:0;padding-left:20px;font-size:15px;line-height:1.65">
       ${g.items.map((t) => `<li style="margin:4px 0">${t}</li>`).join("")}
     </ul>`,
   ).join("");
 
-  return `<!doctype html>
-<html><head><meta charset="utf-8"><title>Your Glow Membership Benefits</title></head>
-<body style="margin:0;padding:0;background:#F9FAFB;font-family:'Plus Jakarta Sans',Helvetica,Arial,sans-serif;color:#374151">
-  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#F9FAFB;padding:32px 16px">
-    <tr><td align="center">
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 8px 24px rgba(92,15,254,0.10)">
-        <tr><td style="background:linear-gradient(135deg,#7C3AED 0%,#5C0FFE 100%);padding:32px 32px 28px;color:#ffffff">
-          <p style="margin:0 0 4px;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;opacity:0.85">NovaraCleaning</p>
-          <h1 style="margin:0 0 8px;font-size:24px;font-weight:700;letter-spacing:-0.01em">Glow Membership Benefits</h1>
-          <p style="margin:0;font-size:14px;line-height:1.5;opacity:0.95">Hi ${opts.firstName || "there"} — here's everything included with a Glow Membership. More than a recurring clean: full visibility, photo proof, and you stay in control.</p>
-        </td></tr>
-        <tr><td style="padding:28px 32px">
-          <p style="margin:0 0 18px;font-size:14px;color:#374151;line-height:1.6">
-            Every Glow plan — <strong>Monthly (1 clean/mo)</strong>, <strong>Bi-Weekly (2 cleans/mo)</strong>, or <strong>Weekly (4 cleans/mo)</strong> —
-            includes the full benefit stack below. Same benefits on every plan; just choose how often we visit.
-          </p>
-
-          ${sectionHtml}
-
-          <div style="text-align:center;margin:28px 0 8px">
-            <a href="${VIEW_URL}" style="display:inline-block;background:linear-gradient(135deg,#7C3AED 0%,#5C0FFE 100%);color:#fff;padding:14px 28px;text-decoration:none;border-radius:6px;font-weight:600;font-size:15px">See all membership benefits</a>
-          </div>
-          <p style="margin:0 0 16px;font-size:12px;color:#9CA3AF;text-align:center">Or open: ${VIEW_URL}</p>
-
-          <div style="text-align:center;margin:8px 0 8px">
-            <a href="${MEMBERSHIP_URL}" style="display:inline-block;border:1px solid #7C3AED;color:#5B21B6;padding:12px 26px;text-decoration:none;border-radius:6px;font-weight:600;font-size:14px">View plans &amp; pricing</a>
-          </div>
-
-          <hr style="border:none;border-top:1px solid #E5E7EB;margin:32px 0" />
-
-          <p style="margin:0 0 8px;font-size:13px;color:#6B7280;line-height:1.6">Questions about your quote or which plan fits? Just reply to this email or text us at <strong style="color:#111827">(301) 357-9119</strong> — we'll help you pick.</p>
-          <p style="margin:0;font-size:12px;color:#9CA3AF;line-height:1.5">© NovaraCleaning · All Rights Reserved.</p>
-        </td></tr>
-        <tr><td style="background:#F9FAFB;padding:20px 32px;text-align:center;font-size:12px;color:#6B7280">
-          Novara Cleaning &middot; billing@novaracleaning.com &middot; +1 (844) 735-2070<br/>
-          Reply to this email any time — we love hearing from our customers.
-        </td></tr>
-      </table>
-    </td></tr>
-  </table>
-</body></html>`;
+  return `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">Glow Membership Benefits</h1>
+<p style="margin:0 0 16px;">Hi ${opts.firstName || "there"} — here's everything included with a Glow Membership. More than a recurring clean: full visibility, photo proof, and you stay in control.</p>
+<p style="margin:0 0 16px;">Every Glow plan — <strong>Monthly (1 clean/mo)</strong>, <strong>Bi-Weekly (2 cleans/mo)</strong>, or <strong>Weekly (4 cleans/mo)</strong> — includes the full benefit stack below. Same benefits on every plan; just choose how often we visit.</p>
+${sectionHtml}
+<p style="margin:22px 0 8px;"><a class="novara-btn" href="${VIEW_URL}" style="display:inline-block;padding:14px 28px;background:#e7e7ea;color:#18181b;text-decoration:none;border-radius:12px;font-weight:600;">See all membership benefits</a></p>
+<p style="margin:16px 0 8px;"><a class="novara-btn" href="${MEMBERSHIP_URL}" style="display:inline-block;padding:14px 28px;background:#e7e7ea;color:#18181b;text-decoration:none;border-radius:12px;font-weight:600;">View plans and pricing</a></p>
+<p style="margin:16px 0 0;">Questions about your quote or which plan fits? Reply to this email or text us at (844) 735-2070.</p>`;
 }
 
 function plainText(opts: { firstName: string }): string {
@@ -155,7 +121,7 @@ function plainText(opts: { firstName: string }): string {
     `See all benefits: ${VIEW_URL}`,
     `Plans & pricing: ${MEMBERSHIP_URL}`,
     "",
-    "Questions? Reply to this email or text us at (301) 357-9119.",
+    "Questions? Reply to this email or text us at (844) 735-2070.",
     "",
     "— The Novara team",
   ];

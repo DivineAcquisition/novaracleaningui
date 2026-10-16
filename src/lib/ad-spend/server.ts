@@ -1,4 +1,5 @@
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
+import { deliverCompliantEmail } from "@/lib/email-compliance/deliver";
 
 import { firstOfMonth, formatRangeLabel, monthsInclusive, priorCompletedMonth } from "./period";
 import { ALL_PLATFORMS, PAID_PLATFORMS, type ChannelEntry, type PaidPlatform } from "./platforms";
@@ -6,7 +7,6 @@ import { ALL_PLATFORMS, PAID_PLATFORMS, type ChannelEntry, type PaidPlatform } f
 export { ALL_PLATFORMS, PAID_PLATFORMS, formatRangeLabel, priorCompletedMonth };
 export type { ChannelEntry, PaidPlatform };
 
-const FROM_ADDRESS = "Novara Team <ops@novaracleaning.com>";
 const DEFAULT_PUBLIC_BASE = "https://try.novaracleaning.com";
 export const OPERATIONS_START = "2026-05-01"; // First calendar month of operations
 
@@ -313,63 +313,43 @@ function escapeHtml(value: string): string {
 }
 
 function renderSingleMonthEmail(range: string, url: string, platforms: string[]): string {
-  return `<!doctype html>
-<html>
-  <body style="margin:0;padding:24px;background:#FAFAFC;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0F172A;">
-    <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #E2E8F0;border-radius:16px;overflow:hidden;">
-      <div style="background:linear-gradient(135deg,#5C0FFE 0%,#8F7BFD 100%);padding:20px 24px;">
-        <p style="margin:0;color:#fff;font-size:16px;font-weight:700;">Monthly ad spend log — ${escapeHtml(range)}</p>
-      </div>
-      <div style="padding:24px;">
-        <p style="margin:0 0 12px;font-size:15px;line-height:1.55;">Log last month's paid spend so the P&amp;L sheet and Airtable stay accurate. One form per calendar month.</p>
-        <p style="margin:0 0 16px;font-size:14px;line-height:1.55;color:#475569;">Channels: ${escapeHtml(platforms.join(", "))}. Leave a channel blank if it wasn't running. Enter 0 if it ran but spent nothing.</p>
-        <p style="margin:0 0 24px;">
-          <a href="${url}" style="display:inline-block;background:#5C0FFE;color:#fff;text-decoration:none;font-weight:600;font-size:15px;padding:12px 22px;border-radius:10px;">Open ${escapeHtml(range)} form</a>
-        </p>
-        <p style="margin:0;font-size:12px;line-height:1.5;color:#94A3B8;word-break:break-all;">${url}</p>
-      </div>
-    </div>
-  </body>
-</html>`;
+  return `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">Monthly ad spend log — ${escapeHtml(range)}</h1>
+<p>Log last month's paid spend so the P&amp;L sheet and Airtable stay accurate. One form per calendar month.</p>
+<p>Channels: ${escapeHtml(platforms.join(", "))}. Leave a channel blank if it wasn't running. Enter 0 if it ran but spent nothing.</p>
+<p style="margin:22px 0 0;"><a class="novara-btn" href="${url}" style="display:inline-block;padding:14px 28px;background:#e7e7ea;color:#18181b;text-decoration:none;border-radius:12px;font-weight:600;">Open ${escapeHtml(range)} form</a></p>`;
 }
 
 function renderBackfillEmail(months: Array<{ range: string; url: string }>): string {
   const buttons = months
     .map(
       (m) =>
-        `<p style="margin:0 0 10px;"><a href="${m.url}" style="display:inline-block;background:#5C0FFE;color:#fff;text-decoration:none;font-weight:600;font-size:14px;padding:10px 18px;border-radius:10px;">${escapeHtml(m.range)}</a></p>`,
+        `<p style="margin:0 0 10px;"><a class="novara-btn" href="${m.url}" style="display:inline-block;padding:12px 18px;background:#e7e7ea;color:#18181b;text-decoration:none;border-radius:12px;font-weight:600;">${escapeHtml(m.range)}</a></p>`,
     )
     .join("");
-  return `<!doctype html>
-<html>
-  <body style="margin:0;padding:24px;background:#FAFAFC;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0F172A;">
-    <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #E2E8F0;border-radius:16px;overflow:hidden;">
-      <div style="background:linear-gradient(135deg,#5C0FFE 0%,#8F7BFD 100%);padding:20px 24px;">
-        <p style="margin:0;color:#fff;font-size:16px;font-weight:700;">Ad spend catch-up — ${months.length} months</p>
-      </div>
-      <div style="padding:24px;">
-        <p style="margin:0 0 12px;font-size:15px;line-height:1.55;">Please use these monthly forms instead of the weekly links sent earlier. Each button is one calendar month from the start of operations through last completed month. Submitting writes the P&amp;L Google Sheet and Airtable.</p>
-        <p style="margin:0 0 18px;font-size:14px;line-height:1.55;color:#475569;">Facebook, LSA, Google, and Instagram. Leave a channel blank if it wasn't running.</p>
-        ${buttons}
-      </div>
-    </div>
-  </body>
-</html>`;
+  return `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">Ad spend catch-up — ${months.length} months</h1>
+<p>Please use these monthly forms instead of the weekly links sent earlier. Each button is one calendar month from the start of operations through last completed month. Submitting writes the P&amp;L Google Sheet and Airtable.</p>
+<p>Facebook, LSA, Google, and Instagram. Leave a channel blank if it wasn't running.</p>
+${buttons}`;
 }
 
 async function sendEmail(to: string[], subject: string, html: string): Promise<boolean> {
   const key = await readSecret("RESEND_API_KEY");
   if (!key || !to.length) return false;
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from: FROM_ADDRESS, to, subject, html }),
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    console.error("[ad-spend] email failed", res.status, body.slice(0, 300));
+  let any = false;
+  for (const recipient of to) {
+    const sent = await deliverCompliantEmail(getAdminSupabase(), {
+      apiKey: key,
+      to: recipient,
+      subject,
+      html,
+      templateKey: "ad_spend",
+      declaredType: "internal_admin",
+      staffRecipient: true,
+    });
+    if (!sent.ok) console.error("[ad-spend] email failed", sent.error);
+    else any = true;
   }
-  return res.ok;
+  return any;
 }
 
 async function markSent(ids: string[], recipients: string[]) {

@@ -1,5 +1,5 @@
 import * as React from "https://esm.sh/react@18.3.1";
-import { Html, Head, Body, Container, Section, Text, Heading, Button } from "https://esm.sh/@react-email/components@0.0.22";
+import { Section, Text, Heading, Button } from "https://esm.sh/@react-email/components@0.0.22";
 import { EmailLayout } from "./components/EmailLayout.tsx";
 import { DetailRow } from "./components/DetailRow.tsx";
 import { Highlight } from "./components/Highlight.tsx";
@@ -19,8 +19,6 @@ export const CleanerInvitation = ({
   onboardingUrl,
 }: CleanerInvitationProps) => {
   return (
-    <Html>
-      <Head />
       <EmailLayout title="Welcome to Novara Cleaning" previewText="Welcome to the Novara Cleaning Team!">
         <Heading style={styles.heading}>
           Welcome to Novara Cleaning! 🎉
@@ -65,7 +63,7 @@ export const CleanerInvitation = ({
         </Text>
 
         <Section style={styles.buttonSection}>
-          <Button href={onboardingUrl} style={styles.button}>
+          <Button href={onboardingUrl} className="novara-btn" style={styles.button}>
             Create Your Account
           </Button>
         </Section>
@@ -96,7 +94,6 @@ export const CleanerInvitation = ({
           The Novara Cleaning Team
         </Text>
       </EmailLayout>
-    </Html>
   );
 };
 
@@ -134,10 +131,10 @@ const styles = {
     margin: "32px 0",
   },
   button: {
-    backgroundColor: BRAND.colors.primary,
-    color: "#ffffff",
+    backgroundColor: "#e7e7ea",
+    color: "#18181b",
     padding: "14px 28px",
-    borderRadius: "8px",
+    borderRadius: "12px",
     textDecoration: "none",
     fontWeight: "600",
     fontSize: "16px",

@@ -1,8 +1,8 @@
 // Drive, Airtable, email, Discord — all best-effort after the PDF exists.
 // A failed mirror is recorded for retry; it does not discard the report.
 
-import { Resend } from "https://esm.sh/resend@2.0.0";
 import { resolveSecret } from "../app-secrets.ts";
+import { sendThroughCompliance } from "../email-compliance-send.ts";
 import { notifyDiscord } from "../discord.ts";
 import {
   driveConfigured,
@@ -149,14 +149,16 @@ export async function notifyWeeklyReport(
   const apiKey = await resolveSecret(sb, "RESEND_API_KEY");
   if (!apiKey || !settings.recipients.length) return;
   try {
-    const resend = new Resend(apiKey);
-    await resend.emails.send({
-      from: "NovaraCleaning <ops@novaracleaning.com>",
+    await sendThroughCompliance(apiKey, {
       to: settings.recipients,
       subject: title,
-      html: `<p>${description.replace(/\n/g, "<br/>")}</p>
-             <p style="color:#64748b;font-size:12px">This report is read-only. It does not change budgets, zones, or pricing.</p>`,
-    });
+      html: `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">${title}</h1>
+             <p>${description.replace(/\n/g, "<br/>")}</p>
+             <p>This report is read-only. It does not change budgets, zones, or pricing.</p>`,
+      templateKey: "admin_internal_notice",
+      declaredType: "internal_admin",
+      staffRecipient: true,
+    }, sb);
   } catch (err) {
     console.warn("[weekly-report] email failed", err instanceof Error ? err.message : String(err));
   }

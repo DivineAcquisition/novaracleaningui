@@ -31,63 +31,34 @@ function formatCurrency(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
+function quoteRow(label: string, value: string): string {
+  return `<tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${label}</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;text-align:right;font-weight:600;">${value}</td></tr>`;
+}
+
 function buildQuoteHtml(data: QuoteEmailRequest): string {
-  const addOnsHtml = data.addOns.length > 0
-    ? data.addOns.map(a => `<li style="color:#6B7280;font-size:14px;">${a}</li>`).join("")
+  const addOns = data.addOns.length > 0
+    ? `<p style="margin:16px 0 8px;font-weight:600;">Add-ons</p><ul style="margin:0;padding-left:20px;">${data.addOns.map((a) => `<li>${a}</li>`).join("")}</ul>`
     : "";
-
-  return `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
-<body style="margin:0;padding:0;background-color:#F9FAFB;font-family:Arial,Helvetica,sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#F9FAFB;padding:40px 20px;">
-<tr><td align="center">
-<table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:12px;overflow:hidden;">
-  <tr><td style="background:linear-gradient(135deg,#16A34A,#0E7C3A);padding:32px;text-align:center;">
-    <h1 style="color:#ffffff;margin:0;font-size:24px;">Your Cleaning Quote</h1>
-    <p style="color:#ffffff;margin:8px 0 0;font-size:14px;opacity:0.9;">NovaraCleaning</p>
-  </td></tr>
-  <tr><td style="padding:32px;">
-    <p style="color:#374151;font-size:16px;margin:0 0 24px;">Hi ${data.firstName || "there"},</p>
-    <p style="color:#6B7280;font-size:14px;margin:0 0 24px;">Here's your personalized cleaning quote:</p>
-    
-    <table width="100%" cellpadding="8" cellspacing="0" style="background-color:#F9FAFB;border-radius:8px;margin-bottom:24px;">
-      <tr><td style="color:#6B7280;font-size:13px;border-bottom:1px solid #E5E7EB;">Service</td>
-          <td style="color:#374151;font-size:13px;text-align:right;border-bottom:1px solid #E5E7EB;">${data.serviceName}</td></tr>
-      <tr><td style="color:#6B7280;font-size:13px;border-bottom:1px solid #E5E7EB;">Home Size</td>
-          <td style="color:#374151;font-size:13px;text-align:right;border-bottom:1px solid #E5E7EB;">${data.homeSizeLabel}</td></tr>
-      ${data.bedrooms ? `<tr><td style="color:#6B7280;font-size:13px;border-bottom:1px solid #E5E7EB;">Bedrooms</td><td style="color:#374151;font-size:13px;text-align:right;border-bottom:1px solid #E5E7EB;">${data.bedrooms}</td></tr>` : ""}
-      ${data.bathrooms ? `<tr><td style="color:#6B7280;font-size:13px;border-bottom:1px solid #E5E7EB;">Bathrooms</td><td style="color:#374151;font-size:13px;text-align:right;border-bottom:1px solid #E5E7EB;">${data.bathrooms}</td></tr>` : ""}
-      <tr><td style="color:#6B7280;font-size:13px;border-bottom:1px solid #E5E7EB;">Frequency</td>
-          <td style="color:#374151;font-size:13px;text-align:right;border-bottom:1px solid #E5E7EB;">${data.frequency}</td></tr>
-      <tr><td style="color:#6B7280;font-size:13px;border-bottom:1px solid #E5E7EB;">Base Price</td>
-          <td style="color:#374151;font-size:13px;text-align:right;border-bottom:1px solid #E5E7EB;">${formatCurrency(data.basePriceCents)}</td></tr>
-      ${data.serviceTierCost > 0 ? `<tr><td style="color:#6B7280;font-size:13px;border-bottom:1px solid #E5E7EB;">Service Upgrade</td><td style="color:#374151;font-size:13px;text-align:right;border-bottom:1px solid #E5E7EB;">+${formatCurrency(data.serviceTierCost)}</td></tr>` : ""}
-      ${data.discountPct > 0 ? `<tr><td style="color:#16A34A;font-size:13px;border-bottom:1px solid #E5E7EB;">${data.frequency} Discount (${data.discountPct}%)</td><td style="color:#16A34A;font-size:13px;text-align:right;border-bottom:1px solid #E5E7EB;">-${formatCurrency(data.discountCents)}</td></tr>` : ""}
-      ${data.isNewCustomer ? `<tr><td style="color:#16A34A;font-size:13px;border-bottom:1px solid #E5E7EB;">New Customer Discount</td><td style="color:#16A34A;font-size:13px;text-align:right;border-bottom:1px solid #E5E7EB;">-$60.00</td></tr>` : ""}
-    </table>
-
-    <table width="100%" cellpadding="12" cellspacing="0" style="background:linear-gradient(135deg,#16A34A11,#0E7C3A11);border:1px solid #16A34A33;border-radius:8px;margin-bottom:24px;">
-      <tr><td style="color:#16A34A;font-size:18px;font-weight:bold;">Per Clean</td>
-          <td style="color:#16A34A;font-size:18px;font-weight:bold;text-align:right;">${formatCurrency(data.finalPriceCents)}</td></tr>
-      <tr><td style="color:#374151;font-size:14px;">💰 Deposit Today</td>
-          <td style="color:#374151;font-size:14px;text-align:right;">${formatCurrency(data.depositCents)}</td></tr>
-      <tr><td style="color:#6B7280;font-size:14px;">Balance After Service</td>
-          <td style="color:#6B7280;font-size:14px;text-align:right;">${formatCurrency(data.balanceDueCents)}</td></tr>
-      ${data.frequency !== "One-Time" ? `<tr><td style="color:#6B7280;font-size:14px;">📅 Monthly Total</td><td style="color:#6B7280;font-size:14px;text-align:right;">${formatCurrency(data.monthlyTotalCents)}</td></tr>` : ""}
-    </table>
-
-    <table width="100%" cellpadding="0" cellspacing="0">
-      <tr><td align="center" style="padding:16px 0;">
-        <a href="https://try.novaracleaning.com/book/zip" style="background:linear-gradient(135deg,#16A34A,#0E7C3A);color:#ffffff;font-weight:bold;text-decoration:none;padding:14px 32px;border-radius:8px;display:inline-block;font-size:16px;">Book Now →</a>
-      </td></tr>
-    </table>
-
-    <p style="color:#6B7280;font-size:12px;text-align:center;margin:24px 0 0;">Questions? Call us at (844) 735-2070</p>
-  </td></tr>
+  return `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">Your cleaning quote</h1>
+<p style="margin:0 0 16px;">Hi ${data.firstName || "there"},</p>
+<p style="margin:0 0 16px;">Here is the quote for this home.</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0 16px;">
+${quoteRow("Service", data.serviceName)}
+${quoteRow("Home size", data.homeSizeLabel)}
+${data.bedrooms ? quoteRow("Bedrooms", String(data.bedrooms)) : ""}
+${data.bathrooms ? quoteRow("Bathrooms", String(data.bathrooms)) : ""}
+${quoteRow("Frequency", data.frequency)}
+${quoteRow("Base price", formatCurrency(data.basePriceCents))}
+${data.serviceTierCost > 0 ? quoteRow("Service upgrade", `+${formatCurrency(data.serviceTierCost)}`) : ""}
+${data.discountPct > 0 ? quoteRow(`${data.frequency} discount (${data.discountPct}%)`, `-${formatCurrency(data.discountCents)}`) : ""}
+${data.isNewCustomer ? quoteRow("New customer discount", "-$60.00") : ""}
+${quoteRow("Per clean", formatCurrency(data.finalPriceCents))}
+${quoteRow("Deposit today", formatCurrency(data.depositCents))}
+${quoteRow("Balance after service", formatCurrency(data.balanceDueCents))}
+${data.frequency !== "One-Time" ? quoteRow("Monthly total", formatCurrency(data.monthlyTotalCents)) : ""}
 </table>
-</td></tr></table>
-</body></html>`;
+${addOns}
+<p style="margin:22px 0 0;"><a class="novara-btn" href="https://try.novaracleaning.com/book/zip" style="display:inline-block;padding:14px 28px;background:#e7e7ea;color:#18181b;text-decoration:none;border-radius:12px;font-weight:600;">Book now</a></p>`;
 }
 
 serve(async (req: Request) => {

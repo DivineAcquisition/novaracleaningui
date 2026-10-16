@@ -217,36 +217,28 @@ async function notifyAdminPriceOverride(
   const sign = opts.deltaPct > 0 ? "+" : "";
   const subject = `Price override on ${opts.bookingRef}: ${money(opts.originalCents)} → ${money(opts.overrideCents)} (${sign}${opts.deltaPct}%)`;
   const html = `
-    <div style="font-family:Arial,sans-serif;font-size:14px;color:#0f172a;line-height:1.5">
-      <p style="margin:0 0 12px"><strong>A VA applied a price override outside the usual adjustment band.</strong> No approval was required — this is a notification only.</p>
-      <table style="border-collapse:collapse;width:100%;max-width:520px">
-        <tr><td style="padding:4px 8px;color:#64748b">Booking</td><td style="padding:4px 8px"><strong>${opts.bookingRef}</strong></td></tr>
-        <tr><td style="padding:4px 8px;color:#64748b">Customer</td><td style="padding:4px 8px">${opts.customerName} &lt;${opts.customerEmail}&gt;</td></tr>
-        <tr><td style="padding:4px 8px;color:#64748b">Service date</td><td style="padding:4px 8px">${opts.serviceDate || "—"}</td></tr>
-        <tr><td style="padding:4px 8px;color:#64748b">VA</td><td style="padding:4px 8px">${opts.vaName}</td></tr>
-        <tr><td style="padding:4px 8px;color:#64748b">Quoted</td><td style="padding:4px 8px">${money(opts.originalCents)}</td></tr>
-        <tr><td style="padding:4px 8px;color:#64748b">Override</td><td style="padding:4px 8px"><strong>${money(opts.overrideCents)}</strong> (${sign}${opts.deltaPct}%)</td></tr>
-        <tr><td style="padding:4px 8px;color:#64748b">Reason</td><td style="padding:4px 8px">${opts.reason}</td></tr>
-        <tr><td style="padding:4px 8px;color:#64748b">Note</td><td style="padding:4px 8px">${opts.note || "—"}</td></tr>
-      </table>
-      <p style="margin:16px 0 0;font-size:12px;color:#94a3b8">Booking id: ${opts.bookingId}</p>
-    </div>`;
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${resendKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from: "NovaraCleaning <ops@novaracleaning.com>",
-      to: [ADMIN_OVERRIDE_NOTIFY_EMAIL],
-      subject,
-      html,
-    }),
-  });
-  if (!res.ok) {
-    throw new Error(`resend ${res.status}: ${(await res.text()).slice(0, 200)}`);
-  }
+    <h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">Price override</h1>
+    <p style="margin:0 0 12px"><strong>A VA applied a price override outside the usual adjustment band.</strong> No approval was required — this is a notification only.</p>
+    <table style="border-collapse:collapse;width:100%;">
+      <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">Booking</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;"><strong>${opts.bookingRef}</strong></td></tr>
+      <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">Customer</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${opts.customerName} &lt;${opts.customerEmail}&gt;</td></tr>
+      <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">Service date</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${opts.serviceDate || "—"}</td></tr>
+      <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">VA</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${opts.vaName}</td></tr>
+      <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">Quoted</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${money(opts.originalCents)}</td></tr>
+      <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">Override</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;"><strong>${money(opts.overrideCents)}</strong> (${sign}${opts.deltaPct}%)</td></tr>
+      <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">Reason</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${opts.reason}</td></tr>
+      <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">Note</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${opts.note || "—"}</td></tr>
+    </table>
+    <p style="margin:16px 0 0;font-size:13px;">Booking id: ${opts.bookingId}</p>`;
+  const sent = await sendThroughCompliance(resendKey, {
+    to: ADMIN_OVERRIDE_NOTIFY_EMAIL,
+    subject,
+    html,
+    templateKey: "admin_internal_notice",
+    declaredType: "internal_admin",
+    staffRecipient: true,
+  }, supabase);
+  if (sent.error) throw new Error(sent.error.message);
   logStep("override admin notified", { to: ADMIN_OVERRIDE_NOTIFY_EMAIL, bookingRef: opts.bookingRef });
 }
 
@@ -282,22 +274,19 @@ async function sendPendingUntilDepositEmail(
   const fname = opts.firstName || "there";
   const where = opts.address ? ` at ${opts.address}` : "";
   const payCta = opts.payUrl
-    ? `<p style="margin:20px 0"><a href="${opts.payUrl}" style="display:inline-block;background:#0f172a;color:#fff;text-decoration:none;padding:12px 18px;border-radius:6px;font-weight:600">Pay deposit ${money(opts.depositCents)}</a></p>
-       <p style="margin:0 0 12px;font-size:13px;color:#64748b">Or open this link: <a href="${opts.payUrl}">${opts.payUrl}</a></p>`
+    ? `<p style="margin:22px 0 0;"><a class="novara-btn" href="${opts.payUrl}" style="display:inline-block;padding:14px 28px;background:#e7e7ea;color:#18181b;text-decoration:none;border-radius:12px;font-weight:600;">Pay deposit ${money(opts.depositCents)}</a></p>`
     : `<p style="margin:16px 0 0">Check your inbox for the Stripe invoice and pay the deposit there.</p>`;
   const remainingNote = opts.remainingCents > 0
-    ? `<p style="margin:12px 0 0;color:#475569">Remaining balance of ${money(opts.remainingCents)} is due after we complete the clean (or per your invoice schedule).</p>`
+    ? `<p style="margin:12px 0 0;">Remaining balance of ${money(opts.remainingCents)} is due after we complete the clean (or per your invoice schedule).</p>`
     : "";
   const subject = `Your Novara cleaning is pending — deposit needed (${opts.bookingRef})`;
   const html = `
-    <div style="font-family:Arial,sans-serif;font-size:15px;color:#0f172a;line-height:1.55;max-width:560px">
+      <h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">Deposit needed</h1>
       <p style="margin:0 0 12px">Hi ${fname},</p>
       <p style="margin:0 0 12px">Your <strong>${opts.serviceType}</strong> clean for <strong>${opts.serviceDate}</strong> (${opts.timeSlot})${where} is <strong>pending until your deposit is received</strong>.</p>
-      <p style="margin:0 0 12px">This is <em>not</em> a confirmed booking yet. Once we receive your ${money(opts.depositCents)} deposit (of ${money(opts.totalCents)} total), we'll confirm your appointment and send your confirmation details.</p>
+      <p style="margin:0 0 12px">Booking <strong>${opts.bookingRef}</strong>. Total ${money(opts.totalCents)}. This is <em>not</em> a confirmed booking yet. Once we receive your ${money(opts.depositCents)} deposit, we'll confirm your appointment and send your confirmation details.</p>
       ${payCta}
-      ${remainingNote}
-      <p style="margin:20px 0 0;font-size:12px;color:#94a3b8">Booking ${opts.bookingRef} · Novara Cleaning</p>
-    </div>`;
+      ${remainingNote}`;
   const sent = await sendThroughCompliance(resendKey, {
     to: opts.to,
     subject,

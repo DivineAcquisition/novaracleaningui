@@ -103,7 +103,7 @@ const credentialHeading = {
 };
 
 const credentialBox = {
-  backgroundColor: BRAND.colors.gray[50],
+  backgroundColor: '#1c1c20',
   border: `2px solid ${BRAND.colors.primary}`,
   borderRadius: BRAND.borderRadius.md,
   padding: BRAND.spacing.lg,

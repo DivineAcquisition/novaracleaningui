@@ -54,19 +54,7 @@ const MIN_AGE_MS_FIRST_REMINDER = 5 * 60 * 1000; // 5 minutes
 const MIN_GAP_MS_PAYMENT = 5 * 60 * 1000;        // 5 minutes between manual triggers
 const MIN_GAP_MS_CRON = 12 * 60 * 60 * 1000;     // 12 hours between cron-issued reminders
 
-// Green brand palette mirrors supabase/functions/_shared/email-templates/brand.ts.
-const BRAND = {
-  name: "NovaraCleaning",
-  primary: "#16A34A",
-  primaryDark: "#0E7C3A",
-  gradient: "linear-gradient(135deg, #16A34A 0%, #0E7C3A 100%)",
-  gray700: "#374151",
-  gray600: "#6B7280",
-  gray200: "#E5E7EB",
-  logoUrl: "https://app.novaracleaning.com/novara-logo.png",
-  supportPhone: "+1 (844) 735-2070",
-  supportEmail: "support@novaracleaning.com",
-};
+const SUPPORT_PHONE = "+1 (844) 735-2070";
 
 function renderDetailsReminderEmail(args: {
   firstName: string;
@@ -75,37 +63,12 @@ function renderDetailsReminderEmail(args: {
 }) {
   const name = args.firstName || "there";
   const datePhrase = args.serviceDate ? ` on ${args.serviceDate}` : "";
-  return `<!doctype html>
-<html><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width" />
-<title>Finish your Novara booking</title></head>
-<body style="margin:0;padding:0;background:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:${BRAND.gray700};">
-<div style="max-width:600px;margin:0 auto;padding:20px;">
-  <div style="background:#fff;padding:20px 20px 12px;text-align:center;border:1px solid ${BRAND.gray200};border-bottom:none;border-radius:8px 8px 0 0;">
-    <img src="${BRAND.logoUrl}" width="56" height="56" alt="${BRAND.name} logo" style="display:block;width:56px;height:56px;border-radius:12px;margin:0 0 22px;"/>
-    <div style="font-size:14px;font-weight:700;letter-spacing:0.04em;color:${BRAND.primary};text-transform:uppercase;">${BRAND.name}</div>
-  </div>
-  <div style="background:${BRAND.gradient};color:#fff;padding:26px 30px;text-align:center;border-left:1px solid ${BRAND.gray200};border-right:1px solid ${BRAND.gray200};">
-    <div style="font-size:24px;font-weight:bold;">One quick step left</div>
-    <div style="font-size:16px;opacity:0.95;margin-top:8px;">Tell us about your home and we'll lock it in</div>
-  </div>
-  <div style="background:#fff;padding:30px;border:1px solid ${BRAND.gray200};border-top:none;">
-    <p style="font-size:16px;line-height:1.6;margin:0 0 16px;">Hi ${escapeHtml(name)},</p>
-    <p style="font-size:16px;line-height:1.6;margin:0 0 16px;">Your payment cleared — thank you! Before we can confirm your cleaning${escapeHtml(datePhrase)} and dispatch a cleaner, we need a few quick details about your home (bedrooms, bathrooms, access notes, etc.).</p>
-    <p style="font-size:16px;line-height:1.6;margin:0 0 24px;font-weight:600;">Your booking is NOT confirmed until this step is complete.</p>
-    <div style="text-align:center;margin:24px 0;">
-      <a href="${args.url}" style="display:inline-block;background:${BRAND.gradient};color:#fff;padding:16px 40px;text-decoration:none;border-radius:6px;font-weight:600;font-size:16px;">Complete Home Details</a>
-    </div>
-    <p style="font-size:14px;line-height:1.6;color:${BRAND.gray600};margin:24px 0 0;">It takes under a minute. If you need help, reply to this email or text us at ${BRAND.supportPhone} and the Novara team will finish it with you.</p>
-  </div>
-  <div style="background:#fff;text-align:center;padding:20px;border:1px solid ${BRAND.gray200};border-top:none;border-radius:0 0 8px 8px;font-size:14px;color:${BRAND.gray600};">
-    <div style="margin:8px 0;">© ${new Date().getFullYear()} ${BRAND.name}. All rights reserved.</div>
-    <div style="margin:12px 0;">
-      <a href="https://novaracleaning.com" style="color:${BRAND.primary};text-decoration:none;">Website</a> ·
-      <a href="https://app.novaracleaning.com/account" style="color:${BRAND.primary};text-decoration:none;">My Account</a> ·
-      <a href="mailto:${BRAND.supportEmail}" style="color:${BRAND.primary};text-decoration:none;">Contact</a>
-    </div>
-  </div>
-</div></body></html>`;
+  return `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">One quick step left</h1>
+<p style="margin:0 0 16px;">Hi ${escapeHtml(name)},</p>
+<p style="margin:0 0 16px;">Your payment cleared — thank you! Before we can confirm your cleaning${escapeHtml(datePhrase)} and dispatch a cleaner, we need a few quick details about your home (bedrooms, bathrooms, access notes, etc.).</p>
+<p style="margin:0 0 16px;font-weight:600;">Your booking is NOT confirmed until this step is complete.</p>
+<p style="margin:22px 0 0;"><a class="novara-btn" href="${args.url}" style="display:inline-block;padding:14px 28px;background:#e7e7ea;color:#18181b;text-decoration:none;border-radius:12px;font-weight:600;">Complete Home Details</a></p>
+<p style="margin:16px 0 0;font-size:14px;">It takes under a minute. If you need help, reply to this email or text us at ${SUPPORT_PHONE} and the Novara team will finish it with you.</p>`;
 }
 
 function escapeHtml(s: string) {

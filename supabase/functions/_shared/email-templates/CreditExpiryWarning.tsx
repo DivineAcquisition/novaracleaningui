@@ -71,9 +71,9 @@ const paragraph = {
 const warningBox = {
   textAlign: 'center' as const,
   padding: BRAND.spacing.lg,
-  background: '#FEF3C7',
+  backgroundColor: '#1c1c20',
   borderRadius: BRAND.borderRadius.md,
-  border: '2px solid #FCD34D',
+  border: '1px solid #3a3a40',
   margin: `${BRAND.spacing.xl} 0`,
 };
 

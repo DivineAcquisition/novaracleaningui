@@ -23,21 +23,6 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const BRAND = {
-  name: "Novara Cleaning",
-  primary: "#5500FF",
-  primaryDark: "#3D00B8",
-  gradient: "linear-gradient(135deg, #5500FF 0%, #3D00B8 100%)",
-  gray50: "#F9FAFB",
-  gray200: "#E5E7EB",
-  gray600: "#6B7280",
-  gray700: "#374151",
-  gray900: "#111827",
-  logo: "https://app.novaracleaning.com/novara-logo.png",
-  supportEmail: "support@novaracleaning.com",
-  supportPhone: "+1 (844) 735-2070",
-};
-const FROM_ADDRESS = "Novara Cleaning <support@novaracleaning.com>";
 const PARTNER_HOST = "https://partner.novaracleaning.com";
 const CALLBACK = `${PARTNER_HOST}/partner/auth/callback`;
 

@@ -1,5 +1,5 @@
 import * as React from 'https://esm.sh/react@18.3.1';
-import { Body, Container, Head, Heading, Html, Preview, Section, Text } from 'https://esm.sh/@react-email/components@0.0.22';
+import { Heading, Section, Text } from 'https://esm.sh/@react-email/components@0.0.22';
 import { EmailLayout } from './components/EmailLayout.tsx';
 import { Button } from './components/Button.tsx';
 import { DetailRow } from './components/DetailRow.tsx';
@@ -92,12 +92,6 @@ export const BookingModification = ({ bookingData }: BookingModificationProps) =
       title="Booking Updated - NovaraCleaning"
       previewText="Your cleaning service has been updated"
     >
-      <Head>
-        <title>Booking Modified - NovaraCleaning</title>
-      </Head>
-      <Preview>Your cleaning service has been updated</Preview>
-      <Body style={main}>
-        <Container style={container}>
           <Heading style={h1}>Booking Updated!</Heading>
           
           <Text style={text}>
@@ -169,12 +163,10 @@ export const BookingModification = ({ bookingData }: BookingModificationProps) =
 
           <Text style={footer}>
             Need to make more changes? Visit your account dashboard or contact us at{' '}
-            <a href="mailto:hello@novaracleaning.com" style={link}>
-              hello@novaracleaning.com
+            <a href="mailto:support@novaracleaning.com" style={link}>
+              support@novaracleaning.com
             </a>
           </Text>
-        </Container>
-      </Body>
     </EmailLayout>
   );
 };
@@ -182,8 +174,8 @@ export const BookingModification = ({ bookingData }: BookingModificationProps) =
 export default BookingModification;
 
 const main = {
-  backgroundColor: '#f8fafc',
-  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  backgroundColor: '#141416',
+  fontFamily: 'Inter, Arial, sans-serif',
 };
 
 const container = {
@@ -225,7 +217,8 @@ const detailsSection = {
 };
 
 const pricingSection = {
-  backgroundColor: '#f1f5f9',
+  backgroundColor: '#1c1c20',
+  border: '1px solid #3a3a40',
   borderRadius: BRAND.borderRadius.lg,
   padding: BRAND.spacing.lg,
   margin: `${BRAND.spacing.xl} 0`,

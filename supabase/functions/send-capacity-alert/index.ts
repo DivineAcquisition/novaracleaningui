@@ -1,7 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { Resend } from "https://esm.sh/resend@4.0.0";
-
-const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
+import { sendThroughCompliance } from "../_shared/email-compliance-send.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -37,82 +35,31 @@ serve(async (req) => {
     });
 
     const emailHtml = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 12px 12px 0 0; text-align: center; }
-            .header h1 { margin: 0; font-size: 24px; }
-            .content { background: #f8f9fa; padding: 30px; border-radius: 0 0 12px 12px; }
-            .alert-box { background: ${urgencyLevel === 'FULL' ? '#dc2626' : '#f59e0b'}; color: white; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center; }
-            .alert-box h2 { margin: 0 0 10px 0; font-size: 28px; }
-            .detail-row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #e5e7eb; }
-            .detail-label { font-weight: 600; color: #6b7280; }
-            .detail-value { font-weight: 500; color: #111827; }
-            .capacity-bar { background: #e5e7eb; height: 30px; border-radius: 15px; overflow: hidden; margin: 15px 0; }
-            .capacity-fill { background: ${urgencyLevel === 'FULL' ? '#dc2626' : '#f59e0b'}; height: 100%; display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; transition: width 0.3s ease; }
-            .action-button { display: inline-block; background: #667eea; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; margin-top: 20px; }
-            .footer { text-align: center; color: #6b7280; font-size: 12px; margin-top: 30px; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <h1>⚠️ Capacity Alert - NovaRaCleaning</h1>
-            </div>
-            <div class="content">
-              <div class="alert-box">
-                <h2>${urgencyLevel === 'FULL' ? '🚨 SLOT FULLY BOOKED' : '⚡ SLOT FILLING UP'}</h2>
-                <p style="margin: 0; font-size: 18px;">${current_bookings} of ${max_capacity} spots taken (${capacityPercentage}%)</p>
-              </div>
-
-              <div style="margin: 20px 0;">
-                <div class="detail-row">
-                  <span class="detail-label">Date:</span>
-                  <span class="detail-value">${formattedDate}</span>
-                </div>
-                <div class="detail-row">
-                  <span class="detail-label">Time Slot:</span>
-                  <span class="detail-value">${time_slot}</span>
-                </div>
-                <div class="detail-row" style="border-bottom: none;">
-                  <span class="detail-label">Status:</span>
-                  <span class="detail-value" style="color: ${urgencyLevel === 'FULL' ? '#dc2626' : '#f59e0b'}; font-weight: 700;">${urgencyLevel}</span>
-                </div>
-              </div>
-
-              <div class="capacity-bar">
-                <div class="capacity-fill" style="width: ${capacityPercentage}%;">${capacityPercentage}%</div>
-              </div>
-
-              <p style="margin: 20px 0; color: #6b7280;">
-                ${urgencyLevel === 'FULL' 
-                  ? 'This time slot is now fully booked. Consider adding additional capacity or notifying customers of alternative times.' 
-                  : 'This time slot is filling up quickly. You may want to review cleaner availability and prepare for potential capacity issues.'}
-              </p>
-
-              <div style="text-align: center;">
-                <a href="https://admin.novaracleaning.com/admin/csr" class="action-button">View Admin Dashboard</a>
-              </div>
-
-              <div class="footer">
-                <p>© 2025 NovaRaCleaning. All Rights Reserved.</p>
-                <p>This is an automated capacity alert. Please do not reply to this email.</p>
-              </div>
-            </div>
-          </div>
-        </body>
-      </html>
+      <h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">${urgencyLevel === "FULL" ? "Slot fully booked" : "Slot filling up"}</h1>
+      <p style="margin:0 0 16px;font-size:18px;color:#ffffff;">${current_bookings} of ${max_capacity} spots taken (${capacityPercentage}%)</p>
+      <table style="width:100%;border-collapse:collapse;">
+        <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">Date</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;text-align:right;">${formattedDate}</td></tr>
+        <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">Time slot</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;text-align:right;">${time_slot}</td></tr>
+        <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">Status</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;text-align:right;">${urgencyLevel}</td></tr>
+      </table>
+      <p>
+        ${urgencyLevel === "FULL"
+          ? "This time slot is now fully booked. Consider adding additional capacity or notifying customers of alternative times."
+          : "This time slot is filling up quickly. You may want to review cleaner availability and prepare for potential capacity issues."}
+      </p>
+      <p style="margin:22px 0 0;"><a class="novara-btn" href="https://admin.novaracleaning.com/admin/csr" style="display:inline-block;padding:14px 28px;background:#e7e7ea;color:#18181b;text-decoration:none;border-radius:12px;font-weight:600;">View Admin Dashboard</a></p>
     `;
 
-    const { data, error } = await resend.emails.send({
-      from: "NovaRaCleaning Alerts <ops@novaracleaning.com>",
-      to: ["admin@novaracleaning.com"], // Update with actual admin email(s)
-      subject: `${urgencyLevel === 'FULL' ? '🚨 FULL' : '⚡ FILLING UP'} - ${formattedDate} at ${time_slot}`,
+    const sent = await sendThroughCompliance(Deno.env.get("RESEND_API_KEY") || "", {
+      to: "admin@novaracleaning.com",
+      subject: `${urgencyLevel === "FULL" ? "FULL" : "FILLING UP"} - ${formattedDate} at ${time_slot}`,
       html: emailHtml,
+      templateKey: "admin_internal_notice",
+      declaredType: "internal_admin",
+      staffRecipient: true,
     });
+    const data = sent.data;
+    const error = sent.error;
 
     if (error) {
       console.error("Error sending capacity alert:", error);

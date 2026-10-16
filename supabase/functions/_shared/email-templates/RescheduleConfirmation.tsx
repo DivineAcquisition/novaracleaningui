@@ -142,7 +142,8 @@ const comparisonContainer = {
 const oldDetailsBox = {
   flex: 1,
   padding: BRAND.spacing.lg,
-  backgroundColor: BRAND.colors.gray[100],
+  backgroundColor: '#1c1c20',
+  border: '1px solid #3a3a40',
   borderRadius: BRAND.borderRadius.lg,
   textAlign: 'center' as const,
 };
@@ -150,7 +151,8 @@ const oldDetailsBox = {
 const newDetailsBox = {
   flex: 1,
   padding: BRAND.spacing.lg,
-  background: 'linear-gradient(135deg, #D1FAE5 0%, #A7F3D0 100%)',
+  backgroundColor: '#1c1c20',
+  border: '1px solid #3a3a40',
   borderRadius: BRAND.borderRadius.lg,
   textAlign: 'center' as const,
 };
@@ -192,7 +194,8 @@ const arrowText = {
 };
 
 const detailBox = {
-  backgroundColor: BRAND.colors.gray[50],
+  backgroundColor: '#1c1c20',
+  border: '1px solid #3a3a40',
   padding: BRAND.spacing.lg,
   borderRadius: BRAND.borderRadius.lg,
   margin: `${BRAND.spacing.lg} 0`,
@@ -206,7 +209,8 @@ const sectionTitle = {
 };
 
 const successBox = {
-  backgroundColor: '#D1FAE5',
+  backgroundColor: '#1c1c20',
+  border: '1px solid #3a3a40',
   padding: BRAND.spacing.lg,
   borderRadius: BRAND.borderRadius.lg,
   margin: `${BRAND.spacing.lg} 0`,

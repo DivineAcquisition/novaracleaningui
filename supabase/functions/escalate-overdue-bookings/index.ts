@@ -9,6 +9,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { resolveStaffAlertEmails } from "../_shared/dispatch-backfill.ts";
+import { sendThroughCompliance } from "../_shared/email-compliance-send.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -45,21 +46,16 @@ async function sendStaffEmail(
 ): Promise<boolean> {
   if (!to.length) return false;
   try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: "NovaraCleaning <ops@novaracleaning.com>",
-        to,
-        subject,
-        html,
-      }),
+    const sent = await sendThroughCompliance(apiKey, {
+      to,
+      subject,
+      html,
+      templateKey: "admin_internal_notice",
+      declaredType: "internal_admin",
+      staffRecipient: true,
     });
-    if (!res.ok) {
-      logStep("Resend failed", { status: res.status, body: await res.text() });
+    if (sent.error) {
+      logStep("Resend failed", { error: sent.error.message });
       return false;
     }
     return true;
@@ -125,32 +121,30 @@ serve(async (req) => {
           ? `${cleaner.first_name || ""} ${cleaner.last_name || ""}`.trim()
           : "—";
         return `<tr>
-          <td style="padding:8px;border-bottom:1px solid #e5e7eb">${ref}</td>
-          <td style="padding:8px;border-bottom:1px solid #e5e7eb">${b.service_date}</td>
-          <td style="padding:8px;border-bottom:1px solid #e5e7eb">${b.time_slot || "—"}</td>
-          <td style="padding:8px;border-bottom:1px solid #e5e7eb">${customer}</td>
-          <td style="padding:8px;border-bottom:1px solid #e5e7eb">${cleanerName}</td>
-          <td style="padding:8px;border-bottom:1px solid #e5e7eb">${b.status}</td>
+          <td style="padding:8px;border-bottom:1px solid #3a3a40">${ref}</td>
+          <td style="padding:8px;border-bottom:1px solid #3a3a40">${b.service_date}</td>
+          <td style="padding:8px;border-bottom:1px solid #3a3a40">${b.time_slot || "—"}</td>
+          <td style="padding:8px;border-bottom:1px solid #3a3a40">${customer}</td>
+          <td style="padding:8px;border-bottom:1px solid #3a3a40">${cleanerName}</td>
+          <td style="padding:8px;border-bottom:1px solid #3a3a40">${b.status}</td>
         </tr>`;
       }).join("");
 
       const html = `
-        <div style="font-family:system-ui,sans-serif;max-width:720px;margin:0 auto">
-          <h2 style="color:#0f172a">Incomplete cleanings past service date</h2>
-          <p style="color:#475569">These bookings were scheduled on or before yesterday but are still not marked complete. Please confirm status with the cleaner and update the booking in admin.</p>
+          <h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">Incomplete cleanings past service date</h1>
+          <p>These bookings were scheduled on or before yesterday but are still not marked complete. Please confirm status with the cleaner and update the booking in admin.</p>
           <table style="width:100%;border-collapse:collapse;font-size:14px;margin:16px 0">
-            <thead><tr style="background:#f1f5f9;text-align:left">
-              <th style="padding:8px">Booking</th>
-              <th style="padding:8px">Date</th>
-              <th style="padding:8px">Window</th>
-              <th style="padding:8px">Customer</th>
-              <th style="padding:8px">Cleaner</th>
-              <th style="padding:8px">Status</th>
+            <thead><tr style="text-align:left">
+              <th style="padding:8px;border-bottom:1px solid #3a3a40;">Booking</th>
+              <th style="padding:8px;border-bottom:1px solid #3a3a40;">Date</th>
+              <th style="padding:8px;border-bottom:1px solid #3a3a40;">Window</th>
+              <th style="padding:8px;border-bottom:1px solid #3a3a40;">Customer</th>
+              <th style="padding:8px;border-bottom:1px solid #3a3a40;">Cleaner</th>
+              <th style="padding:8px;border-bottom:1px solid #3a3a40;">Status</th>
             </tr></thead>
             <tbody>${lines}</tbody>
           </table>
-          <p><a href="${ADMIN_BOOKINGS_URL}" style="color:#059669;font-weight:600">Open admin bookings →</a></p>
-        </div>`;
+          <p style="margin:22px 0 0;"><a class="novara-btn" href="${ADMIN_BOOKINGS_URL}" style="display:inline-block;padding:14px 28px;background:#e7e7ea;color:#18181b;text-decoration:none;border-radius:12px;font-weight:600;">Open admin bookings</a></p>`;
 
       staffEmailSent = await sendStaffEmail(
         resendKey,

@@ -19,13 +19,12 @@
 // per-VA rather than something we can derive.
 
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
+import { deliverCompliantEmail } from "@/lib/email-compliance/deliver";
 import { issueEodToken, type EodToken, type IssueOptions } from "./eod-token";
 import { getEodSettings, localDate, primePerformanceSecrets } from "./settings";
 import { listTrackedVas, type VaRecord } from "./vas";
 
 const DEFAULT_PUBLIC_BASE = "https://eod.novaracleaning.com";
-const FROM_ADDRESS = "Novara Team <ops@novaracleaning.com>";
-
 async function readSecret(key: string): Promise<string> {
   const fromEnv = (process.env[key] || "").trim();
   if (fromEnv) return fromEnv;
@@ -65,52 +64,28 @@ function escapeHtml(value: string): string {
  */
 export function renderEodEmail(va: VaRecord, url: string, workDate: string): string {
   const name = escapeHtml(va.firstName || va.name || "there");
-  return `<!doctype html>
-<html>
-  <body style="margin:0;padding:24px;background:#FAFAFC;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0F172A;">
-    <div style="max-width:520px;margin:0 auto;background:#fff;border:1px solid #E2E8F0;border-radius:16px;overflow:hidden;">
-      <div style="background:linear-gradient(135deg,#5C0FFE 0%,#8F7BFD 100%);padding:20px 24px;">
-        <p style="margin:0;color:#fff;font-size:16px;font-weight:700;letter-spacing:-0.01em;">End of day — ${escapeHtml(workDate)}</p>
-      </div>
-      <div style="padding:24px;">
-        <p style="margin:0 0 12px;font-size:15px;line-height:1.55;">Hi ${name},</p>
-        <p style="margin:0 0 16px;font-size:15px;line-height:1.55;">
-          Your EOD is mostly filled in already — hours, calls, bookings and screens are pulled
-          from the systems automatically. Review what we recorded, add the context we can't see,
-          and you're done. It should take under five minutes.
-        </p>
-        <p style="margin:0 0 24px;">
-          <a href="${url}" style="display:inline-block;background:#5C0FFE;color:#fff;text-decoration:none;font-weight:600;font-size:15px;padding:12px 22px;border-radius:10px;">Open your EOD</a>
-        </p>
-        <p style="margin:0 0 8px;font-size:13px;line-height:1.5;color:#64748B;">
-          This is your personal link — it signs you straight in, so please don't forward it.
-          Bookmark it and it'll work every day.
-        </p>
-        <p style="margin:0;font-size:12px;line-height:1.5;color:#94A3B8;word-break:break-all;">${url}</p>
-      </div>
-    </div>
-    <p style="max-width:520px;margin:14px auto 0;font-size:11px;line-height:1.5;color:#94A3B8;text-align:center;">
-      Blockers and notes on this form are never scored. They're there so you can say what's actually going on.
-    </p>
-  </body>
-</html>`;
+  return `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">End of day — ${escapeHtml(workDate)}</h1>
+<p style="margin:0 0 12px;">Hi ${name},</p>
+<p style="margin:0 0 16px;">Your EOD is mostly filled in already — hours, calls, bookings and screens are pulled from the systems automatically. Review what we recorded, add the context we can't see, and you're done. It should take under five minutes.</p>
+<p style="margin:22px 0 0;"><a class="novara-btn" href="${url}" style="display:inline-block;padding:14px 28px;background:#e7e7ea;color:#18181b;text-decoration:none;border-radius:12px;font-weight:600;">Open your EOD</a></p>
+<p style="margin:16px 0 0;font-size:13px;">This is your personal link — it signs you straight in, so please don't forward it. Bookmark it and it'll work every day.</p>
+<p style="margin:12px 0 0;font-size:13px;">Blockers and notes on this form are never scored. They're there so you can say what's actually going on.</p>`;
 }
 
 async function sendEmail(va: VaRecord, url: string, workDate: string): Promise<boolean> {
   const key = await readSecret("RESEND_API_KEY");
   if (!key || !va.email) return false;
   try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        from: FROM_ADDRESS,
-        to: [va.email],
-        subject: `Your end-of-day report — ${workDate}`,
-        html: renderEodEmail(va, url, workDate),
-      }),
+    const sent = await deliverCompliantEmail(getAdminSupabase(), {
+      apiKey: key,
+      to: va.email,
+      subject: `Your end-of-day report — ${workDate}`,
+      html: renderEodEmail(va, url, workDate),
+      templateKey: "va_onboarding",
+      declaredType: "internal_admin",
+      staffRecipient: true,
     });
-    return res.ok;
+    return sent.ok;
   } catch {
     return false;
   }

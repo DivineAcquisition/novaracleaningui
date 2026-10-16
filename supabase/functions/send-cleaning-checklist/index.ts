@@ -597,92 +597,59 @@ function renderHtml(opts: {
   const { content } = opts;
   const sectionHtml = content.sections.map(
     (g) => `
-    <h3 style="font-family:'Plus Jakarta Sans',Helvetica,Arial,sans-serif;font-size:16px;margin:24px 0 8px;color:#111827">${g.title}</h3>
-    <ul style="margin:0;padding-left:20px;color:#374151;font-size:14px;line-height:1.65">
+    <h2 style="font-family:Inter,Arial,sans-serif;font-size:18px;margin:24px 0 8px;color:#ffffff">${g.title}</h2>
+    <ul style="margin:0;padding-left:20px;font-size:15px;line-height:1.65">
       ${g.items.map((t) => `<li style="margin:4px 0">${t}</li>`).join("")}
     </ul>`,
   ).join("");
 
   const extrasHtml = `
-    <ul style="margin:0;padding-left:20px;color:#374151;font-size:14px;line-height:1.65">
+    <ul style="margin:0;padding-left:20px;font-size:15px;line-height:1.65">
       ${content.extras.map((t) => `<li style="margin:4px 0">${t}</li>`).join("")}
     </ul>`;
 
   const viewCta = opts.viewUrl
-    ? `<div style="text-align:center;margin:28px 0 8px">
-        <a href="${opts.viewUrl}" style="display:inline-block;background:linear-gradient(135deg,#16A34A 0%,#0E7C3A 100%);color:#fff;padding:14px 28px;text-decoration:none;border-radius:6px;font-weight:600;font-size:15px">View checklist online</a>
-      </div>
-      <p style="margin:0 0 16px;font-size:12px;color:#9CA3AF;text-align:center">Or open: ${opts.viewUrl}</p>`
+    ? `<p style="margin:22px 0 0;"><a class="novara-btn" href="${opts.viewUrl}" style="display:inline-block;padding:14px 28px;background:#e7e7ea;color:#18181b;text-decoration:none;border-radius:12px;font-weight:600;">View checklist online</a></p>`
     : "";
 
   const bookingMetaRows: string[] = [];
   if (opts.bookingNumber) {
     bookingMetaRows.push(
-      `<tr><td style="padding:2px 0;color:#6B7280;font-size:13px">Booking #</td><td style="padding:2px 0;color:#111827;font-size:13px;font-weight:600;text-align:right">NVC-${String(opts.bookingNumber).padStart(4, "0")}</td></tr>`,
+      `<tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">Booking</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;font-weight:600;text-align:right">NVC-${String(opts.bookingNumber).padStart(4, "0")}</td></tr>`,
     );
   }
   if (opts.serviceDate) {
     bookingMetaRows.push(
-      `<tr><td style="padding:2px 0;color:#6B7280;font-size:13px">Service date</td><td style="padding:2px 0;color:#111827;font-size:13px;font-weight:600;text-align:right">${opts.serviceDate}</td></tr>`,
+      `<tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">Service date</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;font-weight:600;text-align:right">${opts.serviceDate}</td></tr>`,
     );
   }
   if (opts.timeSlot) {
     bookingMetaRows.push(
-      `<tr><td style="padding:2px 0;color:#6B7280;font-size:13px">Arrival window</td><td style="padding:2px 0;color:#111827;font-size:13px;font-weight:600;text-align:right">${opts.timeSlot}</td></tr>`,
+      `<tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">Arrival window</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;font-weight:600;text-align:right">${opts.timeSlot}</td></tr>`,
     );
   }
   if (opts.serviceAddress) {
     bookingMetaRows.push(
-      `<tr><td style="padding:2px 0;color:#6B7280;font-size:13px">Service address</td><td style="padding:2px 0;color:#111827;font-size:13px;font-weight:600;text-align:right">${opts.serviceAddress}</td></tr>`,
+      `<tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">Service address</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;font-weight:600;text-align:right">${opts.serviceAddress}</td></tr>`,
     );
   }
 
   const bookingMetaTable = bookingMetaRows.length
-    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#F9FAFB;border-radius:10px;padding:14px 16px;margin:0 0 20px">
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 16px">
          ${bookingMetaRows.join("")}
        </table>`
     : "";
 
-  return `<!doctype html>
-<html><head><meta charset="utf-8"><title>Your Maintenance Cleaning Checklist</title></head>
-<body style="margin:0;padding:0;background:#F9FAFB;font-family:'Plus Jakarta Sans',Helvetica,Arial,sans-serif;color:#374151">
-  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#F9FAFB;padding:32px 16px">
-    <tr><td align="center">
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 8px 24px rgba(22,163,74,0.10)">
-        <tr><td style="background:linear-gradient(135deg,#16A34A 0%,#0E7C3A 100%);padding:32px 32px 28px;color:#ffffff">
-          <p style="margin:0 0 4px;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;opacity:0.85">NovaraCleaning</p>
-          <h1 style="margin:0 0 8px;font-size:24px;font-weight:700;letter-spacing:-0.01em">${content.heading}</h1>
-          <p style="margin:0;font-size:14px;line-height:1.5;opacity:0.95">Hi ${opts.firstName || "there"} — here's exactly what the Novara team will do on your visit. Save this email so you always know what's included and what's an add-on.</p>
-        </td></tr>
-        <tr><td style="padding:28px 32px">
-          ${bookingMetaTable}
-          <p style="margin:0 0 18px;font-size:14px;color:#374151;line-height:1.6">
-            ${content.intro}
-          </p>
-
-          ${sectionHtml}
-
-          <hr style="border:none;border-top:1px solid #E5E7EB;margin:32px 0" />
-
-          <h3 style="font-family:'Plus Jakarta Sans',Helvetica,Arial,sans-serif;font-size:16px;margin:0 0 8px;color:#111827">Extras (additional charges apply)</h3>
-          <p style="margin:0 0 8px;font-size:13px;color:#6B7280">Want any of these on your next visit? Just reply to this email or text us — we'll add them and send an updated total.</p>
-          ${extrasHtml}
-
-          ${viewCta}
-
-          <hr style="border:none;border-top:1px solid #E5E7EB;margin:32px 0" />
-
-          <p style="margin:0 0 8px;font-size:13px;color:#6B7280;line-height:1.6"><strong style="color:#111827">Day-of prep tips:</strong> tidy small valuables, secure pets, and flag any sensitive surfaces (natural stone, antique wood, framed art) so we use the right cleaner.</p>
-          <p style="margin:0;font-size:12px;color:#9CA3AF;line-height:1.5">© NovaraCleaning · All Rights Reserved. This document is the exclusive property of NovaraCleaning and intended solely for use by authorized employees, contractors, and the recipient customer.</p>
-        </td></tr>
-        <tr><td style="background:#F9FAFB;padding:20px 32px;text-align:center;font-size:12px;color:#6B7280">
-          Novara Cleaning &middot; support@novaracleaning.com &middot; +1 (844) 735-2070<br/>
-          Reply to this email any time — we love hearing from our customers.
-        </td></tr>
-      </table>
-    </td></tr>
-  </table>
-</body></html>`;
+  return `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">${content.heading}</h1>
+<p style="margin:0 0 16px;">Hi ${opts.firstName || "there"} — here's exactly what the Novara team will do on your visit. Save this email so you always know what's included and what's an add-on.</p>
+${bookingMetaTable}
+<p style="margin:0 0 16px;">${content.intro}</p>
+${sectionHtml}
+<h2 style="font-family:Inter,Arial,sans-serif;font-size:18px;margin:24px 0 8px;color:#ffffff;">Extras (additional charges apply)</h2>
+<p style="margin:0 0 8px;">Want any of these on your next visit? Reply to this email or text us — we'll add them and send an updated total.</p>
+${extrasHtml}
+${viewCta}
+<p style="margin:16px 0 0;"><strong style="color:#ffffff;">Day-of prep tips:</strong> tidy small valuables, secure pets, and flag any sensitive surfaces (natural stone, antique wood, framed art) so we use the right cleaner.</p>`;
 }
 
 function plainText(opts: { firstName: string; content: ChecklistContent; viewUrl?: string }): string {

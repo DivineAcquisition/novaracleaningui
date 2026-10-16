@@ -1,5 +1,5 @@
 import * as React from "https://esm.sh/react@18.3.1";
-import { Html, Head, Body, Container, Section, Text, Heading } from "https://esm.sh/@react-email/components@0.0.22";
+import { Section, Text, Heading } from "https://esm.sh/@react-email/components@0.0.22";
 import { EmailLayout } from "./components/EmailLayout.tsx";
 import { DetailRow } from "./components/DetailRow.tsx";
 import { Highlight } from "./components/Highlight.tsx";
@@ -38,8 +38,6 @@ export const PayoutConfirmation = ({
   };
 
   return (
-    <Html>
-      <Head />
       <EmailLayout title="Payment Sent" previewText="Payment Sent Successfully">
         <Heading style={styles.heading}>
           Payment Sent! 💸
@@ -80,7 +78,6 @@ export const PayoutConfirmation = ({
           NVC Operations
         </Text>
       </EmailLayout>
-    </Html>
   );
 };
 
