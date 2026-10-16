@@ -205,7 +205,6 @@ export function HeroSpotlight() {
 export function PageHero({ title, lede, children }) {
   return (
     <section className="hero page-hero">
-      <Particles density={28} />
       <HeroSpotlight />
       <BlurFade>
         <div className="wrap">

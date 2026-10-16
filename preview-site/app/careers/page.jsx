@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { Particles } from "../../components/effects";
 import { jobs } from "../../lib/content";
 
 export const metadata = { title: "Careers | NovaraCleaning™" };
@@ -8,7 +7,6 @@ export default function CareersPage() {
   return (
     <main>
       <section className="hero page-hero">
-        <Particles density={28} />
         <div className="wrap">
           <h1>Join Our Team</h1>
           <p className="lede">Check out our open positions and see if you’re a great fit for the team.</p>

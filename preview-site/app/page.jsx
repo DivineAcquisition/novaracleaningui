@@ -1,17 +1,17 @@
 import Link from "next/link";
 import { Compare } from "../components/Compare";
-import { BlurFade, HeroSpotlight, MagicCard, Marquee, Particles, ShinyText, TiltCard } from "../components/effects";
+import { BlurFade, HeroSpotlight, Marquee, ShinyText } from "../components/effects";
 import { Faq } from "../components/Faq";
-import { Glyph, Spark } from "../components/Icons";
+import { Glyph } from "../components/Icons";
 import { LeadForm } from "../components/LeadForm";
 import { ProductStage } from "../components/ProductStage";
-import { BOOK_URL, places, serviceCards, steps, values } from "../lib/content";
+import { ServiceGrid } from "../components/ServiceGrid";
+import { BOOK_URL, places, steps, values } from "../lib/content";
 
 export default function HomePage() {
   return (
     <main>
       <section className="hero">
-        <Particles />
         <HeroSpotlight />
         <div className="wrap hero-grid">
           <div>
@@ -56,21 +56,7 @@ export default function HomePage() {
               At <strong>Novara Cleaning</strong>, we don’t just clean — we care for your space with precision, consistency, and attention to detail. Whether you need a quick refresh, a deep restorative clean, or a full property reset, our services are designed to fit your lifestyle and standards.
             </p>
           </div>
-          <div className="bento">
-            <div className="service-grid">
-              {serviceCards.map((service) => (
-                <TiltCard key={service.slug}>
-                  <MagicCard className="service-slot">
-                    <Link className="service-card" href={`/services/${service.slug}`}>
-                      <Spark />
-                      <h3>{service.title}</h3>
-                      <p>{service.blurb}</p>
-                    </Link>
-                  </MagicCard>
-                </TiltCard>
-              ))}
-            </div>
-          </div>
+          <ServiceGrid />
         </div>
       </section>
 

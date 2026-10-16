@@ -46,31 +46,43 @@ export const serviceCards = [
     slug: "commercial",
     title: "Commercial Partnership",
     blurb: "For larger or mixed-use facilities — retail, medical, gyms, multi-tenant, industrial-light.",
+    image: "/images/services/service-commercial.jpg",
+    imageAlt: "Freshly cleaned commercial lobby with polished floors and glass entry",
   },
   {
     slug: "office-cleaning",
     title: "Office Cleaning",
     blurb: "For professional offices, suites, and workspaces, recurring or one-time.",
+    image: "/images/services/service-office.jpg",
+    imageAlt: "Tidy office workspace after a professional clean",
   },
   {
     slug: "recurring-service",
     title: "Recurring Service",
     blurb: "Consistent, hassle-free cleaning on the schedule that fits your life weekly, biweekly, or monthly.",
+    image: "/images/services/service-recurring.jpg",
+    imageAlt: "Bright living room kept fresh for recurring cleaning",
   },
   {
     slug: "deep-clean",
     title: "Deep Cleaning",
     blurb: "Comprehensive home detailing, advanced cleaning, and tailored for every home.",
+    image: "/images/services/service-deep.jpg",
+    imageAlt: "Kitchen after a detailed deep clean",
   },
   {
     slug: "standard-cleaning",
     title: "Standard Cleaning",
     blurb: "Reliable routine maintenance, thorough surface care, and ideal for regular upkeep.",
+    image: "/images/services/service-standard.jpg",
+    imageAlt: "Bedroom after a standard home clean",
   },
   {
     slug: "move-in-out",
     title: "Moving Cleaning",
     blurb: "Complete property reset, extensive interior detailing, and perfect for transitions.",
+    image: "/images/services/service-moving.jpg",
+    imageAlt: "Empty home interior reset for a move",
   },
 ];
 

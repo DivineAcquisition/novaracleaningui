@@ -1,4 +1,3 @@
-import { Particles } from "../../../components/effects";
 import { LeadForm } from "../../../components/LeadForm";
 
 export const metadata = { title: "Specialized Contractor | NovaraCleaning™" };
@@ -7,7 +6,6 @@ export default function SpecializedContractorPage() {
   return (
     <main>
       <section className="hero page-hero">
-        <Particles density={28} />
         <div className="wrap">
           <h1>Specialized Contractor</h1>
           <p className="lede">Advanced cleans on strict timelines. Bring your expertise and gear; we bring consistent work.</p>
