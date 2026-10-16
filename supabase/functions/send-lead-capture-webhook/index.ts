@@ -101,7 +101,7 @@ serve(async (req) => {
           </div>`;
 
         resend.emails.send({
-          from: "Novara Cleaning <hello@novaracleaning.com>",
+          from: "Novara Cleaning <support@novaracleaning.com>",
           to: ["contact@novaracleaning.com"],
           subject,
           html,

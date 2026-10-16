@@ -3,6 +3,7 @@
 // Does not generate or send a 1099 document.
 
 import { evaluateW9Status, type W9Status } from "./engagement-end.ts";
+import { necInclusion } from "./nec-1099.ts";
 
 export type YtdSource = "payroll" | "payouts" | "none";
 
@@ -72,6 +73,35 @@ export async function prepareDepartureTax(
       source = "payouts";
       cents += Number(row.cleaner_payout_cents) || 0;
     }
+  }
+
+  // The annual 1099 reads the unified manual_payouts ledger. When that
+  // ledger has rows, departure prep uses it (and each method's 1099 flag)
+  // instead of the older payroll or payouts tables.
+  const { data: manualRows, error: manualErr } = await admin
+    .from("manual_payouts")
+    .select("amount_cents, amount_sent_cents, status, paid_at, service_date, created_at, payout_method_code, counts_toward_own_1099")
+    .eq("cleaner_id", cleaner.id)
+    .eq("status", "paid");
+  if (manualErr) throw new Error(manualErr.message || "Could not read the pay ledger");
+
+  let manualCents = 0;
+  let sawManual = false;
+  for (const row of manualRows || []) {
+    sawManual = true;
+    const when = row.paid_at || row.service_date || row.created_at;
+    if (yearOf(when) !== year) continue;
+    const inclusion = necInclusion({
+      methodCode: row.payout_method_code,
+      countsTowardOwn1099: row.counts_toward_own_1099,
+    });
+    if (inclusion === "exclude" || inclusion === "unresolved") continue;
+    const paid = row.amount_sent_cents != null ? Number(row.amount_sent_cents) : Number(row.amount_cents);
+    manualCents += Math.max(0, Math.round(paid) || 0);
+  }
+  if (sawManual) {
+    cents = manualCents;
+    source = "payouts";
   }
 
   const w9Status = evaluateW9Status(cleaner);

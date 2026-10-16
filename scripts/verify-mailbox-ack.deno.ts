@@ -11,8 +11,8 @@ import {
   composeAck,
   decideMailboxAck,
   extractEmailAddresses,
+  ackFrom,
   matchedAllowedMailbox,
-  SEND_AS,
   SIGNATURE,
 } from "../supabase/functions/_shared/mailbox-ack.ts";
 
@@ -106,6 +106,7 @@ if (complaint.action === "send") {
   assert(complaint.kind === "complaint", "classified as complaint");
   assert(complaint.to === "kimberlyharperlvt@gmail.com", "replies to the customer");
   assert(complaint.replyTo === "support@novaracleaning.com", "reply-to is the receiving mailbox");
+  assert(complaint.from === "NovaraCleaning <support@novaracleaning.com>", "ack is sent from support@");
   assert(!complaint.text.includes("Malik"), "does not use a personal name");
   assert(complaint.text.endsWith("NovaraCleaning") || complaint.text.includes("\nNovaraCleaning"),
     "signs as NovaraCleaning");
@@ -136,6 +137,7 @@ assert(billingRefund.action === "send", "billing@ inquiry sends");
 if (billingRefund.action === "send") {
   assert(billingRefund.party === "Billing", "billing@ always informs Billing");
   assert(billingRefund.replyTo === "billing@novaracleaning.com", "reply-to billing@");
+  assert(billingRefund.from === "NovaraCleaning <billing@novaracleaning.com>", "billing ack is sent from billing@");
 }
 
 const dispute = decideMailboxAck({
@@ -164,7 +166,7 @@ const composed = composeAck({
 assert(composed.text.startsWith("Kimberly,"), "personalized greeting");
 assert(composed.text.includes("informed Operations"), "party line present");
 assert(composed.html.includes("NovaraCleaning"), "html signed as NovaraCleaning");
-assert(SEND_AS.startsWith("NovaraCleaning"), "from display is NovaraCleaning");
+assert(ackFrom("support@novaracleaning.com").startsWith("NovaraCleaning"), "from display is NovaraCleaning");
 assert(SIGNATURE === "NovaraCleaning", "signature is NovaraCleaning");
 
 if (failed > 0) {

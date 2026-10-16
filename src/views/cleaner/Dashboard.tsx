@@ -1145,7 +1145,7 @@ export default function CleanerDashboard() {
                 ? "View your earnings, payouts, and financial reports"
                 : stripeStatus === "pending"
                   ? "Complete your Stripe setup to start receiving payouts"
-                  : "Set up Stripe to receive payments for your work"}
+                  : "Stripe is the fastest way to get paid. Cash App, Zelle, and Chime are on your profile."}
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-2">

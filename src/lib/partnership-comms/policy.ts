@@ -111,6 +111,8 @@ export interface OfflinePolicyInput {
   settings?: PartnershipCommsSettings;
   emailOptedOut?: boolean;
   smsOptedOut?: boolean;
+  /** Email opt-out stops marketing only. Service mail still sends. */
+  marketing?: boolean;
   recentSendCount?: number;
 }
 
@@ -122,7 +124,7 @@ export function checkPartnershipPolicy(input: OfflinePolicyInput): PartnershipPo
   const settings = input.settings || DEFAULT_PARTNERSHIP_COMMS_SETTINGS;
   const now = input.now || new Date();
   const key = partnershipRecipientKey(input.email, input.phone);
-  if (input.channel === "email" && input.email && input.emailOptedOut) {
+  if (input.channel === "email" && input.marketing && input.email && input.emailOptedOut) {
     return { action: "suppress", reason: "opted_out", recipient_key: key };
   }
   if (input.channel === "sms" && phoneDigits(input.phone) && input.smsOptedOut) {
@@ -163,10 +165,13 @@ export function mergePartnershipSettings(raw: unknown): PartnershipCommsSettings
   const sendersIn = (v.senders && typeof v.senders === "object" ? v.senders : {}) as Record<string, { from?: string; reply_to?: string }>;
   const mergeSender = (
     role: keyof PartnershipCommsSettings["senders"],
-  ): { from: string; reply_to: string } => ({
-    from: sendersIn[role]?.from || DEFAULT_PARTNERSHIP_COMMS_SETTINGS.senders[role].from,
-    reply_to: sendersIn[role]?.reply_to || DEFAULT_PARTNERSHIP_COMMS_SETTINGS.senders[role].reply_to,
-  });
+  ): { from: string; reply_to: string } => {
+    const fallback = DEFAULT_PARTNERSHIP_COMMS_SETTINGS.senders[role];
+    const from = sendersIn[role]?.from || fallback.from;
+    const replyTo = sendersIn[role]?.reply_to || fallback.reply_to;
+    if (/hello@novaracleaning\.com/i.test(from)) return { ...fallback };
+    return { from, reply_to: replyTo };
+  };
   return {
     timezone: String(v.timezone || DEFAULT_PARTNERSHIP_COMMS_SETTINGS.timezone),
     quiet_hours_start: String(v.quiet_hours_start || DEFAULT_PARTNERSHIP_COMMS_SETTINGS.quiet_hours_start),

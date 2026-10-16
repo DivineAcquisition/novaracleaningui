@@ -33,6 +33,11 @@ export interface HiringSessionAnswers {
   consent1099?: boolean;
   backgroundCheckConsent?: boolean;
   payConsent?: boolean;
+  age18?: boolean;
+  validDriversLicense?: boolean;
+  autoInsured?: boolean;
+  smsConsent?: boolean;
+  answersAccurate?: boolean;
   willingToGetSupplies?: string;
   suppliesOnHand?: string;
   reliabilityNote?: string;
@@ -120,7 +125,17 @@ export function sanitizeAnswers(input: unknown): HiringSessionAnswers {
   if (Array.isArray(raw.suppliesOwned)) {
     out.suppliesOwned = raw.suppliesOwned.map((id) => String(id)).filter(Boolean).slice(0, 80);
   }
-  for (const key of ["consent1099", "backgroundCheckConsent", "payConsent", "idConfirmed"] as const) {
+  for (const key of [
+    "consent1099",
+    "backgroundCheckConsent",
+    "payConsent",
+    "idConfirmed",
+    "age18",
+    "validDriversLicense",
+    "autoInsured",
+    "smsConsent",
+    "answersAccurate",
+  ] as const) {
     if (typeof raw[key] === "boolean") out[key] = raw[key];
   }
   return out;

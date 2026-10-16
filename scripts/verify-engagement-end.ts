@@ -210,7 +210,7 @@ check("accountability still texts the shared SMS", accountability.includes("noti
 check("accountability does not import engagement-end", accountability.includes("engagement-end"), false);
 check(
   "accountability from address is unchanged",
-  accountability.includes('const FROM_ADDRESS = "NovaraCleaning Operations <hello@novaracleaning.com>";'),
+  accountability.includes('const FROM_ADDRESS = "NVC Operations <operations@novaracleaning.com>";'),
   true,
 );
 check("accountability escalation copy is unchanged", accountability.includes("escalation policy"), true);

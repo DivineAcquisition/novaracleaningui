@@ -21,7 +21,7 @@ const corsHeaders = {
 };
 
 const PORTAL_RETURN_ORIGIN = "https://app.novaracleaning.com";
-const FROM_ADDRESS = "Novara Cleaning <hello@novaracleaning.com>";
+const FROM_ADDRESS = "Novara Cleaning <billing@novaracleaning.com>";
 
 function json(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -155,8 +155,8 @@ function renderBillingPortalEmail(firstName: string, portalUrl: string) {
     gray700: "#374151",
     gray600: "#6B7280",
     gray200: "#E5E7EB",
-    logoUrl: "https://app.novaracleaning.com/novara-email-logo.png",
-    supportEmail: "support@novaracleaning.com",
+    logoUrl: "https://app.novaracleaning.com/novara-logo.png",
+    supportEmail: "billing@novaracleaning.com",
     supportPhone: "+1 (844) 735-2070",
   };
   const safeName = escapeHtml(firstName || "there");
@@ -164,7 +164,7 @@ function renderBillingPortalEmail(firstName: string, portalUrl: string) {
     `<body style="margin:0;padding:0;background:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:${BRAND.gray700};">` +
     `<div style="max-width:600px;margin:0 auto;padding:20px;">` +
     `<div style="background:#fff;padding:20px 20px 12px;text-align:center;border:1px solid ${BRAND.gray200};border-bottom:none;border-radius:8px 8px 0 0;">` +
-    `<img src="${BRAND.logoUrl}" width="200" height="27" alt="${BRAND.name} logo" style="display:block;margin:0 auto 8px;"/>` +
+    `<img src="${BRAND.logoUrl}" width="56" height="56" alt="${BRAND.name} logo" style="display:block;width:56px;height:56px;border-radius:12px;margin:0 0 22px;"/>` +
     `<div style="font-size:14px;font-weight:700;letter-spacing:0.04em;color:${BRAND.primary};text-transform:uppercase;">${BRAND.name}</div>` +
     `</div>` +
     `<div style="background:${BRAND.gradient};color:#fff;padding:26px 30px;text-align:center;border-left:1px solid ${BRAND.gray200};border-right:1px solid ${BRAND.gray200};">` +
@@ -345,7 +345,7 @@ serve(async (req) => {
           `Hi ${firstName},\n\n` +
           `Use this secure link to update the card on file for your Novara Cleaning account:\n${url}\n\n` +
           `You can also view invoices and manage billing details from the same page.\n\n` +
-          `This link expires after a short time. Questions? support@novaracleaning.com`;
+          `This link expires after a short time. Questions? billing@novaracleaning.com`;
 
         const result = await resend.emails.send({
           from: FROM_ADDRESS,
@@ -353,7 +353,7 @@ serve(async (req) => {
           subject: "Update your Novara Cleaning payment method",
           html,
           text,
-          replyTo: "support@novaracleaning.com",
+          replyTo: "billing@novaracleaning.com",
         });
         if ((result as { error?: unknown })?.error) {
           console.error("[admin-customer-action] resend error", (result as { error?: unknown }).error);

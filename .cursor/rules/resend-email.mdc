@@ -1,0 +1,8 @@
+---
+description: Novara sends every email through the Novara Resend account
+alwaysApply: true
+---
+
+Novara’s email sending system is Resend, on the Novara Resend account. Do not add or switch to another email vendor.
+
+Send with the Resend API using `RESEND_API_KEY` from `app_secrets` (the NovaraCleaning Supabase project). The From address matches the email: `support@` for bookings and account mail, `billing@` for receipts, invoices, deposits, and membership charges, `hello@` only for promotional mail, `operations@` for contractor mail, and `ops@` for staff alerts. Reply-To is that same mailbox. If Resend accepts a send but the inbox never gets it, check that address on the Novara suppression list before sending again.

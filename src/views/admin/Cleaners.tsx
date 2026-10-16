@@ -78,6 +78,7 @@ import {
   isW9OnFile,
 } from "@/lib/cleaner-supplies";
 import TerminateCleanerDialog from "@/components/admin/TerminateCleanerDialog";
+import ContractorPayoutPanel from "@/components/admin/ContractorPayoutPanel";
 import LogResignationDialog from "@/components/admin/LogResignationDialog";
 import { CleanerTourStatus } from "@/components/admin/CleanerTourStatus";
 import { TourRecordingFreshness } from "@/components/admin/TourRecordingFreshness";
@@ -195,6 +196,8 @@ interface CleanerRow {
   ob_training_complete?: boolean | null;
   payouts_enabled: boolean | null;
   stripe_account_id: string | null;
+  payout_method_code?: string | null;
+  payout_method_status?: string | null;
   home_address: string | null;
   home_city: string | null;
   service_zip_codes: string[] | null;
@@ -244,7 +247,7 @@ const STATUS_BADGE: Record<string, string> = {
 const fullName = (c: CleanerRow) =>
   [c.first_name, c.last_name].filter(Boolean).join(" ") || c.email || "—";
 
-// Mirrors cleanerSetupSteps(): agreement → phone → supplies → job-day → dress → W-9 → Stripe → training.
+// Mirrors cleanerSetupSteps(): agreement → phone → supplies → job-day → dress → W-9 → payout method → training.
 const onboardingProgress = (c: CleanerRow): number => {
   const steps = cleanerSetupSteps(c);
   if (steps.length === 0) return 0;
@@ -309,7 +312,7 @@ export default function AdminCleaners() {
     const { data, error } = await supabase
       .from("cleaners")
       .select(
-        "id,user_id,first_name,last_name,email,phone,status,approved,available_for_bookings,walkthrough_eligible,home_zip,state,pay_tier,pay_percentage,completed_bookings,total_bookings,acceptance_rate,on_time_rate,average_rating,weighted_score,workload_score,novara_score,quality_score,overall_score,scores_computed_at,constraints,jobs_assigned_last_7d,onboarding_complete,phone_verified,ob_payouts_setup,ob_agreement_signed,ob_agreement_signed_at,supply_checklist_submitted_at,ob_supplies_checklist_viewed,ob_job_day_guides_ack,ob_job_day_guides_ack_at,ob_dress_code_ack,ob_dress_code_ack_at,ob_training_complete,payouts_enabled,stripe_account_id,home_address,home_city,home_zip,service_zip_codes,max_travel_miles,preferred_work_days,skillset,ghl_synced_at,ghl_sync_error,created_at,activated_at,rehire_status,termination_reason,terminated_at,engagement_end_action,engagement_ended_at,termination_basis,termination_ground,termination_section,ytd_earnings_cents_locked,ytd_earnings_year,ytd_earnings_source,nec_1099_include,nec_1099_batch_year,w9_status,w9_followup_required",
+        "id,user_id,first_name,last_name,email,phone,status,approved,available_for_bookings,walkthrough_eligible,home_zip,state,pay_tier,pay_percentage,completed_bookings,total_bookings,acceptance_rate,on_time_rate,average_rating,weighted_score,workload_score,novara_score,quality_score,overall_score,scores_computed_at,constraints,jobs_assigned_last_7d,onboarding_complete,phone_verified,ob_payouts_setup,payout_method_code,payout_method_status,ob_agreement_signed,ob_agreement_signed_at,supply_checklist_submitted_at,ob_supplies_checklist_viewed,ob_job_day_guides_ack,ob_job_day_guides_ack_at,ob_dress_code_ack,ob_dress_code_ack_at,ob_training_complete,payouts_enabled,stripe_account_id,home_address,home_city,home_zip,service_zip_codes,max_travel_miles,preferred_work_days,skillset,ghl_synced_at,ghl_sync_error,created_at,activated_at,rehire_status,termination_reason,terminated_at,engagement_end_action,engagement_ended_at,termination_basis,termination_ground,termination_section,ytd_earnings_cents_locked,ytd_earnings_year,ytd_earnings_source,nec_1099_include,nec_1099_batch_year,w9_status,w9_followup_required",
       )
       .order("created_at", { ascending: false })
       .limit(500);
@@ -1383,7 +1386,7 @@ const OB_STEPS: Array<{ done: (c: CleanerRow) => boolean; label: string; detail?
         : null,
   },
   { done: isW9OnFile, label: "W-9 on file" },
-  { done: isPayoutSetupStarted, label: "Stripe payouts connected" },
+  { done: isPayoutSetupStarted, label: "Payout method on file" },
   { done: isRequiredTrainingComplete, label: "Training videos watched" },
 ];
 
@@ -1453,8 +1456,9 @@ function OnboardingChecklist({
           <p className="text-xs text-sky-800">
             Sends email + SMS with one link that walks them through whatever is
             left — agreement, phone, supplies, Day To Day Job Operations, dress code,
-            W-9, Stripe payout setup, then the training videos. A first job waits
-            on the W-9 and the videos. Stripe opens the training hub.
+            W-9, how they get paid (Stripe, or Cash App, Zelle, or Chime), then the
+            training videos. A first job waits on the W-9 and the videos. Finishing
+            a payout method opens the training hub.
           </p>
           <Button
             type="button"
@@ -2233,6 +2237,10 @@ function ActionsBlock({
           ) : null}
         </div>
       ) : null}
+      <ContractorPayoutPanel
+        cleanerId={cleaner.id}
+        cleanerName={`${cleaner.first_name || ""} ${cleaner.last_name || ""}`.trim() || "this contractor"}
+      />
       {cleaner.engagement_end_action ? (
         <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-600 space-y-1">
           <p>

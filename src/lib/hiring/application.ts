@@ -23,6 +23,133 @@ export const EXPERIENCE_SOMEWHAT = "Somewhat ";
 export const TRANSPORTATION_CAR = "Yes (Own A Vehicle)";
 export const TRANSPORTATION_NONE = "No Transportation";
 
+/** Bump when the wording on the application changes. Stored with every submission. */
+export const CONSENT_VERSION = "2026-10-15";
+
+export const PRIVACY_POLICY_URL = "https://novaracleaning.com/privacy";
+
+export const AGE_18_COPY = "I am 18 or older.";
+
+export const LICENSE_COPY = "I have a valid driver’s license.";
+
+export const AUTO_INSURED_COPY = "The car I will drive to jobs is insured.";
+
+export const SMS_CONSENT_COPY =
+  "I agree that Novara may text and call this number about my application. Those messages are occasional, about this application only. Reply STOP to opt out of texts. Message and data rates may apply.";
+
+export const ID_PURPOSE_COPY =
+  "We keep this photo only to confirm you are the person applying. Only Novara hiring staff can open it. This is not an employment-eligibility form (not an I-9). Do not upload a Social Security card, a Social Security number, or immigration documents.";
+
+export const ID_CONFIRM_COPY =
+  "This is my current, unexpired government-issued photo ID. I understand it is kept only to confirm my identity.";
+
+export const CONSENT_1099_INTRO =
+  "You work with Novara as an independent contractor, not as a W-2 employee. Novara does not withhold taxes, and you are not on payroll or benefits. You accept jobs, bring your own supplies, and get paid for completed work. At tax time you file your own return. If your pay for the year meets the IRS threshold, we file a 1099-NEC that reports what we paid you — you use that form when you file.";
+
+/** One sentence. The full covenant, including damages, is read at screening and signed in the agreement. */
+export const NON_SOLICIT_EXPECTATION =
+  "If you are offered work, the contractor agreement includes a 24-month client non-solicitation covenant: during the engagement, and for 24 months after it ends, you don’t solicit or clean for clients you met through Novara.";
+
+export const CONFIDENTIALITY_EXPECTATION =
+  "Client names, addresses, and door codes stay confidential, and photos of client homes do not go on social media.";
+
+export const INSURANCE_EXPECTATION =
+  "Novara maintains commercial general liability insurance for assigned jobs. You are responsible for your own car insurance. Any other insurance the contractor agreement requires is confirmed before you are offered work.";
+
+export const CONSENT_1099_LABEL =
+  "I understand this is 1099 contractor work, not employment, that I handle my own taxes, and that the client, confidentiality, and insurance expectations on this page apply if I am offered work.";
+
+export const BACKGROUND_DISCLOSURE =
+  "Before anyone is offered work, Novara may obtain a consumer report that includes a criminal-history check and a driving record. We may decline an application based on that report. This page is the disclosure only. A separate signed authorization, required by the Fair Credit Reporting Act, is collected immediately before a check is ordered. Nothing is assigned until the check clears.";
+
+export const BACKGROUND_CONSENT_COPY =
+  "I have read this disclosure. I understand a criminal-history check and a driving-record check may be run, that Novara may decline me based on the report, and that I will sign a separate authorization immediately before any check is ordered.";
+
+export const PAY_CONSENT_COPY = "I’m comfortable starting at 40–45% of each job.";
+
+export const TRUTHFULNESS_COPY = "My answers on this application are true and complete.";
+
+export interface HiringConsentTexts {
+  age18: string;
+  validDriversLicense: string;
+  autoInsured: string;
+  smsConsent: string;
+  idPurpose: string;
+  idConfirmed: string;
+  privacyPolicyUrl: string;
+  consent1099Intro: string;
+  nonSolicitation: string;
+  confidentiality: string;
+  insurance: string;
+  consent1099: string;
+  backgroundDisclosure: string;
+  backgroundConsent: string;
+  payConsent: string;
+  truthfulness: string;
+}
+
+export interface HiringConsentRecord {
+  version: string;
+  acceptedAt: string;
+  ip: string | null;
+  userAgent: string | null;
+  age18: true;
+  validDriversLicense: true;
+  autoInsured: true;
+  smsConsent: true;
+  idConfirmed: true;
+  consent1099: true;
+  backgroundCheckConsent: true;
+  payConsent: true;
+  answersAccurate: true;
+  texts: HiringConsentTexts;
+}
+
+export function hiringConsentTexts(): HiringConsentTexts {
+  return {
+    age18: AGE_18_COPY,
+    validDriversLicense: LICENSE_COPY,
+    autoInsured: AUTO_INSURED_COPY,
+    smsConsent: SMS_CONSENT_COPY,
+    idPurpose: ID_PURPOSE_COPY,
+    idConfirmed: ID_CONFIRM_COPY,
+    privacyPolicyUrl: PRIVACY_POLICY_URL,
+    consent1099Intro: CONSENT_1099_INTRO,
+    nonSolicitation: NON_SOLICIT_EXPECTATION,
+    confidentiality: CONFIDENTIALITY_EXPECTATION,
+    insurance: INSURANCE_EXPECTATION,
+    consent1099: CONSENT_1099_LABEL,
+    backgroundDisclosure: BACKGROUND_DISCLOSURE,
+    backgroundConsent: BACKGROUND_CONSENT_COPY,
+    payConsent: PAY_CONSENT_COPY,
+    truthfulness: TRUTHFULNESS_COPY,
+  };
+}
+
+/** Exact wording the applicant agreed to, plus when and from where. */
+export function buildHiringConsentRecord(meta: {
+  acceptedAt: string;
+  ip?: string | null;
+  userAgent?: string | null;
+}): HiringConsentRecord {
+  return {
+    version: CONSENT_VERSION,
+    acceptedAt: meta.acceptedAt,
+    ip: meta.ip?.trim() || null,
+    userAgent: meta.userAgent?.trim().slice(0, 500) || null,
+    age18: true,
+    validDriversLicense: true,
+    autoInsured: true,
+    smsConsent: true,
+    idConfirmed: true,
+    consent1099: true,
+    backgroundCheckConsent: true,
+    payConsent: true,
+    answersAccurate: true,
+    texts: hiringConsentTexts(),
+  };
+}
+
 export const APPLICANT_ROLES = [
   {
     value: "Field Cleaner (Contractor)",
@@ -101,6 +228,7 @@ export type ApplicationStep =
   | "car"
   | "id"
   | "authorized"
+  | "age"
   | "experience"
   | "availability"
   | "days"
@@ -123,6 +251,7 @@ const BASE_STEPS: ApplicationStep[] = [
   "car",
   "id",
   "authorized",
+  "age",
   "experience",
   "availability",
   "days",
@@ -158,6 +287,11 @@ export interface HiringApplicationDraft {
   consent1099: boolean;
   backgroundCheckConsent: boolean;
   payConsent: boolean;
+  age18: boolean;
+  validDriversLicense: boolean;
+  autoInsured: boolean;
+  smsConsent: boolean;
+  answersAccurate: boolean;
   willingToGetSupplies: string;
   suppliesOnHand: string;
   reliabilityNote: string;
@@ -186,6 +320,12 @@ export interface NormalizedHiringApplication {
   consent1099: true;
   backgroundCheckConsent: true;
   payConsent: true;
+  age18: true;
+  validDriversLicense: true;
+  autoInsured: true;
+  smsConsent: true;
+  answersAccurate: true;
+  consentVersion: typeof CONSENT_VERSION;
   willingToGetSupplies: "Yes";
   suppliesOnHand: string;
   reliabilityNote: string;
@@ -294,6 +434,21 @@ export function gateCopy(code: string): { title: string; body: string } {
         title: "A car is required",
         body: "A car is the only transportation we can accept. You need to drive yourself to each job — rideshare, transit, and borrowing a car don’t qualify. If that changes, you’re welcome to apply again.",
       };
+    case "no_license":
+      return {
+        title: "A valid driver’s license is required",
+        body: "You need a valid driver’s license to drive yourself to each job. If that changes, you’re welcome to apply again.",
+      };
+    case "no_auto_insurance":
+      return {
+        title: "The car needs to be insured",
+        body: "The car you drive to jobs has to be insured. If that changes, you’re welcome to apply again.",
+      };
+    case "under_18":
+      return {
+        title: "You need to be 18 or older",
+        body: "This role is only open to people who are 18 or older.",
+      };
     case "not_authorized":
       return {
         title: "Work authorization is required",
@@ -391,6 +546,9 @@ export function issuesForStep(step: ApplicationStep, draft: HiringApplicationDra
       if (!toE164Us(draft.phone)) {
         return issue(400, "invalid_phone", "Enter a 10-digit US phone number.");
       }
+      if (!draft.smsConsent) {
+        return issue(400, "missing_sms", "Agree to texts and calls about your application to continue.");
+      }
       return null;
     case "address": {
       const address = oneLine(draft.address);
@@ -427,6 +585,12 @@ export function issuesForStep(step: ApplicationStep, draft: HiringApplicationDra
       if (draft.transportation !== TRANSPORTATION_CAR) {
         return issue(422, "no_car", gateCopy("no_car").body, true);
       }
+      if (!draft.validDriversLicense) {
+        return issue(422, "no_license", gateCopy("no_license").body, true);
+      }
+      if (!draft.autoInsured) {
+        return issue(422, "no_auto_insurance", gateCopy("no_auto_insurance").body, true);
+      }
       return null;
     case "id":
       return idIssue(draft);
@@ -436,6 +600,11 @@ export function issuesForStep(step: ApplicationStep, draft: HiringApplicationDra
       }
       if (draft.authorizedToWork !== "Yes") {
         return issue(422, "not_authorized", gateCopy("not_authorized").body, true);
+      }
+      return null;
+    case "age":
+      if (!draft.age18) {
+        return issue(422, "under_18", gateCopy("under_18").body, true);
       }
       return null;
     case "experience":
@@ -501,6 +670,9 @@ export function issuesForStep(step: ApplicationStep, draft: HiringApplicationDra
       return null;
     }
     case "review":
+      if (!draft.answersAccurate) {
+        return issue(400, "missing_truthfulness", "Confirm that your answers are true and complete.");
+      }
       return null;
     default:
       return null;
@@ -525,7 +697,6 @@ function idIssue(draft: HiringApplicationDraft): ApplicationIssue | null {
 export function validateHiringApplication(draft: HiringApplicationDraft): ApplicationResult {
   const steps = visibleSteps(draft.willingToGetSupplies);
   for (const step of steps) {
-    if (step === "review") continue;
     const found = issuesForStep(step, draft);
     if (found) return found;
   }
@@ -559,6 +730,12 @@ export function validateHiringApplication(draft: HiringApplicationDraft): Applic
       consent1099: true,
       backgroundCheckConsent: true,
       payConsent: true,
+      age18: true,
+      validDriversLicense: true,
+      autoInsured: true,
+      smsConsent: true,
+      answersAccurate: true,
+      consentVersion: CONSENT_VERSION,
       willingToGetSupplies: "Yes",
       suppliesOnHand: supplies,
       reliabilityNote: oneLine(draft.reliabilityNote),

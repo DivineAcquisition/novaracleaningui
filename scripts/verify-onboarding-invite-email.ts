@@ -46,7 +46,7 @@ check("route does not treat the edge invite as the email", route.includes('type:
 console.log("\nCleaner email function does not report a provider error as sent:");
 const sender = readFileSync("supabase/functions/send-cleaner-email/index.ts", "utf8");
 check("invitation template includes the link", sender.includes("onboardingUrl"), true);
-check("Resend error fails the send", sender.includes("emailResponse.error"), true);
+check("a provider rejection fails the send", sender.includes("!emailResponse.ok"), true);
 
 if (failures) {
   console.error(`\n${failures} check(s) failed`);

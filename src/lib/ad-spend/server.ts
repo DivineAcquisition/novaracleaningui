@@ -6,7 +6,7 @@ import { ALL_PLATFORMS, PAID_PLATFORMS, type ChannelEntry, type PaidPlatform } f
 export { ALL_PLATFORMS, PAID_PLATFORMS, formatRangeLabel, priorCompletedMonth };
 export type { ChannelEntry, PaidPlatform };
 
-const FROM_ADDRESS = "Novara Team <hello@novaracleaning.com>";
+const FROM_ADDRESS = "Novara Team <ops@novaracleaning.com>";
 const DEFAULT_PUBLIC_BASE = "https://try.novaracleaning.com";
 export const OPERATIONS_START = "2026-05-01"; // First calendar month of operations
 

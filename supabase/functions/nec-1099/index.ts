@@ -101,7 +101,7 @@ async function readPages(label: string, build: () => DB): Promise<Record<string,
 }
 
 async function loadLedgers(admin: DB, cleanerId: string, year: number) {
-  const payoutSelect = "id, cleaner_id, amount_cents, status, service_date, paid_at, created_at, cleaner_breakdown";
+  const payoutSelect = "id, cleaner_id, amount_cents, amount_sent_cents, status, service_date, paid_at, created_at, cleaner_breakdown, payout_method_code, counts_toward_own_1099";
   const [payoutsByCleaner, payoutsByCrew, extras, tips] = await Promise.all([
     readPages("the pay ledger", () =>
       admin.from("manual_payouts").select(payoutSelect).eq("status", "paid").eq("cleaner_id", cleanerId).order("id"),
@@ -117,7 +117,7 @@ async function loadLedgers(admin: DB, cleanerId: string, year: number) {
     readPages("extra pay", () =>
       admin
         .from("job_extra_pay")
-        .select("id, cleaner_id, status, paid_at, created_at, surge_cents, job_value_cents, overtime_cents, supply_cents, mileage_cents")
+        .select("id, cleaner_id, status, paid_at, created_at, surge_cents, job_value_cents, overtime_cents, supply_cents, mileage_cents, payout_method_code, counts_toward_own_1099")
         .eq("cleaner_id", cleanerId)
         .eq("status", "paid")
         .order("id"),
@@ -146,6 +146,9 @@ async function loadLedgers(admin: DB, cleanerId: string, year: number) {
     paidAt: row.paid_at as string | null,
     createdAt: row.created_at as string | null,
     breakdown: row.cleaner_breakdown,
+    amountSentCents: row.amount_sent_cents as number | null,
+    methodCode: row.payout_method_code as string | null,
+    countsTowardOwn1099: row.counts_toward_own_1099 as boolean | null,
   }));
   const extraRows: ExtraPayRow[] = extras.map((row: Record<string, unknown>) => ({
     status: row.status as string | null,
@@ -156,6 +159,8 @@ async function loadLedgers(admin: DB, cleanerId: string, year: number) {
     overtimeCents: row.overtime_cents as number | null,
     supplyCents: row.supply_cents as number | null,
     mileageCents: row.mileage_cents as number | null,
+    methodCode: row.payout_method_code as string | null,
+    countsTowardOwn1099: row.counts_toward_own_1099 as boolean | null,
   }));
   const tipRows: TipRow[] = tips.map((row: Record<string, unknown>) => ({
     amountCents: row.amount_cents as number | null,
@@ -187,7 +192,7 @@ function payerDraft(value: unknown) {
   const src = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
   const text = (key: string) => String(src[key] ?? "").replace(/\s+/g, " ").trim();
   return {
-    name: text("name") || "NovaraCleaning LLC",
+    name: text("name") || "Novara Cleaning LLC",
     tin: text("tin"),
     street: text("street"),
     city: text("city"),
@@ -314,6 +319,9 @@ async function buildForm(
     loadW9(admin, cleanerId),
   ]);
   const ttoc: TtocSetting = parseTtocSetting(ttocValue);
+  if ((ledgers.unresolvedCents || 0) > 0) {
+    return { ok: false, status: 409, error: blockerMessage("nec_method_unclassified") };
+  }
   const assembled = assembleNecForm({
     taxYear: year,
     corrected,
@@ -390,6 +398,25 @@ serve(async (req) => {
 
     // Contractor onboarding. Resolved from the signed-in user, never from a
     // cleaner id in the body, and answered before the admin check.
+    if (action === "consent_electronic") {
+      const user = await signedInUser(req);
+      const cleaner = await cleanerForContractor(admin, user);
+      if (body.electronicDeliveryConsent !== true) return json({ ok: true, delivery: "paper" });
+      const { data: profile } = await admin.from("cleaners").select("email").eq("id", cleaner.id).maybeSingle();
+      const email = String(profile?.email || user.email || "").trim().toLowerCase();
+      if (!email) return json({ error: "An email address is required to consent to electronic delivery." }, 400);
+      const at = new Date().toISOString();
+      const { error } = await admin.from("email_tax_e_consent").upsert({
+        email,
+        contractor_id: cleaner.id,
+        consented_at: at,
+        withdrawn_at: null,
+        source: "contractor",
+      }, { onConflict: "email" });
+      if (error) throw new Error(error.message || "Could not store electronic-delivery consent.");
+      return json({ ok: true, consentedAt: at });
+    }
+
     if (action === "submit_w9" || action === "w9_summary") {
       const user = await signedInUser(req);
       const cleaner = await cleanerForContractor(admin, user);
@@ -413,6 +440,19 @@ serve(async (req) => {
       const submitted = recipientFromBody(body);
       if (!submitted.ok) return json({ error: blockerMessage(submitted.reason) }, 400);
       await saveValidatedW9(admin, cleaner.id, submitted.recipient, user.id);
+      if (body.electronicDeliveryConsent === true) {
+        const { data: profile } = await admin.from("cleaners").select("email").eq("id", cleaner.id).maybeSingle();
+        const email = String(profile?.email || user.email || "").trim().toLowerCase();
+        if (email) {
+          await admin.from("email_tax_e_consent").upsert({
+            email,
+            contractor_id: cleaner.id,
+            consented_at: new Date().toISOString(),
+            withdrawn_at: null,
+            source: "w9",
+          }, { onConflict: "email" });
+        }
+      }
       return json({
         ok: true,
         legalName: submitted.recipient.name,
@@ -480,6 +520,7 @@ serve(async (req) => {
       if (!recipient.ok) blockers.push(blockerMessage("w9_required"));
       if (!payer.ok) blockers.push(blockerMessage("payer_incomplete", payer.missing));
       if (ledgers.tipCents > 0 && !occupation.ok) blockers.push(blockerMessage(occupation.reason));
+      if ((ledgers.unresolvedCents || 0) > 0) blockers.push(blockerMessage("nec_method_unclassified"));
       return json({
         taxYear: year,
         thresholdCents: NEC_ELIGIBILITY_THRESHOLD_CENTS,
@@ -532,6 +573,40 @@ serve(async (req) => {
       const linked = correctionOf(originalId, built.form);
       const row = await insertForm(admin, cleanerId, linked, actor);
       return json({ ok: true, formId: row.id, corrected: true, correctsFormId: originalId });
+    }
+
+    if (action === "email_copy") {
+      const { data: profile } = await admin.from("cleaners").select("id, email").eq("id", cleanerId).maybeSingle();
+      const email = String(profile?.email || "").trim().toLowerCase();
+      if (!email) return json({ error: "This contractor has no email on file." }, 400);
+      const { data: consent } = await admin.from("email_tax_e_consent").select("consented_at, withdrawn_at").eq("email", email).maybeSingle();
+      if (!consent?.consented_at || consent.withdrawn_at) {
+        return json({
+          ok: false,
+          delivery: "paper",
+          error: "This contractor has not consented to electronic tax forms. Send the paper copy.",
+        }, 409);
+      }
+      const formId = String(body?.formId || "").trim();
+      if (!formId) return json({ error: "A filing is required." }, 400);
+      const { data, error } = await admin.from("nec_1099_forms").select("id, tax_year, corrected, copy_b_pdf").eq("id", formId).maybeSingle();
+      if (error) throw new Error(error.message || "Could not open the 1099.");
+      if (!data?.copy_b_pdf) return json({ error: "Copy B was not retained." }, 404);
+      const { deliverCompliantEmail } = await import("../_shared/email-compliance-send.ts");
+      const sent = await deliverCompliantEmail(admin, {
+        apiKey: Deno.env.get("RESEND_API_KEY") || "",
+        to: email,
+        subject: `Your ${data.tax_year} Form 1099-NEC`,
+        html: `<p>Your Form 1099-NEC for ${data.tax_year} is attached.</p><p>This message does not include your taxpayer identification number.</p>`,
+        declaredType: "contractor_tax",
+        templateKey: "contractor_tax",
+        attachments: [{
+          filename: `1099-NEC-${data.tax_year}-Copy-B${data.corrected ? "-corrected" : ""}.pdf`,
+          content: String(data.copy_b_pdf),
+        }],
+      });
+      if (!sent.ok) return json({ ok: false, blocked: sent.blocked, error: sent.error }, sent.blocked ? 409 : 500);
+      return json({ ok: true, id: sent.id, delivery: "electronic" });
     }
 
     if (action === "open") {

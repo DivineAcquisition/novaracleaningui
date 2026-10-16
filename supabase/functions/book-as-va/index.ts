@@ -237,7 +237,7 @@ async function notifyAdminPriceOverride(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      from: "Novara Cleaning <hello@novaracleaning.com>",
+      from: "NovaraCleaning <ops@novaracleaning.com>",
       to: [ADMIN_OVERRIDE_NOTIFY_EMAIL],
       subject,
       html,
@@ -304,7 +304,7 @@ async function sendPendingUntilDepositEmail(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      from: "Novara Cleaning <hello@novaracleaning.com>",
+      from: "Novara Cleaning <billing@novaracleaning.com>",
       to: [opts.to],
       subject,
       html,

@@ -227,6 +227,10 @@ export interface CleanerSetupState {
   stripe_account_id?: string | null;
   /** 'complete' only after a validated W-9 is stored. Stripe does not set this. */
   w9_status?: string | null;
+  /** Set when a payout method (Stripe or a manual method) is the active one. */
+  payout_method_code?: string | null;
+  /** 'verified' once Stripe payouts are on, or manual details are confirmed. */
+  payout_method_status?: string | null;
 }
 
 export type CleanerSetupStepId =
@@ -292,12 +296,18 @@ export function isRequiredTrainingComplete(c: CleanerSetupState): boolean {
   return Boolean(c.ob_training_complete);
 }
 
-/** Stripe Connect reached, whether or not payouts have finished enabling. */
+/**
+ * Payout step started or finished.
+ * Stripe Connect reached still counts, so a contractor who got partway
+ * through Stripe is not sent back to the start. A verified manual method
+ * (Cash App, Zelle, Chime, or a later method) counts too.
+ */
 export function isPayoutSetupStarted(c: CleanerSetupState): boolean {
   return (
     Boolean(c.payouts_enabled) ||
     Boolean(c.ob_payouts_setup) ||
-    Boolean(c.stripe_account_id)
+    Boolean(c.stripe_account_id) ||
+    c.payout_method_status === "verified"
   );
 }
 
@@ -313,9 +323,9 @@ export function isW9OnFile(c: CleanerSetupState): boolean {
  * Onboarding in the order everything presents it.
  *
  * Agreement first. Phone verification is second. Supplies and Day To Day
- * Job Operations come next, then the dress code. The W-9 is sixth. Stripe
- * payout setup is seventh. Training videos are last. Finishing Stripe opens
- * the training hub.
+ * Job Operations come next, then the dress code. The W-9 is sixth. How to
+ * get paid is seventh (Stripe first, or Cash App, Zelle, or Chime). Training
+ * videos are last. Finishing a payout method opens the training hub.
  *
  * First-job eligibility is every step except payouts. A first job waits on
  * the W-9 and the videos. Stripe stays locked until the W-9 is in, and the
@@ -355,7 +365,7 @@ export function cleanerSetupSteps(c: CleanerSetupState): CleanerSetupStep[] {
     },
     {
       id: "payouts",
-      title: "Set up Stripe payouts",
+      title: "How would you like to get paid?",
       done: isPayoutSetupStarted(c),
     },
     {

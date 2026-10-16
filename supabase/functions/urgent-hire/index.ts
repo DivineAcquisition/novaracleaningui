@@ -502,7 +502,7 @@ async function mintOnboardingTokens(admin: SB, cleanerId: string): Promise<{
   const { data: cleaner } = await admin
     .from("cleaners")
     .select(
-      "supply_token, supply_token_expires_at, agreement_token, agreement_token_expires_at, setup_token, setup_token_expires_at, ob_agreement_signed, ob_payouts_setup, payouts_enabled, stripe_account_id",
+      "supply_token, supply_token_expires_at, agreement_token, agreement_token_expires_at, setup_token, setup_token_expires_at, ob_agreement_signed, ob_payouts_setup, payouts_enabled, stripe_account_id, payout_method_status",
     )
     .eq("id", cleanerId)
     .maybeSingle();

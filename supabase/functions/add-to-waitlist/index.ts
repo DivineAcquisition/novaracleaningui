@@ -130,7 +130,7 @@ const handler = async (req: Request): Promise<Response> => {
         );
 
         const emailResult = await resend.emails.send({
-          from: "Novara Cleaning <hello@novaracleaning.com>",
+          from: "Novara Cleaning <support@novaracleaning.com>",
           to: [email],
           subject: "You're on the Novara Cleaning Waitlist! 🎉",
           html,

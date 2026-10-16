@@ -1,13 +1,10 @@
 "use client";
 
 import {
-  RiBankCardLine,
   RiCameraLine,
   RiChat3Line,
-  RiCheckboxCircleLine,
   RiCloseLine,
   RiErrorWarningLine,
-  RiExternalLinkLine,
   RiLoader4Line,
   RiMailLine,
   RiNotification3Line,
@@ -31,6 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 
 import { processAvatarImage } from "@/lib/image-compression";
+import ContractorPayoutCard from "@/components/cleaner/ContractorPayoutCard";
 import { TOUR, tourAnchor } from "@/lib/tours/anchors";
 
 interface CleanerProfile {
@@ -210,8 +208,6 @@ export default function CleanerProfile() {
     }
   };
 
-  const [isInitiatingStripe, setIsInitiatingStripe] = useState(false);
-
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
@@ -221,7 +217,6 @@ export default function CleanerProfile() {
   }
 
   const handleStripeConnect = async () => {
-    setIsInitiatingStripe(true);
     try {
       const { data, error } = await supabase.functions.invoke('initiate-cleaner-stripe-connect');
 
@@ -236,8 +231,6 @@ export default function CleanerProfile() {
         description: error.message,
         variant: "destructive",
       });
-    } finally {
-      setIsInitiatingStripe(false);
     }
   };
 
@@ -248,8 +241,6 @@ export default function CleanerProfile() {
       </div>
     );
   }
-
-  const stripeConnected = profile.stripe_account_id && profile.payouts_enabled;
 
   return (
     <div className="mx-auto max-w-lg">
@@ -332,45 +323,7 @@ export default function CleanerProfile() {
               </div>
             </div>
 
-            {/* Stripe Connect Section */}
-            <div className="p-3 border rounded-lg space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <RiBankCardLine className="h-4 w-4 text-primary" />
-                  <span className="text-sm font-medium">Payout Account</span>
-                </div>
-                {stripeConnected ? (
-                  <Badge variant="secondary" className="bg-green-100 text-green-700 text-xs">
-                    <RiCheckboxCircleLine className="mr-1 h-3 w-3" />
-                    Connected
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="text-xs">Not Set Up</Badge>
-                )}
-              </div>
-              {!stripeConnected && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full"
-                  onClick={handleStripeConnect}
-                  disabled={isInitiatingStripe}
-                >
-                  {isInitiatingStripe ? (
-                    <RiLoader4Line className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <RiExternalLinkLine className="mr-2 h-4 w-4" />
-                  )}
-                  Setup Stripe Payouts
-                </Button>
-              )}
-              <p className="text-xs text-muted-foreground">
-                {stripeConnected 
-                  ? "You can receive payments for completed jobs"
-                  : "Required to receive payments for jobs"
-                }
-              </p>
-            </div>
+            <ContractorPayoutCard onStripe={handleStripeConnect} />
 
             {/* Contact Information - Compact */}
             <div className="space-y-3">

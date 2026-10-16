@@ -607,6 +607,8 @@ export type Database = {
           ob_job_day_guides_ack_at: string | null
           ob_payouts_setup: boolean | null
           ob_payouts_setup_at: string | null
+          payout_method_code: string | null
+          payout_method_status: string | null
           ob_supplies_checklist_viewed: boolean | null
           ob_supplies_checklist_viewed_at: string | null
           ob_training_accessed: boolean | null
@@ -680,6 +682,8 @@ export type Database = {
           ob_job_day_guides_ack_at?: string | null
           ob_payouts_setup?: boolean | null
           ob_payouts_setup_at?: string | null
+          payout_method_code?: string | null
+          payout_method_status?: string | null
           ob_supplies_checklist_viewed?: boolean | null
           ob_supplies_checklist_viewed_at?: string | null
           ob_training_accessed?: boolean | null
@@ -753,6 +757,8 @@ export type Database = {
           ob_job_day_guides_ack_at?: string | null
           ob_payouts_setup?: boolean | null
           ob_payouts_setup_at?: string | null
+          payout_method_code?: string | null
+          payout_method_status?: string | null
           ob_supplies_checklist_viewed?: boolean | null
           ob_supplies_checklist_viewed_at?: string | null
           ob_training_accessed?: boolean | null

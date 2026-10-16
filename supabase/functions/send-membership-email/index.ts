@@ -8,6 +8,7 @@ import { CreditAllocated } from '../_shared/email-templates/CreditAllocated.tsx'
 import { SubscriptionCancelled } from '../_shared/email-templates/SubscriptionCancelled.tsx';
 import { CreditExpiryWarning } from '../_shared/email-templates/CreditExpiryWarning.tsx';
 import { RecurringPaused } from '../_shared/email-templates/RecurringPaused.tsx';
+import { buildEmailCard } from '../_shared/email-compliance.ts';
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
@@ -53,27 +54,20 @@ function renderCheckoutLink(d: MembershipEmailRequest["data"]): string {
   const name = d.name || "there";
   const plan = d.plan || "Membership";
   const depositLine = d.depositAmount && d.depositAmount > 0
-    ? `<p style="margin:0 0 8px;color:#374151;font-size:14px;">First-clean deposit at signup: <strong>${money(d.depositAmount)}</strong></p>`
+    ? `<p style="margin:0 0 8px;font-size:14px;">First-clean deposit at signup: <strong>${money(d.depositAmount)}</strong></p>`
     : "";
   const dateLine = d.firstServiceDate
-    ? `<p style="margin:0 0 8px;color:#374151;font-size:14px;">Your first clean: <strong>${d.firstServiceDate}</strong></p>`
+    ? `<p style="margin:0 0 8px;font-size:14px;">Your first clean: <strong>${d.firstServiceDate}</strong></p>`
     : "";
-  return `<!doctype html><html><body style="margin:0;background:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F9FAFB;padding:24px 0;"><tr><td align="center">
-<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;">
-<tr><td style="background:linear-gradient(135deg,#5500FF 0%,#3D00B8 100%);padding:28px 30px;text-align:center;">
-<h1 style="margin:0;color:#fff;font-size:24px;">Start your ${plan} membership</h1></td></tr>
-<tr><td style="padding:30px;">
-<p style="margin:0 0 12px;color:#111827;font-size:16px;">Hi ${name},</p>
-<p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6;">You're almost set! Tap the button below to securely add your card and activate your Novara ${plan} membership.</p>
-<p style="margin:0 0 8px;color:#374151;font-size:14px;">Monthly: <strong>${money(d.monthlyAmount)}/mo</strong></p>
-${depositLine}${dateLine}
-<table role="presentation" cellpadding="0" cellspacing="0" style="margin:22px auto;"><tr><td align="center" style="background:linear-gradient(135deg,#5500FF 0%,#3D00B8 100%);border-radius:8px;">
-<a href="${d.url}" style="display:inline-block;padding:14px 32px;color:#fff;font-size:16px;font-weight:600;text-decoration:none;">Complete my signup</a></td></tr></table>
-<p style="margin:16px 0 0;color:#6B7280;font-size:12px;line-height:1.5;">If the button doesn't work, copy this link:<br><a href="${d.url}" style="color:#5500FF;word-break:break-all;">${d.url}</a></p>
-</td></tr>
-<tr><td style="background:#fff;border-top:1px solid #E5E7EB;padding:18px;text-align:center;color:#6B7280;font-size:12px;">© ${new Date().getFullYear()} Novara Cleaning</td></tr>
-</table></td></tr></table></body></html>`;
+  return buildEmailCard({
+    title: `Start your ${plan} membership`,
+    bodyHtml: `<p style="margin:0 0 12px;">Hi ${name},</p>
+<p style="margin:0 0 16px;">You're almost set. Use the button to add your card and activate your Novara ${plan} membership.</p>
+<p style="margin:0 0 8px;">Monthly: <strong>${money(d.monthlyAmount)}/mo</strong></p>
+${depositLine}${dateLine}`,
+    buttonHref: d.url || "",
+    buttonLabel: "Complete my signup",
+  });
 }
 
 
@@ -128,18 +122,16 @@ serve(async (req: Request) => {
         const who = data.name || "there";
         const when = data.when || "your usual day";
         const charged = data.chargedLabel
-          ? `<p style="margin:0 0 16px;color:#475569">We charged <strong>${data.chargedLabel}</strong> to the card on file.</p>`
+          ? `<p style="margin:0 0 16px;">We charged <strong>${data.chargedLabel}</strong> to the card on file.</p>`
           : "";
         subject = data.subject || "Your Novara recurring cleaning is back on";
-        html = `
-          <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#0f172a">
-            <h2 style="margin:0 0 8px;font-size:20px">Your cleaning is back on</h2>
-            <p style="margin:0 0 16px;color:#475569">Hi ${who},</p>
-            <p style="margin:0 0 16px;color:#475569">Your recurring cleaning has resumed. Next visit: <strong>${when}</strong>.</p>
-            ${charged}
-            <p style="margin:0 0 16px;color:#475569">Questions? Call (844) 735-2070.</p>
-            <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">Novara Cleaning</p>
-          </div>`;
+        html = buildEmailCard({
+          title: "Your cleaning is back on",
+          bodyHtml: `<p style="margin:0 0 16px;">Hi ${who},</p>
+<p style="margin:0 0 16px;">Your recurring cleaning has resumed. Next visit: <strong>${when}</strong>.</p>
+${charged}
+<p style="margin:0;">Questions? Call (844) 735-2070.</p>`,
+        });
         break;
       }
       default:
@@ -147,7 +139,7 @@ serve(async (req: Request) => {
     }
 
     const emailResponse = await resend.emails.send({
-      from: "Novara Cleaning <hello@novaracleaning.com>",
+      from: "Novara Cleaning <billing@novaracleaning.com>",
       to: [email],
       subject,
       html,

@@ -36,7 +36,6 @@ export const MembershipWelcome = (props: MembershipWelcomeProps) => {
           <li>
             <strong>{props.credits} cleaning credit(s)</strong> added to your account
           </li>
-          <li>Exclusive discounts on all add-ons</li>
           <li>Priority scheduling and support</li>
           <li>Flexible rescheduling options</li>
         </ul>

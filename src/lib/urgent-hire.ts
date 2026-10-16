@@ -270,11 +270,13 @@ export function payoutsReady(cleaner: {
   payouts_enabled?: boolean | null;
   ob_payouts_setup?: boolean | null;
   stripe_account_id?: string | null;
+  payout_method_status?: string | null;
 }): boolean {
   return Boolean(
     cleaner.payouts_enabled ||
       cleaner.ob_payouts_setup ||
-      (cleaner.stripe_account_id && String(cleaner.stripe_account_id).trim()),
+      (cleaner.stripe_account_id && String(cleaner.stripe_account_id).trim()) ||
+      cleaner.payout_method_status === "verified",
   );
 }
 

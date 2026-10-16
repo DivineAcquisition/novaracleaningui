@@ -29,7 +29,7 @@ const corsHeaders = {
 const PORTAL_ROLES = new Set(["admin", "va"]);
 const ADMIN_PORTAL_URL = "https://admin.novaracleaning.com";
 const ADMIN_CALLBACK = `${ADMIN_PORTAL_URL}/admin/auth/callback`;
-const FROM_ADDRESS = "Novara Cleaning <hello@novaracleaning.com>";
+const FROM_ADDRESS = "NovaraCleaning <ops@novaracleaning.com>";
 const NOVARA_EMAIL_RE = /^[^@\s]+@novaracleaning\.com$/i;
 
 function isNovaraEmail(email: string): boolean {
@@ -46,7 +46,7 @@ const BRAND = {
   gray600: "#6B7280",
   gray700: "#374151",
   gray900: "#111827",
-  logo: "https://app.novaracleaning.com/novara-email-logo.png",
+  logo: "https://app.novaracleaning.com/novara-logo.png",
   supportEmail: "support@novaracleaning.com",
 };
 
@@ -98,7 +98,7 @@ function renderInviteHtml(opts: {
 <tr><td align="center">
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;width:100%;">
 <tr><td style="background:#ffffff;border:1px solid ${BRAND.gray200};border-bottom:none;border-radius:8px 8px 0 0;padding:20px;text-align:center;">
-<img src="${BRAND.logo}" alt="${BRAND.name}" width="200" height="27" style="display:block;margin:0 auto 8px;" />
+<img src="${BRAND.logo}" alt="${BRAND.name}" width="56" height="56" style="display:block;width:56px;height:56px;border-radius:12px;margin:0 0 22px;" />
 <div style="font-size:14px;font-weight:700;letter-spacing:.04em;color:${BRAND.primary};text-transform:uppercase;">Admin workspace</div>
 </td></tr>
 <tr><td style="background:${BRAND.gradient};color:#ffffff;padding:26px 30px;text-align:center;border-left:1px solid ${BRAND.gray200};border-right:1px solid ${BRAND.gray200};">
@@ -178,7 +178,7 @@ async function sendWorkspaceInviteEmail(
       subject,
       html,
       text,
-      replyTo: BRAND.supportEmail,
+      replyTo: "ops@novaracleaning.com",
     });
     if ((result as any)?.error) {
       return { sent: false, error: String((result as any).error?.message || (result as any).error) };

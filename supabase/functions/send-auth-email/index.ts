@@ -25,6 +25,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { Resend } from "https://esm.sh/resend@4.0.0";
+import { buildEmailCard } from "../_shared/email-compliance.ts";
 import { isStaffCustomerEmail } from "../_shared/staff-customer.ts";
 
 const corsHeaders = {
@@ -43,12 +44,12 @@ const BRAND = {
   gray600: "#6B7280",
   gray700: "#374151",
   gray900: "#111827",
-  logo: "https://app.novaracleaning.com/novara-email-logo.png",
+  logo: "https://app.novaracleaning.com/novara-logo.png",
   supportEmail: "support@novaracleaning.com",
   supportPhone: "+1 (844) 735-2070",
 };
 
-const FROM_ADDRESS = "Novara Cleaning <hello@novaracleaning.com>";
+const FROM_ADDRESS = "Novara Cleaning <support@novaracleaning.com>";
 
 const SITE_HOSTS = {
   app: "https://app.novaracleaning.com",
@@ -128,7 +129,7 @@ function configFor(kind: Kind, link: string, firstName: string): EmailConfig {
         subject: "Your Novara sign-in link",
         preheader: "Tap the link below to sign in — no password needed.",
         heading: "Sign in to Novara",
-        bodyHtml: `<p>${greeting}</p><p>Tap the button below to sign in to your Novara account. No password required.</p>`,
+        bodyHtml: `<p style="margin:0;font-size:16px;line-height:1.5;color:#b4b4bc;">Use the button below to sign in. This link expires shortly and works once.</p>`,
         ctaLabel: "Sign in",
         expiryNote: "This link expires in 1 hour and can only be used once.",
         textVersion: `${greeting}\n\nUse this link to sign in to Novara:\n${link}\n\nThis link expires in 1 hour and can only be used once.`,
@@ -137,32 +138,17 @@ function configFor(kind: Kind, link: string, firstName: string): EmailConfig {
 }
 
 function renderHtml(cfg: EmailConfig, link: string): string {
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${cfg.subject}</title><meta name="x-preheader" content="${cfg.preheader}"></head><body style="margin:0;padding:0;background:${BRAND.gray50};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:${BRAND.gray900};">
-<div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">${cfg.preheader}</div>
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:${BRAND.gray50};padding:20px 0;">
-<tr><td align="center">
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;width:100%;">
-<tr><td style="background:#ffffff;border:1px solid ${BRAND.gray200};border-bottom:none;border-radius:8px 8px 0 0;padding:20px 20px 12px;text-align:center;">
-<img src="${BRAND.logo}" alt="${BRAND.name}" width="200" height="27" style="display:block;margin:0 auto 8px;" />
-<div style="font-size:14px;font-weight:700;letter-spacing:.04em;color:${BRAND.primary};text-transform:uppercase;">NOVARACLEANING</div>
-</td></tr>
-<tr><td style="background:${BRAND.gradient};color:#ffffff;padding:26px 30px;text-align:center;border-left:1px solid ${BRAND.gray200};border-right:1px solid ${BRAND.gray200};">
-<h1 style="margin:0;font-size:28px;font-weight:bold;color:#ffffff;">${cfg.heading}</h1>
-</td></tr>
-<tr><td style="background:#ffffff;padding:30px;border-left:1px solid ${BRAND.gray200};border-right:1px solid ${BRAND.gray200};font-size:16px;line-height:1.6;color:${BRAND.gray700};">
-${cfg.bodyHtml}
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:24px auto;"><tr><td align="center" style="background:${BRAND.gradient};border-radius:8px;"><a href="${link}" style="display:inline-block;padding:14px 32px;font-size:16px;font-weight:600;color:#ffffff;text-decoration:none;">${cfg.ctaLabel}</a></td></tr></table>
-<p style="font-size:13px;color:${BRAND.gray600};margin:16px 0 8px;text-align:center;">${cfg.expiryNote}</p>
-<p style="font-size:13px;color:${BRAND.gray600};margin:16px 0 0;text-align:center;">If the button above doesn't work, paste this URL into your browser:</p>
-<p style="font-size:12px;color:${BRAND.primary};word-break:break-all;margin:8px 0 0;text-align:center;"><a href="${link}" style="color:${BRAND.primary};text-decoration:underline;">${link}</a></p>
-</td></tr>
-<tr><td style="background:#ffffff;border:1px solid ${BRAND.gray200};border-top:none;border-radius:0 0 8px 8px;padding:20px;text-align:center;font-size:13px;color:${BRAND.gray600};">
-<div style="margin:8px 0;">Need help? Email <a href="mailto:${BRAND.supportEmail}" style="color:${BRAND.primary};text-decoration:none;">${BRAND.supportEmail}</a> or call ${BRAND.supportPhone}.</div>
-<div style="margin:8px 0;">&copy; ${new Date().getFullYear()} ${BRAND.name}. All rights reserved.</div>
-</td></tr>
-</table>
-</td></tr></table>
-</body></html>`;
+  const body = cfg.bodyHtml.includes("Use the button below")
+    ? cfg.bodyHtml
+    : `${cfg.bodyHtml}<p style="margin:16px 0 0;font-size:15px;line-height:1.5;color:#b4b4bc;">${cfg.expiryNote}</p>`;
+  return buildEmailCard({
+    preheader: cfg.preheader,
+    title: cfg.heading,
+    bodyHtml: body,
+    buttonHref: link,
+    buttonLabel: cfg.ctaLabel,
+    footerHtml: `<p style="margin:28px 0 0;padding-top:16px;border-top:1px solid #3f3f46;font-family:Inter,Arial,sans-serif;font-size:13px;line-height:1.5;color:#a1a1aa;">Novara Cleaning<br/>Questions: <a href="mailto:${BRAND.supportEmail}" style="color:#ddd6fe;">${BRAND.supportEmail}</a> · ${BRAND.supportPhone}</p>`,
+  });
 }
 
 async function generateLink(

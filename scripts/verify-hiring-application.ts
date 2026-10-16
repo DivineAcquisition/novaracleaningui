@@ -6,11 +6,13 @@
 //   Run:  npm run hiring:verify
 
 import {
+  CONSENT_VERSION,
   EXPERIENCE_SOMEWHAT,
   OPEN_APPLICANT_ROLE,
   TRANSPORTATION_CAR,
   TRANSPORTATION_NONE,
   applicantStateFromAddress,
+  buildHiringConsentRecord,
   issuesForStep,
   savedApplicationNote,
   presetRoleForHiringPage,
@@ -54,6 +56,11 @@ function draft(overrides: Partial<HiringApplicationDraft> = {}): HiringApplicati
     consent1099: true,
     backgroundCheckConsent: true,
     payConsent: true,
+    age18: true,
+    validDriversLicense: true,
+    autoInsured: true,
+    smsConsent: true,
+    answersAccurate: true,
     willingToGetSupplies: "Yes",
     suppliesOnHand: "Vacuum and all-purpose cleaner",
     reliabilityNote: "I show up when I say I will",
@@ -76,6 +83,7 @@ if (good.ok) {
   check("department is service delivery", good.value.department, "Service Delivery");
   check("supplies follow-up is kept", good.value.suppliesOnHand, "Vacuum and all-purpose cleaner");
   check("experience value is unchanged", good.value.experience, "Yes 1yr+");
+  check("consent version is stored", good.value.consentVersion, CONSENT_VERSION);
 }
 
 const somewhat = validateHiringApplication(draft({ experience: EXPERIENCE_SOMEWHAT }));
@@ -98,6 +106,11 @@ check("not authorized code", codeOf({ authorizedToWork: "No" }), "not_authorized
 check("declined 1099 code", codeOf({ consent1099: false }), "missing_consent");
 check("declined background check code", codeOf({ backgroundCheckConsent: false }), "missing_consent");
 check("declined pay code", codeOf({ payConsent: false }), "missing_consent");
+check("under 18 is a hard stop", codeOf({ age18: false }), "under_18");
+check("missing license is a hard stop", codeOf({ validDriversLicense: false }), "no_license");
+check("uninsured car is a hard stop", codeOf({ autoInsured: false }), "no_auto_insurance");
+check("missing text consent", codeOf({ smsConsent: false }), "missing_sms");
+check("missing truthfulness", codeOf({ answersAccurate: false }), "missing_truthfulness");
 check("unwilling supplies code", codeOf({ willingToGetSupplies: "No" }), "not_willing_supplies");
 check("yes supplies without a list", codeOf({ suppliesOnHand: " " }), "missing_supplies_list");
 check("none yet is an acceptable supply list", codeOf({ suppliesOnHand: "none yet" }), "ok");
@@ -120,6 +133,26 @@ check(
   "suppliesOnHand",
 );
 check("car step rejects no vehicle before the ID", issuesForStep("car", draft({ transportation: TRANSPORTATION_NONE }))?.code, "no_car");
+check("age sits after work authorization", withList[withList.indexOf("authorized") + 1], "age");
+const under18 = validateHiringApplication(draft({ age18: false }));
+check("under 18 uses the gate screen", under18.ok ? false : under18.gate, true);
+const noSms = validateHiringApplication(draft({ smsConsent: false }));
+check("missing text consent stays on the question", noSms.ok ? true : noSms.gate, false);
+const record = buildHiringConsentRecord({
+  acceptedAt: "2026-10-15T12:00:00.000Z",
+  ip: " 203.0.113.4 ",
+  userAgent: "TestAgent",
+});
+check("consent record version", record.version, CONSENT_VERSION);
+check("consent record keeps the ip", record.ip, "203.0.113.4");
+check("consent record names the 24-month covenant", record.texts.nonSolicitation.includes("24 months"), true);
+check("consent record includes STOP", record.texts.smsConsent.includes("STOP"), true);
+check("consent record discloses the driving record", record.texts.backgroundDisclosure.includes("driving record"), true);
+check("consent record points at a later signed authorization", record.texts.backgroundDisclosure.includes("immediately before"), true);
+check("consent record says not to upload a Social Security card", record.texts.idPurpose.includes("Do not upload a Social Security card"), true);
+check("consent record states company liability coverage", record.texts.insurance.includes("commercial general liability"), true);
+check("saved answers keep the new consents", sanitizeAnswers({ smsConsent: true, age18: false }).smsConsent, true);
+check("saved answers keep a no on age", sanitizeAnswers({ age18: false }).age18, false);
 check("California is not a service state", codeOf({ state: "California" }), "invalid_state");
 check("Texas is not a service state", codeOf({ state: "Texas" }), "invalid_state");
 check("address step asks for the city", issuesForStep("address", draft({ city: "" }))?.code, "missing_city");

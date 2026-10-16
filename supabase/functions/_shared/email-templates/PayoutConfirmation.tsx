@@ -63,7 +63,7 @@ export const PayoutConfirmation = ({
             {sourceLabel ? <DetailRow label="Type" value={sourceLabel} /> : null}
             <DetailRow label="Amount" value={`$${(amount / 100).toFixed(2)}`} />
             <DetailRow label="Transfer Date" value={formatDate(transferDate)} />
-            <DetailRow label="Stripe Transfer ID" value={transferId} />
+            <DetailRow label="Payout reference" value={transferId ? `ending in ${String(transferId).slice(-4)}` : "—"} />
           </Highlight>
         </Section>
 
@@ -76,8 +76,8 @@ export const PayoutConfirmation = ({
         </Text>
 
         <Text style={styles.footer}>
-          Thank you for being part of the Novara team!<br />
-          The Novara Cleaning Team
+          Thank you for your work as an independent contractor with NovaraCleaning.<br />
+          NVC Operations
         </Text>
       </EmailLayout>
     </Html>

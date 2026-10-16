@@ -542,7 +542,7 @@ async function checkPortal(browser: Browser): Promise<void> {
     "Read Day To Day Job Operations",
     "Agree to the dress code",
     "Submit your W-9",
-    "Set up Stripe payouts",
+    "How would you like to get paid?",
     "Watch the training videos",
   ];
   check(
@@ -833,7 +833,7 @@ async function checkSetupLanding(browser: Browser): Promise<void> {
       "Read Day To Day Job Operations",
       "Agree to the dress code",
       "Submit your W-9",
-      "Set up Stripe payouts",
+      "How would you like to get paid?",
       "Watch the training videos",
     ],
   );

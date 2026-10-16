@@ -108,7 +108,7 @@ serve(async (req: Request) => {
     const html = buildQuoteHtml(data);
 
     const emailResponse = await resend.emails.send({
-      from: "Novara Cleaning <hello@novaracleaning.com>",
+      from: "Novara Cleaning <support@novaracleaning.com>",
       to: [data.email],
       subject: `Your NovaraCleaning Quote - ${formatCurrency(data.finalPriceCents)}/clean ✨`,
       html,

@@ -12,7 +12,9 @@ export const ALLOWED_MAILBOXES = [
   "billing@novaracleaning.com",
 ] as const;
 
-export const SEND_AS = "NovaraCleaning <hello@novaracleaning.com>";
+export function ackFrom(mailbox: (typeof ALLOWED_MAILBOXES)[number]): string {
+  return `NovaraCleaning <${mailbox}>`;
+}
 export const SIGNATURE = "NovaraCleaning";
 export const BLOCKED_CC = "maliksannie7@gmail.com";
 
@@ -42,6 +44,7 @@ export type MailboxAckDecision =
       party: MailboxParty;
       mailbox: (typeof ALLOWED_MAILBOXES)[number];
       to: string;
+      from: string;
       replyTo: (typeof ALLOWED_MAILBOXES)[number];
       subject: string;
       text: string;
@@ -265,6 +268,7 @@ export function decideMailboxAck(mail: InboundMail): MailboxAckDecision {
     party,
     mailbox,
     to: fromEmail,
+    from: ackFrom(mailbox),
     replyTo: mailbox,
     subject: composed.subject,
     text: composed.text,

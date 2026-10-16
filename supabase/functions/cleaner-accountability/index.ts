@@ -68,8 +68,8 @@ type SB = any;
 const ACTION_TYPES = ["coaching_note", "strike", "suspension", "removal"] as const;
 type ActionType = (typeof ACTION_TYPES)[number];
 
-const FROM_ADDRESS = "NovaraCleaning Operations <hello@novaracleaning.com>";
-const REPLY_TO = "hello@novaracleaning.com";
+const FROM_ADDRESS = "NVC Operations <operations@novaracleaning.com>";
+const REPLY_TO = "operations@novaracleaning.com";
 // Every formal notice CCs the office + QC inboxes — the paper trail lives
 // in company mail as well as on the action row.
 const CC_ADDRESSES = ["contact@novaracleaning.com", "qc@novaracleaning.com"];

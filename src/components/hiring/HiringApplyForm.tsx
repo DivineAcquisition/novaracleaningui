@@ -16,9 +16,9 @@ interface Props {
 }
 
 const REQUIREMENTS = [
-  { icon: RiMapPin2Line, label: "Your own car — the only transportation we accept" },
-  { icon: RiFileTextLine, label: "A valid government-issued photo ID" },
-  { icon: RiCheckboxCircleLine, label: "Yes to supplies, and to all three consents" },
+  { icon: RiCheckboxCircleLine, label: "18 or older, and authorized to work in the U.S." },
+  { icon: RiMapPin2Line, label: "Your own insured car and a valid driver’s license" },
+  { icon: RiFileTextLine, label: "A photo ID, kept only to confirm who you are" },
 ];
 
 export function HiringApplyForm({ defaultRole = "field-tech", className, compact }: Props) {
@@ -36,7 +36,7 @@ export function HiringApplyForm({ defaultRole = "field-tech", className, compact
       </h3>
       {!compact && (
         <p className="mt-1.5 text-sm leading-relaxed text-slate-500">
-          A short application. You’ll need a car, a photo ID, and a willingness to get supplies.
+          A short application. You’ll need to be 18 or older, with an insured car, a driver’s license, and a photo ID.
         </p>
       )}
       <ul className="mt-5 space-y-2.5">

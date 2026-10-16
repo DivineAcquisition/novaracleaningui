@@ -132,7 +132,7 @@ function renderHtml(opts: { firstName: string }): string {
           <p style="margin:0;font-size:12px;color:#9CA3AF;line-height:1.5">© NovaraCleaning · All Rights Reserved.</p>
         </td></tr>
         <tr><td style="background:#F9FAFB;padding:20px 32px;text-align:center;font-size:12px;color:#6B7280">
-          Novara Cleaning &middot; hello@novaracleaning.com &middot; +1 (844) 735-2070<br/>
+          Novara Cleaning &middot; billing@novaracleaning.com &middot; +1 (844) 735-2070<br/>
           Reply to this email any time — we love hearing from our customers.
         </td></tr>
       </table>
@@ -259,7 +259,7 @@ serve(async (req) => {
     if (doEmail) {
       const resend = new Resend(Deno.env.get("RESEND_API_KEY") || "");
       const result = await resend.emails.send({
-        from: "Novara Cleaning <hello@novaracleaning.com>",
+        from: "Novara Cleaning <billing@novaracleaning.com>",
         to: [email],
         subject: "Your Glow Membership Benefits — everything included ✨",
         html: renderHtml({ firstName }),

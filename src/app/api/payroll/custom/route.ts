@@ -18,6 +18,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin, AdminAuthError, type AdminPrincipal } from "@/lib/admin-auth";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import { syncManualPayoutJob } from "@/lib/airtable/manual-payout";
+import { PAYOUT_SETTINGS_KEY, findMethod, parsePayoutSettings, snapshot1099Flag } from "@/lib/payout-methods";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -77,7 +78,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       case "submit":
         return NextResponse.json(await submitPayout(supabase, body, principal));
       case "mark_paid":
-        return NextResponse.json(await markPaid(supabase, body));
+        return NextResponse.json(await markPaid(supabase, body, principal));
       case "run_preview":
         return NextResponse.json(await runPreview(supabase));
       case "execute_pending":
@@ -843,12 +844,47 @@ async function submitPayout(
   };
 }
 
-async function markPaid(supabase: SB, body: Record<string, unknown>) {
+async function markPaid(supabase: SB, body: Record<string, unknown>, principal: AdminPrincipal) {
   const id = String(body.id || "");
   if (!id) return { error: "id required" };
-  const { data: row, error } = await supabase
-    .from("manual_payouts")
-    .update({ status: "paid", paid_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+  const { data: existing, error: readErr } = await (supabase.from("manual_payouts") as any)
+    .select("id, status, cleaner_id, pay_run_line_id, booking_id, amount_cents")
+    .eq("id", id)
+    .maybeSingle();
+  if (readErr) throw readErr;
+  if (!existing) return { error: "Payout not found" };
+  if (existing.pay_run_line_id) {
+    return { error: "This payout is in a pay run. Mark it paid there so it is recorded once." };
+  }
+  if (existing.status === "paid") return { ok: true, alreadyPaid: true };
+
+  let methodCode: string | null = null;
+  let countsTowardOwn1099: boolean | null = null;
+  if (!existing.cleaner_id) return { error: "A W-9 must be on file before any payout." };
+  if (existing.cleaner_id) {
+    const { data: cleaner } = await (supabase.from("cleaners") as any)
+      .select("w9_status, payout_method_code")
+      .eq("id", existing.cleaner_id)
+      .maybeSingle();
+    if ((cleaner as { w9_status?: string | null } | null)?.w9_status !== "complete") {
+      return { error: "A W-9 must be on file before any payout." };
+    }
+    methodCode = (cleaner as { payout_method_code?: string | null } | null)?.payout_method_code || null;
+    const { data: setting } = await supabase.from("app_settings").select("value").eq("key", PAYOUT_SETTINGS_KEY).maybeSingle();
+    const settings = parsePayoutSettings(setting?.value);
+    countsTowardOwn1099 = snapshot1099Flag(findMethod(settings, methodCode));
+  }
+
+  const { data: row, error } = await (supabase.from("manual_payouts") as any)
+    .update({
+      status: "paid",
+      paid_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      payout_method_code: methodCode,
+      counts_toward_own_1099: countsTowardOwn1099,
+      recorded_by: principal.userId,
+      amount_sent_cents: existing.amount_cents,
+    })
     .eq("id", id)
     .select("id, booking_id, amount_cents, cleaner_breakdown, cleaner_id, cleaner_phone, cleaner_name")
     .single();

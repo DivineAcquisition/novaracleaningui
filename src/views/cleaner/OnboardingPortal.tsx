@@ -42,6 +42,7 @@ import { SupplyChecklistForm } from "@/components/cleaner/SupplyChecklistForm";
 import { JobDayGuides } from "@/components/cleaner/JobDayGuides";
 import { onboardingGuide } from "@/lib/cleaner-onboarding-guides";
 import { W9OnboardingForm } from "@/components/cleaner/W9OnboardingForm";
+import PayoutMethodStep from "@/components/cleaner/PayoutMethodStep";
 import {
   SUPPLY_ITEMS,
   cleanerSetupSteps,
@@ -72,7 +73,7 @@ const logo = "/novara-logo.png";
 //   4. Day To Day Job Operations
 //   5. Dress code — must agree, not merely view
 //   6. W-9 — legal name, TIN, and address for a 1099
-//   7. Stripe payout setup — finishing it opens the training hub
+//   7. How would you like to get paid? — Stripe, or Cash App, Zelle, or Chime
 //   8. Training hub — last
 //
 // A contractor with zero completed jobs cannot be offered work until the
@@ -111,6 +112,8 @@ interface CleanerProfile {
   state: string | null;
   home_zip: string | null;
   w9_status: string | null;
+  payout_method_code?: string | null;
+  payout_method_status?: string | null;
 }
 
 // ─── Blocked Status Screen ──────────────────────────────
@@ -402,7 +405,7 @@ export default function OnboardingPortal() {
     job_day: "Read Day To Day Job Operations first.",
     w9: "Submit your W-9 first.",
     training: "Watch the training videos first.",
-    payouts: "Set up Stripe payouts first.",
+    payouts: "Choose how you get paid first.",
   };
   const lockFor = (id: CleanerSetupStepId) => {
     const idx = steps.findIndex((s) => s.id === id);
@@ -748,11 +751,11 @@ export default function OnboardingPortal() {
           )}
         </StepCard>
 
-        {/* Step 7 — Stripe payouts. Finishing this opens training. */}
+        {/* Step 7 — How to get paid. Stripe stays first. Finishing this opens training. */}
         <StepCard
           number={7}
-          title="Set up Stripe payouts"
-          description="Connect the account we pay. When Stripe finishes, you watch what to expect on a job."
+          title="How would you like to get paid?"
+          description="Stripe is the fastest and pays you automatically. Cash App, Zelle, and Chime are paid on the weekly pay run."
           icon={RiBankCardLine}
           done={payoutsDone}
           started={false}
@@ -760,6 +763,16 @@ export default function OnboardingPortal() {
         >
           {!payoutsUnlocked ? (
             lockMsg(lockFor("payouts"))
+          ) : payoutsDone && profile.payout_method_status === "verified" && profile.payout_method_code && profile.payout_method_code !== "stripe" ? (
+            <>
+              <p className="text-sm text-muted-foreground">
+                Payout details confirmed. Next, watch the video on what a job looks like.
+              </p>
+              <Button variant="outline" onClick={() => router.push("/cleaner/training")}>
+                <RiGraduationCapLine className="w-4 h-4 mr-1.5" />
+                Continue to training
+              </Button>
+            </>
           ) : payoutsDone ? (
             <>
               <p className="text-sm text-muted-foreground">
@@ -772,26 +785,11 @@ export default function OnboardingPortal() {
               </Button>
             </>
           ) : (
-            <>
-              <p className="text-sm text-muted-foreground">
-                Connect the account we pay. When Stripe finishes, you go straight
-                to the video on what a job looks like.
-              </p>
-              <Button
-                size="lg"
-                onClick={() => void openStripe()}
-                disabled={stripeLoading}
-                className="bg-primary hover:bg-primary/90 text-primary-foreground"
-              >
-                {stripeLoading ? (
-                  <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" />
-                ) : (
-                  <RiBankCardLine className="w-4 h-4 mr-1.5" />
-                )}
-                Set up Stripe payouts
-                <RiArrowRightLine className="w-4 h-4 ml-1.5" />
-              </Button>
-            </>
+            <PayoutMethodStep
+              stripeLoading={stripeLoading}
+              onStripe={() => void openStripe()}
+              onVerified={() => void refreshProfile()}
+            />
           )}
         </StepCard>
 

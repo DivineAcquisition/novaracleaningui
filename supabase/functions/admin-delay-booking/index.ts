@@ -420,7 +420,7 @@ serve(async (req) => {
             <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">Novara Cleaning</p>
           </div>`;
         const { error: emailErr } = await resend.emails.send({
-          from: "Novara Cleaning <hello@novaracleaning.com>",
+          from: "Novara Cleaning <support@novaracleaning.com>",
           to: [booking.email],
           subject: `Your Novara appointment moved to ${newSlot}`,
           html,

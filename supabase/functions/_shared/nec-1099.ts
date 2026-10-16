@@ -101,7 +101,8 @@ export type NecBlocker =
   | "ttoc_required"
   | "ttoc_invalid"
   | "not_this_revision"
-  | "correction_link";
+  | "correction_link"
+  | "nec_method_unclassified";
 
 function clean(value: unknown): string {
   return String(value ?? "").replace(/\s+/g, " ").trim();
@@ -243,11 +244,21 @@ export function stateLinesForForm(lines: unknown): StateTaxLine[] {
 export type LedgerPayout = {
   cleanerId?: string | null;
   amountCents?: number | null;
+  /** What was actually sent, when it differs from the amount due. */
+  amountSentCents?: number | null;
   status?: string | null;
   serviceDate?: string | null;
   paidAt?: string | null;
   createdAt?: string | null;
   breakdown?: unknown;
+  /** Null on rows written before payout methods. A code means the row was classified. */
+  methodCode?: string | null;
+  /**
+   * Snapshot of the method's 1099 flag at pay time.
+   * true include, false exclude, null unresolved (do not guess).
+   * Missing on legacy rows, which stay in the total.
+   */
+  countsTowardOwn1099?: boolean | null;
 };
 
 export type ExtraPayRow = {
@@ -259,7 +270,26 @@ export type ExtraPayRow = {
   overtimeCents?: number | null;
   supplyCents?: number | null;
   mileageCents?: number | null;
+  methodCode?: string | null;
+  countsTowardOwn1099?: boolean | null;
 };
+
+export type NecInclusion = "include" | "exclude" | "unresolved" | "legacy";
+
+/**
+ * Whether a paid ledger row counts toward Novara's own 1099-NEC.
+ * Legacy rows (no method) stay in the total this form already used.
+ * A method with no accountant flag is unresolved and is not guessed.
+ */
+export function necInclusion(row: {
+  methodCode?: string | null;
+  countsTowardOwn1099?: boolean | null;
+}): NecInclusion {
+  if (row.countsTowardOwn1099 === true) return "include";
+  if (row.countsTowardOwn1099 === false) return "exclude";
+  if (!row.methodCode) return "legacy";
+  return "unresolved";
+}
 
 export type TipRow = {
   amountCents?: number | null;
@@ -281,7 +311,12 @@ export function payoutShareCents(row: LedgerPayout, cleanerId: string): number {
     }
     return sum;
   }
-  if (String(row.cleanerId || "") === cleanerId) return nonNegative(row.amountCents);
+  if (String(row.cleanerId || "") === cleanerId) {
+    if (row.amountSentCents != null && Number.isFinite(Number(row.amountSentCents))) {
+      return nonNegative(row.amountSentCents);
+    }
+    return nonNegative(row.amountCents);
+  }
   return 0;
 }
 
@@ -304,14 +339,22 @@ export function jobPayFromLedgers(input: {
   year: number;
   payouts: LedgerPayout[];
   extras: ExtraPayRow[];
-}): { jobPayCents: number; overtimeTrackedCents: number; reimbursementCents: number } {
+}): { jobPayCents: number; overtimeTrackedCents: number; reimbursementCents: number; unresolvedCents: number } {
   let jobPayCents = 0;
   let overtimeTrackedCents = 0;
   let reimbursementCents = 0;
+  let unresolvedCents = 0;
   for (const row of input.payouts) {
     const when = row.paidAt || row.serviceDate || row.createdAt;
     if (!paidInYear(row.status, when, input.year)) continue;
-    jobPayCents += payoutShareCents(row, input.cleanerId);
+    const share = payoutShareCents(row, input.cleanerId);
+    const inclusion = necInclusion(row);
+    if (inclusion === "exclude") continue;
+    if (inclusion === "unresolved") {
+      unresolvedCents += share;
+      continue;
+    }
+    jobPayCents += share;
   }
   for (const row of input.extras) {
     const when = row.paidAt || row.createdAt;
@@ -319,11 +362,18 @@ export function jobPayFromLedgers(input: {
     const surge = nonNegative(row.surgeCents);
     const jobValue = nonNegative(row.jobValueCents);
     const overtime = nonNegative(row.overtimeCents);
-    jobPayCents += surge + jobValue + overtime;
+    const compensation = surge + jobValue + overtime;
+    const inclusion = necInclusion(row);
+    if (inclusion === "exclude") continue;
+    if (inclusion === "unresolved") {
+      unresolvedCents += compensation;
+      continue;
+    }
+    jobPayCents += compensation;
     overtimeTrackedCents += overtime;
     reimbursementCents += nonNegative(row.supplyCents) + nonNegative(row.mileageCents);
   }
-  return { jobPayCents, overtimeTrackedCents, reimbursementCents };
+  return { jobPayCents, overtimeTrackedCents, reimbursementCents, unresolvedCents };
 }
 
 /** Year tips from cleaner_tips only. */
@@ -486,6 +536,8 @@ export function blockerMessage(reason: NecBlocker, missing?: string[]): string {
       return "This December 2026 form is for calendar year 2026 and later. Earlier years keep the prior form.";
     case "correction_link":
       return "A corrected 1099 is a new record linked to the original filing.";
+    case "nec_method_unclassified":
+      return "A payout method on this ledger has no 1099-NEC flag yet. The accountant sets that on the method before these payments are included or left off.";
     default:
       return "The 1099 could not be prepared.";
   }

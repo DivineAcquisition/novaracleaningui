@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { Resend } from "https://esm.sh/resend@2.0.0";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { renderAsync } from "https://esm.sh/@react-email/components@0.0.22";
 import * as React from "https://esm.sh/react@18.3.1";
 import { CleanerAssignment } from "../_shared/email-templates/CleanerAssignment.tsx";
@@ -7,7 +7,7 @@ import { BookingCompletion } from "../_shared/email-templates/BookingCompletion.
 import { PayoutConfirmation } from "../_shared/email-templates/PayoutConfirmation.tsx";
 import { CleanerCredentials } from "../_shared/email-templates/CleanerCredentials.tsx";
 import { CleanerTierPromotion } from "../_shared/email-templates/CleanerTierPromotion.tsx";
-import { CONTRACTOR_OPS_FROM, CONTRACTOR_OPS_REPLY_TO } from "../_shared/contractor-comms.ts";
+import { deliverCompliantEmail } from "../_shared/email-compliance-send.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -25,10 +25,15 @@ serve(async (req) => {
   }
 
   try {
-    const { type, email, data, cc, to } = await req.json();
+    const body = await req.json();
+    const { type, email, data, cc, to } = body;
     logStep("Sending cleaner email", { type, email, cc, extraTo: to });
 
-    const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
+    const apiKey = Deno.env.get("RESEND_API_KEY") || "";
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    );
 
     let subject = "";
     let html = "";
@@ -253,7 +258,7 @@ serve(async (req) => {
         if (data.needsJobDay !== false) needs.push("Read Day To Day Job Operations");
         if (data.needsDressCode !== false) needs.push("Agree to the dress code");
         if (data.needsW9 !== false) needs.push("Submit your W-9");
-        if (data.needsStripe !== false) needs.push("Set up Stripe payouts");
+        if (data.needsStripe !== false) needs.push("How would you like to get paid?");
         if (data.needsTraining !== false) needs.push("Watch the training videos");
         const stepsList = needs.length
           ? `<ol style="margin:0 0 16px;padding-left:20px;color:#475569">${
@@ -468,6 +473,15 @@ serve(async (req) => {
         break;
       }
 
+      case "contractor_notice": {
+        subject = String(data?.subject || "A note from Novara");
+        const bodyHtml = String(data?.html || "");
+        if (!bodyHtml.trim()) throw new Error("Notice was empty.");
+        // Payout identifiers never travel in a notification, even if a caller included one.
+        html = bodyHtml.replace(/\$[A-Za-z][A-Za-z0-9_]{2,30}/g, "[payout id removed]");
+        break;
+      }
+
       default:
         throw new Error(`Unknown email type: ${type}`);
     }
@@ -490,24 +504,25 @@ serve(async (req) => {
       throw new Error("No recipient email");
     }
 
-    const emailResponse = await resend.emails.send({
-      from: CONTRACTOR_OPS_FROM,
-      reply_to: CONTRACTOR_OPS_REPLY_TO,
-      to: toList,
-      ...(ccList.length ? { cc: ccList } : {}),
+    const templateKey = type === "payout" || type === "payout_pending" ? "contractor_payout" : "contractor_assignment";
+    const emailResponse = await deliverCompliantEmail(supabase, {
+      apiKey,
+      to: toList[0],
+      cc: [...toList.slice(1), ...ccList],
       subject,
       html,
+      templateKey,
+      declaredType: "contractor_operational",
+      contractorRelationship: body.contractorRelationship || null,
+      bookingId: data?.bookingId || null,
     });
 
-    // Resend returns { data, error } and does not throw. Treating that as
-    // success is how an onboarding invite was marked emailed while only the
-    // SMS went out.
-    if (emailResponse.error) {
-      const providerError = emailResponse.error as { message?: string };
-      throw new Error(providerError.message || JSON.stringify(emailResponse.error));
+    // A blocked or rejected send must not be reported as delivered.
+    if (!emailResponse.ok) {
+      throw new Error(emailResponse.error || "Contractor email was not sent.");
     }
 
-    logStep("Email sent successfully", { data: emailResponse.data });
+    logStep("Email sent successfully", { id: emailResponse.id, type: emailResponse.type });
 
     return new Response(
       JSON.stringify({ success: true }),

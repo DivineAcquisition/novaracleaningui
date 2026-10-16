@@ -41,7 +41,7 @@ export interface LeadAlertResult {
 const FACEBOOK_SOURCE_RE =
   /(fb_lead|facebook|^fb$|fb[-_ ]?ads|meta|instagram|ig_lead)/i;
 
-const FROM_ADDRESS = "Novara Cleaning <hello@novaracleaning.com>";
+const FROM_ADDRESS = "NovaraCleaning <ops@novaracleaning.com>";
 const ADMIN_CSR_URL = "https://admin.novaracleaning.com/admin/csr";
 const FACEBOOK_BLUE = 1752220;
 
