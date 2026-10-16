@@ -1,7 +1,7 @@
 "use client";
 
 import { BOOK_URL } from "../lib/content";
-import { BorderBeam } from "./effects";
+import { BorderBeam, NumberTicker } from "./effects";
 import { Glyph } from "./Icons";
 
 export function PlanCard({ plan }) {
@@ -13,7 +13,7 @@ export function PlanCard({ plan }) {
         <div className="mini-icon"><Glyph name="calendar" /></div>
         <h3>{plan.name}</h3>
         <p className="who">{plan.audience}</p>
-        <p className="price">{plan.price} <span>/month</span></p>
+        <p className="price"><NumberTicker value={Number(plan.price.replace(/\D/g, ""))} prefix="$" /> <span>/month</span></p>
       </div>
       <div className="plan-foot">
         <h4>What’s in it for you?</h4>

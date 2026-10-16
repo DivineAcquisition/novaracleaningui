@@ -1,6 +1,6 @@
 import { Figtree } from "next/font/google";
 import { CtaBand, Footer, Header } from "../components/Chrome";
-import { BookDock, ScrollProgress } from "../components/effects";
+import { ScrollProgress } from "../components/effects";
 import "./globals.css";
 
 const figtree = Figtree({
@@ -27,7 +27,6 @@ export default function RootLayout({ children }) {
         {children}
         <CtaBand />
         <Footer />
-        <BookDock />
       </body>
     </html>
   );

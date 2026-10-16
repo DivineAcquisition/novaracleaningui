@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Compare } from "../components/Compare";
-import { BlurFade, MagicCard, Marquee, Particles, ShinyText } from "../components/effects";
+import { BlurFade, HeroSpotlight, MagicCard, Marquee, Particles, ShinyText } from "../components/effects";
 import { Faq } from "../components/Faq";
 import { Glyph, Spark } from "../components/Icons";
 import { LeadForm } from "../components/LeadForm";
@@ -11,6 +11,7 @@ export default function HomePage() {
     <main>
       <section className="hero">
         <Particles />
+        <HeroSpotlight />
         <div className="wrap hero-grid">
           <div>
             <p className="kicker"><ShinyText>Book Your First Cleaning 50% Off.</ShinyText></p>

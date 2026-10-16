@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { motion, useMotionTemplate, useMotionValue } from "motion/react";
-import { BOOK_URL } from "../lib/content";
 
 function reducedMotion() {
   return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -137,28 +136,51 @@ export function ScrollProgress() {
   return <div className="scroll-progress" style={{ transform: `scaleX(${progress})` }} />;
 }
 
-export function BookDock() {
-  const [show, setShow] = useState(false);
+export function NumberTicker({ value, prefix = "" }) {
+  const [current, setCurrent] = useState(value);
   useEffect(() => {
-    function onScroll() {
-      setShow(window.scrollY > 640);
+    if (reducedMotion()) return undefined;
+    const startValue = Math.round(value * 0.72);
+    const start = performance.now();
+    let frame = 0;
+    setCurrent(startValue);
+    function tick(now) {
+      const progress = Math.min(1, (now - start) / 700);
+      setCurrent(Math.round(startValue + (value - startValue) * (1 - (1 - progress) ** 3)));
+      if (progress < 1) frame = requestAnimationFrame(tick);
     }
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-  if (!show) return null;
-  return (
-    <a className="book-dock btn btn-primary" href={BOOK_URL}>
-      Book 50% Off
-    </a>
-  );
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [value]);
+  return <span>{prefix}{current}</span>;
+}
+
+export function HeroSpotlight() {
+  const ref = useRef(null);
+  const x = useMotionValue(70);
+  const y = useMotionValue(40);
+  const glow = useMotionTemplate`radial-gradient(460px circle at ${x}% ${y}%, rgba(255,255,255,0.2), transparent 62%)`;
+
+  useEffect(() => {
+    const node = ref.current?.parentElement;
+    if (!node || reducedMotion()) return undefined;
+    function move(event) {
+      const rect = node.getBoundingClientRect();
+      x.set(((event.clientX - rect.left) / rect.width) * 100);
+      y.set(((event.clientY - rect.top) / rect.height) * 100);
+    }
+    node.addEventListener("mousemove", move);
+    return () => node.removeEventListener("mousemove", move);
+  }, [x, y]);
+
+  return <motion.div ref={ref} aria-hidden className="hero-spot" style={{ background: glow }} />;
 }
 
 export function PageHero({ title, lede, children }) {
   return (
     <section className="hero page-hero">
       <Particles density={28} />
+      <HeroSpotlight />
       <BlurFade>
         <div className="wrap">
           {title ? <h1>{title}</h1> : null}
