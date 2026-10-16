@@ -1754,7 +1754,7 @@ interface CaseFile {
     checklist_items?: Array<{ key: string; label: string; state: string; skip_reason: string | null; at: string | null; by: string | null }>;
     photos?: { before: Array<{ url: string; created_at: string | null; original_timestamp_source: string }>; after: Array<{ url: string; created_at: string | null; original_timestamp_source: string }> };
     ghl?: { client: Record<string, any>; contractor: Record<string, any> };
-    comms?: { sms_logs: Array<Record<string, any>>; partnership_messages: Array<Record<string, any>>; gaps: string[] };
+    comms?: { sms_logs: Array<Record<string, any>>; partnership_messages: Array<Record<string, any>>; email_delivery?: Array<Record<string, any>>; gaps: string[] };
     contractor_dossier?: Record<string, any>;
     incident_timeline?: Array<{ at: string | null; source: string; label: string; kind: string; gap_from?: string | null; gap_to?: string | null }>;
     evidence_gaps?: string[];
@@ -1804,16 +1804,27 @@ export function CaseFileSheet({ bookingId, caseRef, onClose }: { bookingId: stri
               bookingId={bookingId}
               bookingRef={cf.ref}
               booking={cf.booking}
-              messages={(cf.incident?.ghl?.client?.messages || []) as Array<{
-                id?: string | null;
-                at?: string | null;
-                direction?: string | null;
-                messageType?: string | null;
-                body?: string | null;
-                transcript?: string | null;
-                callDurationSeconds?: number | null;
-                callStatus?: string | null;
-              }>}
+              messages={[
+                ...((cf.incident?.ghl?.client?.messages || []) as Array<{
+                  id?: string | null;
+                  at?: string | null;
+                  direction?: string | null;
+                  messageType?: string | null;
+                  body?: string | null;
+                  transcript?: string | null;
+                  callDurationSeconds?: number | null;
+                  callStatus?: string | null;
+                  source?: string | null;
+                }>),
+                ...((cf.incident?.comms?.email_delivery || []).map((row) => ({
+                  id: String(row.id || ""),
+                  at: String(row.sent_at || ""),
+                  direction: "novara",
+                  messageType: "EMAIL",
+                  body: String(row.text_body || ""),
+                  source: "email_delivery_log",
+                }))),
+              ]}
               photos={(cf.photos.zones && cf.photos.zones.length > 0
                 ? cf.photos.zones.map((zone) => ({
                   label: zone.label,
@@ -2102,7 +2113,13 @@ export function CaseFileSheet({ bookingId, caseRef, onClose }: { bookingId: stri
                       {fmtDT(String(r.sent_at || r.created_at))} · {String(r.channel)} {String(r.status)} → {String(r.to_phone || r.to_email)} · {String(r.template_key || "")}
                     </p>
                   ))}
-                  {(cf.incident.comms?.sms_logs || []).length + (cf.incident.comms?.partnership_messages || []).length === 0 && (
+                  {(cf.incident.comms?.email_delivery || []).map((r, i) => (
+                    <p key={`e-${i}`} className="text-[11px] text-slate-700 whitespace-pre-wrap">
+                      {fmtDT(String(r.sent_at))} · email {String(r.email_type)} · {String(r.subject)} → {String(r.contact_email)}
+                      {r.text_body ? `\n${String(r.text_body)}` : ""}
+                    </p>
+                  ))}
+                  {(cf.incident.comms?.sms_logs || []).length + (cf.incident.comms?.partnership_messages || []).length + (cf.incident.comms?.email_delivery || []).length === 0 && (
                     <p className="text-xs text-amber-800">No delivery-log rows matched this client or contractor.</p>
                   )}
                 </section>

@@ -17,7 +17,9 @@ import { Resend } from "https://esm.sh/resend@4.0.0";
 import {
   BLOCKED_CC,
   decideMailboxAck,
+  extractEmailAddresses,
   parseResendReceivedEvent,
+  primaryFromAddress,
   SEND_AS,
   type InboundMail,
 } from "../_shared/mailbox-ack.ts";
@@ -142,6 +144,36 @@ serve(async (req) => {
   if (existing) {
     log("duplicate", { dedupeKey, status: (existing as { status?: string }).status });
     return json({ skipped: true, reason: "duplicate" });
+  }
+
+  const fromEmail = primaryFromAddress(mail.from);
+  const watched = [
+    ...extractEmailAddresses(mail.to),
+    ...extractEmailAddresses(mail.cc),
+    ...extractEmailAddresses(mail.deliveredTo),
+  ];
+  const mailboxHit = decision.action === "send"
+    ? decision.mailbox
+    : watched.includes("operations@novaracleaning.com")
+      ? "operations@novaracleaning.com"
+      : watched.includes("support@novaracleaning.com")
+        ? "support@novaracleaning.com"
+        : watched.includes("billing@novaracleaning.com")
+          ? "billing@novaracleaning.com"
+          : "";
+  if (fromEmail && mailboxHit) {
+    try {
+      await supabase.from("email_conversation_messages").insert({
+        contact_email: fromEmail,
+        direction: "inbound",
+        mailbox: mailboxHit,
+        subject: String(mail.subject || ""),
+        body: String(mail.text || mail.html || ""),
+        email_type: "customer_service",
+      });
+    } catch {
+      /* The acknowledgement decision does not depend on the history row. */
+    }
   }
 
   if (decision.action === "skip") {

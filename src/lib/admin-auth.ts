@@ -79,6 +79,17 @@ export async function requireAdmin(req: Request): Promise<AdminPrincipal> {
   return { userId: user.id, email: user.email || "admin" };
 }
 
+/** Settings that change what every email says. VAs can operate the console; they cannot change this. */
+export async function requireFullAdmin(req: Request): Promise<AdminPrincipal> {
+  const principal = await requireAdmin(req);
+  const admin = getServiceClient();
+  const { data: roles, error } = await admin.from("user_roles").select("role").eq("user_id", principal.userId);
+  if (error) throw new AdminAuthError("Could not verify permissions.", 500);
+  const full = (roles || []).some((r: { role: string }) => r.role === "admin");
+  if (!full) throw new AdminAuthError("An admin has to change email settings.", 403);
+  return principal;
+}
+
 /**
  * Validate the request is from ANY signed-in user (no role requirement).
  * Used by self-service flows (e.g. a contractor signing their own agreement).

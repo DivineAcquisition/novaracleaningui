@@ -7,10 +7,8 @@
 // and only reports sent when the API accepts the message.
 
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
+import { deliverCompliantEmail } from "@/lib/email-compliance/deliver";
 import { buildOnboardingInviteEmail, usableInviteEmail } from "@/lib/talent/onboarding-invite";
-
-const FROM = "NVC Operations <operations@novaracleaning.com>";
-const REPLY_TO = "operations@novaracleaning.com";
 
 async function resolveResendKey(): Promise<string> {
   const fromEnv = (process.env.RESEND_API_KEY || "").trim();
@@ -53,24 +51,15 @@ export async function sendOnboardingInviteEmail(args: {
   });
 
   try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: FROM,
-        reply_to: REPLY_TO,
-        to: [to],
-        subject,
-        html,
-      }),
+    const outcome = await deliverCompliantEmail(getAdminSupabase(), {
+      to,
+      subject,
+      html,
+      apiKey: key,
+      declaredType: "contractor_operational",
+      templateKey: "contractor_invitation",
     });
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      return { sent: false, error: `Resend ${res.status}${body ? `: ${body.slice(0, 200)}` : ""}` };
-    }
+    if (!outcome.ok) return { sent: false, error: outcome.error || "Onboarding email was not sent." };
     return { sent: true, error: null };
   } catch (err) {
     return { sent: false, error: (err as Error).message || "Failed to send onboarding email" };

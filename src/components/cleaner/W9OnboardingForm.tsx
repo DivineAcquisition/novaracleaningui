@@ -78,6 +78,7 @@ export function W9OnboardingForm({
   const [state, setState] = useState(() => postalStateCode(stateDefault));
   const [zip, setZip] = useState(zipDefault);
   const [certified, setCertified] = useState(false);
+  const [electronicConsent, setElectronicConsent] = useState(false);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
   const [editing, setEditing] = useState(!done);
@@ -160,6 +161,9 @@ export function W9OnboardingForm({
           state: checked.recipient.state,
           zip: checked.recipient.zip,
         });
+        if (electronicConsent) {
+          await supabase.functions.invoke("nec-1099", { body: { action: "consent_electronic", electronicDeliveryConsent: true } });
+        }
         await onSubmitted();
         setSummary(saved);
         setTin("");
@@ -178,6 +182,7 @@ export function W9OnboardingForm({
           city: checked.recipient.city,
           state: checked.recipient.state,
           zip: checked.recipient.zip,
+          electronicDeliveryConsent: electronicConsent,
         },
       });
       const saved = data as { ok?: boolean; legalName?: string; tinLast4?: string; error?: string } | null;
@@ -295,6 +300,17 @@ export function W9OnboardingForm({
           <Label htmlFor="w9-zip" className="text-xs">ZIP</Label>
           <Input id="w9-zip" value={zip} onChange={(e) => setZip(e.target.value)} autoComplete="postal-code" inputMode="numeric" placeholder="20814" />
         </div>
+      </div>
+      <div className="flex items-start gap-2.5">
+        <Checkbox
+          id="w9-electronic"
+          checked={electronicConsent}
+          onCheckedChange={(v) => setElectronicConsent(v === true)}
+          className="mt-0.5"
+        />
+        <label htmlFor="w9-electronic" className="cursor-pointer text-sm text-foreground">
+          I agree to receive tax forms electronically. I can withdraw that consent later and ask for a paper copy. If I leave this unchecked, tax forms are sent on paper.
+        </label>
       </div>
       <div className="flex items-start gap-2.5">
         <Checkbox

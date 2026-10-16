@@ -57,7 +57,10 @@ export const EmailLayout = ({
           {/* Content */}
           <Section style={content}>{children}</Section>
 
-          {/* Footer */}
+          {/* Footer. The send path replaces everything between the markers
+              with the footer for this email's type. */}
+          <div dangerouslySetInnerHTML={{ __html: "<!--NOVARA_FOOTER_START-->" }} />
+          <Text style={marker}>NOVARA_FOOTER_START</Text>
           <Section style={footer}>
             {footerNote && (
               <Text style={footerText}>{footerNote}</Text>
@@ -96,6 +99,8 @@ export const EmailLayout = ({
               </Link>
             </Text>
           </Section>
+          <Text style={marker}>NOVARA_FOOTER_END</Text>
+          <div dangerouslySetInnerHTML={{ __html: "<!--NOVARA_FOOTER_END-->" }} />
         </Container>
       </Body>
     </Html>
@@ -104,7 +109,7 @@ export const EmailLayout = ({
 
 const main = {
   backgroundColor: '#F9FAFB',
-  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
 };
 
 const container = {
@@ -155,6 +160,15 @@ const content = {
   padding: '30px',
   border: `1px solid ${BRAND.colors.gray[200]}`,
   borderTop: 'none',
+};
+
+const marker = {
+  display: "none",
+  fontSize: "0",
+  lineHeight: "0",
+  color: "#ffffff",
+  maxHeight: "0",
+  overflow: "hidden",
 };
 
 const footer = {

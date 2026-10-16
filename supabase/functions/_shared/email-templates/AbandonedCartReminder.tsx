@@ -30,9 +30,9 @@ export const AbandonedCartReminder = ({
   isSecondReminder = false,
 }: AbandonedCartReminderProps) => {
   const previewText = isSecondReminder
-    ? "Last chance! Your clean home is just one click away."
-    : "You're almost there! Complete your booking for a spotless home.";
-  const headingText = isSecondReminder ? "Don't Miss Out! 🏠✨" : "You're Almost There! 🧹";
+    ? "Your Novara booking is still open, with 5% off for 24 hours."
+    : "Your Novara booking is still open.";
+  const headingText = isSecondReminder ? "Your booking is still open" : "You're almost there";
 
   return (
     <Html>
@@ -77,7 +77,7 @@ export const AbandonedCartReminder = ({
 
             {isSecondReminder && (
               <Section style={urgencyBanner}>
-                <Text style={urgencyText}>🎁 Complete your booking in the next 24 hours and get <strong>5% off</strong>!</Text>
+                <Text style={urgencyText}>Complete your booking in the next 24 hours and get <strong>5% off</strong>. New customers only, one per household, and this offer expires 24 hours after this email.</Text>
               </Section>
             )}
 

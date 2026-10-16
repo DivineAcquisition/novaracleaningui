@@ -92,7 +92,7 @@ function copyForType(type: ReminderType | undefined, firstName?: string) {
         highlightVariant: 'info' as const,
         highlightTitle: 'Save $30 as a new customer',
         highlightBody:
-          `Hi ${name}, you're just one step away. Continue your saved booking below to finish checkout and claim the new-customer discount.`,
+          `Hi ${name}, you're just one step away. Continue your saved booking below to finish checkout and claim the new-customer discount. New customers only, one per household, applied at checkout.`,
         cta: 'Finish & save $30',
         urgent: false,
       };

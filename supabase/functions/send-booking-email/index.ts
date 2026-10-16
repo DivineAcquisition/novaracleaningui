@@ -1,13 +1,11 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { Resend } from "https://esm.sh/resend@4.0.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import React from 'https://esm.sh/react@18.3.1';
 import { renderAsync } from 'https://esm.sh/@react-email/components@0.0.22';
 import { PaymentReceipt } from '../_shared/email-templates/PaymentReceipt.tsx';
 import { BookingModification } from '../_shared/email-templates/BookingModification.tsx';
 import { generateICalFile } from '../_shared/calendar-utils.ts';
-
-const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
+import { deliverCompliantEmail } from '../_shared/email-compliance-send.ts';
 
 const supabaseAdmin = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -326,19 +324,36 @@ serve(async (req: Request) => {
     // price-changing modifications, cancellations with potential fees).
     const FINANCIAL_TYPES = ['confirmation', 'payment_receipt', 'modification', 'cancellation'];
     const billingCc = FINANCIAL_TYPES.includes(type) ? ['billing@novaracleaning.com'] : undefined;
+    const templateKey = type === 'confirmation'
+      ? 'booking_confirmation'
+      : type === 'payment_receipt'
+        ? 'booking_payment_receipt'
+        : type === 'modification'
+          ? 'booking_modification'
+          : type === 'cancellation'
+            ? 'booking_cancellation'
+            : type === 'completion'
+              ? 'booking_completion'
+              : 'booking_photo_gallery';
 
-    const emailResponse = await resend.emails.send({
-      from: "Novara Cleaning <hello@novaracleaning.com>",
-      to: [email],
-      cc: billingCc,
+    const emailResponse = await deliverCompliantEmail(supabaseAdmin, {
+      apiKey: Deno.env.get("RESEND_API_KEY") || "",
+      to: email,
       subject,
       html,
+      templateKey,
+      declaredType: "customer_service",
+      bookingId: data?.bookingId || bookingData?.bookingId || null,
+      cc: billingCc,
       attachments: attachments.length > 0 ? attachments : undefined,
     });
+    if (!emailResponse.ok) {
+      throw new Error(emailResponse.error || "Email was not sent.");
+    }
 
-    logStep("Email sent successfully", { messageId: emailResponse });
+    logStep("Email sent successfully", { messageId: emailResponse.id, type: emailResponse.type });
 
-    return new Response(JSON.stringify({ success: true, messageId: emailResponse }), {
+    return new Response(JSON.stringify({ success: true, messageId: emailResponse.id, warnings: emailResponse.warnings }), {
       status: 200,
       headers: {
         "Content-Type": "application/json",

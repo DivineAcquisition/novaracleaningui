@@ -44,6 +44,7 @@ import {
   RiLineChartLine,
   RiPriceTag3Line,
   RiRefreshLine,
+  RiMailLine,
   RiMailSendLine,
   RiSparklingLine,
 } from "@remixicon/react";
@@ -188,6 +189,13 @@ const NAV_ITEMS: NavItem[] = [
     url: "/admin/team",
     icon: RiTeamLine,
     description: "Admins & VA access",
+    adminOnly: true,
+  },
+  {
+    title: "Email",
+    url: "/admin/email",
+    icon: RiMailLine,
+    description: "Types, footers, consent, and the delivery log",
     adminOnly: true,
   },
   {

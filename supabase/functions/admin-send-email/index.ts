@@ -1,24 +1,13 @@
 // ─── admin-send-email — generic admin email sender ─────────────────────
 //
-// Powers the Manual Messages composer in the admin portal. Posts a single
-// email through Resend with a small wrapper so the Inter font + signature
-// are consistent with our other transactional emails.
-//
-// Body shape:
-//   {
-//     to: string;                  // single email
-//     subject: string;
-//     html: string;                // already-formatted HTML body
-//     from?: string;               // defaults to "Novara Cleaning <hello@novaracleaning.com>"
-//     replyTo?: string;            // Reply-To (partnership sends route replies to support/ops)
-//     headers?: Record<string,string>; // List-Unsubscribe, etc.
-//     idempotencyKey?: string;     // Resend Idempotency-Key
-//     attachments?: Array<{ filename: string; content: string }>;
-//   }
-//
-// Returns 200 with { success: true, id } when Resend accepts.
+// Every message through this function gets exactly one email type and the
+// footer for that type. Marketing that fails a check is not sent. Service
+// mail with a misplaced offer has that offer removed. The delivery log
+// stores the rendered message.
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { deliverCompliantEmail } from "../_shared/email-compliance-send.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -42,69 +31,66 @@ serve(async (req) => {
     const to = String(body.to || "").trim();
     const subject = String(body.subject || "").trim();
     const html = String(body.html || "");
-    const from = String(body.from || "Novara Cleaning <hello@novaracleaning.com>");
-    const replyTo = typeof body.replyTo === "string" && body.replyTo.trim()
-      ? body.replyTo.trim()
-      : "";
-    const extraHeaders = body.headers && typeof body.headers === "object" && !Array.isArray(body.headers)
-      ? Object.fromEntries(
-        Object.entries(body.headers as Record<string, unknown>)
-          .filter(([, v]) => typeof v === "string" && String(v).trim())
-          .map(([k, v]) => [k, String(v)]),
-      )
-      : undefined;
-    const idempotencyKey = typeof body.idempotencyKey === "string" && body.idempotencyKey.trim()
-      ? body.idempotencyKey.trim().slice(0, 256)
-      : "";
-    // Optional file attachments: [{ filename, content }] where content is
-    // base64 (Resend's format). Passed straight through when provided.
-    const attachments = Array.isArray(body.attachments) && body.attachments.length > 0
-      ? body.attachments
-          .map((a: { filename?: string; content?: string }) => ({
-            filename: String(a?.filename || "attachment"),
-            content: String(a?.content || ""),
-          }))
-          .filter((a: { content: string }) => a.content.length > 0)
-      : undefined;
     if (!to || !subject || !html) {
       return new Response(JSON.stringify({ error: "to, subject, and html are required" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
-      },
-      body: JSON.stringify({
-        from,
-        to: [to],
-        subject,
-        html,
-        ...(replyTo ? { reply_to: replyTo } : {}),
-        ...(extraHeaders && Object.keys(extraHeaders).length ? { headers: extraHeaders } : {}),
-        ...(attachments ? { attachments } : {}),
-      }),
+    const fromHint = String(body.from || "");
+    let declaredType = body.emailType || body.declaredType || null;
+    if (!declaredType && /operations@novaracleaning\.com/i.test(fromHint)) {
+      declaredType = "contractor_operational";
+    }
+    const personal = body.personalFrom && typeof body.personalFrom === "object" ? body.personalFrom : null;
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    );
+    const attachments = Array.isArray(body.attachments) && body.attachments.length > 0
+      ? body.attachments
+        .map((a: { filename?: string; content?: string }) => ({
+          filename: String(a?.filename || "attachment"),
+          content: String(a?.content || ""),
+        }))
+        .filter((a: { content: string }) => a.content.length > 0)
+      : undefined;
+    const outcome = await deliverCompliantEmail(supabase, {
+      apiKey,
+      to,
+      subject,
+      html,
+      text: typeof body.text === "string" ? body.text : null,
+      declaredType,
+      templateKey: body.templateKey || body.template_key || null,
+      category: body.category || null,
+      adminAcknowledged: body.adminAcknowledged === true,
+      separatedOfferHtml: typeof body.separatedOfferHtml === "string" ? body.separatedOfferHtml : null,
+      testSend: body.testSend === true,
+      contractorRelationship: body.contractorRelationship || null,
+      staffRecipient: body.staffRecipient === true ? true : body.staffRecipient === false ? false : undefined,
+      personalFrom: personal,
+      isReply: body.isReply === true,
+      bookingId: body.bookingId || null,
+      idempotencyKey: typeof body.idempotencyKey === "string" ? body.idempotencyKey.trim().slice(0, 256) : "",
+      attachments,
+      cc: Array.isArray(body.cc) ? body.cc.map((item: unknown) => String(item)) : undefined,
     });
-    const text = await res.text();
-    if (!res.ok) {
-      log("resend error", { status: res.status, body: text.slice(0, 300) });
-      return new Response(JSON.stringify({ error: text }), {
-        status: 500,
+    if (!outcome.ok) {
+      log(outcome.blocked ? "blocked" : "resend error", { to, subject, error: outcome.error });
+      return new Response(JSON.stringify({
+        error: outcome.error,
+        blocked: outcome.blocked,
+        blockReasons: outcome.blocked ? [outcome.error] : [],
+        warnings: outcome.warnings,
+        type: outcome.type,
+      }), {
+        status: outcome.blocked ? 409 : 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    let id = "";
-    try {
-      id = (JSON.parse(text)?.id as string) || "";
-    } catch {
-      /* ignore */
-    }
-    log("ok", { id, to, subject });
-    return new Response(JSON.stringify({ success: true, id }), {
+    log("ok", { id: outcome.id, to, subject, type: outcome.type });
+    return new Response(JSON.stringify({ success: true, id: outcome.id, warnings: outcome.warnings, type: outcome.type }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

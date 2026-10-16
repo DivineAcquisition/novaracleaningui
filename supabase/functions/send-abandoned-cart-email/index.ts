@@ -1,6 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { Resend } from "https://esm.sh/resend@2.0.0";
 import * as React from "https://esm.sh/react@18.3.1";
 import { renderAsync } from "https://esm.sh/@react-email/components@0.0.22";
 import { AbandonedCartReminder } from "../_shared/email-templates/AbandonedCartReminder.tsx";
@@ -83,7 +82,6 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    const resend = new Resend(resendApiKey);
 
     const body = await req.json();
     const { cartId, isSecondReminder = false, testMode, testEmail, testFirstName, testHomeSize, testServiceType } = body;
@@ -241,15 +239,27 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     const subject = isSecondReminder
-      ? "Last chance! Complete your Novara Cleaning booking"
-      : "You're almost there! Complete your booking";
+      ? "Your Novara Cleaning booking is still open — 5% off for 24 hours"
+      : "Your Novara Cleaning booking is still open";
 
-    const emailResult = await resend.emails.send({
-      from: "Novara Cleaning <hello@novaracleaning.com>",
-      to: [cart.email],
+    const { deliverCompliantEmail } = await import("../_shared/email-compliance-send.ts");
+    const emailResult = await deliverCompliantEmail(supabase, {
+      apiKey: Deno.env.get("RESEND_API_KEY") || "",
+      to: cart.email,
       subject,
       html,
+      templateKey: "abandoned_cart",
+      declaredType: "customer_marketing",
+      category: "offers",
+      bookingId: bookingId || null,
     });
+    if (!emailResult.ok) {
+      logStep("Abandoned cart email not sent", { blocked: emailResult.blocked, error: emailResult.error });
+      return new Response(
+        JSON.stringify({ success: false, blocked: emailResult.blocked, error: emailResult.error }),
+        { status: emailResult.blocked ? 409 : 500, headers: { "Content-Type": "application/json", ...corsHeaders } },
+      );
+    }
 
     logStep("Abandoned cart email sent:", emailResult);
 
@@ -265,7 +275,7 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     return new Response(
-      JSON.stringify({ success: true, emailId: emailResult.data?.id }),
+      JSON.stringify({ success: true, emailId: emailResult.id, warnings: emailResult.warnings }),
       { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
     );
 
