@@ -97,6 +97,7 @@ assert("service footer has no unsubscribe", !/Unsubscribe/.test(confirmation.foo
 assert("service footer warns about card numbers", confirmation.text.includes("full card number"));
 assert("service footer links the refund policy", confirmation.footer.text.includes("https://novaracleaning.com/refund-policy"));
 assert("policy words carry the address", confirmation.footer.html.includes(">Refund Policy</a>") && !/>Refund Policy \(http/.test(confirmation.footer.html));
+assert("legal links sit under the service text", confirmation.footer.html.indexOf("full card number") < confirmation.footer.html.indexOf(">Privacy Policy</a>"));
 assert("applied discount is not treated as a promotion", confirmation.promoRemoved === false);
 assert("booking mail is sent from support@", confirmation.from.includes("support@novaracleaning.com") && !confirmation.from.includes("hello@"));
 assert("reply-to is the support inbox", confirmation.replyTo === "support@novaracleaning.com");
@@ -189,7 +190,9 @@ assert("marketing footer says unsubscribe stops promotions only", promo.text.inc
 assert("marketing footer carries the offer terms", promo.text.includes("Offer terms:") && promo.text.includes("one per household"));
 assert("mail apps get a one-click header", promo.headers["List-Unsubscribe-Post"] === "List-Unsubscribe=One-Click");
 assert("marketing uses the marketing stream", promo.stream === "marketing");
-assert("unsubscribe link is not tiny", promo.footer.html.includes("font-size:15px"));
+assert("unsubscribe link is not tiny", promo.footer.html.includes("font-size:13px") && promo.footer.html.includes("font-weight:700"));
+assert("links sit under the footer sentences", promo.footer.html.indexOf("Unsubscribing stops") < promo.footer.html.indexOf(">Unsubscribe</a>"));
+assert("footer links share one row", promo.footer.html.includes("novara-footer-links") && promo.footer.html.includes("·"));
 assert("unsubscribe is the word, not the raw url", promo.footer.html.includes(">Unsubscribe</a>") && !/>Unsubscribe \(http/.test(promo.footer.html));
 
 const noAddress = evaluateEmail({

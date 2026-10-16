@@ -736,20 +736,24 @@ function renderFooter(model: FooterModel, theme: "light" | "dark"): string {
     const size = index === 0 ? "14px" : "13px";
     return `<p style="margin:0 0 6px;font-family:Inter,Arial,sans-serif;font-size:${size};line-height:1.5;font-weight:${weight};color:${color};">${escapeHtml(line)}</p>`;
   }).join("");
-  const linkHtml = model.links.map((item) => {
-    const style = item.prominent
-      ? `color:${brand};font-size:15px;font-weight:700;text-decoration:underline;`
-      : `color:${brand};font-size:13px;text-decoration:underline;`;
-    return `<a class="novara-footer-link" href="${escapeHtml(item.href)}" style="${style}">${escapeHtml(item.label)}</a>`;
-  }).join("<br/>");
+  const linkHtml = model.links.length
+    ? `<p class="novara-footer-links" style="margin:14px 0 0;padding-top:12px;border-top:1px solid #3f3f46;font-family:Inter,Arial,sans-serif;font-size:13px;line-height:1.7;">${
+      model.links.map((item) => {
+        const style = item.prominent
+          ? `color:${brand};font-size:13px;font-weight:700;text-decoration:underline;`
+          : `color:${brand};font-size:13px;font-weight:400;text-decoration:underline;`;
+        return `<a class="novara-footer-link" href="${escapeHtml(item.href)}" style="${style}">${escapeHtml(item.label)}</a>`;
+      }).join(`<span style="color:${fg};">&nbsp;&nbsp;·&nbsp;&nbsp;</span>`)
+    }</p>`
+    : "";
   const afterHtml = model.after.map((line) =>
     `<p style="margin:8px 0 0;font-family:Inter,Arial,sans-serif;font-size:13px;line-height:1.5;color:${fg};">${escapeHtml(line)}</p>`,
   ).join("");
   return `<table role="presentation" class="novara-footer" data-novara-footer="1" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background:${bg};border-top:1px solid ${dark ? "#3f3f46" : "#e4e4e7"};">
-  <tr><td style="padding:16px 8px 8px;font-family:Inter,Arial,sans-serif;">
+  <tr><td style="padding:16px 8px 12px;font-family:Inter,Arial,sans-serif;">
     ${lineHtml}
-    ${linkHtml ? `<p style="margin:8px 0 0;">${linkHtml}</p>` : ""}
     ${afterHtml}
+    ${linkHtml}
   </td></tr>
 </table>`;
 }
@@ -765,8 +769,8 @@ export function buildFooter(
   const darkHtml = renderFooter(model, "dark");
   const text = [
     ...model.lines,
-    ...model.links.map((item) => `${item.label}: ${item.href}`),
     ...model.after,
+    ...model.links.map((item) => `${item.label}: ${item.href}`),
   ].join("\n");
   const versionKeySource = `${type}\n${text}\n${identity.legalName}\n${formatAddress(identity.mailingAddress)}`;
   return { versionKey: versionKey(versionKeySource), html, darkHtml, text };
