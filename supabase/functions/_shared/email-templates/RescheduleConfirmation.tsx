@@ -8,11 +8,13 @@ import { BRAND } from './brand.ts';
 interface RescheduleConfirmationProps {
   firstName?: string;
   bookingId?: string;
+  bookingNumber?: string;
   oldDate?: string;
   oldTimeSlot?: string;
   newDate?: string;
   newTimeSlot?: string;
   serviceType?: string;
+  frequency?: string;
   address?: string;
 }
 
@@ -64,7 +66,7 @@ export const RescheduleConfirmation = (props: RescheduleConfirmationProps) => {
       title="✅ Booking Rescheduled"
       subtitle="Your appointment has been updated"
       previewText={`Your cleaning has been rescheduled to ${newFormattedDate}`}
-      footerNote={`Booking Reference: ${props.bookingId}`}
+      footerNote={`Booking ${props.bookingNumber || props.bookingId || ""}`}
     >
       <Text style={paragraph}>Hi {props.firstName || 'there'},</Text>
       <Text style={paragraph}>
@@ -89,8 +91,10 @@ export const RescheduleConfirmation = (props: RescheduleConfirmationProps) => {
 
       <Section style={detailBox}>
         <Text style={sectionTitle}>🏠 Service Details</Text>
+        {props.bookingNumber ? <DetailRow label="Booking:" value={<strong>{props.bookingNumber}</strong>} /> : null}
         <DetailRow label="Service:" value={formatServiceType(props.serviceType || '')} />
-        <DetailRow label="Location:" value={props.address || ''} isLast />
+        {props.frequency ? <DetailRow label="Frequency:" value={props.frequency} /> : null}
+        <DetailRow label="Address:" value={props.address || ''} isLast />
       </Section>
 
       <Section style={successBox}>

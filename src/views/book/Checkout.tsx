@@ -1521,7 +1521,7 @@ export default function BookingCheckout() {
                           You will sign on the next page. You will also confirm the cancellation policy, card authorization, authority to book, photos and recordings{isNewMembershipSignup ? ", membership billing" : ""}, and optional service texts, promotional texts, and email.
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          A copy of what you accept is emailed to you.
+                          What you accept is kept with your booking.
                         </p>
                       </div>
                     </div>

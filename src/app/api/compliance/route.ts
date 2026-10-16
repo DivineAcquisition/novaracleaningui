@@ -420,19 +420,7 @@ export async function POST(req: Request) {
       stored_at: copy.storedAt,
       booking_id: copy.bookingId,
     });
-    try {
-      const { getAdminSupabase } = await import("@/lib/airtable/sources/admin-client");
-      await getAdminSupabase().functions.invoke("admin-send-email", {
-        body: {
-          to: email,
-          subject,
-          html: `<p>${text.replace(/\n/g, "<br>")}</p>`,
-        },
-      });
-    } catch {
-      // The copy is stored even when email delivery is not configured.
-    }
-    return NextResponse.json({ ok: true, stored: true });
+    return NextResponse.json({ ok: true, stored: true, emailed: false });
   }
 
   try {

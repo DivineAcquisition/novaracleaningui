@@ -9,9 +9,16 @@ import { BRAND } from './brand.ts';
 interface PaymentReceiptProps {
   firstName?: string;
   bookingId?: string;
+  bookingNumber?: string;
   serviceDate?: string;
   timeSlot?: string;
+  arrivalWindow?: string;
   serviceType?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  frequency?: string;
   totalAmount?: number;
   paymentOption?: string;
   balanceAmount?: number;
@@ -43,7 +50,7 @@ const formatServiceType = (type: string) => {
 
 export const PaymentReceipt = (props: PaymentReceiptProps) => {
   const formattedDate = props.serviceDate
-    ? new Date(props.serviceDate).toLocaleDateString('en-US', {
+    ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(props.serviceDate) ? `${props.serviceDate}T12:00:00` : props.serviceDate).toLocaleDateString('en-US', {
         weekday: 'long',
         year: 'numeric',
         month: 'long',
@@ -78,14 +85,20 @@ export const PaymentReceipt = (props: PaymentReceiptProps) => {
             day: 'numeric',
           })}
         />
-        <DetailRow label="Reference:" value={props.bookingId || ''} isLast />
+        <DetailRow label="Booking:" value={props.bookingNumber || props.bookingId || ''} isLast />
       </Section>
 
       <Section style={detailBox}>
-        <Text style={sectionTitle}>🏠 Service Details</Text>
-        <DetailRow label="Service Date:" value={formattedDate} />
-        <DetailRow label="Time:" value={formatTimeSlot(props.timeSlot || '')} />
-        <DetailRow label="Service Type:" value={formatServiceType(props.serviceType || '')} isLast />
+        <Text style={sectionTitle}>Service</Text>
+        <DetailRow label="Date:" value={formattedDate} />
+        <DetailRow label="Arrival window:" value={props.arrivalWindow || formatTimeSlot(props.timeSlot || '')} />
+        <DetailRow label="Service:" value={formatServiceType(props.serviceType || '')} />
+        {props.frequency ? <DetailRow label="Frequency:" value={props.frequency} /> : null}
+        <DetailRow
+          label="Address:"
+          value={[props.address, [props.city, props.state, props.zipCode].filter(Boolean).join(" ")].filter(Boolean).join(", ") || "On your booking"}
+          isLast
+        />
       </Section>
 
       {props.paymentOption === 'deposit' && props.balanceAmount && (

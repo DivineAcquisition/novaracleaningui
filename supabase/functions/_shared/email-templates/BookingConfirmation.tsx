@@ -8,11 +8,20 @@ import { BRAND } from './brand.ts';
 
 interface BookingConfirmationProps {
   firstName?: string;
+  lastName?: string;
   bookingId?: string;
+  bookingNumber?: string;
   serviceDate?: string;
   timeSlot?: string;
+  arrivalWindow?: string;
   serviceType?: string;
   homeSize?: string;
+  bedrooms?: number;
+  bathrooms?: number;
+  sqft?: string;
+  frequency?: string;
+  membershipPlan?: string;
+  paymentMethod?: string;
   address?: string;
   city?: string;
   state?: string;
@@ -68,6 +77,30 @@ const formatServiceType = (type: string) => {
   return types[type] || type;
 };
 
+const formatFrequency = (value?: string) => {
+  const labels: Record<string, string> = {
+    once: "One-time",
+    "one-time": "One-time",
+    onetime: "One-time",
+    weekly: "Weekly",
+    biweekly: "Every 2 weeks",
+    "bi-weekly": "Every 2 weeks",
+    monthly: "Monthly",
+  };
+  if (!value) return "";
+  return labels[value] || value;
+};
+
+const homeLine = (props: BookingConfirmationProps) => {
+  const parts = [
+    props.bedrooms ? `${props.bedrooms} bed` : "",
+    props.bathrooms ? `${props.bathrooms} bath` : "",
+    props.sqft ? `${props.sqft} sq ft` : "",
+    props.homeSize || "",
+  ].filter(Boolean);
+  return parts.join(" · ");
+};
+
 const formatAddOns = (addOns: string[]) => {
   const addOnLabels: Record<string, string> = {
     fridge: 'Refrigerator Cleaning',
@@ -99,25 +132,31 @@ export const BookingConfirmation = (props: BookingConfirmationProps) => {
       title="🎉 Booking Confirmed!"
       subtitle="Thank you for choosing Novara Cleaning"
       previewText={`Your cleaning on ${formattedDate} is confirmed!`}
-      footerNote={`Booking Reference: ${props.bookingId}`}
+      footerNote={`Booking ${props.bookingNumber || props.bookingId || ""}`}
     >
       <Text style={paragraph}>Hi {props.firstName || 'there'},</Text>
       <Text style={paragraph}>
-        Your cleaning service has been successfully booked! We're excited to make your home sparkle.
+        Your cleaning is booked. The details below are the ones on your booking.
       </Text>
 
       <Section style={detailBox}>
-        <Text style={sectionTitle}>📅 Booking Details</Text>
+        <Text style={sectionTitle}>Booking details</Text>
+        {props.bookingNumber ? <DetailRow label="Booking:" value={<strong>{props.bookingNumber}</strong>} /> : null}
         <DetailRow label="Date:" value={<strong>{formattedDate}</strong>} />
-        <DetailRow label="Time Window:" value={<strong>{formatTimeSlot(props.timeSlot || '')}</strong>} />
+        <DetailRow label="Arrival window:" value={<strong>{props.arrivalWindow || formatTimeSlot(props.timeSlot || '')}</strong>} />
+        {props.timeSlot && props.arrivalWindow && props.arrivalWindow !== props.timeSlot ? (
+          <DetailRow label="Time slot:" value={formatTimeSlot(props.timeSlot)} />
+        ) : null}
         <DetailRow label="Service:" value={formatServiceType(props.serviceType || '')} />
-        {props.addOns && props.addOns.length > 0 && (
+        {formatFrequency(props.frequency) ? <DetailRow label="Frequency:" value={formatFrequency(props.frequency)} /> : null}
+        {props.membershipPlan ? <DetailRow label="Plan:" value={props.membershipPlan} /> : null}
+        {homeLine(props) ? <DetailRow label="Home:" value={homeLine(props)} /> : null}
+        {props.addOns && props.addOns.length > 0 ? (
           <DetailRow label="Add-ons:" value={formatAddOns(props.addOns)} />
-        )}
-        <DetailRow label="Home Size:" value={props.homeSize || ''} />
+        ) : null}
         <DetailRow
-          label="Location:"
-          value={`${props.address}\n${props.city}, ${props.state} ${props.zipCode}`}
+          label="Address:"
+          value={[props.address, [props.city, props.state, props.zipCode].filter(Boolean).join(" ")].filter(Boolean).join(", ")}
           isLast
         />
       </Section>
@@ -164,13 +203,14 @@ export const BookingConfirmation = (props: BookingConfirmationProps) => {
         </Highlight>
       ) : props.paymentOption === 'deposit' ? (
         <Section style={detailBox}>
-          <Text style={sectionTitle}>💳 Payment Summary</Text>
-          <DetailRow label="Deposit Paid:" value={<strong>${((props.depositAmount || 0) / 100).toFixed(2)}</strong>} />
+          <Text style={sectionTitle}>Payment</Text>
+          {props.totalAmount ? <DetailRow label="Booking total:" value={`$${((props.totalAmount || 0) / 100).toFixed(2)}`} /> : null}
+          <DetailRow label="Deposit paid:" value={<strong>${((props.depositAmount || 0) / 100).toFixed(2)}</strong>} />
           <DetailRow
-            label="Balance Due:"
-            value={`$${((props.balanceAmount || 0) / 100).toFixed(2)} (after service)`}
-            isLast
+            label="Balance due:"
+            value={`$${((props.balanceAmount || 0) / 100).toFixed(2)} after the cleaning`}
           />
+          {props.paymentMethod ? <DetailRow label="Payment method:" value={props.paymentMethod} isLast /> : <DetailRow label="Payment method:" value="Card on file" isLast />}
         </Section>
       ) : (
         <Section style={detailBox}>

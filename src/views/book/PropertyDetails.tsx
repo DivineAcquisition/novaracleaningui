@@ -991,12 +991,12 @@ export default function PropertyDetails() {
                 <a href="https://novaracleaning.com/disclaimer" target="_blank" rel="noopener noreferrer" className="text-primary underline">Disclaimer</a>,{" "}
                 <a href="https://novaracleaning.com/refund-policy" target="_blank" rel="noopener noreferrer" className="text-primary underline">Refund Policy</a>
                 {isMembershipSignup ? (
-                  <>, and the Membership / Recurring Service Agreement. A signed copy is emailed to you.</>
+                  <>, and the Membership / Recurring Service Agreement. What you accept is kept with your booking.</>
                 ) : (
                   <>
                     , and the{" "}
                     <a href="/agreements/one-time-service-agreement.pdf" target="_blank" rel="noopener noreferrer" className="text-primary underline">One-Time Service Agreement</a>
-                    . A signed copy is emailed to you.
+                    . What you accept is kept with your booking.
                   </>
                 )}
               </p>

@@ -110,7 +110,10 @@ serve(async (req) => {
     if (settled && wasPaid) {
       await callEmail("payment_receipt", {
         firstName: b.first_name, lastName: b.last_name, bookingId: b.id,
-        serviceDate: b.service_date, timeSlot: b.time_slot, serviceType: b.service_type,
+        bookingNumber: b.booking_number ? `NVC-${String(b.booking_number).padStart(4, "0")}` : undefined,
+        serviceDate: b.service_date, timeSlot: b.time_slot, arrivalWindow: b.arrival_window || b.time_slot,
+        serviceType: b.service_type, address: b.address, city: b.city, state: b.state, zipCode: b.zip_code,
+        frequency: b.frequency,
         totalAmount: b.payment_option === "full" ? Math.max(0, totalCents - fullDiscount) : depositCents,
         balanceAmount: balanceAfterDeposit,
         paymentOption: b.payment_option, checklistLink: cl,

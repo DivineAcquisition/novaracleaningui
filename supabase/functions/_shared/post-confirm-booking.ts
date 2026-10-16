@@ -338,9 +338,18 @@ async function sendConfirmationEmails(
             firstName: booking.first_name,
             lastName: booking.last_name,
             bookingId: booking.id,
+            bookingNumber: booking.booking_number
+              ? `NVC-${String(booking.booking_number).padStart(4, "0")}`
+              : undefined,
             serviceDate: booking.service_date,
             timeSlot: booking.time_slot,
+            arrivalWindow: booking.arrival_window || booking.time_slot,
             serviceType: booking.service_type,
+            address: booking.address,
+            city: booking.city,
+            state: booking.state,
+            zipCode: booking.zip_code,
+            frequency: booking.frequency,
             totalAmount:
               booking.payment_option === "full"
                 ? Math.max(0, totalCents - fullDiscount)

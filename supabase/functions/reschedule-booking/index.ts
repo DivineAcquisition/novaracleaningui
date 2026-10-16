@@ -362,12 +362,16 @@ serve(async (req) => {
       const emailData = {
         firstName: booking.first_name,
         bookingId: bookingId,
+        bookingNumber: booking.booking_number
+          ? `NVC-${String(booking.booking_number).padStart(4, "0")}`
+          : undefined,
         oldDate: oldDate,
         oldTimeSlot: oldTimeSlot,
         newDate: newDate,
         newTimeSlot: newTimeSlot,
         serviceType: booking.service_type,
-        address: `${booking.address}, ${booking.city}, ${booking.state} ${booking.zip_code}`,
+        frequency: booking.frequency,
+        address: [booking.address, [booking.city, booking.state, booking.zip_code].filter(Boolean).join(" ")].filter(Boolean).join(", "),
       };
 
       const html = await renderAsync(React.createElement(RescheduleConfirmation, emailData));
