@@ -404,6 +404,84 @@ export const RECEPTIONIST_KNOWLEDGE = {
     readBack: "Before you hang up, read back name, mobile, email, address, service, add-ons, date, arrival window, total, courtesy if any, and deposit. Ask them to correct anything that is wrong. That is the record we save and send.",
   },
 
+  liveTools: {
+    endpoint: "https://sxdraeptzuamsgjcvfeg.supabase.co/functions/v1/ai-tool-router",
+    rule: "Call the function. Speak only what it returns. Do not calculate a price, invent a time, or promise a discount the function did not save.",
+    order: [
+      "lookup_customer as soon as you have a phone number",
+      "check_service_area as soon as you have a ZIP",
+      "get_price_estimate before you say any dollar amount",
+      "get_available_slots before you offer a time",
+      "create_booking only after the customer agrees and every required field is filled",
+      "handle_keyword for R, C, YES, NO, STOP, or HELP",
+      "add_to_waitlist when the ZIP is not served",
+      "escalate_to_human for refunds, damage, legal, commercial, over 5,000 sq ft, or when they ask for a person",
+    ],
+    tools: [
+      {
+        name: "lookup_customer",
+        pass: "phone",
+        returns: "Name, email, address, Glow plan, next booking, outstanding balance, and a pay link if money is owed.",
+        say: "Use what it found. Do not ask again for a name or address it already returned.",
+      },
+      {
+        name: "check_service_area",
+        pass: "zip_code, 5 digits",
+        returns: "serviced true or false, city, state, and zone A, B, or C.",
+        say: "If serviced is false, offer the waitlist and do not quote.",
+      },
+      {
+        name: "get_price_estimate",
+        pass: "home_size_id, service_type, add_ons, membership_plan",
+        returns: "total_cents, deposit_cents, remaining_cents, and human_summary.",
+        say: "Read human_summary. Home-size ids are 0_999, 1000_1500, 1501_2000, 2001_2500, 2501_3000, 3001_3500, 3501_4000, 4001_4500, 4501_5000, 5000_plus. Services are standard, deep, moveInOut, combo. Add-ons this function accepts are fridge, oven, and windows.",
+      },
+      {
+        name: "get_available_slots",
+        pass: "service_date as YYYY-MM-DD",
+        returns: "Up to five slot ids. Offer only those ids.",
+        say: "This function rejects Sundays and any date inside 3 days. The website offers 8-12, 12-4, and 4-8. Do not mix the two. Use the slot id the function returned.",
+      },
+      {
+        name: "create_booking",
+        pass: "first_name, last_name, email, phone, address, city, state, zip_code, bedrooms, bathrooms, dwelling_type, home_size_id, service_type, service_date, time_slot. Optional: add_ons, membership_plan.",
+        returns: "booking_id, booking_number, payment_link, deposit_cents, total_cents. Status is pending_payment.",
+        say: "Send the payment link exactly. The visit is not booked until they pay. Dwelling types are house, apartment, condo, townhouse, office_space, mansion.",
+      },
+      {
+        name: "handle_keyword",
+        pass: "phone and keyword R, C, YES, NO, STOP, or HELP",
+        returns: "reply_text",
+        say: "Send reply_text. Do not improvise a cancel or reschedule.",
+      },
+      {
+        name: "add_to_waitlist",
+        pass: "zip_code, email, phone. Optional first_name and last_name.",
+        returns: "ok and waitlist_id",
+        say: "Tell them they will hear first when that ZIP opens.",
+      },
+      {
+        name: "escalate_to_human",
+        pass: "phone, reason, summary. Reasons: quality_issue, refund, legal, custom_quote, competitor_match, safety, phone_request, ai_loop, other.",
+        returns: "ok",
+        say: "Tell them a person will follow up, then stop selling.",
+      },
+    ],
+    bookedMeans: [
+      "create_booking only creates a pending_payment row and a Stripe deposit link.",
+      "The customer pays on that link. Never take a card number on the call.",
+      "The visit becomes real when Stripe confirms the deposit.",
+      "They still finish the home-details page: pets, access, and the agreements. If they pay and stop, a reminder email goes out.",
+      "The confirmation email, with booking number, date, window, service, address, total, deposit, and balance, is sent by the payment path.",
+    ],
+    cannotDoYet: [
+      "The $10 or $15 courtesy is not a field on create_booking. The function recalculates the price and ignores a discount you say out loud. Do not promise $10 or $15 until a function saves that exact total on the payment link.",
+      "get_price_estimate uses the older price rules and its summary can say 50% NEW. The booking screen uses the Training Guide price, then condition, then zone. If the two totals disagree, do not quote. Escalate.",
+      "There is no function that only saves a quote. create_booking is the save, and it also creates the pay link.",
+      "Commercial, short-term rental host booking, and hiring are not these functions. Escalate those.",
+    ],
+  },
+
   transcripts: {
     available: false,
     reason: "No recorded sales-call transcripts were on file, and the call-recording account was not connected when this pack was built. Do not invent a past call.",
