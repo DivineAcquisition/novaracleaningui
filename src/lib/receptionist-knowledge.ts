@@ -13,6 +13,7 @@ export const RECEPTIONIST_KNOWLEDGE = {
   version: "2026-10-17",
   pullUrl: "https://app.novaracleaning.com/api/receptionist/knowledge",
   pdfUrl: "https://app.novaracleaning.com/receptionist/NovaraCleaning_Receptionist_Knowledge.pdf",
+  salesPdfUrl: "https://app.novaracleaning.com/receptionist/NovaraCleaning_Sales_Call.pdf",
   business: {
     legalName: "Novara Cleaning LLC",
     brandName: "NovaraCleaning",
@@ -48,7 +49,7 @@ export const RECEPTIONIST_KNOWLEDGE = {
       "Do not say the company is licensed.",
       "Do not say the company is bonded.",
       "Do not say every cleaner is background-checked.",
-      "Do not offer 50% off, 5% off, or a dollar-off new-customer discount. Those offers are not approved.",
+      "Do not offer 50% off, 5% off, or any discount except the $10 or $15 courtesy in the sales section. That courtesy is only for a hesitant buyer, and only when the service total is over $175.",
       "Do not say every job is a two-person crew. Crew size follows home size.",
       "Do not promise the same cleaner every visit.",
       "Do not quote cleaner pay, margins, or the internal price floor.",
@@ -256,7 +257,7 @@ export const RECEPTIONIST_KNOWLEDGE = {
 
   callFlow: {
     source: "Booking-desk sales scripts stored for the internal booking screen, rewritten so the spoken lines match current prices and the claims Novara is allowed to make. No recorded call transcripts were attached.",
-    goal: "Book a real visit at the real price, or hand the call to a person. Do not win the call by inventing a discount.",
+    goal: "Get the booking details, say the real price, and if they hesitate and the service is over $175, offer $10 off, then $15 off. Save those details and send the booking only after the price on the screen matches what you said.",
     steps: [
       {
         step: 1,
@@ -309,20 +310,20 @@ export const RECEPTIONIST_KNOWLEDGE = {
     objections: [
       {
         theySay: "That is too expensive.",
-        say: "I can walk through what is in it: supplies, the 48-hour re-clean, and the size of the home. If the total is too high, we can drop add-ons or do a Standard instead of a Deep. I can't cut the rate on this call.",
-        doNotSay: "Do not offer a one-time trial at a made-up price, and do not say the crew is bonded.",
+        say: "I can take $10 off this visit if the service is over $175. If they are still hesitating, make it $15 off and stop there. Then read the new total and the new deposit, which is half of that new total.",
+        doNotSay: "Do not offer this on a service of $175 or less. Do not go past $15. Do not say the crew is bonded.",
       },
       {
         theySay: "I need to think about it.",
-        say: "Of course. I can hold this price for 48 hours. What day should I pencil in, and I will follow up tomorrow?",
+        say: "Of course. If the service is over $175 I can take $10 off this visit and hold that price for 48 hours. What day should I pencil in?",
       },
       {
         theySay: "I am just getting quotes.",
-        say: "That makes sense. I will give you the number for this home and what is included, and you can compare it. I am not going to add a discount to win the quote.",
+        say: "That makes sense. I will give you the number for this home and what is included. If you want to book and the service is over $175, I can take $10 off this visit.",
       },
       {
         theySay: "I found someone cheaper.",
-        say: "A lot of people do. The way to compare is one clean at the published price. I won't match another company's number on this call.",
+        say: "I won't match their price. If this visit is over $175 I can take $10 off, or $15 if that is what gets you booked. That is the only courtesy.",
       },
       {
         theySay: "I need to ask my spouse.",
@@ -330,7 +331,7 @@ export const RECEPTIONIST_KNOWLEDGE = {
       },
       {
         theySay: "Can you do a discount?",
-        say: "The price comes from the home size and the condition. I can change the service or the add-ons. I can't discount the rate.",
+        say: "If this visit is over $175, I can take $10 off, and $15 if you are still unsure. I can't go past that, and I can't do it on a visit of $175 or less. We can also drop add-ons or use a Standard instead of a Deep.",
       },
       {
         theySay: "I don't have time right now.",
@@ -357,6 +358,50 @@ export const RECEPTIONIST_KNOWLEDGE = {
       "They are calling about a job application.",
       "You cannot answer the same question twice from this document.",
     ],
+  },
+
+  sales: {
+    job: "The call is to book the clean. Capture enough detail to save a quote even if they do not pay today, and send the booking only when they decide to proceed.",
+    hesitationOffer: {
+      when: "Say the full price first. Offer this only after they hesitate: too expensive, need to think, shopping other quotes, or not ready to give a card.",
+      serviceMustBeOverUsd: 175,
+      firstOfferUsd: 10,
+      ifStillHesitantUsd: 15,
+      ceilingUsd: 15,
+      sayTen: "I can take $10 off this visit so you can try us. That makes it [new total]. Half of that, [new deposit], holds the date.",
+      sayFifteen: "If this is the visit that gets you on the calendar, I can make it $15 off. That is as far as I can go. The total is [new total], and [new deposit] holds it.",
+      rules: [
+        "The service total before this courtesy must be over $175. A $175 clean does not qualify.",
+        "Start at $10. Use $15 only if they are still not ready. Never offer both as a stack, and never more than $15.",
+        "One courtesy on this visit. Do not put it on a Glow membership rate.",
+        "Do not say the lower price until it is saved on the quote. The text, the email, and the pay link have to show that same number.",
+        "The deposit is half of the price after the courtesy. The rest is due after the clean.",
+      ],
+    },
+    capture: {
+      saveWillNotWorkWithout: ["First name", "Email", "Home size", "Service type"],
+      sendTheBookingWith: [
+        "Last name",
+        "Mobile number",
+        "ZIP code",
+        "Street address",
+        "Beds and baths",
+        "How lived-in the home is: light, typical, or heavy",
+        "Add-ons",
+        "Preferred date",
+        "Arrival window: 8-12, 12-4, or 4-8",
+        "The price you said, after the courtesy if you offered one",
+      ],
+    },
+    ifTheyProceed: [
+      "Read the details back and save the quote in internal booking. Saving locks that price for 48 hours.",
+      "Create the booking and send the pay link by text or email. They pay the deposit on our Stripe page. Never take a card number on the call.",
+      "Tell them the order on the link: confirm the service and the window, pay half, then finish the home details page. Pets, access, and the agreements are on that last page. The visit is not fully set until they finish it. If they pay and stop, we email them to finish the details.",
+      "After the deposit clears they get a confirmation email: booking number, date, arrival window, service, address, total, deposit paid, and balance due.",
+      "They can also book it themselves at https://try.novaracleaning.com/book/zip. The pages run ZIP, home and service, date and arrival window, checkout for the deposit, then home details.",
+    ],
+    ifTheyDoNotProceed: "Still save every field you have. Text or email the summary: service, address, window if they named one, total, the courtesy if you offered it, the deposit, and the booking link. Tell them the price holds for 48 hours.",
+    readBack: "Before you hang up, read back name, mobile, email, address, service, add-ons, date, arrival window, total, courtesy if any, and deposit. Ask them to correct anything that is wrong. That is the record we save and send.",
   },
 
   transcripts: {

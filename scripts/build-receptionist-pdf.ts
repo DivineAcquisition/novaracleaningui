@@ -333,19 +333,108 @@ async function build() {
   ctx.y -= 4;
   para(ctx, K.transcripts.useInstead);
 
+  h1(ctx, "Sales: the $10 and $15 courtesy");
+  para(ctx, K.sales.job);
+  para(ctx, K.sales.hesitationOffer.when);
+  for (const rule of K.sales.hesitationOffer.rules) bullet(ctx, rule);
+  para(ctx, K.sales.hesitationOffer.sayTen);
+  para(ctx, K.sales.hesitationOffer.sayFifteen);
+  h2(ctx, "What to capture");
+  para(ctx, "A quote cannot be saved without: " + K.sales.capture.saveWillNotWorkWithout.join(", ") + ".");
+  for (const field of K.sales.capture.sendTheBookingWith) bullet(ctx, field);
+  h2(ctx, "If they decide to book");
+  for (const step of K.sales.ifTheyProceed) bullet(ctx, step);
+  h2(ctx, "If they are not ready");
+  para(ctx, K.sales.ifTheyDoNotProceed);
+  para(ctx, K.sales.readBack);
+
   footer(ctx);
   const bytes = await doc.save();
-  const targets = [
+  await writePdf(bytes, [
     "docs/ai-receptionist/NovaraCleaning_Receptionist_Knowledge.pdf",
     "public/receptionist/NovaraCleaning_Receptionist_Knowledge.pdf",
-  ];
+  ], doc.getPageCount());
+
+  const sales = await buildSales();
+  await writePdf(sales.bytes, [
+    "docs/ai-receptionist/NovaraCleaning_Sales_Call.pdf",
+    "public/receptionist/NovaraCleaning_Sales_Call.pdf",
+  ], sales.pages);
+}
+
+async function writePdf(bytes: Uint8Array, targets: string[], pages: number) {
   for (const target of targets) {
     const out = resolve(process.cwd(), target);
     mkdirSync(resolve(out, ".."), { recursive: true });
     writeFileSync(out, bytes);
     console.log(`Wrote ${out}`);
   }
-  console.log(`${doc.getPageCount()} pages, ${(bytes.length / 1024).toFixed(0)} KB`);
+  console.log(`${pages} pages, ${(bytes.length / 1024).toFixed(0)} KB`);
+}
+
+async function buildSales(): Promise<{ bytes: Uint8Array; pages: number }> {
+  const doc = await PDFDocument.create();
+  doc.setTitle("NovaraCleaning sales call");
+  doc.setAuthor("Novara Cleaning LLC");
+  doc.setSubject("How to sell a clean, when to offer $10 or $15 off, and how the customer books.");
+  const regular = await doc.embedFont(StandardFonts.Helvetica);
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const ctx: Ctx = { doc, page: doc.addPage([PAGE.w, PAGE.h]), y: PAGE.h - MARGIN, regular, bold, pageNo: 1 };
+
+  ctx.page.drawRectangle({ x: 0, y: PAGE.h - 8, width: PAGE.w, height: 8, color: PURPLE });
+  ctx.page.drawText("NOVARACLEANING LLC", { x: MARGIN, y: ctx.y, size: 11, font: bold, color: PURPLE });
+  ctx.y -= 40;
+  ctx.page.drawText("Sales call", { x: MARGIN, y: ctx.y, size: 32, font: bold, color: INK });
+  ctx.y -= 28;
+  para(ctx, K.sales.job);
+  ctx.y -= 6;
+  labelLine(ctx, "Phone", K.business.phone);
+  labelLine(ctx, "Bookings", K.business.emails.bookingsAndAccount);
+  labelLine(ctx, "Book online", K.business.websites.book);
+
+  h1(ctx, "1. Capture the details");
+  para(ctx, "Get these before you talk price. A saved quote needs the first four. Sending a booking needs the rest.");
+  para(ctx, "Required to save: " + K.sales.capture.saveWillNotWorkWithout.join(", ") + ".");
+  for (const field of K.sales.capture.sendTheBookingWith) bullet(ctx, field);
+
+  h1(ctx, "2. Say the real price first");
+  para(ctx, "Price the home from the knowledge pack: Zone B base, then condition, then zone, then flat add-ons. Deposit is half. Balance is after the clean. A typical 1,700 sq ft home in Columbia is $298.75 for a Standard Clean, $149.38 to hold it.");
+  para(ctx, "Do not open with a discount. Do not round the number.");
+
+  h1(ctx, "3. Hesitant buyer: $10, then $15");
+  para(ctx, K.sales.hesitationOffer.when);
+  for (const rule of K.sales.hesitationOffer.rules) bullet(ctx, rule);
+  h2(ctx, "First offer, $10 off");
+  para(ctx, K.sales.hesitationOffer.sayTen);
+  h2(ctx, "Still hesitating, $15 off");
+  para(ctx, K.sales.hesitationOffer.sayFifteen);
+  para(ctx, "Example. A $298.75 Standard Clean is over $175. $10 off makes it $288.75, and half holds the date. If they are still unsure, $15 off makes it $283.75. Stop there.", { color: MUTED });
+
+  h1(ctx, "4. If they decide to proceed");
+  for (const step of K.sales.ifTheyProceed) bullet(ctx, step);
+  h2(ctx, "What the customer does");
+  bullet(ctx, "Opens the pay link or goes to try.novaracleaning.com/book/zip.");
+  bullet(ctx, "Confirms ZIP, home size, service, add-ons, date, and arrival window.");
+  bullet(ctx, "Pays the deposit on the Stripe checkout on our site. We never collect the card on the phone.");
+  bullet(ctx, "Finishes the details page: beds and baths if missing, pets, and the agreements. The booking is not fully set until that page is done.");
+  bullet(ctx, "Gets a confirmation email with the booking number, date, arrival window, service, address, total, deposit, and balance.");
+
+  h1(ctx, "5. If they do not book today");
+  para(ctx, K.sales.ifTheyDoNotProceed);
+  para(ctx, K.sales.readBack);
+
+  h1(ctx, "6. Close");
+  for (const item of K.callFlow.objections) {
+    h2(ctx, item.theySay);
+    para(ctx, item.say);
+    if (item.doNotSay) para(ctx, item.doNotSay, { color: MUTED });
+  }
+  h2(ctx, "Hand off");
+  for (const line of K.callFlow.transfer) bullet(ctx, line);
+  para(ctx, "Full menus and price tables: " + K.pdfUrl, { color: MUTED, size: 9 });
+
+  footer(ctx);
+  return { bytes: await doc.save(), pages: doc.getPageCount() };
 }
 
 build().catch((err) => {

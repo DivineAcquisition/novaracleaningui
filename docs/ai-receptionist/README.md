@@ -13,6 +13,13 @@ The same document is a PDF:
 - `docs/ai-receptionist/NovaraCleaning_Receptionist_Knowledge.pdf`
 - `https://app.novaracleaning.com/receptionist/NovaraCleaning_Receptionist_Knowledge.pdf` after deploy
 
-Rebuild it with `npm run receptionist:pdf` after the knowledge file changes.
+The sales call is its own PDF. It is the one to give the dialer:
+
+- `docs/ai-receptionist/NovaraCleaning_Sales_Call.pdf`
+- `https://app.novaracleaning.com/receptionist/NovaraCleaning_Sales_Call.pdf` after deploy
+
+A hesitant buyer whose service is over $175 can be offered $10 off, then $15 off. The price has to be saved before it is texted or emailed. The sales PDF also says which details to capture and how the customer pays the deposit and finishes the details page.
+
+Rebuild both with `npm run receptionist:pdf` after the knowledge file changes.
 
 Do not paste cleaner pay, the internal price floor, or an unapproved discount into this file.
