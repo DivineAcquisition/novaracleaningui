@@ -1,0 +1,367 @@
+// Knowledge the AI receptionist and outbound dialer may quote.
+//
+// Pull it at GET /api/receptionist/knowledge.
+// Prices are the published Training Guide rates (Zone B) plus the condition
+// and zone steps the booking screen actually charges. Do not stack the older
+// 15% / 25% list-price discounts on top of these numbers.
+//
+// Recorded sales-call transcripts were not available when this file was
+// written. The call section is the booking-desk script, with lines the
+// agent must not say.
+
+export const RECEPTIONIST_KNOWLEDGE = {
+  version: "2026-10-17",
+  business: {
+    legalName: "Novara Cleaning LLC",
+    brandName: "NovaraCleaning",
+    phone: "(844) 735-2070",
+    mailingAddress: "7404 Executive Place, Lanham, MD 20706",
+    emails: {
+      bookingsAndAccount: "support@novaracleaning.com",
+      billing: "billing@novaracleaning.com",
+      refunds: "refunds@novaracleaning.com",
+    },
+    websites: {
+      book: "https://try.novaracleaning.com/book/zip",
+      account: "https://app.novaracleaning.com/account",
+      membership: "https://try.novaracleaning.com/membership",
+      commercial: "https://novaracleaning.com",
+      refundPolicy: "https://novaracleaning.com/refund-policy",
+      cancellationPolicy: "https://novaracleaning.com/cancellation-policy",
+      privacy: "https://novaracleaning.com/privacy",
+      terms: "https://novaracleaning.com/terms",
+    },
+    serviceArea: "Maryland, Washington DC, and Northern Virginia, by ZIP. If the booking system says the ZIP is outside coverage, offer the waitlist. Do not guess a price.",
+    arrivalWindows: [
+      "8:00 AM – 12:00 PM",
+      "12:00 PM – 4:00 PM",
+      "4:00 PM – 8:00 PM",
+    ],
+    claimsYouMayMake: [
+      "Novara Cleaning maintains commercial general liability insurance.",
+      "A 48-hour re-clean is offered if the customer is not satisfied.",
+      "Supplies and equipment are included unless a commercial client asks us to use theirs.",
+    ],
+    claimsYouMustNotMake: [
+      "Do not say the company is licensed.",
+      "Do not say the company is bonded.",
+      "Do not say every cleaner is background-checked.",
+      "Do not offer 50% off, 5% off, or a dollar-off new-customer discount. Those offers are not approved.",
+      "Do not say every job is a two-person crew. Crew size follows home size.",
+      "Do not promise the same cleaner every visit.",
+      "Do not quote cleaner pay, margins, or the internal price floor.",
+    ],
+  },
+
+  menus: {
+    residential: [
+      {
+        id: "standard",
+        name: "Standard Clean",
+        useWhen: "The home is kept up and they want a regular clean.",
+        included: [
+          "Kitchen counters, sink, and stovetop wiped",
+          "Appliance and cabinet exteriors",
+          "Bathrooms sanitized, toilet inside and out, tub and shower wiped, mirror polished",
+          "Dust reachable surfaces",
+          "Vacuum carpets, rugs, and upholstery surfaces",
+          "Mop hard floors",
+          "Make beds on request",
+          "Trash removed and a general tidy",
+          "Supplies included",
+          "48-hour re-clean if they are not satisfied",
+        ],
+        notIncluded: [
+          "Inside fridge or oven, unless added",
+          "Inside cabinets, grout scrub, baseboards, interior windows, light fixtures, and behind furniture — those are Deep or add-ons",
+        ],
+      },
+      {
+        id: "deep",
+        name: "Deep Clean",
+        useWhen: "First professional clean, or the home has not been cleaned in a long time.",
+        included: [
+          "Everything in a Standard Clean",
+          "Inside cabinets and drawers",
+          "Hand-scrubbed backsplash and grease",
+          "Range hood and vent",
+          "Grout, behind the toilet, under the sink, showerhead descaled",
+          "Baseboards and door frames",
+          "Interior windows and sills",
+          "Light fixtures and ceiling-fan blades",
+          "Behind and under reachable furniture",
+          "Switch plates, door handles, and vent covers",
+        ],
+      },
+      {
+        id: "combo",
+        name: "Deep + Standard combo",
+        useWhen: "They want a deep reset now and a standard visit soon after.",
+        note: "Price is the deep price plus the standard price for that home size, before condition and zone.",
+      },
+      {
+        id: "moveInOut",
+        name: "Move-in / move-out",
+        useWhen: "They are moving, staging, or turning a home over.",
+        included: ["A full clean", "Inside fridge and inside oven are included at no extra charge"],
+      },
+      {
+        id: "focused",
+        name: "Focused clean",
+        useWhen: "They want one area, not the whole home.",
+        areas: [
+          { name: "Bathroom", priceUsd: 65 },
+          { name: "Kitchen", priceUsd: 65 },
+          { name: "Living or common area", priceUsd: 65 },
+          { name: "Other single area", priceUsd: 65 },
+          { name: "Bedroom", priceUsd: 50, note: "Per bedroom" },
+        ],
+        minimumUsd: 65,
+      },
+    ],
+    membership: {
+      name: "Glow membership",
+      plans: [
+        { id: "monthly", visits: "1 clean a month" },
+        { id: "biweekly", visits: "2 cleans a month" },
+        { id: "weekly", visits: "4 cleans a month" },
+      ],
+      say: "Members pay the published plan rate for their home size. Cancel, pause, or change the card on the membership page. There is no long contract.",
+      doNotSay: "Do not promise free add-ons or a dedicated cleaner unless the booking screen shows that benefit for the plan they chose.",
+    },
+    commercial: {
+      name: "Office, retail, medical, gym, restaurant, warehouse, school, church",
+      say: "Commercial work is priced after a walkthrough. Do not give a number on the call. Month-to-month is the default. After-hours and overnight windows are normal. Several locations can sit on one account, each priced on its own.",
+    },
+    shortTermRental: {
+      name: "Short-term rental turnover",
+      say: "Turnovers are booked in the host portal. Host cancellation rules are different from a home cleaning. Do not quote a home price for a turnover.",
+    },
+  },
+
+  prices: {
+    howToQuote: [
+      "Start with the Zone B base for the home-size band and the service.",
+      "Multiply by condition: light ×1, typical lived-in ×1.25, heavy ×1.6.",
+      "Then multiply by zone: A ×1.15, B ×1, C ×0.9. The ZIP picks the zone. Do not pick it yourself.",
+      "Demand pricing is off. Do not add a surge.",
+      "Add flat add-ons and a same-day fee last. Those are never multiplied.",
+      "Deposit is half the total. The rest is due after the clean.",
+      "A saved quote holds for 48 hours. After that, re-quote before you book.",
+      "5,000 sq ft and up has no published price. Take a message for a custom quote.",
+      "If the ZIP is outside the service area, do not invent a price. Offer the waitlist.",
+    ],
+    condition: [
+      { id: "light", meaning: "Well kept, regular upkeep", multiplier: 1 },
+      { id: "standard", meaning: "Typical lived-in home", multiplier: 1.25 },
+      { id: "heavy", meaning: "Build-up, neglect, or after an event", multiplier: 1.6 },
+    ],
+    zones: [
+      { id: "A", multiplier: 1.15, where: "Bethesda, Potomac, Chevy Chase, Rockville, Silver Spring, Takoma Park, Northwest DC, Arlington, McLean, Great Falls, Vienna, Falls Church, Old Town Alexandria" },
+      { id: "B", multiplier: 1, where: "Rest of Montgomery County, Prince George's County, Columbia, Ellicott City, Laurel, Bowie, College Park, the rest of DC, Fairfax County, Ashburn, Leesburg, Reston, Herndon, Alexandria" },
+      { id: "C", multiplier: 0.9, where: "Frederick, Hagerstown, Annapolis, Glen Burnie, Baltimore and suburbs, Eastern Shore, Southern and Western Maryland, Prince William County, Manassas, outer Loudoun" },
+    ],
+    zoneBBaseUsd: [
+      { band: "0 – 999 sq ft", hours: 2, crew: 1, standard: 150, deep: 225, moveInOut: 300 },
+      { band: "1,000 – 1,500 sq ft", hours: 2.5, crew: 1, standard: 189, deep: 284, moveInOut: 378 },
+      { band: "1,501 – 2,000 sq ft", hours: 3, crew: 1, standard: 239, deep: 359, moveInOut: 478 },
+      { band: "2,001 – 2,500 sq ft", hours: 3.5, crew: 1, standard: 279, deep: 419, moveInOut: 558 },
+      { band: "2,501 – 3,000 sq ft", hours: 4, crew: 2, standard: 339, deep: 509, moveInOut: 678 },
+      { band: "3,001 – 3,500 sq ft", hours: 4.5, crew: 2, standard: 379, deep: 569, moveInOut: 758 },
+      { band: "3,501 – 4,000 sq ft", hours: 5, crew: 2, standard: 439, deep: 659, moveInOut: 878 },
+      { band: "4,001 – 4,500 sq ft", hours: 5.5, crew: 2, standard: 489, deep: 734, moveInOut: 978 },
+      { band: "4,501 – 5,000 sq ft", hours: 6, crew: 2, standard: 539, deep: 809, moveInOut: 1078 },
+    ],
+    comboNote: "Combo base, before condition and zone, is the standard base plus the deep base for that band.",
+    workedExample: {
+      home: "About 1,700 sq ft in Columbia, typical condition, Standard Clean, no add-ons",
+      steps: ["Base $239", "Typical condition ×1.25 = $298.75", "Zone B, no change", "No demand charge"],
+      customerPaysUsd: 298.75,
+      depositUsd: 149.38,
+      balanceAfterUsd: 149.37,
+    },
+    addOnsUsd: [
+      { id: "fridge", name: "Inside fridge", price: 30, note: "Included on move-in/out" },
+      { id: "oven", name: "Inside oven", price: 30, note: "Included on move-in/out" },
+      { id: "windows", name: "Interior windows", price: 40 },
+      { id: "laundry", name: "Laundry, wash and fold", price: 35, note: "Per load" },
+      { id: "changeLinens", name: "Change bed linens", price: 15, note: "Customer provides the linens" },
+      { id: "dishes", name: "Dishes", price: 20 },
+      { id: "baseboards", name: "Baseboards, hand-wiped", price: 35 },
+      { id: "blinds", name: "Blinds and shutters", price: 30 },
+      { id: "cabinets", name: "Inside cabinets", price: 35 },
+      { id: "walls", name: "Spot wall washing", price: 40 },
+      { id: "ceilingFans", name: "Ceiling fans", price: 15 },
+      { id: "microwave", name: "Inside microwave", price: 10 },
+      { id: "dishwasher", name: "Inside dishwasher", price: 15 },
+      { id: "garage", name: "Garage sweep-out", price: 50 },
+      { id: "basement", name: "Basement clean", price: 75 },
+      { id: "patio", name: "Patio or balcony", price: 35 },
+      { id: "petHair", name: "Heavy pet hair", price: 35 },
+      { id: "closets", name: "Inside closets", price: 30 },
+      { id: "trashHaul", name: "Trash haul", price: 75 },
+      { id: "deepBathroomDetail", name: "Deep bathroom detail", price: 45, note: "Per bathroom" },
+      { id: "cateringEvent", name: "Catering or event cleanup", price: 85 },
+    ],
+    sameDayFeeUsd: 50,
+    sameDayCutoff: "2:00 PM Eastern. Same-day work also needs a person to confirm a crew is free.",
+    membershipMonthlyUsdZoneB: [
+      { band: "0 – 999 sq ft", monthly: 129, biweekly: 199, weekly: 359 },
+      { band: "1,000 – 1,500 sq ft", monthly: 159, biweekly: 249, weekly: 449 },
+      { band: "1,501 – 2,000 sq ft", monthly: 199, biweekly: 319, weekly: 569 },
+      { band: "2,001 – 2,500 sq ft", monthly: 239, biweekly: 369, weekly: 659 },
+      { band: "2,501 – 3,000 sq ft", monthly: 279, biweekly: 449, weekly: 799 },
+      { band: "3,001 – 3,500 sq ft", monthly: 319, biweekly: 499, weekly: null },
+      { band: "3,501 – 4,000 sq ft", monthly: 369, biweekly: 579, weekly: null },
+      { band: "4,001 – 4,500 sq ft", monthly: 409, biweekly: 649, weekly: null },
+      { band: "4,501 – 5,000 sq ft", monthly: 459, biweekly: 719, weekly: null },
+    ],
+    membershipNote: "These are the plan rates on file for Zone B as of the August 2026 pricing configuration. Weekly is not published above 3,000 sq ft. Apply the zone multiplier the same way as a one-time clean. Confirm the figure on the booking screen before taking a card.",
+    deposit: "Half is due to hold the booking. The balance is due after the clean.",
+  },
+
+  policies: {
+    reclean: "If they are not satisfied, they tell us within 48 hours and we come back to put it right at no charge.",
+    residentialCancel: "More than 24 hours before the service date, a residential cancellation is a full refund. Inside 24 hours, a $50 short-notice fee applies and the rest is refunded. If the visit was paid with a membership credit, the credit is restored and there is no cash refund.",
+    residentialReschedule: "Rescheduling inside 24 hours of the service date adds a $25 short-notice fee.",
+    hostCancel: "Short-term rental host visits use a different rule: 48 hours or more out, no fee and the amount is credit-eligible; 24 to 48 hours, a 50% fee; under 24 hours, the full visit rate. Do not use this rule for a normal home cleaning.",
+    payment: "Cards are charged through Stripe. Novara does not take card numbers on the phone. Send them to the booking link or the invoice link.",
+    access: "Do not ask for gate codes or alarm codes on a sales call. Access notes are collected on the booking, not in the sales conversation.",
+    quotesLockHours: 48,
+  },
+
+  faqs: [
+    { q: "How much is a cleaning?", a: "It depends on home size, how lived-in the home is, and the ZIP. A typical 1,700 sq ft home in Columbia, standard condition, is $298.75 for a Standard Clean, with half due to book. Use the price tables. Do not round to a friendlier number." },
+    { q: "What is included?", a: "Use the Standard and Deep menus. Inside the fridge and oven are add-ons, except on a move-in/out, where both are included." },
+    { q: "Do you bring supplies?", a: "Yes. They do not need to provide products or a vacuum." },
+    { q: "Are you insured?", a: "Yes. Novara Cleaning maintains commercial general liability insurance." },
+    { q: "Are you licensed or bonded?", a: "Do not say yes. Say you can have someone follow up if they need a certificate of insurance." },
+    { q: "Are the cleaners background-checked?", a: "Do not say every cleaner is. Screening is part of hiring, and it is not a promise you can make for every person on every job." },
+    { q: "Will I get the same cleaner?", a: "We assign the crew for that visit. Do not promise a dedicated person." },
+    { q: "How many people come?", a: "Homes up to 2,500 sq ft are planned as one cleaner. Larger homes are planned as two. Do not promise a two-person crew for a small home." },
+    { q: "Can you come today?", a: "Same-day is a $50 add-on, only if a crew is actually free, and the request has to be in before 2:00 PM Eastern. A person confirms it. Do not promise the slot." },
+    { q: "Do you do Sundays?", a: "Offer only a date the booking calendar shows as open. Do not invent a day." },
+    { q: "What if I am not happy?", a: "Tell us within 48 hours and we come back and fix it at no charge." },
+    { q: "How do I cancel?", a: "They can cancel from the booking page or by emailing support@novaracleaning.com. More than 24 hours out, the residential visit is fully refunded. Inside 24 hours, the short-notice fee is $50." },
+    { q: "Can I get a discount?", a: "Do not create a discount. You can change the service, the frequency, or the add-ons so the job fits the budget. Membership is a published rate, not a coupon you invent." },
+    { q: "I found someone cheaper.", a: "Acknowledge it. Offer a single clean so they can compare the work. Do not match a price on the call." },
+    { q: "My place is really messy.", a: "That is a heavy-condition or Deep Clean, not a reason to refuse. Price it with the heavy multiplier or recommend Deep. Stop and transfer if they describe hoarding, biohazard, construction debris, bed bugs, or a large mold problem." },
+    { q: "Do you clean offices?", a: "Yes, after a walkthrough. Do not give an office price on this call. Take the business name, contact, city, size, and how often, and say a person replies within one business day." },
+    { q: "Do you clean Airbnbs?", a: "Yes. Turnovers are set up in the host portal. Do not quote them as a normal home clean." },
+    { q: "I want to work for you.", a: "That is a hiring call, not a sales call. Point them to the hiring page and transfer. Do not read the contractor screening script on a customer line." },
+    { q: "Can I speak to a person?", a: "Yes. Take their name, number, and what they need, and hand it to a person. Do not keep selling." },
+  ],
+
+  callFlow: {
+    source: "Booking-desk sales scripts stored for the internal booking screen, rewritten so the spoken lines match current prices and the claims Novara is allowed to make. No recorded call transcripts were attached.",
+    goal: "Book a real visit at the real price, or hand the call to a person. Do not win the call by inventing a discount.",
+    steps: [
+      {
+        step: 1,
+        name: "Open",
+        say: "Hi, this is Novara Cleaning. I can price a home clean and get you on the calendar. What is the ZIP code?",
+      },
+      {
+        step: 2,
+        name: "Service area",
+        say: "If the ZIP is covered, say we clean there and move on. If it is not, offer the waitlist. Do not estimate a price.",
+      },
+      {
+        step: 3,
+        name: "Home",
+        collect: ["Street address", "Beds and baths or square feet", "House, apartment, condo, or townhouse", "How long since the last professional clean", "Pets"],
+      },
+      {
+        step: 4,
+        name: "Recommend a service",
+        say: "If it has been a long time or this is the first professional clean, recommend a Deep Clean. If the home is already kept up, recommend Standard. If they are moving, recommend move-in/out, and mention fridge and oven are included. If they only want one room, offer a focused clean.",
+      },
+      {
+        step: 5,
+        name: "Say the price",
+        say: "Give the base, then the condition, then the zone, then add-ons, then the total, the half deposit, and the balance. Example: a typical 1,700 sq ft home in Columbia is $298.75 for a Standard Clean. $149.38 holds it, and $149.37 is due after the clean.",
+      },
+      {
+        step: 6,
+        name: "Add-ons",
+        say: "Ask only after the service price. Inside fridge is $30, inside oven is $30, interior windows are $40. Skip fridge and oven on a move-in/out because they are already included.",
+      },
+      {
+        step: 7,
+        name: "Close",
+        say: "I can hold morning, midday, or late afternoon. Which window works?",
+        alternate: "Want to start with a Deep Clean, or a Standard if the home is already in good shape?",
+      },
+      {
+        step: 8,
+        name: "Take the booking details",
+        collect: ["First and last name", "Mobile", "Email", "Date and arrival window"],
+        say: "Send them to the booking link to pay the deposit. Do not take a card number.",
+      },
+      {
+        step: 9,
+        name: "Recap before you hang up",
+        say: "Repeat the address, service, date, arrival window, total, deposit, and the link. Tell them the quote holds for 48 hours.",
+      },
+    ],
+    objections: [
+      {
+        theySay: "That is too expensive.",
+        say: "I can walk through what is in it: supplies, the 48-hour re-clean, and the size of the home. If the total is too high, we can drop add-ons or do a Standard instead of a Deep. I can't cut the rate on this call.",
+        doNotSay: "Do not offer a one-time trial at a made-up price, and do not say the crew is bonded.",
+      },
+      {
+        theySay: "I need to think about it.",
+        say: "Of course. I can hold this price for 48 hours. What day should I pencil in, and I will follow up tomorrow?",
+      },
+      {
+        theySay: "I am just getting quotes.",
+        say: "That makes sense. I will give you the number for this home and what is included, and you can compare it. I am not going to add a discount to win the quote.",
+      },
+      {
+        theySay: "I found someone cheaper.",
+        say: "A lot of people do. The way to compare is one clean at the published price. I won't match another company's number on this call.",
+      },
+      {
+        theySay: "I need to ask my spouse.",
+        say: "Of course. I can text a short summary to this number: the address, the service, the total, and the deposit. They can call (844) 735-2070 with questions.",
+      },
+      {
+        theySay: "Can you do a discount?",
+        say: "The price comes from the home size and the condition. I can change the service or the add-ons. I can't discount the rate.",
+      },
+      {
+        theySay: "I don't have time right now.",
+        say: "I can hold a window and text the booking link. It takes the deposit to confirm. Which arrival window should I send?",
+      },
+      {
+        theySay: "Is my card safe?",
+        say: "You pay on Stripe, on our booking page. I never take the card number on the phone. Half is due to book, and the rest is after the clean.",
+      },
+    ],
+    phoneHabits: [
+      "Be warm and brief. One question at a time.",
+      "Leave a pause after the price. Do not fill it with a discount.",
+      "Do not say the schedule is almost full unless you are looking at the real calendar.",
+      "Recap the next step before you hang up.",
+      "If they are upset, stop selling and transfer.",
+    ],
+    transfer: [
+      "They ask for a person.",
+      "They are angry, or they describe damage, a missing item, an injury, or a legal threat.",
+      "They want a refund or a chargeback.",
+      "The home is over 5,000 sq ft, commercial, post-construction, or a hoarding or biohazard situation.",
+      "They want a price match.",
+      "They are calling about a job application.",
+      "You cannot answer the same question twice from this document.",
+    ],
+  },
+
+  transcripts: {
+    available: false,
+    reason: "No recorded sales-call transcripts were on file, and the call-recording account was not connected when this pack was built. Do not invent a past call.",
+    useInstead: "Follow callFlow. Those lines are the booking-desk script for how a sales call should go.",
+  },
+} as const;
+
+export type ReceptionistKnowledge = typeof RECEPTIONIST_KNOWLEDGE;
