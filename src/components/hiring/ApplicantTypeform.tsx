@@ -347,7 +347,7 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
       )}
 
       <main className="flex flex-1 flex-col">
-        <div className="m-auto w-full max-w-2xl px-5 py-6 sm:px-6 sm:py-10">
+        <div className="m-auto w-full max-w-2xl px-5 pb-20 pt-6 sm:px-6 sm:pb-24 sm:pt-10">
           {done ? (
             <Success name={answers.firstName} />
           ) : gate ? (
@@ -386,6 +386,8 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
         </div>
       </main>
 
+      <ApplyFooter />
+
       <input
         tabIndex={-1}
         aria-hidden
@@ -396,6 +398,28 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
         name="faxNumber"
       />
     </div>
+  );
+}
+
+function ApplyFooter() {
+  return (
+    <footer className="mt-auto border-t border-slate-200/80 px-5 py-6 text-center sm:px-6">
+      <p className="text-xs leading-relaxed text-slate-500">Submitting this form is not an offer of work.</p>
+      <p className="mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs font-medium text-slate-500">
+        <span>Novara Cleaning</span>
+        <a
+          href={PRIVACY_POLICY_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="text-[#5C0FFE] underline-offset-2 hover:underline"
+        >
+          Privacy Policy
+        </a>
+        <a href="mailto:support@novaracleaning.com" className="text-[#5C0FFE] underline-offset-2 hover:underline">
+          support@novaracleaning.com
+        </a>
+      </p>
+    </footer>
   );
 }
 
