@@ -11,6 +11,8 @@
 
 export const RECEPTIONIST_KNOWLEDGE = {
   version: "2026-10-17",
+  pullUrl: "https://app.novaracleaning.com/api/receptionist/knowledge",
+  pdfUrl: "https://app.novaracleaning.com/receptionist/NovaraCleaning_Receptionist_Knowledge.pdf",
   business: {
     legalName: "Novara Cleaning LLC",
     brandName: "NovaraCleaning",
@@ -360,7 +362,7 @@ export const RECEPTIONIST_KNOWLEDGE = {
   transcripts: {
     available: false,
     reason: "No recorded sales-call transcripts were on file, and the call-recording account was not connected when this pack was built. Do not invent a past call.",
-    useInstead: "Follow callFlow. Those lines are the booking-desk script for how a sales call should go.",
+    useInstead: "Use the sales-call section in this document. Those lines are how a sales call should go.",
   },
 } as const;
 

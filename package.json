@@ -24,6 +24,7 @@
     "pricing:verify:server": "deno run --allow-read scripts/verify-dynamic-quote.deno.ts",
     "checklists:verify": "tsx scripts/verify-checklist-catalog.ts",
     "checklists:pdf": "tsx scripts/build-checklist-pdf.ts",
+    "receptionist:pdf": "tsx scripts/build-receptionist-pdf.ts",
     "reclean:verify": "deno run --allow-read scripts/verify-reclean.deno.ts",
     "reclean:verify:node": "tsx scripts/verify-reclean.deno.ts",
     "qc-incident:verify": "deno run --allow-read scripts/verify-qc-incident.deno.ts",
