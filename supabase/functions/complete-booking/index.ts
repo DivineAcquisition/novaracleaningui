@@ -696,6 +696,20 @@ serve(async (req) => {
       });
     }
 
+    // One 15% Glow-membership offer, after the service, for someone who is
+    // not already a member. Marketing rules apply inside the sender.
+    if (booking.is_reclean !== true) {
+      try {
+        const { sendMembershipWelcomeOffer } = await import("../_shared/membership-welcome-offer.ts");
+        const welcome = await sendMembershipWelcomeOffer(supabase, booking);
+        logStep("Membership welcome offer", welcome);
+      } catch (welcomeErr) {
+        logStep("Membership welcome offer failed (non-blocking)", {
+          error: welcomeErr instanceof Error ? welcomeErr.message : String(welcomeErr),
+        });
+      }
+    }
+
     // Post-clean testimonial video offer (50% off the 2nd clean once a
     // video + answers are submitted). Non-blocking — dynamic import keeps
     // this isolated from the completion path. Skip on re-cleans: the

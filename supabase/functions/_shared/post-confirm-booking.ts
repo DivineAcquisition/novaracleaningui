@@ -10,10 +10,11 @@
 //   • cleaner_payout_cents / platform_fee_cents stamped (revenue share)
 //   • estimated_duration_hours stamped if missing
 //   • Time slot reserved (idempotent — RPC already handles dup inserts)
-//   • Confirmation email + payment receipt (Resend) — gated on
-//     bookings.confirmation_email_sent so re-invokes stay quiet, and
-//     held back entirely until the upfront payment has settled
-//   • Customer confirmation SMS (Telnyx via sendSms)
+//   • Confirmation email + personal checklist (Resend) — one claim on
+//     bookings.confirmation_email_sent, shared with every other confirm
+//     path, and held until the upfront payment has settled. Stripe sends
+//     the receipt, so this path does not.
+//   • Customer confirmation SMS (one text, sent with that same claim)
 //   • auto-dispatch-booking (assigns cleaners)
 //   • create-google-calendar-event
 //   • send-zapier-webhook (full GHL custom-field map + Lead Connector)
@@ -27,12 +28,7 @@
 // deno-lint-ignore no-explicit-any
 type SupabaseClient = any;
 
-import { sendSms, formatServiceDate, formatTimeSlot } from "./sms.ts";
-import { smsActionTail } from "./booking-policy.ts";
-import {
-  confirmationSmsBalanceTail,
-  remainingDueAfterUpfrontCents,
-} from "./booking-balance.ts";
+import { sendBookingConfirmationComms } from "./booking-customer-comms.ts";
 import {
   calculateCleanerPayoutCents,
   DEFAULT_PAY_PERCENTAGE,
@@ -54,8 +50,8 @@ export interface PostConfirmOptions {
    */
   source?: "customer" | "admin";
   /**
-   * Override the default checklist link shown in the confirmation
-   * email. If omitted, the helper picks one based on serviceType.
+   * Kept for callers that used to override the checklist link inside the
+   * confirmation. The checklist is now its own email, so this is ignored.
    */
   checklistLink?: string;
   /**
@@ -130,23 +126,7 @@ export async function ensurePayoutFieldsStamped(
   }
 }
 
-/**
- * True once the money the customer owes UP FRONT has actually landed.
- *
- * An internal (VA) booking stays `pending_payment` until its deposit
- * or paid-in-full payment clears. "Booking Confirmed" and "Payment
- * Received" must not reach the customer before that, or we are thanking
- * them for money they haven't sent. stripe-webhook promotes the booking
- * and releases the comms when the deposit (or full payment) settles.
- *
- * A booking covered by a membership credit, or one with nothing owed at
- * all, has nothing to wait on.
- */
-export function upfrontPaymentSettled(booking: Record<string, unknown>): boolean {
-  if (booking.uses_credit === true) return true;
-  if (booking.payment_received_at) return true;
-  return Number(booking.total_estimate_cents || 0) <= 0;
-}
+export { upfrontPaymentSettled } from "./booking-customer-comms.ts";
 
 /**
  * Reserve the booking's availability slot. Tolerant of the slot row
@@ -219,9 +199,9 @@ function parseTimeSlot(slot: string): { start: string | null; end: string | null
 }
 
 /**
- * Send the customer-facing confirmation + payment receipt emails via
- * the send-booking-email Edge Function. Gated on
- * bookings.confirmation_email_sent so we never double-send.
+ * Confirmation email, the personal checklist, and one confirmation text.
+ * The shared helper is the only sender, so this fan-out and the confirm
+ * trigger cannot both deliver.
  */
 async function sendConfirmationEmails(
   supabase: SupabaseClient,
@@ -236,172 +216,13 @@ async function sendConfirmationEmails(
     log("skipEmails=true — bypassing");
     return;
   }
-  // Held, not dropped: confirmation_email_sent stays false so the
-  // stripe-webhook can run booking-confirm-comms once the deposit lands.
-  if (!upfrontPaymentSettled(booking)) {
-    log("upfront payment outstanding — holding confirmation + receipt", {
-      bookingId: booking.id,
-    });
-    return;
-  }
-
-  const checklistLink =
-    opts.checklistLink ||
-    checklistLinkForServiceType(
-      booking.service_type as string,
-      (booking as { scope_level?: string | null }).scope_level,
-    );
-
-  const totalCents = Number(booking.total_estimate_cents || 0);
-  const finalCents = Number(booking.final_charge_cents || 0);
-  const depositCents = Number(booking.deposit_cents || 0);
-  const fullDiscount = Number(booking.full_payment_discount || 0);
-  const balanceAfterDeposit = remainingDueAfterUpfrontCents(booking);
-
-  const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
-
   try {
-    await fetch(`${supabaseUrl}/functions/v1/send-booking-email`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${anonKey}`,
-      },
-      body: JSON.stringify({
-        type: "confirmation",
-        email: booking.email,
-        data: {
-          firstName: booking.first_name,
-          lastName: booking.last_name,
-          bookingId: booking.id,
-          bookingNumber: booking.booking_number
-            ? `NVC-${String(booking.booking_number).padStart(4, "0")}`
-            : undefined,
-          serviceDate: booking.service_date,
-          timeSlot: booking.time_slot,
-          arrivalWindow: booking.arrival_window || booking.time_slot,
-          serviceType: booking.service_type,
-          homeSize: booking.home_size_id,
-          bedrooms: booking.bedrooms,
-          bathrooms: booking.bathrooms,
-          sqft: booking.sqft,
-          address: booking.address,
-          city: booking.city,
-          state: booking.state,
-          zipCode: booking.zip_code,
-          totalAmount: totalCents,
-          depositAmount: depositCents,
-          balanceAmount: balanceAfterDeposit,
-          paymentOption: booking.payment_option,
-          paymentMethod: booking.payment_method,
-          useCredit: booking.uses_credit,
-          addOns: booking.add_ons,
-          frequency: booking.frequency,
-          // New: link customers to the public service checklist so
-          // they know exactly what's included before the visit.
-          checklistLink,
-          // "Pay Your Invoice" CTA — only while something is still owed.
-          // This email now waits for the upfront payment, so on the VA
-          // path the deposit invoice it points at is normally settled by
-          // the time we get here and the button would misinform.
-          hostedInvoiceUrl: booking.payment_received_at
-            ? undefined
-            : booking.hosted_invoice_url,
-          // Account / management deep links — populated by the email
-          // function from BRAND.urls if absent.
-          rescheduleLink: undefined,
-          cancellationLink: undefined,
-          referralLink: undefined,
-        },
-      }),
+    const result = await sendBookingConfirmationComms(supabase, booking, {
+      sms: opts.skipCustomerSms !== true,
     });
-    log("confirmation email queued");
-
-    // Payment receipt — only once money has actually moved. deposit_cents
-    // is the amount we intend to collect, not the amount collected, so it
-    // can't stand in for a receipt: a VA deposit invoice sets it while the
-    // invoice is still unpaid.
-    const wasPaid = Boolean(booking.payment_received_at) ||
-      Number(finalCents) > 0;
-    if (wasPaid) {
-      await fetch(`${supabaseUrl}/functions/v1/send-booking-email`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${anonKey}`,
-        },
-        body: JSON.stringify({
-          type: "payment_receipt",
-          email: booking.email,
-          data: {
-            firstName: booking.first_name,
-            lastName: booking.last_name,
-            bookingId: booking.id,
-            bookingNumber: booking.booking_number
-              ? `NVC-${String(booking.booking_number).padStart(4, "0")}`
-              : undefined,
-            serviceDate: booking.service_date,
-            timeSlot: booking.time_slot,
-            arrivalWindow: booking.arrival_window || booking.time_slot,
-            serviceType: booking.service_type,
-            address: booking.address,
-            city: booking.city,
-            state: booking.state,
-            zipCode: booking.zip_code,
-            frequency: booking.frequency,
-            totalAmount:
-              booking.payment_option === "full"
-                ? Math.max(0, totalCents - fullDiscount)
-                : depositCents,
-            balanceAmount: remainingDueAfterUpfrontCents(booking),
-            paymentOption: booking.payment_option,
-            checklistLink,
-          },
-        }),
-      });
-      log("payment_receipt email queued");
-    }
-
-    await supabase
-      .from("bookings")
-      .update({
-        confirmation_email_sent: true,
-        confirmation_email_sent_at: new Date().toISOString(),
-      })
-      .eq("id", booking.id);
+    log("customer comms", result);
   } catch (err) {
     log("email send failed (non-blocking)", {
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
-}
-
-async function sendCustomerSms(
-  supabase: SupabaseClient,
-  booking: Record<string, unknown>,
-  opts: PostConfirmOptions,
-): Promise<void> {
-  if (opts.skipCustomerSms) return;
-  if (!booking.phone) return;
-
-  try {
-    const dateLabel = formatServiceDate(booking.service_date as string);
-    const timeLabel = formatTimeSlot(booking.time_slot as string);
-    const tail = confirmationSmsBalanceTail(booking, "emdash");
-    const msg =
-      `Novara Cleaning: Booking confirmed for ${dateLabel}` +
-      (timeLabel ? ` (${timeLabel})` : "") +
-      `.${tail} ${smsActionTail()}`;
-
-    await sendSms(supabase, {
-      toPhone: booking.phone as string,
-      message: msg,
-      type: "confirmation",
-    });
-    log("customer SMS sent");
-  } catch (err) {
-    log("customer SMS failed (non-blocking)", {
       error: err instanceof Error ? err.message : String(err),
     });
   }
@@ -499,7 +320,6 @@ export async function runPostConfirmFanout(
   await ensurePayoutFieldsStamped(supabase, booking);
   await reserveBookingSlot(supabase, booking);
   await sendConfirmationEmails(supabase, booking, opts);
-  await sendCustomerSms(supabase, booking, opts);
 
   await fanoutDownstream(supabase, bookingId);
 

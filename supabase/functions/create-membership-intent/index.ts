@@ -9,6 +9,8 @@ import {
   isPastServiceDate,
   PAST_SERVICE_DATE_CODE,
 } from "../_shared/checkout-nudge-guard.ts";
+import { lookupWelcomeOffer } from "../_shared/membership-welcome-offer.ts";
+import { WELCOME_CODE_PREFIX } from "../_shared/membership-welcome-copy.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -195,6 +197,17 @@ serve(async (req) => {
       customerId = customer.id;
     }
 
+    const welcomeCode = String(bookingData.promoCode || bookingData.welcomeCode || "").trim().toUpperCase();
+    const welcome = welcomeCode.startsWith(WELCOME_CODE_PREFIX)
+      ? await lookupWelcomeOffer(supabase, welcomeCode, email)
+      : null;
+    if (welcomeCode.startsWith(WELCOME_CODE_PREFIX) && !welcome) {
+      return json({
+        error: "This welcome offer does not apply to this email, or it has already been used.",
+        code: "WELCOME_OFFER_INVALID",
+      }, 400);
+    }
+
     const membershipProduct = await stripe.products.create({
       name: `Novara Membership — ${planLabel}`,
       description: `Recurring cleaning membership (${homeSizeId.replace("_", "-")} sq ft)`,
@@ -211,13 +224,30 @@ serve(async (req) => {
     // deno-lint-ignore no-explicit-any
     const addInvoiceItems: Array<{ price: string; quantity: number }> = [];
     if (wantsDeepClean) {
+      // Its own product, so a first-month membership coupon cannot discount it.
+      const deepProduct = await stripe.products.create({
+        name: "First Clean Deep Clean",
+        metadata: { funnel: "book", purpose: "first_clean_deep" },
+      });
       const deepCleanPrice = await stripe.prices.create({
-        product: membershipProduct.id,
+        product: deepProduct.id,
         currency: "usd",
         unit_amount: DEEP_CLEAN_CENTS,
         nickname: "First Clean Deep Clean",
       });
       addInvoiceItems.push({ price: deepCleanPrice.id, quantity: 1 });
+    }
+
+    let welcomeCoupon: string | null = null;
+    if (welcome) {
+      const coupon = await stripe.coupons.create({
+        percent_off: welcome.percent_off,
+        duration: "once",
+        name: "Glow membership welcome — first month",
+        applies_to: { products: [membershipProduct.id] },
+        metadata: { welcome_code: welcome.promo_code, offer_id: welcome.id },
+      });
+      welcomeCoupon = coupon.id;
     }
 
     const days = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
@@ -238,6 +268,7 @@ serve(async (req) => {
       first_service_date: String(bookingData.serviceDate || ""),
       first_time_slot: String(bookingData.timeSlot || ""),
       deep_clean_included: wantsDeepClean ? "true" : "false",
+      ...(welcome ? { welcome_code: welcome.promo_code } : {}),
       deep_cleaned_before: String(bookingData.deepCleanedBefore || ""),
       first_name: String(bookingData.firstName || ""),
       last_name: String(bookingData.lastName || ""),
@@ -252,6 +283,7 @@ serve(async (req) => {
       customer: customerId,
       items: [{ price: recurringPrice.id }],
       ...(addInvoiceItems.length ? { add_invoice_items: addInvoiceItems } : {}),
+      ...(welcomeCoupon ? { discounts: [{ coupon: welcomeCoupon }] } : {}),
       payment_behavior: "default_incomplete",
       payment_settings: { save_default_payment_method: "on_subscription" },
       metadata: sharedMetadata,
@@ -351,6 +383,7 @@ serve(async (req) => {
             booking_id: booking.id,
             funnel: "book",
             purpose: "membership_first",
+            ...(welcome ? { welcome_code: welcome.promo_code } : {}),
           },
         });
       } catch (piErr) {

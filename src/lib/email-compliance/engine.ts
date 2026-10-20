@@ -865,11 +865,19 @@ export function detectedClaims(value: string): Array<{ id: string; label: string
 
 export function unapprovedClaims(value: string, claims: ApprovedClaim[]): Array<{ id: string; label: string }> {
   const active = claims.filter((claim) => claim.active && claim.phrase.trim() && claim.basis.trim());
+  const text = visibleText(value).toLowerCase();
   return detectedClaims(value).filter((found) => {
-    const match = active.find((claim) => claim.id === found.id || claim.phrase.toLowerCase() === found.label.toLowerCase() || visibleText(value).toLowerCase().includes(claim.phrase.toLowerCase()));
-    if (!match) return true;
-    if (match.conditional && match.requiredWording.trim() && !visibleText(value).toLowerCase().includes(match.requiredWording.toLowerCase())) return true;
-    return false;
+    const matches = active.filter((claim) =>
+      claim.id === found.id
+      || claim.phrase.toLowerCase() === found.label.toLowerCase()
+      || text.includes(claim.phrase.toLowerCase())
+    );
+    if (!matches.length) return true;
+    // Any approved basis covers the claim when its own required wording is present.
+    return !matches.some((match) => {
+      if (!match.conditional || !match.requiredWording.trim()) return true;
+      return text.includes(match.requiredWording.toLowerCase());
+    });
   });
 }
 
@@ -1296,6 +1304,8 @@ const ROUTED_KEYS = new Set([
   "abandoned_cart",
   "job_feedback",
   "testimonial_offer",
+  "cleaning_checklist",
+  "membership_welcome_offer",
   "contractor_payout",
   "contractor_assignment",
   "contractor_invitation",
@@ -1338,7 +1348,8 @@ export const EMAIL_CATALOG: CatalogEntry[] = [
   entry({ key: "details_reminder", name: "Details reminder", where: "send-details-reminder", senderBefore: "Novara Cleaning <hello@novaracleaning.com>", replyToBefore: "none", footerBefore: "Inline.", unsubscribeBefore: false, promotionalBefore: false, plainTextBefore: false, assignedType: "customer_service", ownerDecisionNeeded: false, external: false, changed: "Service footer." }),
   entry({ key: "pending_deposit", name: "Pending deposit reminder", where: "pending-deposit-reminders / book-as-va", senderBefore: "Novara Cleaning <hello@novaracleaning.com>", replyToBefore: "none", footerBefore: "Inline.", unsubscribeBefore: false, promotionalBefore: false, plainTextBefore: false, assignedType: "customer_service", ownerDecisionNeeded: false, external: false, changed: "Service footer. Payment mail, not a promotion." }),
   entry({ key: "overdue_booking", name: "Overdue booking notice", where: "escalate-overdue-bookings", senderBefore: "Novara Cleaning <hello@novaracleaning.com>", replyToBefore: "none", footerBefore: "Inline.", unsubscribeBefore: false, promotionalBefore: false, plainTextBefore: false, assignedType: "customer_service", ownerDecisionNeeded: false, external: false, changed: "Service footer." }),
-  entry({ key: "cleaning_checklist", name: "Cleaning checklist", where: "send-cleaning-checklist", senderBefore: "Novara Cleaning <hello@novaracleaning.com>", replyToBefore: "none", footerBefore: "Inline.", unsubscribeBefore: false, promotionalBefore: false, plainTextBefore: false, assignedType: "customer_service", ownerDecisionNeeded: false, external: false, changed: "Service footer." }),
+  entry({ key: "cleaning_checklist", name: "Cleaning checklist", where: "send-cleaning-checklist / my-checklist", senderBefore: "Novara Cleaning <hello@novaracleaning.com>", replyToBefore: "none", footerBefore: "Inline.", unsubscribeBefore: false, promotionalBefore: false, plainTextBefore: false, assignedType: "customer_service", ownerDecisionNeeded: false, external: false, changed: "Service footer. One email and one text per booking, linking a private checklist page for that visit." }),
+  entry({ key: "membership_welcome_offer", name: "Membership welcome offer", where: "membership-welcome-offer after a completed cleaning", senderBefore: "Not sent", replyToBefore: "n/a", footerBefore: "None.", unsubscribeBefore: false, promotionalBefore: true, plainTextBefore: false, assignedType: "customer_marketing", ownerDecisionNeeded: false, external: false, changed: "One 15% first-month Glow offer after a completed cleaning. Marketing footer, unsubscribe, and the offer terms beside the offer. Sent from hello@." }),
   entry({ key: "addon_email", name: "Add-on notice", where: "send-addon-email", senderBefore: "Novara Cleaning <hello@novaracleaning.com>", replyToBefore: "none", footerBefore: "Inline.", unsubscribeBefore: false, promotionalBefore: false, plainTextBefore: false, assignedType: "customer_service", ownerDecisionNeeded: false, external: false, changed: "Service footer." }),
   entry({ key: "lead_capture", name: "Lead capture mail", where: "send-lead-capture-webhook", senderBefore: "Novara Cleaning <hello@novaracleaning.com>", replyToBefore: "none", footerBefore: "Inline.", unsubscribeBefore: false, promotionalBefore: false, plainTextBefore: false, assignedType: "customer_service", ownerDecisionNeeded: true, external: false, changed: "Sends as a service message with promotional content removed until the owner assigns a type." }),
   entry({ key: "mailbox_ack", name: "Inbound mailbox acknowledgement", where: "inbound-mailbox-ack", senderBefore: "NovaraCleaning <hello@novaracleaning.com>", replyToBefore: "support@ or billing@", footerBefore: "Signature only. Copy is fixed and factual.", unsubscribeBefore: false, promotionalBefore: false, plainTextBefore: true, assignedType: "customer_service", ownerDecisionNeeded: false, external: false, changed: "Copy unchanged. The acknowledgement is sent from the mailbox that received the message. The inbound message is stored in the conversation history." }),

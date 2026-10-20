@@ -1,12 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-import { sendSms, formatServiceDate, formatTimeSlot } from "../_shared/sms.ts";
-import { smsActionTail } from "../_shared/booking-policy.ts";
-import {
-  confirmationSmsBalanceTail,
-  remainingDueAfterUpfrontCents,
-} from "../_shared/booking-balance.ts";
+import { sendBookingConfirmationComms } from "../_shared/booking-customer-comms.ts";
 import { resolveSecret } from "../_shared/app-secrets.ts";
 import { sendMetaPurchase } from "../_shared/meta-capi.ts";
 import { provisionGlowMembership } from "../_shared/provision-glow-membership.ts";
@@ -142,6 +137,19 @@ serve(async (req) => {
             logStep("Booking not found for payment intent");
           }
           break;
+        }
+
+        const welcomeCode = String((paymentIntent.metadata || {}).welcome_code || "");
+        if (welcomeCode) {
+          try {
+            const { markWelcomeOfferClaimed } = await import("../_shared/membership-welcome-offer.ts");
+            await markWelcomeOfferClaimed(supabase, welcomeCode);
+            logStep("Welcome offer claimed", { welcomeCode });
+          } catch (welcomeErr) {
+            logStep("Welcome offer claim failed (non-blocking)", {
+              error: welcomeErr instanceof Error ? welcomeErr.message : String(welcomeErr),
+            });
+          }
         }
 
         // Idempotency: skip status update if already confirmed, but ALWAYS run downstream actions
@@ -467,144 +475,29 @@ serve(async (req) => {
           }
         }
 
-          // Send confirmation emails (skip if already sent)
+          // One confirmation, one personal checklist, one confirmation text.
+          // The helper claims the booking, so the confirm trigger and the
+          // finalize fan-out cannot send them too. Stripe sends the receipt.
           if (!confirmedBooking.confirmation_email_sent) {
-            logStep("Sending confirmation emails", { email: confirmedBooking.email });
-          
             try {
-              // Send booking confirmation
-              await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-booking-email`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
-                },
-                body: JSON.stringify({
-                  type: 'confirmation',
-                  email: confirmedBooking.email,
-                  data: {
-                    firstName: confirmedBooking.first_name,
-                    lastName: confirmedBooking.last_name,
-                    bookingId: confirmedBooking.id,
-                    serviceDate: confirmedBooking.service_date,
-                    timeSlot: confirmedBooking.time_slot,
-                    serviceType: confirmedBooking.service_type,
-                    homeSize: confirmedBooking.home_size_id,
-                    address: confirmedBooking.address,
-                    city: confirmedBooking.city,
-                    state: confirmedBooking.state,
-                    zipCode: confirmedBooking.zip_code,
-                    totalAmount: confirmedBooking.total_estimate_cents,
-                    depositAmount: confirmedBooking.deposit_cents,
-                    balanceAmount: confirmedBooking.total_estimate_cents - (confirmedBooking.payment_option === 'full' ? confirmedBooking.total_estimate_cents - (confirmedBooking.full_payment_discount || 0) : confirmedBooking.deposit_cents),
-                    paymentOption: confirmedBooking.payment_option,
-                    useCredit: confirmedBooking.uses_credit,
-                    addOns: confirmedBooking.add_ons,
-                  },
-                }),
-              });
-
-            // Send payment receipt
-            await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-booking-email`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
-              },
-              body: JSON.stringify({
-                type: 'payment_receipt',
-                email: confirmedBooking.email,
-                data: {
-                  firstName: confirmedBooking.first_name,
-                  lastName: confirmedBooking.last_name,
-                  bookingId: confirmedBooking.id,
-                  serviceDate: confirmedBooking.service_date,
-                  timeSlot: confirmedBooking.time_slot,
-                  serviceType: confirmedBooking.service_type,
-                  totalAmount: confirmedBooking.payment_option === 'full' ? confirmedBooking.total_estimate_cents - (confirmedBooking.full_payment_discount || 0) : confirmedBooking.deposit_cents,
-                  balanceAmount: remainingDueAfterUpfrontCents(confirmedBooking),
-                  paymentOption: confirmedBooking.payment_option,
-                },
-              }),
-            });
-
-            logStep("Confirmation emails sent successfully");
-
-              // Customer SMS confirmation — best-effort, non-blocking.
-              // "Paid in full" only when remaining balance is actually $0.
-              try {
-                const dateLabel = formatServiceDate(confirmedBooking.service_date);
-                const timeLabel = formatTimeSlot(confirmedBooking.time_slot);
-                const tail = confirmationSmsBalanceTail(confirmedBooking, "emdash");
-                const smsMsg =
-                  `Novara Cleaning: Booking confirmed for ${dateLabel}` +
-                  (timeLabel ? ` (${timeLabel})` : "") +
-                  `.${tail} ${smsActionTail()}`;
-                await sendSms(supabase, {
-                  toPhone: confirmedBooking.phone,
-                  message: smsMsg,
-                  type: "confirmation",
-                });
-                logStep("Customer confirmation SMS sent");
-              } catch (smsErr) {
-                logStep("Customer confirmation SMS failed (non-blocking)", {
-                  error: smsErr instanceof Error ? smsErr.message : String(smsErr),
-                });
-              }
-
-              // Also fire the post-booking GHL SMS (account + referral
-              // links). Idempotent on bookings.post_confirm_ghl_sms_sent
-              // so it won't double-text if finalize-booking also runs.
-              try {
-                await supabase.functions.invoke("send-post-booking-sms", {
-                  body: { bookingId: confirmedBooking.id },
-                });
-                logStep("Post-booking GHL SMS triggered");
-              } catch (ghlSmsErr) {
-                logStep("Post-booking GHL SMS failed (non-blocking)", {
-                  error: ghlSmsErr instanceof Error ? ghlSmsErr.message : String(ghlSmsErr),
-                });
-              }
-
-              // Mark confirmation email as sent to prevent duplicates on webhook retries
-              await supabase
-                .from('bookings')
-                .update({ confirmation_email_sent: true })
-                .eq('id', confirmedBooking.id);
-
-              logStep("Set confirmation_email_sent flag", { bookingId: confirmedBooking.id });
-          } catch (emailError) {
-            logStep("Error sending emails (non-blocking)", { error: emailError });
-
-            // Queue for retry on failure
-            try {
-              await supabase
-                .from('email_retry_queue')
-                .insert({
-                  booking_id: confirmedBooking.id,
-                  email_type: 'confirmation',
-                  email_address: confirmedBooking.email,
-                  email_data: {
-                    firstName: confirmedBooking.first_name,
-                    lastName: confirmedBooking.last_name,
-                    bookingId: confirmedBooking.id,
-                    serviceDate: confirmedBooking.service_date,
-                    timeSlot: confirmedBooking.time_slot,
-                    serviceType: confirmedBooking.service_type,
-                    address: `${confirmedBooking.address}, ${confirmedBooking.city}, ${confirmedBooking.state} ${confirmedBooking.zip_code}`,
-                    totalAmount: confirmedBooking.total_estimate_cents,
-                  },
-                  status: 'pending',
-                  retry_count: 0,
-                  next_retry_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-                });
-              logStep("Queued confirmation email for retry");
-            } catch (queueError) {
-              logStep("Failed to queue email for retry", { error: queueError });
+              const comms = await sendBookingConfirmationComms(supabase, confirmedBooking);
+              logStep("Customer confirmation comms", comms);
+            } catch (emailError) {
+              logStep("Error sending confirmation comms (non-blocking)", { error: emailError });
             }
-          }
           } else {
             logStep("Confirmation email already sent - skipping", { bookingId: confirmedBooking.id });
+          }
+
+          try {
+            await supabase.functions.invoke("send-post-booking-sms", {
+              body: { bookingId: confirmedBooking.id },
+            });
+            logStep("Post-booking GHL SMS triggered");
+          } catch (ghlSmsErr) {
+            logStep("Post-booking GHL SMS failed (non-blocking)", {
+              error: ghlSmsErr instanceof Error ? ghlSmsErr.message : String(ghlSmsErr),
+            });
           }
 
           // Legacy assign-cleaner removed — auto-dispatch-booking (line ~190) handles this via dispatch-job

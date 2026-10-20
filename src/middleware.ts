@@ -132,6 +132,8 @@ const ROUTE_OWNER: Array<[string, SubdomainKey]> = [
   ["/book", "try"],
   ["/membership", "try"], // /membership and /membership/[planId] browse
   ["/checklist", "try"],  // /checklist and /checklist/[slug] public scope sheets
+  ["/my-checklist", "try"], // private per-booking checklist, token in the path
+  ["/welcome", "try"], // private membership offer, token in the path
   ["/demo", "try"],
   ["/pricing-sheet", "try"],
   // Public PM / rental-portfolio acquisition. No login. Distinct from

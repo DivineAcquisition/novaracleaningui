@@ -248,98 +248,23 @@ export default function BookingSuccess() {
           bookingId,
         });
 
-        // ─── Safety net: confirmation + receipt emails ──────────
-        // The backend (stripe-webhook / finalize-booking) is
-        // supposed to fire these when the row flips to
-        // 'confirmed'. We've seen cases where the backend hits an
-        // unhandled error inside its email try/catch and the row
-        // ends up `confirmation_email_sent=false`. Dispatching
-        // here on the client (only when the flag is false AND the
-        // row is confirmed) makes the email send a hard guarantee
-        // tied to the customer actually reaching this page. The
-        // edge function is idempotent and we mark the row sent
-        // immediately so a second tab open doesn't double-email.
-        // A VA-created booking is 'confirmed' while its deposit invoice is
-        // still unpaid, so 'confirmed' alone is not proof the customer paid.
-        // Only the settled ones get the confirmation + receipt here.
+        // Safety net for the one confirmation and the personal checklist.
+        // The edge function claims the booking first, so this cannot add a
+        // second copy of either email, and it does not send a receipt —
+        // Stripe already does that.
         if (
           booking.status === "confirmed" &&
           !booking.confirmation_email_sent &&
           (bookingRow.payment_received_at || booking.uses_credit)
         ) {
-          (async () => {
-            try {
-              const balanceCents =
-                booking.payment_option === "full"
-                  ? 0
-                  : Math.max(
-                      0,
-                      (booking.total_estimate_cents || 0) - (booking.deposit_cents || 0),
-                    );
-
-              await supabase.functions.invoke("send-booking-email", {
-                body: {
-                  type: "confirmation",
-                  email: booking.email,
-                  data: {
-                    firstName: booking.first_name,
-                    lastName: booking.last_name,
-                    bookingId: booking.id,
-                    serviceDate: booking.service_date,
-                    timeSlot: booking.time_slot,
-                    serviceType: booking.service_type,
-                    homeSize: booking.home_size_id,
-                    address: booking.address,
-                    city: booking.city,
-                    state: booking.state,
-                    zipCode: booking.zip_code,
-                    totalAmount: booking.total_estimate_cents,
-                    depositAmount: booking.deposit_cents,
-                    balanceAmount: balanceCents,
-                    paymentOption: booking.payment_option,
-                    useCredit: booking.uses_credit,
-                    addOns: Array.isArray(booking.add_ons) ? booking.add_ons : [],
-                  },
-                },
-              });
-
-              await supabase.functions.invoke("send-booking-email", {
-                body: {
-                  type: "payment_receipt",
-                  email: booking.email,
-                  data: {
-                    firstName: booking.first_name,
-                    lastName: booking.last_name,
-                    bookingId: booking.id,
-                    serviceDate: booking.service_date,
-                    timeSlot: booking.time_slot,
-                    serviceType: booking.service_type,
-                    totalAmount:
-                      booking.payment_option === "full"
-                        ? booking.total_estimate_cents -
-                          (booking.full_payment_discount || 0)
-                        : booking.deposit_cents,
-                    balanceAmount: balanceCents,
-                    paymentOption: booking.payment_option,
-                  },
-                },
-              });
-
-              await supabase
-                .from("bookings")
-                .update({
-                  confirmation_email_sent: true,
-                  confirmation_email_sent_at: new Date().toISOString(),
-                })
-                .eq("id", booking.id)
-                .eq("confirmation_email_sent", false);
-
-              setEmailSent(true);
-              logStep("Confirmation + receipt emails dispatched from client safety net");
-            } catch (emailErr) {
-              console.warn("[BookingSuccess] safety-net email send failed", emailErr);
-            }
-          })();
+          supabase.functions.invoke("booking-confirm-comms", {
+            body: { bookingId: booking.id },
+          }).then(() => {
+            setEmailSent(true);
+            logStep("Confirmation comms requested from the success page");
+          }).catch((emailErr) => {
+            console.warn("[BookingSuccess] confirmation comms failed", emailErr);
+          });
         }
 
         // ─── Safety net: remaining-balance invoice ──────────────

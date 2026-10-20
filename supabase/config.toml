@@ -692,6 +692,14 @@ verify_jwt = false
 [functions.send-cleaning-checklist]
 verify_jwt = false
 
+# Private checklist page. The token is the credential.
+[functions.customer-checklist]
+verify_jwt = false
+
+# Private membership-offer page. The token is the credential.
+[functions.membership-welcome]
+verify_jwt = false
+
 [functions.send-details-reminder]
 verify_jwt = false
 

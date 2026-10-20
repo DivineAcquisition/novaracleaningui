@@ -101,6 +101,41 @@ async function mirror(table: string, row: Record<string, unknown>, conflict?: st
   }
 }
 
+async function recordEmailMarketingConsent(records: AcceptanceRecord[]) {
+  const accepted = records.filter((row) => row.kind === "email_marketing" && row.action === "accepted" && row.email);
+  if (!accepted.length) return;
+  try {
+    const { getAdminSupabase } = await import("@/lib/airtable/sources/admin-client");
+    const supabase = getAdminSupabase();
+    for (const row of accepted) {
+      const email = String(row.email).trim().toLowerCase();
+      const { data: existing } = await supabase.from("email_marketing_contacts").select("status").eq("email", email).maybeSingle();
+      if (existing?.status === "unsubscribed") continue;
+      const now = new Date().toISOString();
+      await supabase.from("email_marketing_contacts").upsert({
+        email,
+        status: "subscribed",
+        source: "booking_form",
+        source_note: "Checked the optional email marketing box while booking.",
+        consent_basis: String(row.wordingShown || "").slice(0, 500),
+        consented_at: now,
+        unsubscribed_at: null,
+        updated_at: now,
+      }, { onConflict: "email" });
+      await supabase.from("email_consent_events").insert({
+        email,
+        actor: "contact",
+        previous_status: existing?.status || "not_asked",
+        next_status: "subscribed",
+        source: "booking_form",
+        detail: "Accepted email marketing while booking.",
+      });
+    }
+  } catch {
+    // The acceptance itself is already stored. Consent sync can be retried from the record.
+  }
+}
+
 async function prepDispute(records: AcceptanceRecord[]) {
   const bookingId = records.find((row) => row.bookingId)?.bookingId;
   if (!bookingId) return;
@@ -251,6 +286,7 @@ export async function POST(req: Request) {
       });
     }
     void prepDispute(stored);
+    void recordEmailMarketingConsent(stored);
     return NextResponse.json({
       ok: true,
       acceptances: stored,

@@ -1,31 +1,34 @@
 // ─── send-cleaning-checklist ─────────────────────────────────────────────
 //
-// Drops the official NovaraCleaning Maintenance Cleaning Checklist into
-// the customer's inbox. This is the canonical scope-of-work for every
-// recurring (weekly / biweekly / monthly) Standard cleaning, so the
-// customer knows exactly what's covered and what's an add-on.
+// The customer's cleaning checklist, by email and text.
 //
-// Two ways to invoke:
+//   POST { bookingId }
+//     Booking confirmed. Mints (or reuses) the customer's private checklist
+//     session, then sends ONE email and ONE text pointing at their own page,
+//     /my-checklist/<token>. The page is built live from their booking:
+//     their service, date, home, add-ons, and notes. Each channel is claimed
+//     in booking_emails_sent before it sends, so a retry, a webhook replay,
+//     or two confirmation paths landing together can never send it twice.
 //
-//   POST { bookingId }                — looks up the booking, sends to
-//                                       booking.email with first-name
-//                                       personalization. Skips silently
-//                                       if service_type is not 'standard'
-//                                       (deep / move-in/out have their
-//                                       own scope docs).
-//
-//   POST { email, firstName?, serviceType?: "standard" }
-//                                     — direct send (admin tooling).
-//
-// Idempotent: writes a booking_emails_sent row keyed on
-// (booking_id, kind='maintenance_checklist') so the same booking can't
-// double-fire even if the auto-trigger retries.
+//   POST { email, firstName?, serviceType?, sendEmail?, sendSms?, force? }
+//     Admin tooling (quotes, membership signup). No booking, so no personal
+//     page: sends the full public checklist inline with a link to the public
+//     checklist page.
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { sendThroughCompliance } from "../_shared/email-compliance-send.ts";
+import { resolveSecret } from "../_shared/app-secrets.ts";
 import { sendSms } from "../_shared/sms.ts";
 import { publicChecklistUrl } from "../_shared/public-checklist-url.ts";
+import {
+  buildPersonalChecklist,
+  CHECKLIST_BY_TYPE,
+  personalChecklistUrl,
+  renderPersonalEmail,
+  resolveChecklistType,
+  type ChecklistContent,
+} from "../_shared/customer-checklists.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -33,555 +36,12 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+const PERSONAL_EMAIL_KIND = "personal_checklist";
+const PERSONAL_SMS_KIND = "personal_checklist_sms";
+
 /** Public customer-facing checklist page for a given service type. */
 function checklistViewUrl(serviceType: string, scopeLevel?: string | null): string {
   return publicChecklistUrl(serviceType, scopeLevel);
-}
-
-// ─── SERVICE-TYPE-AWARE CHECKLIST DATA ───────────────────────────────
-//
-// Each service type has its own subject, heading, intro, sections, and
-// extras list. Extend CHECKLIST_BY_TYPE to add new types — the handler
-// routes automatically. Idempotency kind is per-type so a deep_checklist
-// and maintenance_checklist can both exist for the same booking without
-// conflicting.
-
-interface ChecklistContent {
-  subject: string;
-  heading: string;
-  intro: string;
-  sections: Array<{ title: string; items: string[] }>;
-  extras: string[];
-  emailKind: string;
-}
-
-const CHECKLIST_BY_TYPE: Record<string, ChecklistContent> = {
-  standard: {
-    subject: "Your Maintenance Cleaning Checklist — what's included ✨",
-    heading: "Maintenance Cleaning Checklist",
-    intro:
-      "All recurring cleanings (weekly, biweekly and monthly) are what we call <strong>maintenance cleans</strong> because the goal is to <em>maintain the cleanliness</em> of the home. These are thorough, efficient cleanings, covering every area of the house every single time.",
-    emailKind: "maintenance_checklist",
-    sections: [
-      {
-        title: "Kitchen",
-        items: [
-          "Dust and spot clean cabinet fronts",
-          "Clean counter tops",
-          "Clean sink and polish faucet",
-          "Wipe microwave interior and exterior",
-          "Dust small appliances & items on counter tops",
-          "Clean microwave (inside and out)",
-          "Clean/polish oven and refrigerator exterior",
-          "Clean/polish stove top and vent hood",
-          "Vacuum and mop kitchen floor",
-          "Remove trash, replace bag, wipe exterior",
-        ],
-      },
-      {
-        title: "Bathrooms",
-        items: [
-          "Clean mirrors (streak-free)",
-          "Dust light fixtures",
-          "Spot clean cabinet fronts",
-          "Scrub the shower and tub",
-          "Clean counters, sinks and polish fixtures",
-          "Disinfect toilet and toilet area",
-          "Vacuum bathroom rugs",
-          "Remove trash, replace bag, wipe exterior",
-          "Clean and disinfect bathroom floors",
-        ],
-      },
-      {
-        title: "All Rooms",
-        items: [
-          "Remove cob webs and dust ceiling fans",
-          "Dust reachable light fixtures and ceiling fans",
-          "Dust wall art and AC/heating vents",
-          "Disinfect light switches and door knobs",
-          "Dust and spot clean doors and door frames",
-          "Dust window sills and window ledges",
-          "Dust baseboards and blinds",
-          "Dust TVs, electronics, knick-knacks, book tops, picture frames, lamps, etc.",
-          "Dust all furniture — polish as needed",
-          "Dust banister and handrails",
-          "Vacuum all floors/stairs and mop hard surface floors",
-          "Vacuum all furniture (if possible)",
-          "Change linen and/or make all beds",
-          "Clean front/back door glass",
-        ],
-      },
-    ],
-    extras: [
-      "Hand wash baseboards",
-      "Clean oven (interior)",
-      "Clean refrigerator/freezer",
-      "Wash interior window (must be reachable with a 2-step stool)",
-      "Hand wash wood blinds or shutters",
-    ],
-  },
-
-  deep: {
-    subject: "Your Deep Clean Checklist — full scope included ✨",
-    heading: "Deep Clean Checklist",
-    intro:
-      "Your Deep Clean is the thorough reset your home deserves. We go further than a standard maintenance clean — hand-wiping every surface, detail-cleaning appliances, and reaching every corner so your home is set to the highest baseline.",
-    emailKind: "deep_checklist",
-    sections: [
-      {
-        title: "Kitchen",
-        items: [
-          "Hand-wipe all cabinet exteriors",
-          "Clean countertops",
-          "Wipe backsplash",
-          "Clean sink and polish faucets",
-          "Hand-wipe small appliances and items on countertops",
-          "Clean microwave (inside and out)",
-          "Clean and polish oven and refrigerator exterior",
-          "Clean and polish stove top and vent hood",
-          "Detail-clean under electric range burners",
-          "Vacuum and mop kitchen floor",
-          "Remove trash, replace bag, wipe exterior",
-        ],
-      },
-      {
-        title: "Bathrooms",
-        items: [
-          "Clean mirrors (streak-free)",
-          "Wipe all reachable light fixtures",
-          "Wipe cabinet fronts",
-          "Scrub shower and tub",
-          "Clean counters, sinks, and polish fixtures",
-          "Disinfect toilet and surrounding area",
-          "Vacuum bathroom rugs",
-          "Remove trash, replace bags, wipe exterior",
-          "Clean and disinfect bathroom floor",
-        ],
-      },
-      {
-        title: "All Rooms",
-        items: [
-          "Remove cobwebs",
-          "Wipe all reachable light fixtures and ceiling fan blades",
-          "Dust wall art and A/C vents",
-          "Disinfect light switches and door knobs",
-          "Hand-wipe door frames and doors",
-          "Hand-wipe window sills and window ledges",
-          "Dust baseboards and blinds",
-          "Dust TVs, electronics, book tops, knick-knacks, lamps",
-          "Hand-polish all wood furniture",
-          "Dust banisters and handrails",
-          "Vacuum floors and mop hard surface floors",
-          "Vacuum under all furniture (where possible)",
-          "Vacuum carpet edges with attachment",
-          "Vacuum upholstered furniture and crevices",
-          "Change linens and/or make beds",
-          "Clean front and back door glass",
-        ],
-      },
-    ],
-    extras: [
-      "Hand wash baseboards (included in Deluxe)",
-      "Clean oven interior",
-      "Clean refrigerator and freezer interior",
-      "Wash interior windows (reachable with a 2-step stool)",
-      "Hand wash wood blinds or shutters (included in Deluxe)",
-    ],
-  },
-
-  moveinout: {
-    subject: "Your Move In/Out Cleaning Checklist — complete scope ✨",
-    heading: "Move In/Out Clean Checklist",
-    intro:
-      "Your Move In/Out Clean covers every inch of the empty home — including everything in a Deep Clean plus the interior of all cabinets, drawers, and built-ins, and inside the refrigerator and oven. Occupied-only lines (furniture, linens, rugs) are marked <em>if present</em> so an empty house can skip them.",
-    emailKind: "moveinout_checklist",
-    sections: [
-      {
-        title: "Kitchen",
-        items: [
-          "Hand-wipe all cabinet exteriors",
-          "Clean and wipe down pantry",
-          "Vacuum out and wipe inside all cabinets and drawers",
-          "Clean countertops",
-          "Wipe backsplash",
-          "Clean sink and polish faucets",
-          "Clean microwave (inside and out)",
-          "Clean and polish oven and refrigerator exterior",
-          "Clean and polish stove top and vent hood",
-          "Detail-clean under electric range burners",
-          "Vacuum and mop kitchen floor",
-          "Hand-wipe small appliances and items on countertops (if present)",
-          "Remove trash, replace bag, wipe exterior",
-          "Clean inside refrigerator and freezer",
-          "Clean inside oven",
-        ],
-      },
-      {
-        title: "Bathrooms",
-        items: [
-          "Clean mirrors (streak-free)",
-          "Wipe all reachable light fixtures",
-          "Wipe cabinet fronts",
-          "Wipe out inside cabinets and drawers",
-          "Scrub shower and tub",
-          "Clean counters, sinks, and polish fixtures",
-          "Disinfect toilet and surrounding area",
-          "Clean and disinfect bathroom floor",
-          "Vacuum bathroom rugs (if present)",
-          "Remove trash, replace bags, wipe exterior",
-        ],
-      },
-      {
-        title: "All Rooms",
-        items: [
-          "Remove cobwebs",
-          "Wipe all reachable light fixtures and ceiling fan blades",
-          "Dust A/C vents",
-          "Wipe inside and out of any built-in cabinets or bookcases",
-          "Disinfect light switches and door knobs",
-          "Hand-wipe door frames and doors",
-          "Hand-wipe window sills and ledges",
-          "Dust baseboards and blinds",
-          "Dust banisters and handrails",
-          "Vacuum floors and mop hard surface floors",
-          "Vacuum carpet edges with attachment",
-          "Clean front and back door glass",
-          "Dust wall art (if present)",
-          "Dust TVs, electronics, book tops, knick-knacks, lamps (if present)",
-          "Hand-polish all wood furniture (if present)",
-          "Vacuum under all furniture (if present)",
-          "Vacuum upholstered furniture and crevices (if present)",
-          "Change linens and/or make beds (if present)",
-        ],
-      },
-    ],
-    extras: [
-      "Wash interior windows (reachable with a 2-step stool)",
-      "Hand wash wood blinds or shutters",
-      "Carpet shampooing / steam cleaning (separate service)",
-    ],
-  },
-
-  combo: {
-    subject: "Your Combo Clean Checklist — both visits covered ✨",
-    heading: "Combo Clean Checklist",
-    intro:
-      "Your Combo Clean includes a Deep Clean on the first visit followed by a Standard Maintenance Clean on the follow-up visit. The scope below covers your initial deep clean — your second visit follows the standard maintenance checklist.",
-    emailKind: "combo_checklist",
-    sections: [
-      {
-        title: "Kitchen (Deep Clean — First Visit)",
-        items: [
-          "Hand-wipe all cabinet exteriors",
-          "Clean countertops",
-          "Wipe backsplash",
-          "Clean sink and polish faucets",
-          "Hand-wipe small appliances and items on countertops",
-          "Clean microwave (inside and out)",
-          "Clean and polish oven and refrigerator exterior",
-          "Clean and polish stove top and vent hood",
-          "Detail-clean under electric range burners",
-          "Vacuum and mop kitchen floor",
-          "Remove trash, replace bag, wipe exterior",
-        ],
-      },
-      {
-        title: "Bathrooms (Deep Clean — First Visit)",
-        items: [
-          "Clean mirrors (streak-free)",
-          "Wipe all reachable light fixtures",
-          "Wipe cabinet fronts",
-          "Scrub shower and tub",
-          "Clean counters, sinks, and polish fixtures",
-          "Disinfect toilet and surrounding area",
-          "Vacuum bathroom rugs",
-          "Remove trash, replace bags, wipe exterior",
-          "Clean and disinfect bathroom floor",
-        ],
-      },
-      {
-        title: "All Rooms (Deep Clean — First Visit)",
-        items: [
-          "Remove cobwebs",
-          "Wipe all reachable light fixtures and ceiling fan blades",
-          "Dust wall art and A/C vents",
-          "Disinfect light switches and door knobs",
-          "Hand-wipe door frames and doors",
-          "Hand-wipe window sills and window ledges",
-          "Dust baseboards and blinds",
-          "Dust TVs, electronics, book tops, knick-knacks, lamps",
-          "Hand-polish all wood furniture",
-          "Dust banisters and handrails",
-          "Vacuum floors and mop hard surface floors",
-          "Vacuum under all furniture (where possible)",
-          "Vacuum carpet edges with attachment",
-          "Vacuum upholstered furniture and crevices",
-          "Change linens and/or make beds",
-          "Clean front and back door glass",
-        ],
-      },
-    ],
-    extras: [
-      "Clean oven interior",
-      "Clean refrigerator and freezer interior",
-      "Wash interior windows (reachable with a 2-step stool)",
-      "Hand wash wood blinds or shutters",
-    ],
-  },
-
-  commerciallight: {
-    subject: "Your Commercial Light checklist — what's included ✨",
-    heading: "Commercial Light Checklist",
-    intro:
-      "A Light commercial visit keeps a maintained facility presentable: floors swept and vacuumed, trash pulled, restrooms reset, and visible spills spot-cleaned. Standard adds mopping, rooms, and touch-point disinfection.",
-    emailKind: "commercial_light_checklist",
-    sections: [
-      {
-        title: "Arrival & setup",
-        items: [
-          "Check in per site access instructions (badge / code / contact)",
-          "Notify the required contact on arrival (if specified)",
-          "Confirm the alarm is disarmed per the security notes before starting",
-          "Walk the site and note anything already damaged or blocked",
-        ],
-      },
-      {
-        title: "Light scope — every area in this job",
-        items: [
-          "Sweep and vacuum all floors in scope",
-          "Empty all trash and recycling; replace liners; take to designated disposal",
-          "Restrooms: disinfect toilets, sinks, counters, mirrors; restock supplies",
-          "Spot-clean visible spills and marks",
-        ],
-      },
-      {
-        title: "Documentation",
-        items: [
-          "Take BEFORE photos of all areas in scope",
-          "Take AFTER photos of every area cleaned",
-        ],
-      },
-      {
-        title: "Close-out",
-        items: [
-          "Complete any deep tasks scheduled for this visit (per scope)",
-          "Return all furniture and equipment to where you found it",
-          "Secure the site per lock-up procedure (doors, alarm, lights)",
-          "Notify the required contact on departure (if specified)",
-        ],
-      },
-    ],
-    extras: [
-      "Catering / event cleanup",
-      "Deep bathroom detail (per restroom)",
-      "Interior window wash beyond entry glass",
-      "After-hours or weekend premium window",
-      "Floor machine / scrubber pass",
-    ],
-  },
-
-  commercialstandard: {
-    subject: "Your Commercial Standard checklist — what's included ✨",
-    heading: "Commercial Standard Checklist",
-    intro:
-      "Standard is the default commercial visit. It includes everything in Light, then mops hard floors, resets the break room, wipes individual offices and rooms, and disinfects handles, switches, and rails.",
-    emailKind: "commercial_standard_checklist",
-    sections: [
-      {
-        title: "Arrival & setup",
-        items: [
-          "Check in per site access instructions (badge / code / contact)",
-          "Notify the required contact on arrival (if specified)",
-          "Confirm the alarm is disarmed per the security notes before starting",
-          "Walk the site and note anything already damaged or blocked",
-        ],
-      },
-      {
-        title: "Standard scope — every area in this job",
-        items: [
-          "Sweep and vacuum all floors in scope",
-          "Empty all trash and recycling; replace liners; take to designated disposal",
-          "Restrooms: disinfect toilets, sinks, counters, mirrors; restock supplies",
-          "Spot-clean visible spills and marks",
-          "Mop all hard floors",
-          "Break room / kitchenette: counters, sink, appliance exteriors, tables",
-          "Individual offices and rooms: surfaces wiped, trash pulled, floors done",
-          "Wipe and disinfect touch points (handles, switches, rails)",
-        ],
-      },
-      {
-        title: "Documentation",
-        items: [
-          "Take BEFORE photos of all areas in scope",
-          "Take AFTER photos of every area cleaned",
-        ],
-      },
-      {
-        title: "Close-out",
-        items: [
-          "Complete any deep tasks scheduled for this visit (per scope)",
-          "Return all furniture and equipment to where you found it",
-          "Secure the site per lock-up procedure (doors, alarm, lights)",
-          "Notify the required contact on departure (if specified)",
-        ],
-      },
-    ],
-    extras: [
-      "Catering / event cleanup",
-      "Deep bathroom detail (per restroom)",
-      "Interior window wash beyond entry glass",
-      "After-hours or weekend premium window",
-      "Floor machine / scrubber pass",
-    ],
-  },
-
-  commercialdetailed: {
-    subject: "Your Commercial Detailed checklist — full scope included ✨",
-    heading: "Commercial Detailed Checklist",
-    intro:
-      "Detailed is the reset pass: everything in Standard, then floor edges and grout, a high-touch sanitization of shared equipment, detail dusting of ledges and vents, and streak-free interior glass.",
-    emailKind: "commercial_detailed_checklist",
-    sections: [
-      {
-        title: "Arrival & setup",
-        items: [
-          "Check in per site access instructions (badge / code / contact)",
-          "Notify the required contact on arrival (if specified)",
-          "Confirm the alarm is disarmed per the security notes before starting",
-          "Walk the site and note anything already damaged or blocked",
-        ],
-      },
-      {
-        title: "Detailed scope — every area in this job",
-        items: [
-          "Sweep and vacuum all floors in scope",
-          "Empty all trash and recycling; replace liners; take to designated disposal",
-          "Restrooms: disinfect toilets, sinks, counters, mirrors; restock supplies",
-          "Spot-clean visible spills and marks",
-          "Mop all hard floors",
-          "Break room / kitchenette: counters, sink, appliance exteriors, tables",
-          "Individual offices and rooms: surfaces wiped, trash pulled, floors done",
-          "Wipe and disinfect touch points (handles, switches, rails)",
-          "Scrub floors — grout lines, edges, and corners, not just the open middle",
-          "High-touch sanitization pass: shared equipment, phones, rails, dispensers",
-          "Detail dusting: ledges, sills, vents, fixtures, tops of partitions",
-          "Interior glass and entry doors, streak-free",
-        ],
-      },
-      {
-        title: "Documentation",
-        items: [
-          "Take BEFORE photos of all areas in scope",
-          "Take AFTER photos of every area cleaned",
-        ],
-      },
-      {
-        title: "Close-out",
-        items: [
-          "Complete any deep tasks scheduled for this visit (per scope)",
-          "Return all furniture and equipment to where you found it",
-          "Secure the site per lock-up procedure (doors, alarm, lights)",
-          "Notify the required contact on departure (if specified)",
-        ],
-      },
-    ],
-    extras: [
-      "Catering / event cleanup",
-      "Deep bathroom detail (per restroom)",
-      "Interior window wash beyond entry glass",
-      "After-hours or weekend premium window",
-      "Floor machine / scrubber pass",
-    ],
-  },
-
-  office: {
-    subject: "Your Office Clean checklist — after-hours scope ✨",
-    heading: "Office Clean (After-Hours) Checklist",
-    intro:
-      "Office visits run the Commercial Standard list, then add desk, conference, and lock-up rules so the workspace is usable the next morning.",
-    emailKind: "office_checklist",
-    sections: [
-      {
-        title: "Arrival & setup",
-        items: [
-          "Check in per site access instructions (badge / code / contact)",
-          "Notify the required contact on arrival (if specified)",
-          "Confirm the alarm is disarmed per the security notes before starting",
-          "Walk the site and note anything already damaged or blocked",
-        ],
-      },
-      {
-        title: "Standard scope — every area in this job",
-        items: [
-          "Sweep and vacuum all floors in scope",
-          "Empty all trash and recycling; replace liners; take to designated disposal",
-          "Restrooms: disinfect toilets, sinks, counters, mirrors; restock supplies",
-          "Spot-clean visible spills and marks",
-          "Mop all hard floors",
-          "Break room / kitchenette: counters, sink, appliance exteriors, tables",
-          "Individual offices and rooms: surfaces wiped, trash pulled, floors done",
-          "Wipe and disinfect touch points (handles, switches, rails)",
-        ],
-      },
-      {
-        title: "Office rules",
-        items: [
-          "Respect the desk policy — do NOT move or touch papers/electronics unless scope says otherwise",
-          "Clean around workstations: wipe desks per policy, sanitize phones/shared equipment only if in scope",
-          "Conference rooms: tables, chairs, glass, whiteboard trays (do not erase boards)",
-          "Handle sensitive areas exactly per instructions (server rooms, exec offices)",
-        ],
-      },
-      {
-        title: "Documentation",
-        items: [
-          "Take BEFORE photos of all areas in scope",
-          "Take AFTER photos of every area cleaned",
-        ],
-      },
-      {
-        title: "Close-out",
-        items: [
-          "Complete any deep tasks scheduled for this visit (per scope)",
-          "Return all furniture and equipment to where you found it",
-          "Secure the site per lock-up procedure (doors, alarm, lights)",
-          "Notify the required contact on departure (if specified)",
-        ],
-      },
-      {
-        title: "After-hours close-out",
-        items: [
-          "Turn off lights per building instructions",
-          "Set the alarm and lock up exactly per the security notes",
-          "Badge out / check out with security if required",
-        ],
-      },
-    ],
-    extras: [
-      "Catering / event cleanup",
-      "Deep bathroom detail (per restroom)",
-      "Interior window wash beyond entry glass",
-      "After-hours or weekend premium window",
-      "Floor machine / scrubber pass",
-    ],
-  },
-};
-
-function resolveChecklistType(serviceType: string, scopeLevel?: string | null): string {
-  const lower = (serviceType || "").toLowerCase().replace(/[\s_-]/g, "");
-  if (lower.includes("move") || lower.includes("inout")) return "moveinout";
-  if (lower === "deep") return "deep";
-  if (lower === "combo") return "combo";
-  if (lower.includes("office")) return "office";
-  if (lower.includes("commercial") || lower === "light" || lower === "detailed") {
-    const scope = String(scopeLevel || lower.replace("commercial", "") || "standard").toLowerCase();
-    if (scope.includes("light")) return "commerciallight";
-    if (scope.includes("detailed")) return "commercialdetailed";
-    if (lower === "light") return "commerciallight";
-    if (lower === "detailed") return "commercialdetailed";
-    return "commercialstandard";
-  }
-  return "standard";
 }
 
 // ─── HTML renderer ───────────────────────────────────────────────────
@@ -675,6 +135,72 @@ function plainText(opts: { firstName: string; content: ChecklistContent; viewUrl
   return lines.join("\n");
 }
 
+// ─── Claim-then-send ledger ─────────────────────────────────────────
+
+// deno-lint-ignore no-explicit-any
+type Db = any;
+
+/** True when this call won the right to send. A second caller gets false. */
+async function claim(db: Db, bookingId: string, kind: string, recipient: string): Promise<boolean> {
+  const { error } = await db.from("booking_emails_sent").insert({
+    booking_id: bookingId,
+    kind,
+    recipient_email: recipient || null,
+  });
+  return !error;
+}
+
+async function release(db: Db, bookingId: string, kind: string): Promise<void> {
+  await db.from("booking_emails_sent").delete().eq("booking_id", bookingId).eq("kind", kind);
+}
+
+async function ensureSession(db: Db, booking: { id: string; email?: string | null }, checklistType: string): Promise<string> {
+  const { data: existing } = await db
+    .from("customer_checklist_sessions")
+    .select("token, revoked_at")
+    .eq("booking_id", booking.id)
+    .maybeSingle();
+  if (existing?.token && !existing.revoked_at) return String(existing.token);
+
+  const bytes = new Uint8Array(20);
+  crypto.getRandomValues(bytes);
+  const token = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  if (existing?.token) {
+    await db
+      .from("customer_checklist_sessions")
+      .update({ token, revoked_at: null, checklist_type: checklistType })
+      .eq("booking_id", booking.id);
+    return token;
+  }
+  const { error } = await db.from("customer_checklist_sessions").insert({
+    booking_id: booking.id,
+    token,
+    email: booking.email || null,
+    checklist_type: checklistType,
+  });
+  if (error) {
+    const { data: raced } = await db
+      .from("customer_checklist_sessions")
+      .select("token")
+      .eq("booking_id", booking.id)
+      .maybeSingle();
+    if (raced?.token) return String(raced.token);
+    throw new Error(`Could not create the checklist session: ${error.message}`);
+  }
+  return token;
+}
+
+
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    status,
+  });
+}
+
+const BOOKING_COLUMNS =
+  "id, status, is_reclean, booking_number, email, phone, first_name, service_type, scope_level, service_date, time_slot, arrival_window, address, city, state, bedrooms, bathrooms, dwelling_type, frequency, add_ons, pets, access_notes";
+
 // ─── Handler ─────────────────────────────────────────────────────────
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -690,7 +216,7 @@ serve(async (req) => {
       serviceType: directServiceType,
       scopeLevel: directScopeLevel,
       sendEmail: wantEmail = true,
-      sendSms: wantSms = false,
+      sendSms: wantSms,
       force = false,
     } = payload as {
       bookingId?: string;
@@ -699,11 +225,11 @@ serve(async (req) => {
       firstName?: string;
       serviceType?: string;
       scopeLevel?: string;
-      /** Email the full checklist HTML (default true). */
+      /** Email the checklist (default true). */
       sendEmail?: boolean;
-      /** Text the public customer checklist page link (default false). */
+      /** Text the checklist link. Booking mode defaults to true when the booking has a phone. */
       sendSms?: boolean;
-      /** Bypass booking_emails_sent idempotency when resending from admin. */
+      /** Admin resend: bypass the already-sent ledger. */
       force?: boolean;
     };
 
@@ -712,152 +238,125 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
         Deno.env.get("SUPABASE_ANON_KEY") ?? "",
     );
-
-    // Resolve recipient + booking-level personalization.
-    let email = directEmail || "";
-    let phone = directPhone || "";
-    let firstName = directFirstName || "";
-    let serviceType = (directServiceType || "standard").toLowerCase();
-    let scopeLevel = (directScopeLevel || "").toLowerCase() || null;
-    let bookingNumber: number | null = null;
-    let serviceDate: string | null = null;
-    let timeSlot: string | null = null;
-    let serviceAddress: string | null = null;
-    let resolvedBookingId: string | null = bookingId || null;
+    const resendKey = await resolveSecret(supabase, "RESEND_API_KEY");
 
     if (bookingId) {
       const { data: booking, error: bookingError } = await supabase
         .from("bookings")
-        .select(
-          "id, booking_number, email, phone, first_name, service_type, scope_level, service_date, time_slot, address, city, state, zip_code",
-        )
+        .select(BOOKING_COLUMNS)
         .eq("id", bookingId)
         .maybeSingle();
-      if (bookingError) {
-        console.warn("[send-cleaning-checklist] booking lookup failed", bookingError.message);
+      if (bookingError || !booking) {
+        return json({ error: "Booking not found" }, 404);
       }
-      if (booking) {
-        email = email || booking.email || "";
-        phone = phone || booking.phone || "";
-        firstName = firstName || booking.first_name || "";
-        serviceType = (booking.service_type || serviceType || "standard").toLowerCase();
-        scopeLevel = (booking.scope_level || scopeLevel || "").toLowerCase() || scopeLevel;
-        bookingNumber = booking.booking_number ?? null;
-        serviceDate = booking.service_date
-          ? new Date(booking.service_date + "T00:00:00").toLocaleDateString("en-US", {
-              weekday: "long",
-              month: "long",
-              day: "numeric",
-              year: "numeric",
-            })
-          : null;
-        timeSlot = booking.time_slot || null;
-        serviceAddress = [booking.address, booking.city, booking.state, booking.zip_code]
-          .filter(Boolean)
-          .join(", ") || null;
-        resolvedBookingId = booking.id;
+      if (String(booking.status || "").toLowerCase() === "cancelled" || booking.is_reclean === true) {
+        return json({ skipped: true, reason: booking.is_reclean ? "reclean" : "cancelled" });
       }
+
+      const email = String(booking.email || directEmail || "").trim();
+      const phone = String(booking.phone || directPhone || "").trim();
+      const checklist = buildPersonalChecklist(booking);
+      const token = await ensureSession(supabase, booking, checklist.checklistType);
+      const url = personalChecklistUrl(token);
+      const legacyKind = (CHECKLIST_BY_TYPE[checklist.checklistType] ?? CHECKLIST_BY_TYPE.standard).emailKind;
+
+      let emailed = false;
+      let emailSkipped: string | null = null;
+      if (wantEmail !== false && email) {
+        const { data: legacy } = await supabase
+          .from("booking_emails_sent").select("id").eq("booking_id", booking.id).eq("kind", legacyKind).maybeSingle();
+        if (force) await release(supabase, booking.id, PERSONAL_EMAIL_KIND);
+        if (legacy?.id && !force) {
+          emailSkipped = "already-sent";
+        } else if (!(await claim(supabase, booking.id, PERSONAL_EMAIL_KIND, email))) {
+          emailSkipped = "already-sent";
+        } else {
+          const result = await sendThroughCompliance(resendKey, {
+            to: email,
+            subject: `Your cleaning checklist${checklist.visit.serviceDate ? ` for ${checklist.visit.serviceDate}` : ""}`,
+            html: renderPersonalEmail(checklist, url),
+            templateKey: "cleaning_checklist",
+            declaredType: "customer_service",
+            bookingId: booking.id,
+          });
+          if (result?.error || !result?.data?.id) {
+            await release(supabase, booking.id, PERSONAL_EMAIL_KIND);
+            console.error("[send-cleaning-checklist] email failed", result?.error);
+            return json({ error: "email send failed", detail: result?.error?.message }, 502);
+          }
+          await supabase
+            .from("booking_emails_sent")
+            .update({ provider_message_id: result.data.id })
+            .eq("booking_id", booking.id)
+            .eq("kind", PERSONAL_EMAIL_KIND);
+          emailed = true;
+        }
+      }
+
+      let smsSent = false;
+      let smsSkipped: string | null = null;
+      const doSms = wantSms ?? Boolean(phone);
+      if (doSms && phone) {
+        if (force) await release(supabase, booking.id, PERSONAL_SMS_KIND);
+        if (!(await claim(supabase, booking.id, PERSONAL_SMS_KIND, phone))) {
+          smsSkipped = "already-sent";
+        } else {
+          const when = checklist.visit.serviceDate ? ` for ${checklist.visit.serviceDate.replace(/, \d{4}$/, "")}` : "";
+          smsSent = await sendSms(supabase, {
+            toPhone: phone,
+            message: `Novara Cleaning: Your personal cleaning checklist${when} is ready: ${url} Reply STOP to opt out.`,
+            type: "confirmation",
+          });
+          if (!smsSent) await release(supabase, booking.id, PERSONAL_SMS_KIND);
+        }
+      }
+
+      try {
+        await supabase.from("events").insert({
+          event_type: "checklist.sent",
+          source: "send-cleaning-checklist",
+          booking_id: booking.id,
+          summary: `Personal checklist (${checklist.checklistType}) via ${[emailed && "email", smsSent && "sms"].filter(Boolean).join("+") || "none"}`,
+          data: { booking_id: booking.id, checklist_type: checklist.checklistType, emailed, sms_sent: smsSent, emailSkipped, smsSkipped },
+        });
+      } catch { /* best-effort */ }
+
+      return json({ success: true, bookingId: booking.id, emailed, smsSent, emailSkipped, smsSkipped, viewUrl: url, checklistType: checklist.checklistType });
     }
 
+    // ─── Admin direct send (no booking, no personal page) ───────────────
+    const email = String(directEmail || "").trim();
+    const phone = String(directPhone || "").trim();
+    const firstName = String(directFirstName || "").trim();
+    const serviceType = String(directServiceType || "standard").toLowerCase();
+    const scopeLevel = String(directScopeLevel || "").toLowerCase() || null;
     const doEmail = wantEmail !== false;
     const doSms = wantSms === true;
-    if (!doEmail && !doSms) {
-      return new Response(JSON.stringify({ error: "sendEmail and/or sendSms required" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 400,
-      });
-    }
-    if (doEmail && !email) {
-      return new Response(JSON.stringify({ error: "email required when sendEmail is true" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 400,
-      });
-    }
-    if (doSms && !phone) {
-      return new Response(JSON.stringify({ error: "phone required when sendSms is true" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 400,
-      });
-    }
+    if (!doEmail && !doSms) return json({ error: "sendEmail and/or sendSms required" }, 400);
+    if (doEmail && !email) return json({ error: "email required when sendEmail is true" }, 400);
+    if (doSms && !phone) return json({ error: "phone required when sendSms is true" }, 400);
 
-    // Resolve service-type-aware checklist content
     const checklistType = resolveChecklistType(serviceType, scopeLevel);
     const content = CHECKLIST_BY_TYPE[checklistType] ?? CHECKLIST_BY_TYPE.standard;
     const viewUrl = checklistViewUrl(serviceType, scopeLevel);
 
-    // Idempotency: skip if we already sent this checklist kind for this booking.
-    // Admin "force" resends bypass this (Quotes / CSR tooling).
-    if (resolvedBookingId && !force && doEmail) {
-      const { data: prior } = await supabase
-        .from("booking_emails_sent")
-        .select("id, sent_at")
-        .eq("booking_id", resolvedBookingId)
-        .eq("kind", content.emailKind)
-        .maybeSingle();
-      if (prior?.id) {
-        console.log("[send-cleaning-checklist] already sent — skipping", {
-          bookingId: resolvedBookingId,
-          kind: content.emailKind,
-          priorSentAt: prior.sent_at,
-        });
-        return new Response(
-          JSON.stringify({ skipped: true, reason: "already-sent", priorSentAt: prior.sent_at, viewUrl }),
-          {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-            status: 200,
-          },
-        );
-      }
-    }
-
     let messageId: string | null = null;
     let emailed = false;
     if (doEmail) {
-      const html = renderHtml({
-        firstName,
-        bookingNumber,
-        serviceDate,
-        timeSlot,
-        serviceAddress,
-        content,
-        viewUrl,
-      });
-      const text = plainText({ firstName, content, viewUrl });
-      const result = await sendThroughCompliance(Deno.env.get("RESEND_API_KEY") || "", {
+      const result = await sendThroughCompliance(resendKey, {
         to: email,
         subject: content.subject,
-        html,
-        text,
+        html: renderHtml({ firstName, content, viewUrl }),
+        text: plainText({ firstName, content, viewUrl }),
         templateKey: "cleaning_checklist",
         declaredType: "customer_service",
       });
-
       if (result?.error) {
         console.error("[send-cleaning-checklist] resend error", result.error);
-        return new Response(
-          JSON.stringify({ error: "resend send failed", detail: result.error }),
-          {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-            status: 502,
-          },
-        );
+        return json({ error: "resend send failed", detail: result.error }, 502);
       }
       messageId = (result?.data?.id as string | undefined) || null;
       emailed = true;
-
-      // Idempotency stamp — best-effort, doesn't block the response.
-      if (resolvedBookingId) {
-        try {
-          await supabase.from("booking_emails_sent").insert({
-            booking_id: resolvedBookingId,
-            kind: content.emailKind,
-            recipient_email: email,
-            provider_message_id: messageId,
-          });
-        } catch (logErr) {
-          console.warn("[send-cleaning-checklist] booking_emails_sent insert failed", logErr);
-        }
-      }
     }
 
     let smsSent = false;
@@ -877,43 +376,14 @@ serve(async (req) => {
         event_type: "checklist.sent",
         source: "send-cleaning-checklist",
         summary: `Checklist sent (${checklistType}) via ${[emailed && "email", smsSent && "sms"].filter(Boolean).join("+") || "none"}`,
-        data: {
-          booking_id: resolvedBookingId,
-          email: email || null,
-          phone: phone || null,
-          service_type: serviceType,
-          checklist_type: checklistType,
-          view_url: viewUrl,
-          emailed,
-          sms_sent: smsSent,
-          force: Boolean(force),
-        },
+        data: { email: email || null, phone: phone || null, service_type: serviceType, checklist_type: checklistType, view_url: viewUrl, emailed, sms_sent: smsSent, force: Boolean(force) },
       });
-    } catch {
-      /* best-effort */
-    }
+    } catch { /* best-effort */ }
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        bookingId: resolvedBookingId,
-        messageId,
-        emailed,
-        smsSent,
-        viewUrl,
-        checklistType,
-      }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 200,
-      },
-    );
+    return json({ success: true, messageId, emailed, smsSent, viewUrl, checklistType });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("[send-cleaning-checklist]", message);
-    return new Response(JSON.stringify({ error: message }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 500,
-    });
+    return json({ error: message }, 500);
   }
 });

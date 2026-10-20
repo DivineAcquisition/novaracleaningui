@@ -559,8 +559,12 @@ export default function BookingCheckout() {
         ] || 0,
       )
     : 0;
+  const welcomeOffer = isNewMembershipSignup && /^WELCOME-[A-Z0-9]+$/i.test(String(bookingData.promoCode || ""));
+  const membershipFirstMonthDollars = welcomeOffer
+    ? Math.round(membershipMonthlyDollars * 85) / 100
+    : membershipMonthlyDollars;
   const membershipDeepDollars = isNewMembershipSignup && deepClean.includeDeepClean ? 75 : 0;
-  const membershipDueDollars = membershipMonthlyDollars + membershipDeepDollars;
+  const membershipDueDollars = membershipFirstMonthDollars + membershipDeepDollars;
 
   // Handle Referral Code
   const handleApplyReferral = async () => {
@@ -1114,6 +1118,12 @@ export default function BookingCheckout() {
                     <span className="font-semibold">{membership?.label || "Glow membership"}</span>
                     <span className="font-semibold">${membershipMonthlyDollars.toFixed(2)}/mo</span>
                   </div>
+                  {welcomeOffer ? (
+                    <div className="flex items-baseline justify-between text-sm text-emerald-700">
+                      <span className="font-medium">Welcome offer, first month only</span>
+                      <span className="font-semibold">15% off</span>
+                    </div>
+                  ) : null}
                   {membershipDeepDollars > 0 ? (
                     <div className="flex items-baseline justify-between text-sm">
                       <span className="font-medium">First-clean deep clean</span>

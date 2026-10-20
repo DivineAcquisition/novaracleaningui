@@ -34,6 +34,7 @@ export default function BookingZip() {
   const fbclid = searchParams.get('fbclid');
   const membershipParam = searchParams.get('membership');
   const homeSizeParam = searchParams.get('homeSize');
+  const welcomeCode = searchParams.get('welcome');
 
   // Capture referral code from URL on mount
   useEffect(() => {
@@ -51,6 +52,9 @@ export default function BookingZip() {
     }
     if (homeSizeParam) {
       updateBookingData({ homeSizeId: homeSizeParam });
+    }
+    if (welcomeCode && /^WELCOME-[A-Z0-9]+$/i.test(welcomeCode)) {
+      updateBookingData({ promoCode: welcomeCode.toUpperCase() });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [membershipParam, homeSizeParam]);
