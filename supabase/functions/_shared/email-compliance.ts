@@ -1458,40 +1458,52 @@ export interface EmailCardInput {
 }
 
 /**
- * The email box: dark card, purple bar, logo, then the message.
- * Matches the sign-in card — mark at the top left, title, body, light button.
+ * The email box every send uses. Header band with the mark and wordmark,
+ * then the message, then the compliance footer.
  */
 export function buildEmailCard(input: EmailCardInput): string {
   const title = textOf(input.title).trim();
   const button = input.buttonHref && input.buttonLabel
-    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:22px 0 0;"><tr><td style="background:#e7e7ea;border-radius:12px;">
-        <a class="novara-btn" href="${escapeHtml(input.buttonHref)}" style="display:inline-block;padding:14px 28px;font-family:Inter,Arial,sans-serif;font-size:16px;font-weight:600;color:#18181b;text-decoration:none;border-radius:12px;">${escapeHtml(input.buttonLabel)}</a>
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:26px 0 0;"><tr><td style="background:#f4f4f5;border-radius:999px;">
+        <a class="novara-btn" href="${escapeHtml(input.buttonHref)}" style="display:inline-block;padding:14px 28px;font-family:Inter,Arial,sans-serif;font-size:15px;line-height:1;font-weight:600;color:#18181b;text-decoration:none;border-radius:999px;">${escapeHtml(input.buttonLabel)}</a>
       </td></tr></table>
-      <p style="margin:14px 0 0;font-family:Inter,Arial,sans-serif;font-size:12px;line-height:1.5;color:#a1a1aa;word-break:break-all;">${escapeHtml(input.buttonHref)}</p>`
+      <p style="margin:12px 0 0;font-family:Inter,Arial,sans-serif;font-size:12px;line-height:1.5;color:#a1a1aa;word-break:break-all;">${escapeHtml(input.buttonHref)}</p>`
     : "";
   const heading = title
-    ? `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">${escapeHtml(title)}</h1>`
+    ? `<h1 style="margin:0 0 16px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;letter-spacing:-0.02em;color:#ffffff;">${escapeHtml(title)}</h1>`
     : "";
   const footer = input.footerHtml ?? "<!--NOVARA_FOOTER_START--><!--NOVARA_FOOTER_END-->";
   const preheader = textOf(input.preheader).trim();
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="dark"><meta name="supported-color-schemes" content="dark">
 <style>
   .novara-card p, .novara-card li, .novara-card span, .novara-card td { color:#d4d4d8 !important; }
-  .novara-card a:not(.novara-btn) { color:#ddd6fe; }
-  .novara-card a.novara-btn { color:#18181b !important; }
+  .novara-card h1, .novara-card h2, .novara-card h3,
+  .novara-card strong, .novara-card b, .novara-card strong span, .novara-card b span { color:#ffffff !important; }
+  .novara-card p[style*="font-weight:600"], .novara-card p[style*="font-weight: 600"],
+  .novara-card p[style*="font-weight:700"], .novara-card p[style*="font-weight: 700"] { color:#ffffff !important; }
+  .novara-card a:not(.novara-btn) { color:#ddd6fe !important; }
+  .novara-card a.novara-btn { color:#18181b !important; background:#f4f4f5 !important; border-radius:999px !important; }
+  .novara-card .novara-label { color:#a1a1aa !important; font-weight:500 !important; }
+  .novara-card .novara-value, .novara-card .novara-value span, .novara-card .novara-value strong { color:#ffffff !important; font-weight:600 !important; }
 </style></head>
-<body style="margin:0;padding:0;background:#141416;">
-${preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(preheader)}</div>` : ""}
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#141416;"><tr><td align="center" style="padding:28px 12px;">
-<table data-novara-card="1" role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#2a2a2e;border:1px solid #3a3a40;border-radius:16px;">
-<tr><td style="height:3px;background:#7c6af7;border-radius:16px 16px 0 0;font-size:0;line-height:3px;">&nbsp;</td></tr>
-<tr><td class="novara-card" style="padding:28px 28px 24px;font-family:Inter,Arial,sans-serif;">
-<img src="${EMAIL_LOGO_URL}" width="56" height="56" alt="Novara Cleaning" style="display:block;width:56px;height:56px;border-radius:12px;margin:0 0 22px;" />
+<body style="margin:0;padding:0;background:#0b0b0d;">
+${preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#0b0b0d;">${escapeHtml(preheader)}</div>` : ""}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0b0b0d;"><tr><td align="center" style="padding:32px 16px;">
+<table data-novara-card="1" role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#18181b;border:1px solid #2e2e33;border-radius:20px;">
+<tr><td style="padding:0;background:#121214;border-radius:20px 20px 0 0;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="height:4px;background:#7c6af7;font-size:0;line-height:4px;border-radius:20px 20px 0 0;">&nbsp;</td></tr>
+<tr><td style="padding:18px 28px;"><table role="presentation" cellpadding="0" cellspacing="0"><tr>
+<td style="vertical-align:middle;"><img src="${EMAIL_LOGO_URL}" width="40" height="40" alt="Novara Cleaning" style="display:block;width:40px;height:40px;border:0;border-radius:10px;" /></td>
+<td style="vertical-align:middle;padding-left:12px;"><p style="margin:0;font-family:Inter,Arial,sans-serif;font-size:15px;line-height:1.2;font-weight:700;letter-spacing:-0.01em;color:#ffffff;">Novara Cleaning</p></td>
+</tr></table></td></tr></table>
+</td></tr>
+<tr><td class="novara-card" style="padding:28px 28px 8px;font-family:Inter,Arial,sans-serif;">
 ${heading}
-<div style="font-family:Inter,Arial,sans-serif;font-size:16px;line-height:1.5;color:#d4d4d8;">${input.bodyHtml}</div>
+<div style="font-family:Inter,Arial,sans-serif;font-size:16px;line-height:1.55;color:#d4d4d8;">${input.bodyHtml}</div>
 ${button}
-${footer}
-</td></tr></table>
+</td></tr>
+<tr><td style="padding:0 12px 8px;">${footer}</td></tr>
+</table>
 </td></tr></table></body></html>`;
 }
 

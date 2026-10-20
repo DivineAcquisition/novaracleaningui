@@ -18,11 +18,11 @@ export const Button = ({ href, children, variant = 'primary' }: ButtonProps) => 
 
 const buttonPrimary = {
   display: 'inline-block',
-  backgroundColor: '#e7e7ea',
+  backgroundColor: '#f4f4f5',
   color: '#18181b',
   padding: '14px 28px',
   textDecoration: 'none',
-  borderRadius: '12px',
+  borderRadius: '999px',
   fontWeight: '600',
   fontSize: '16px',
   textAlign: 'center' as const,

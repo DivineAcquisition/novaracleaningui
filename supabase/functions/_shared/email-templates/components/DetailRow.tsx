@@ -1,6 +1,5 @@
 import * as React from 'https://esm.sh/react@18.3.1';
 import { Row, Column, Text } from 'https://esm.sh/@react-email/components@0.0.22';
-import { BRAND } from '../brand.ts';
 
 interface DetailRowProps {
   label: string;
@@ -12,10 +11,10 @@ export const DetailRow = ({ label, value, isLast = false }: DetailRowProps) => {
   return (
     <Row style={isLast ? rowStyleLast : rowStyle}>
       <Column style={labelStyle}>
-        <Text style={labelText}>{label}</Text>
+        <Text className="novara-label" style={labelText}>{label}</Text>
       </Column>
       <Column style={valueStyle}>
-        <Text style={valueText}>{value}</Text>
+        <Text className="novara-value" style={valueText}>{value}</Text>
       </Column>
     </Row>
   );
@@ -23,7 +22,7 @@ export const DetailRow = ({ label, value, isLast = false }: DetailRowProps) => {
 
 const rowStyle = {
   padding: '12px 0',
-  borderBottom: `1px solid ${BRAND.colors.gray[200]}`,
+  borderBottom: '1px solid #3a3a40',
 };
 
 const rowStyleLast = {
@@ -31,25 +30,27 @@ const rowStyleLast = {
 };
 
 const labelStyle = {
-  width: '140px',
-  verticalAlign: 'top',
+  width: '42%',
+  verticalAlign: 'top' as const,
 };
 
 const labelText = {
   margin: '0',
   fontSize: '14px',
-  fontWeight: '600',
-  color: BRAND.colors.gray[600],
+  fontWeight: '500',
+  color: '#a1a1aa',
 };
 
 const valueStyle = {
-  verticalAlign: 'top',
+  verticalAlign: 'top' as const,
 };
 
 const valueText = {
   margin: '0',
   fontSize: '14px',
-  color: BRAND.colors.gray[900],
+  fontWeight: '600',
+  color: '#ffffff',
+  textAlign: 'right' as const,
 };
 
 export default DetailRow;

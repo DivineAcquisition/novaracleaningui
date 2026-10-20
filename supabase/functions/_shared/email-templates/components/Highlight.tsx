@@ -36,7 +36,7 @@ export const Highlight = ({ children, variant = 'info' }: HighlightProps) => {
 
 const baseStyle = {
   padding: BRAND.spacing.lg,
-  borderRadius: BRAND.borderRadius.sm,
+  borderRadius: '12px',
   margin: `${BRAND.spacing.lg} 0`,
 };
 
