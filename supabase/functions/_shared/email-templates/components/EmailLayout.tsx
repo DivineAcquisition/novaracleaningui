@@ -60,18 +60,7 @@ export const EmailLayout = ({
                             </tr>
                             <tr>
                               <td style={{ padding: '18px 28px' }}>
-                                <table role="presentation" cellPadding={0} cellSpacing={0}>
-                                  <tbody>
-                                    <tr>
-                                      <td style={{ verticalAlign: 'middle' }}>
-                                        <Img src={BRAND.logo.url} width="40" height="40" alt="Novara Cleaning" style={logo} />
-                                      </td>
-                                      <td style={{ verticalAlign: 'middle', paddingLeft: '12px' }}>
-                                        <p style={wordmark}>Novara Cleaning</p>
-                                      </td>
-                                    </tr>
-                                  </tbody>
-                                </table>
+                                <Img src={BRAND.logo.url} width="40" height="40" alt="Novara Cleaning" style={logo} />
                               </td>
                             </tr>
                           </tbody>
@@ -137,16 +126,6 @@ const logo = {
   height: '40px',
   borderRadius: '10px',
   border: '0',
-};
-
-const wordmark = {
-  margin: '0',
-  fontFamily: 'Inter, Arial, sans-serif',
-  fontSize: '15px',
-  lineHeight: '1.2',
-  fontWeight: 700,
-  letterSpacing: '-0.01em',
-  color: '#ffffff',
 };
 
 const bodyCell = {

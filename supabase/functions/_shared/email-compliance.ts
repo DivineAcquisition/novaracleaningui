@@ -1458,7 +1458,7 @@ export interface EmailCardInput {
 }
 
 /**
- * The email box every send uses. Header band with the mark and wordmark,
+ * The email box every send uses. Header band with the mark,
  * then the message, then the compliance footer.
  */
 export function buildEmailCard(input: EmailCardInput): string {
@@ -1492,10 +1492,7 @@ ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;c
 <table data-novara-card="1" role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#18181b;border:1px solid #2e2e33;border-radius:20px;">
 <tr><td style="padding:0;background:#121214;border-radius:20px 20px 0 0;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="height:4px;background:#7c6af7;font-size:0;line-height:4px;border-radius:20px 20px 0 0;">&nbsp;</td></tr>
-<tr><td style="padding:18px 28px;"><table role="presentation" cellpadding="0" cellspacing="0"><tr>
-<td style="vertical-align:middle;"><img src="${EMAIL_LOGO_URL}" width="40" height="40" alt="Novara Cleaning" style="display:block;width:40px;height:40px;border:0;border-radius:10px;" /></td>
-<td style="vertical-align:middle;padding-left:12px;"><p style="margin:0;font-family:Inter,Arial,sans-serif;font-size:15px;line-height:1.2;font-weight:700;letter-spacing:-0.01em;color:#ffffff;">Novara Cleaning</p></td>
-</tr></table></td></tr></table>
+<tr><td style="padding:18px 28px;"><img src="${EMAIL_LOGO_URL}" width="40" height="40" alt="Novara Cleaning" style="display:block;width:40px;height:40px;border:0;border-radius:10px;" /></td></tr></table>
 </td></tr>
 <tr><td class="novara-card" style="padding:28px 28px 8px;font-family:Inter,Arial,sans-serif;">
 ${heading}
