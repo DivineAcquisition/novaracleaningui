@@ -17,10 +17,14 @@ export interface FirstJobReadyRow {
   ob_job_day_guides_ack?: boolean | null;
   ob_training_complete?: boolean | null;
   w9_status?: string | null;
+  /** False blocks assignment. Missing means the older onboarding path. */
+  kit_confirmed?: boolean | null;
+  background_cleared?: boolean | null;
 }
 
 export function isCleanerReadyForFirstJob(c: FirstJobReadyRow): boolean {
   if (Number(c.completed_bookings || 0) > 0) return true;
+  if (c.kit_confirmed === false || c.background_cleared === false) return false;
   return Boolean(
     c.ob_agreement_signed &&
       c.phone_verified &&
@@ -38,4 +42,4 @@ export function filterReadyForFirstJob<T extends FirstJobReadyRow>(rows: T[]): T
 
 /** Columns the first-job gate reads. Append to a cleaners select. */
 export const FIRST_JOB_READY_COLUMNS =
-  "completed_bookings, ob_agreement_signed, phone_verified, supply_checklist_submitted_at, ob_supplies_checklist_viewed, ob_dress_code_ack, ob_job_day_guides_ack, ob_training_complete, w9_status";
+  "completed_bookings, ob_agreement_signed, phone_verified, supply_checklist_submitted_at, ob_supplies_checklist_viewed, ob_dress_code_ack, ob_job_day_guides_ack, ob_training_complete, w9_status, kit_confirmed, background_cleared";

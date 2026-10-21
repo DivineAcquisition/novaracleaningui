@@ -84,6 +84,7 @@ serve(async (req) => {
       is_reclean?: boolean | null;
       reclean_scope?: string | null;
       reclean_assessed_value_cents?: number | null;
+      lead_job?: boolean;
     } | null = null;
     if (assignment.job_id) {
       const { data: b } = await supabase
@@ -94,6 +95,13 @@ serve(async (req) => {
         .limit(1)
         .maybeSingle();
       if (b) {
+        const { data: leadRow, error: leadErr } = await supabase
+          .from("bookings")
+          .select("lead_job")
+          .eq("job_id", assignment.job_id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
         booking = {
           service_date: b.service_date ?? null,
           time_slot: b.time_slot ?? null,
@@ -103,6 +111,7 @@ serve(async (req) => {
           reclean_assessed_value_cents: b.reclean_assessed_value_cents != null
             ? Number(b.reclean_assessed_value_cents)
             : null,
+          lead_job: !leadErr && leadRow?.lead_job === true,
         };
       }
     }

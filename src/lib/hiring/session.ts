@@ -43,6 +43,18 @@ export interface HiringSessionAnswers {
   reliabilityNote?: string;
   reasonNote?: string;
   idConfirmed?: boolean;
+  emailConsent?: boolean;
+  hasSmartphone?: string;
+  hasVehicle?: string;
+  willHaveKit?: string;
+  understandsContractor?: string;
+  understandsVerification?: string;
+  experienceYears?: string;
+  ageAnswer?: string;
+  jobsPerWeek?: number;
+  timeWindows?: string[];
+  cleaningTypes?: string[];
+  privacyAccepted?: boolean;
 }
 
 export interface HiringSessionRow {
@@ -119,12 +131,22 @@ export function sanitizeAnswers(input: unknown): HiringSessionAnswers {
   text("suppliesOnHand", 2000);
   text("reliabilityNote", 1000);
   text("reasonNote", 1000);
+  text("hasSmartphone", 10);
+  text("hasVehicle", 10);
+  text("willHaveKit", 10);
+  text("understandsContractor", 10);
+  text("understandsVerification", 10);
+  text("experienceYears", 40);
+  text("ageAnswer", 10);
   if (Array.isArray(raw.preferredDays)) {
     out.preferredDays = raw.preferredDays.map((d) => String(d)).slice(0, 7);
   }
   if (Array.isArray(raw.suppliesOwned)) {
     out.suppliesOwned = raw.suppliesOwned.map((id) => String(id)).filter(Boolean).slice(0, 80);
   }
+  if (Array.isArray(raw.timeWindows)) out.timeWindows = raw.timeWindows.map((d) => String(d)).slice(0, 8);
+  if (Array.isArray(raw.cleaningTypes)) out.cleaningTypes = raw.cleaningTypes.map((d) => String(d)).slice(0, 8);
+  if (typeof raw.jobsPerWeek === "number") out.jobsPerWeek = raw.jobsPerWeek;
   for (const key of [
     "consent1099",
     "backgroundCheckConsent",
@@ -135,6 +157,8 @@ export function sanitizeAnswers(input: unknown): HiringSessionAnswers {
     "autoInsured",
     "smsConsent",
     "answersAccurate",
+    "emailConsent",
+    "privacyAccepted",
   ] as const) {
     if (typeof raw[key] === "boolean") out[key] = raw[key];
   }

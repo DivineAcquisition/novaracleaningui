@@ -1,296 +1,211 @@
 "use client";
 
-// One question at a time, in the style of a Typeform, for the Airtable
-// Applicants intake. Gates (no car, no work authorization, declined consent,
-// unwilling to get supplies) stop the application instead of creating a row.
+// Public contractor application. One step at a time. A "no" is an answer.
+// The server decides pass, not a fit, waitlist, or needs review.
 
-import { useEffect, useId, useMemo, useRef, useState, type RefObject } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import {
-  RiArrowLeftLine,
-  RiCheckLine,
-  RiCheckboxCircleFill,
-  RiLoader4Line,
-} from "@remixicon/react";
+import { RiArrowLeftLine, RiCheckboxCircleFill, RiLoader4Line } from "@remixicon/react";
 import { SEO } from "@/components/SEO";
 import {
-  AGE_18_COPY,
-  APPLICANT_ROLES,
-  APPLICANT_STATES,
-  AUTO_INSURED_COPY,
-  AVAILABILITY_OPTIONS,
-  BACKGROUND_CONSENT_COPY,
-  BACKGROUND_DISCLOSURE,
-  CONSENT_1099_INTRO,
-  CONSENT_1099_LABEL,
-  CONFIDENTIALITY_EXPECTATION,
-  CONTRACTOR_TYPES,
+  CLEANING_TYPES,
   DAY_LABEL,
-  EXPERIENCE_OPTIONS,
-  ID_CONFIRM_COPY,
-  ID_PURPOSE_COPY,
-  INSURANCE_EXPECTATION,
-  LICENSE_COPY,
-  NON_SOLICIT_EXPECTATION,
+  EXPERIENCE_YEARS,
   OPEN_APPLICANT_ROLE,
-  PAY_CONSENT_COPY,
   PREFERRED_DAYS,
-  PRIVACY_POLICY_URL,
-  SMS_CONSENT_COPY,
-  TRANSPORTATION_CAR,
-  TRANSPORTATION_NONE,
-  TRUTHFULNESS_COPY,
-  applicantStateFromAddress,
-  availabilityLabel,
-  experienceLabel,
-  gateCopy,
-  hiringIntentNote,
+  TIME_WINDOWS,
+  YES_NO,
   isApplicationIssue,
-  isOpenApplicantRole,
   issuesForStep,
   presetRoleForHiringPage,
-  savedApplicationNote,
-  validateHiringApplication,
   roleLabel,
+  validateHiringApplication,
   visibleSteps,
   type ApplicationStep,
   type HiringApplicationDraft,
 } from "@/lib/hiring/application";
-import { AddressSuggestionMenu } from "@/components/booking/AddressSuggestionMenu";
-import { useAddressAutocomplete } from "@/hooks/use-address-autocomplete";
-import type { AddressSuggestion } from "@/lib/google-places-loader";
+import { wordingById } from "@/lib/contractor-intake/wording";
 import { formatPhoneNumber } from "@/lib/input-formatters";
 import { HIRING_GRADIENT } from "@/components/hiring/HiringChrome";
-import { MagicCard } from "@/components/magicui/magic-card";
-import { ShimmerButton } from "@/components/magicui/shimmer-button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { SUPPLY_CATEGORY_LABEL, SUPPLY_ITEMS, type SupplyCategory } from "@/lib/cleaner-supplies";
 import type { PublicHiringSession } from "@/lib/hiring/session";
 import { cn } from "@/lib/utils";
 
-const PAGE_TITLE =
-  "font-heading text-[1.65rem] font-semibold leading-snug tracking-tight text-slate-900 outline-none focus-visible:!ring-0 focus-visible:!ring-offset-0 sm:text-[1.85rem]";
+const STORAGE_KEY = "novara-contractor-application";
 
-const SUPPLY_GROUPS: SupplyCategory[] = ["solutions", "tools", "safety", "optional", "commercial_equipment"];
+type Answers = HiringApplicationDraft & { ageAnswer: string };
 
-const LOGO = "/novara-logo.png";
-
-type Answers = {
-  role: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string;
-  address: string;
-  city: string;
-  zipCode: string;
-  state: string;
-  suppliesOwned: string[];
-  contractorType: string;
-  transportation: string;
-  authorizedToWork: string;
-  experience: string;
-  availability: string;
-  preferredDays: string[];
-  consent1099: boolean;
-  backgroundCheckConsent: boolean;
-  payConsent: boolean;
-  age18: boolean;
-  validDriversLicense: boolean;
-  autoInsured: boolean;
-  smsConsent: boolean;
-  answersAccurate: boolean;
-  willingToGetSupplies: string;
-  suppliesOnHand: string;
-  reliabilityNote: string;
-  reasonNote: string;
-  idConfirmed: boolean;
-  idFile: File | null;
+const EMPTY: Answers = {
+  role: OPEN_APPLICANT_ROLE,
+  firstName: "",
+  lastName: "",
+  email: "",
+  phone: "",
+  address: "",
+  city: "",
+  zipCode: "",
+  state: "",
+  contractorType: "Individual",
+  transportation: "",
+  authorizedToWork: "",
+  experience: "",
+  availability: "",
+  preferredDays: [],
+  consent1099: false,
+  backgroundCheckConsent: false,
+  payConsent: false,
+  age18: false,
+  validDriversLicense: false,
+  autoInsured: false,
+  smsConsent: false,
+  answersAccurate: false,
+  willingToGetSupplies: "",
+  suppliesOnHand: "",
+  reliabilityNote: "",
+  reasonNote: "",
+  idConfirmed: false,
+  idFile: null,
+  emailConsent: false,
+  hasSmartphone: "",
+  hasVehicle: "",
+  willHaveKit: "",
+  understandsContractor: "",
+  understandsVerification: "",
+  jobsPerWeek: 0,
+  timeWindows: [],
+  cleaningTypes: [],
+  experienceYears: "",
+  privacyAccepted: false,
+  ageAnswer: "",
+  leadRoleOpen: false,
 };
 
-type Choice = { value: string; label: string; hint?: string; disabled?: boolean };
-
-function toDraft(answers: Answers, hiringRole: string | null): HiringApplicationDraft {
-  return {
-    ...answers,
-    idFile: answers.idFile
-      ? { name: answers.idFile.name, type: answers.idFile.type, size: answers.idFile.size }
-      : null,
-    hiringRole,
-  };
-}
-
-function emailForForm(saved: string | undefined, sessionEmail: string | undefined): string {
-  const value = (saved || "").trim();
-  const onFile = (sessionEmail || "").trim().toLowerCase();
-  if (!value || (onFile && value.toLowerCase() === onFile)) return "";
-  return value;
-}
-
-function blankAnswers(hiringRole: string | null, session?: PublicHiringSession | null): Answers {
-  const saved = session?.answers || {};
-  return {
-    role: isOpenApplicantRole(saved.role) ? saved.role : presetRoleForHiringPage(hiringRole),
-    firstName: saved.firstName || session?.firstName || "",
-    lastName: saved.lastName || session?.lastName || "",
-    email: emailForForm(saved.email, session?.email),
-    phone: saved.phone || session?.phone || "",
-    address: saved.address || "",
-    city: saved.city || "",
-    zipCode: saved.zipCode || "",
-    state: saved.state || "",
-    suppliesOwned: saved.suppliesOwned || [],
-    contractorType: saved.contractorType || "",
-    transportation: saved.transportation || "",
-    authorizedToWork: saved.authorizedToWork || "",
-    experience: saved.experience || "",
-    availability: saved.availability || "",
-    preferredDays: saved.preferredDays || [],
-    consent1099: Boolean(saved.consent1099),
-    backgroundCheckConsent: Boolean(saved.backgroundCheckConsent),
-    payConsent: Boolean(saved.payConsent),
-    age18: Boolean(saved.age18),
-    validDriversLicense: Boolean(saved.validDriversLicense),
-    autoInsured: Boolean(saved.autoInsured),
-    smsConsent: Boolean(saved.smsConsent),
-    answersAccurate: Boolean(saved.answersAccurate),
-    willingToGetSupplies: saved.willingToGetSupplies || "",
-    suppliesOnHand: saved.suppliesOnHand || "",
-    reliabilityNote: saved.reliabilityNote || "",
-    reasonNote: saved.reasonNote || "",
-    idConfirmed: Boolean(saved.idConfirmed),
-    idFile: null,
-  };
+function why(id: string): string {
+  return wordingById(id)?.body || "";
 }
 
 export function ApplicantTypeform({ session }: { session?: PublicHiringSession | null }) {
   const params = useSearchParams();
-  const hiringRole = params.get("role");
-  const intent = hiringIntentNote(hiringRole);
-  const [answers, setAnswers] = useState<Answers>(() => blankAnswers(hiringRole, session));
-  const [stepIndex, setStepIndex] = useState(() => session?.stepIndex || 0);
+  const [leadOpen, setLeadOpen] = useState(false);
+  const [answers, setAnswers] = useState<Answers>(EMPTY);
+  const [stepIndex, setStepIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [gate, setGate] = useState<string | null>(null);
   const [done, setDone] = useState(session?.status === "submitted");
+  const [result, setResult] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [fax, setFax] = useState("");
-  const headingRef = useRef<HTMLHeadingElement>(null);
+  const headingId = useId();
 
-  const steps = visibleSteps(answers.willingToGetSupplies);
-  const index = Math.min(stepIndex, steps.length - 1);
-  const step = steps[index];
-  const progress = steps.length <= 1 ? 0 : index / (steps.length - 1);
+  const steps = visibleSteps();
+  const step = steps[Math.min(stepIndex, steps.length - 1)];
 
   useEffect(() => {
-    headingRef.current?.focus();
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [step, gate, done]);
-
-  const draft = useMemo(() => toDraft(answers, hiringRole), [answers, hiringRole]);
+    let saved: Partial<Answers> = {};
+    try {
+      saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") as Partial<Answers>;
+    } catch {
+      saved = {};
+    }
+    const fromSession = session?.answers || {};
+    setAnswers({
+      ...EMPTY,
+      ...saved,
+      ...fromSession,
+      role: fromSession.role || saved.role || presetRoleForHiringPage(params.get("role")),
+      firstName: fromSession.firstName || saved.firstName || session?.firstName || "",
+      lastName: fromSession.lastName || saved.lastName || session?.lastName || "",
+      email: fromSession.email || saved.email || "",
+      phone: fromSession.phone || saved.phone || session?.phone || "",
+      idFile: null,
+      leadRoleOpen: false,
+    });
+    setStepIndex(session?.stepIndex || 0);
+  }, [params, session]);
 
   useEffect(() => {
+    fetch("/api/hiring/intake")
+      .then((res) => res.json())
+      .then((data: { leadRoleOpenToPublic?: boolean }) => {
+        setLeadOpen(Boolean(data.leadRoleOpenToPublic));
+        setAnswers((current) => ({ ...current, leadRoleOpen: Boolean(data.leadRoleOpenToPublic) }));
+      })
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    const { idFile: _file, ...rest } = answers;
+    void _file;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(rest));
     if (!session?.token || session.status === "submitted") return;
     const handle = window.setTimeout(() => {
-      const { idFile, ...rest } = answers;
-      void idFile;
       void fetch(`/api/hiring/session/${session.token}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ answers: rest, stepIndex }),
       });
-    }, 600);
+    }, 400);
     return () => window.clearTimeout(handle);
-  }, [answers, stepIndex, session?.token, session?.status]);
+  }, [answers, session, stepIndex]);
 
-  function back() {
-    setError(null);
-    if (gate) {
-      setGate(null);
-      return;
-    }
-    setStepIndex((i) => Math.max(0, i - 1));
-  }
+  const draft = useMemo(() => ({ ...answers, leadRoleOpen: leadOpen }), [answers, leadOpen]);
 
-  function advance(next: Answers) {
-    setAnswers(next);
-    const list = visibleSteps(next.willingToGetSupplies);
-    const current = list[Math.min(stepIndex, list.length - 1)] ?? step;
-    const found = issuesForStep(current, toDraft(next, hiringRole));
+  function advance(next = draft) {
+    const found = issuesForStep(step, next);
     if (found) {
-      setError(found.gate ? null : found.error);
-      setGate(found.gate ? found.code : null);
+      setError(found.error);
       return;
     }
     setError(null);
-    setGate(null);
-    const at = list.indexOf(current);
-    setStepIndex(Math.min(at + 1, list.length - 1));
-  }
-
-  function patch(partial: Partial<Answers>, andAdvance = false) {
-    const next = { ...answers, ...partial };
-    setError(null);
-    if (andAdvance) advance(next);
-    else setAnswers(next);
+    setStepIndex((index) => Math.min(index + 1, steps.length - 1));
   }
 
   async function submit() {
     const found = validateHiringApplication(draft);
     if (isApplicationIssue(found)) {
-      setError(found.gate ? null : found.error);
-      setGate(found.gate ? found.code : null);
-      if (!found.gate) {
-        const list = visibleSteps(answers.willingToGetSupplies);
-        const failing = list.find((id) => id !== "review" && issuesForStep(id, draft));
-        if (failing) setStepIndex(list.indexOf(failing));
-      }
+      setError(found.error);
+      const failing = steps.find((id) => issuesForStep(id, draft));
+      if (failing) setStepIndex(steps.indexOf(failing));
       return;
     }
-    if (!answers.idFile) return;
     setSubmitting(true);
     setError(null);
     try {
       const body = new FormData();
-      body.set("role", answers.role);
-      body.set("firstName", answers.firstName);
-      body.set("lastName", answers.lastName);
-      body.set("email", answers.email);
-      body.set("phone", answers.phone);
-      body.set("address", answers.address);
-      body.set("city", answers.city);
-      body.set("zipCode", answers.zipCode);
-      body.set("state", answers.state);
-      body.set("contractorType", answers.contractorType);
-      body.set("transportation", answers.transportation);
-      body.set("authorizedToWork", answers.authorizedToWork);
-      body.set("experience", answers.experience);
-      body.set("availability", answers.availability);
-      body.set("preferredDays", JSON.stringify(answers.preferredDays));
-      body.set("consent1099", String(answers.consent1099));
-      body.set("backgroundCheckConsent", String(answers.backgroundCheckConsent));
-      body.set("payConsent", String(answers.payConsent));
-      body.set("age18", String(answers.age18));
-      body.set("validDriversLicense", String(answers.validDriversLicense));
-      body.set("autoInsured", String(answers.autoInsured));
-      body.set("smsConsent", String(answers.smsConsent));
-      body.set("answersAccurate", String(answers.answersAccurate));
-      body.set("willingToGetSupplies", answers.willingToGetSupplies);
-      body.set("suppliesOnHand", answers.suppliesOnHand);
-      body.set("reliabilityNote", answers.reliabilityNote);
-      body.set("reasonNote", answers.reasonNote);
-      body.set("idConfirmed", String(answers.idConfirmed));
-      body.set("hiringRole", hiringRole || "");
-      body.set("faxNumber", fax);
+      const entries: Record<string, string> = {
+        role: answers.role,
+        firstName: answers.firstName,
+        lastName: answers.lastName,
+        email: answers.email,
+        phone: answers.phone,
+        zipCode: answers.zipCode,
+        smsConsent: String(Boolean(answers.smsConsent)),
+        emailConsent: String(Boolean(answers.emailConsent)),
+        age18: String(answers.ageAnswer === "yes"),
+        ageAnswer: answers.ageAnswer,
+        hasSmartphone: answers.hasSmartphone || "",
+        hasVehicle: answers.hasVehicle || "",
+        willHaveKit: answers.willHaveKit || "",
+        understandsContractor: answers.understandsContractor || "",
+        understandsVerification: answers.understandsVerification || "",
+        jobsPerWeek: String(answers.jobsPerWeek || 0),
+        preferredDays: JSON.stringify(answers.preferredDays || []),
+        timeWindows: JSON.stringify(answers.timeWindows || []),
+        cleaningTypes: JSON.stringify(answers.cleaningTypes || []),
+        experienceYears: answers.experienceYears || "",
+        privacyAccepted: String(Boolean(answers.privacyAccepted)),
+        leadRoleOpen: String(leadOpen),
+        faxNumber: fax,
+      };
+      Object.entries(entries).forEach(([key, value]) => body.set(key, value));
       if (session?.token) body.set("sessionToken", session.token);
-      body.set("idFile", answers.idFile);
       const res = await fetch("/api/hiring/apply", { method: "POST", body });
-      const data = (await res.json().catch(() => ({}))) as { error?: string; code?: string; gate?: boolean; ok?: boolean };
+      const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
       if (!res.ok) {
-        if (data.gate && data.code) setGate(data.code);
-        else setError(data.error || "Could not submit your application.");
+        setError(data.error || "Could not submit your application.");
         return;
       }
+      localStorage.removeItem(STORAGE_KEY);
+      setResult(data.message || "We received your application.");
       setDone(true);
     } catch {
       setError("Something went wrong. Please try again.");
@@ -300,1228 +215,305 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
   }
 
   return (
-    <div
-      className="flex min-h-dvh flex-col text-slate-900"
-      style={{
-        background:
-          "radial-gradient(80% 46% at 50% -12%, rgba(143,123,253,0.22), transparent 58%), linear-gradient(180deg, #FFFFFF 0%, #F7F5FC 100%)",
-      }}
-    >
+    <div className="flex min-h-dvh flex-col bg-white text-slate-900">
       <SEO
         title="Apply"
-        description="Apply to clean with Novara. One question at a time. You need to be 18 or older, with an insured car, a valid driver’s license, and a photo ID."
+        description="Apply to join the Novara contractor network. The application asks only whether you can do the work."
         canonical="https://hiring.novaracleaning.com/hiring/apply"
       />
-      <style>{`
-        @keyframes nvQIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
-        .nv-q { animation: nvQIn .45s cubic-bezier(.22,1,.36,1) both; }
-        @media (prefers-reduced-motion: reduce) {
-          .nv-q { animation: none; }
-        }
-      `}</style>
-
-      <div className="h-1 w-full bg-slate-200/80">
-        <div
-          className="h-full transition-[width] duration-500 ease-out"
-          style={{ width: `${Math.round(progress * 100)}%`, background: HIRING_GRADIENT }}
-        />
+      <div className="h-1 w-full bg-slate-200">
+        <div className="h-full" style={{ width: `${Math.round(((stepIndex + 1) / steps.length) * 100)}%`, background: HIRING_GRADIENT }} />
       </div>
-
-      <header className="mx-auto flex w-full max-w-2xl items-center justify-between px-5 py-4 sm:px-6">
-        <Link href="/hiring" className="flex items-center gap-2.5 transition hover:opacity-80">
-          <img src={LOGO} alt="" className="h-8 w-8 rounded-lg" />
-          <span className="font-heading text-[15px] font-bold tracking-tight">
-            Novara<span className="text-primary">Cleaning</span>
-          </span>
-        </Link>
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-          {done ? "Done" : gate ? "Hold" : `${index + 1} of ${steps.length}`}
-        </p>
+      <header className="mx-auto flex w-full max-w-2xl items-center justify-between px-5 py-4">
+        <Link href="/hiring" className="font-heading text-[15px] font-bold">Novara<span className="text-primary">Cleaning</span></Link>
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{done ? "Done" : `${stepIndex + 1} of ${steps.length}`}</p>
       </header>
-      {session && !done && (
-        <p className="mx-auto w-full max-w-2xl px-5 text-sm text-slate-500 sm:px-6">
-          {session.preview
-            ? "Preview link. Answers on this link are saved as you go."
-            : savedApplicationNote(session.firstName)}
-        </p>
-      )}
-
-      <main className="flex flex-1 flex-col">
-        <div className="m-auto w-full max-w-2xl px-5 py-6 sm:px-6 sm:py-10">
-          {done ? (
-            <Success name={answers.firstName} />
-          ) : gate ? (
-            <GateScreen code={gate} onBack={back} />
-          ) : (
-            <div key={step} className="nv-q">
-              {index > 0 && (
-                <button
-                  type="button"
-                  onClick={back}
-                  className="mb-6 inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 transition hover:text-slate-800"
-                >
-                  <RiArrowLeftLine className="h-4 w-4" />
-                  Back
+      <main className="mx-auto w-full max-w-2xl flex-1 px-5 pb-28">
+        {done ? (
+          <div className="py-10">
+            <RiCheckboxCircleFill className="h-12 w-12 text-emerald-600" aria-hidden />
+            <h1 className="mt-4 font-heading text-3xl font-semibold">Application received</h1>
+            <p className="mt-4 max-w-xl text-base leading-relaxed text-slate-700">{result}</p>
+          </div>
+        ) : (
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (step === "review") void submit();
+              else advance();
+            }}
+          >
+            <Step
+              step={step}
+              answers={draft}
+              headingId={headingId}
+              leadOpen={leadOpen}
+              error={error}
+              submitting={submitting}
+              onChange={(partial) => {
+                setError(null);
+                setAnswers((current) => ({ ...current, ...partial }));
+              }}
+            />
+            {error && <p role="alert" className="mt-4 text-sm font-medium text-red-700">{error}</p>}
+            <div className="mt-8 flex items-center gap-4">
+              {stepIndex > 0 && (
+                <button type="button" onClick={() => { setError(null); setStepIndex((index) => index - 1); }} className="inline-flex h-12 items-center gap-2 rounded-full border border-slate-300 px-4 text-sm font-semibold">
+                  <RiArrowLeftLine className="h-4 w-4" aria-hidden /> Back
                 </button>
               )}
-              <Question
-                step={step}
-                index={index}
-                answers={answers}
-                intent={step === "role" ? intent : null}
-                error={error}
-                submitting={submitting}
-                headingRef={headingRef}
-                onPatch={patch}
-                onAdvance={() => advance(answers)}
-                onSubmit={submit}
-                onEdit={(id) => {
-                  setError(null);
-                  setStepIndex(visibleSteps(answers.willingToGetSupplies).indexOf(id));
-                }}
-                onError={setError}
-              />
+              <button type="submit" disabled={submitting} className="inline-flex h-12 items-center rounded-full px-6 text-sm font-semibold text-white disabled:opacity-60" style={{ background: HIRING_GRADIENT }}>
+                {submitting ? <RiLoader4Line className="h-4 w-4 animate-spin" /> : step === "review" ? "Submit application" : "Continue"}
+              </button>
             </div>
-          )}
-        </div>
+          </form>
+        )}
       </main>
-
-      <input
-        tabIndex={-1}
-        aria-hidden
-        autoComplete="off"
-        value={fax}
-        onChange={(e) => setFax(e.target.value)}
-        className="pointer-events-none absolute left-[-9999px] h-0 w-0 opacity-0"
-        name="faxNumber"
-      />
+      <footer className="fixed inset-x-0 bottom-0 border-t border-slate-200 bg-white/95 px-5 py-3 text-sm text-slate-700">
+        <div className="mx-auto max-w-2xl">
+          If you need an accommodation to complete this application, email <a className="font-semibold text-slate-900 underline" href="mailto:operations@novaracleaning.com">operations@novaracleaning.com</a>.
+        </div>
+      </footer>
+      <input tabIndex={-1} autoComplete="off" aria-hidden className="hidden" value={fax} onChange={(event) => setFax(event.target.value)} name="faxNumber" />
     </div>
   );
 }
 
-function Success({ name }: { name: string }) {
-  return (
-    <div className="nv-q py-10 text-center">
-      <RiCheckboxCircleFill className="mx-auto h-14 w-14 text-emerald-500" />
-      <h1 className="mt-5 font-heading text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
-        Application received{name ? `, ${name}` : ""}
-      </h1>
-      <p className="mx-auto mt-4 max-w-md text-base leading-relaxed text-slate-600">
-        Thanks for applying for Field Cleaner. We review every submission and reach out when it’s a fit.
-        The other roles are opening soon.
-      </p>
-      <Link
-        href="/hiring"
-        className="mt-8 inline-flex h-12 items-center justify-center rounded-full px-6 text-sm font-semibold text-white"
-        style={{ background: HIRING_GRADIENT }}
-      >
-        Back to careers
-      </Link>
-    </div>
-  );
-}
-
-function GateScreen({ code, onBack }: { code: string; onBack: () => void }) {
-  const copy = gateCopy(code);
-  return (
-    <div className="nv-q py-8">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-700">Not a match yet</p>
-      <h1 className="mt-3 font-heading text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
-        {copy.title}
-      </h1>
-      <p className="mt-4 max-w-lg text-base leading-relaxed text-slate-600">{copy.body}</p>
-      <button
-        type="button"
-        onClick={onBack}
-        className="mt-8 inline-flex h-12 items-center gap-2 rounded-full border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-800 transition hover:border-slate-300"
-      >
-        <RiArrowLeftLine className="h-4 w-4" />
-        Change my answer
-      </button>
-    </div>
-  );
-}
-
-function Question({
-  step,
-  index,
-  answers,
-  intent,
-  error,
-  submitting,
-  headingRef,
-  onPatch,
-  onAdvance,
-  onSubmit,
-  onEdit,
-  onError,
+function Step({
+  step, answers, headingId, leadOpen, error: _error, submitting: _submitting, onChange,
 }: {
   step: ApplicationStep;
-  index: number;
   answers: Answers;
-  intent: string | null;
+  headingId: string;
+  leadOpen: boolean;
   error: string | null;
   submitting: boolean;
-  headingRef: RefObject<HTMLHeadingElement>;
-  onPatch: (partial: Partial<Answers>, andAdvance?: boolean) => void;
-  onAdvance: () => void;
-  onSubmit: () => void;
-  onEdit: (step: ApplicationStep) => void;
-  onError: (message: string) => void;
+  onChange: (partial: Partial<Answers>) => void;
 }) {
-  const n = String(index + 1).padStart(2, "0");
-
-  if (step === "review") {
+  void _error;
+  void _submitting;
+  if (step === "role") {
     return (
-      <div>
-        <Kicker n={n} />
-        <h1 ref={headingRef} tabIndex={-1} className={PAGE_TITLE}>
-          Look over your application
-        </h1>
-        <p className="mt-3 text-base text-slate-500">Change anything before you send it.</p>
-        <dl className="mt-8 divide-y divide-slate-200 rounded-2xl border border-slate-200 bg-white">
-          <ReviewRow label="Role" value={roleLabel(answers.role)} onEdit={() => onEdit("role")} />
-          <ReviewRow label="Name" value={`${answers.firstName} ${answers.lastName}`.trim()} onEdit={() => onEdit("name")} />
-          <ReviewRow label="Email" value={answers.email} onEdit={() => onEdit("email")} />
-          <ReviewRow label="Phone" value={answers.phone} onEdit={() => onEdit("phone")} />
-          <ReviewRow
-            label="Address"
-            value={[answers.address, answers.city, answers.zipCode, answers.state].filter(Boolean).join(", ")}
-            onEdit={() => onEdit("address")}
-          />
-          <ReviewRow label="Applying as" value={answers.contractorType === "Individual" ? "Just me" : answers.contractorType} onEdit={() => onEdit("contractorType")} />
-          <ReviewRow label="Car" value="Own car, valid license, insured" onEdit={() => onEdit("car")} />
-          <ReviewRow label="Photo ID" value={answers.idFile?.name || "Uploaded"} onEdit={() => onEdit("id")} />
-          <ReviewRow label="Authorized to work" value="Yes" onEdit={() => onEdit("authorized")} />
-          <ReviewRow label="Age" value="18 or older" onEdit={() => onEdit("age")} />
-          <ReviewRow label="Texts and calls" value="Agreed" onEdit={() => onEdit("phone")} />
-          <ReviewRow label="Experience" value={experienceLabel(answers.experience)} onEdit={() => onEdit("experience")} />
-          <ReviewRow label="Availability" value={availabilityLabel(answers.availability)} onEdit={() => onEdit("availability")} />
-          <ReviewRow label="Days" value={answers.preferredDays.map((d) => DAY_LABEL[d as keyof typeof DAY_LABEL] || d).join(", ")} onEdit={() => onEdit("days")} />
-          <ReviewRow label="1099 consent" value="Agreed" onEdit={() => onEdit("consent1099")} />
-          <ReviewRow label="Background check" value="Agreed" onEdit={() => onEdit("consentBg")} />
-          <ReviewRow label="Pay consent" value="Agreed" onEdit={() => onEdit("consentPay")} />
-          <ReviewRow label="Willing to get supplies" value="Yes" onEdit={() => onEdit("supplies")} />
-          <ReviewRow label="Supplies you have" value={answers.suppliesOnHand} onEdit={() => onEdit("suppliesOnHand")} />
-          <ReviewRow label="Reliability" value={answers.reliabilityNote} onEdit={() => onEdit("reliability")} />
-          <ReviewRow label="Why Novara" value={answers.reasonNote} onEdit={() => onEdit("reason")} />
-        </dl>
-        <label className="mt-6 flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-base text-slate-800 shadow-sm">
-          <input
-            type="checkbox"
-            checked={answers.answersAccurate}
-            onChange={(e) => onPatch({ answersAccurate: e.target.checked })}
-            className="mt-1 h-5 w-5 rounded border-slate-300 text-[#5C0FFE] focus:ring-[#8F7BFD]"
-          />
-          <span>{TRUTHFULNESS_COPY}</span>
-        </label>
-        {error && <ErrorText message={error} />}
-        <div className="mt-6">
-          <OkButton label={submitting ? "Submitting…" : "Submit application"} busy={submitting} onClick={onSubmit} />
-        </div>
-      </div>
+      <section aria-labelledby={headingId}>
+        <h1 id={headingId} tabIndex={-1} className="font-heading text-3xl font-semibold">Which role are you applying for?</h1>
+        <Choice
+          name="role"
+          value={answers.role}
+          options={[
+            { value: OPEN_APPLICANT_ROLE, label: "Cleaner", hint: "Residential jobs on the Novara network" },
+            { value: "Lead Cleaner (Contractor)", label: "Lead Cleaner", hint: leadOpen ? "Open to new applicants" : "Opens after current contractors are invited", disabled: !leadOpen },
+          ]}
+          onPick={(role) => onChange({ role })}
+        />
+      </section>
     );
   }
-
   if (step === "name") {
     return (
-      <TextStep
-        n={n}
-        title="What’s your name?"
-        hint="Use the name on your ID."
-        error={error}
-        headingRef={headingRef}
-        onOk={onAdvance}
-      >
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="First name" autoComplete="given-name" value={answers.firstName} onChange={(v) => onPatch({ firstName: v })} onEnter={onAdvance} />
-          <Field label="Last name" autoComplete="family-name" value={answers.lastName} onChange={(v) => onPatch({ lastName: v })} onEnter={onAdvance} />
+      <section aria-labelledby={headingId}>
+        <h1 id={headingId} className="font-heading text-3xl font-semibold">What’s your name?</h1>
+        <div className="mt-6 grid gap-3 sm:grid-cols-2">
+          <Field label="First name" autoComplete="given-name" value={answers.firstName} onChange={(firstName) => onChange({ firstName })} />
+          <Field label="Last name" autoComplete="family-name" value={answers.lastName} onChange={(lastName) => onChange({ lastName })} />
         </div>
-      </TextStep>
+      </section>
     );
   }
-
   if (step === "email") {
     return (
-      <TextStep n={n} title="What’s the best email to reach you?" hint="We’ll only use this to follow up on your application." error={error} headingRef={headingRef} onOk={onAdvance}>
-        <Field label="Email" type="email" autoComplete="email" placeholder="you@email.com" value={answers.email} onChange={(v) => onPatch({ email: v })} onEnter={onAdvance} />
-      </TextStep>
+      <section aria-labelledby={headingId}>
+        <h1 id={headingId} className="font-heading text-3xl font-semibold">What’s your email?</h1>
+        <Field label="Email" type="email" autoComplete="email" value={answers.email} onChange={(email) => onChange({ email })} />
+      </section>
     );
   }
-
   if (step === "phone") {
     return (
-      <TextStep n={n} title="What’s your phone number?" hint="A mobile number works best. We’ll use it for this application." error={error} headingRef={headingRef} onOk={onAdvance}>
-        <Field label="Phone" type="tel" autoComplete="tel" inputMode="tel" placeholder="(301) 555-0123" value={answers.phone} onChange={(v) => onPatch({ phone: formatPhoneNumber(v) })} onEnter={onAdvance} />
-        <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm leading-relaxed text-slate-800">
-          <input
-            type="checkbox"
-            checked={answers.smsConsent}
-            onChange={(e) => onPatch({ smsConsent: e.target.checked })}
-            className="mt-0.5 h-5 w-5 rounded border-slate-300 text-[#5C0FFE] focus:ring-[#8F7BFD]"
-          />
-          <span>{SMS_CONSENT_COPY}</span>
-        </label>
-      </TextStep>
+      <section aria-labelledby={headingId}>
+        <h1 id={headingId} className="font-heading text-3xl font-semibold">What’s your mobile number?</h1>
+        <Field label="Mobile number" type="tel" autoComplete="tel" value={answers.phone} onChange={(phone) => onChange({ phone: formatPhoneNumber(phone) })} />
+        <Check label={why("application_sms")} checked={Boolean(answers.smsConsent)} onChange={(smsConsent) => onChange({ smsConsent })} />
+      </section>
     );
   }
-
-  if (step === "address") {
+  if (step === "comms") {
     return (
-      <TextStep n={n} title="Where do you live?" hint="Search once. City, ZIP, and state fill in. We hire in Maryland, Virginia, DC, and New York." error={error} headingRef={headingRef} onOk={onAdvance}>
-        <div className="space-y-4">
-          <AddressSearchField
-            onResolved={(partial) => onPatch(partial)}
-          />
-          {answers.address && (
-            <p className="text-sm text-slate-600">
-              Found · <span className="font-medium text-slate-900">{answers.address}</span>
-            </p>
-          )}
-          <Field
-            label="City"
-            autoComplete="address-level2"
-            placeholder="Baltimore"
-            value={answers.city}
-            onChange={(v) => onPatch({ city: v })}
-            onEnter={onAdvance}
-          />
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field
-              label="ZIP code"
-              autoComplete="postal-code"
-              inputMode="numeric"
-              placeholder="21213"
-              value={answers.zipCode}
-              onChange={(v) => onPatch({ zipCode: v.replace(/\D/g, "").slice(0, 5) })}
-              onEnter={onAdvance}
-            />
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">State</span>
-              <select
-                value={answers.state}
-                onChange={(e) => onPatch({ state: e.target.value })}
-                className="h-12 w-full rounded-xl border border-slate-200 bg-white px-3 text-base text-slate-900 outline-none transition focus:border-[#5C0FFE] focus:ring-4 focus:ring-[#5C0FFE]/10"
-              >
-                <option value="">Select a state</option>
-                {APPLICANT_STATES.map((s) => (
-                  <option key={s.value} value={s.value}>{s.label}</option>
-                ))}
-              </select>
-            </label>
-          </div>
-        </div>
-      </TextStep>
+      <section aria-labelledby={headingId}>
+        <h1 id={headingId} className="font-heading text-3xl font-semibold">How can we reach you?</h1>
+        <p className="mt-3 text-base text-slate-700">Texts are optional. If you decline texts, email is required so we have one way to reach you.</p>
+        <Check label={why("application_email")} checked={Boolean(answers.emailConsent)} onChange={(emailConsent) => onChange({ emailConsent })} />
+      </section>
     );
   }
-
-  if (step === "suppliesOnHand") {
+  if (step === "zip") {
     return (
-      <TextStep
-        n={n}
-        title="Which supplies do you already have?"
-        hint="Same checklist we use in onboarding. Check what you own. Leave the rest — you’ll get those before your first job."
-        error={error}
-        headingRef={headingRef}
-        onOk={() => onPatch({ suppliesOnHand: supplySummary(answers.suppliesOwned) }, true)}
-      >
-        <SupplyPicker
-          owned={answers.suppliesOwned}
-          onChange={(suppliesOwned) => onPatch({ suppliesOwned, suppliesOnHand: supplySummary(suppliesOwned) })}
-        />
-      </TextStep>
+      <section aria-labelledby={headingId}>
+        <h1 id={headingId} className="font-heading text-3xl font-semibold">What’s your ZIP code?</h1>
+        <p className="mt-3 text-base text-slate-700">We check it against the areas we cover. Outside the area goes on a waitlist, not a rejection.</p>
+        <Field label="ZIP code" inputMode="numeric" autoComplete="postal-code" value={answers.zipCode} onChange={(zipCode) => onChange({ zipCode: zipCode.replace(/\D/g, "").slice(0, 5) })} />
+      </section>
     );
   }
-
-  if (step === "reliability") {
-    return (
-      <TextStep n={n} title="How would you describe your reliability?" hint="Showing up, on time, is the job. A sentence or two is plenty." error={error} headingRef={headingRef} onOk={onAdvance}>
-        <Area value={answers.reliabilityNote} placeholder="I show up when I say I will…" onChange={(v) => onPatch({ reliabilityNote: v })} />
-      </TextStep>
-    );
-  }
-
-  if (step === "reason") {
-    return (
-      <TextStep n={n} title="Why do you want to join Novara?" error={error} headingRef={headingRef} onOk={onAdvance}>
-        <Area value={answers.reasonNote} placeholder="I like the work, and I want a steady way to book it…" onChange={(v) => onPatch({ reasonNote: v })} />
-      </TextStep>
-    );
-  }
-
-  if (step === "id") {
-    return (
-      <IdStep
-        n={n}
-        answers={answers}
-        error={error}
-        headingRef={headingRef}
-        onPatch={onPatch}
-        onAdvance={onAdvance}
-      />
-    );
-  }
-
   if (step === "days") {
     return (
-      <div>
-        <Kicker n={n} />
-        <h1 ref={headingRef} tabIndex={-1} className={PAGE_TITLE}>
-          Which days can you work?
-        </h1>
-        <p className="mt-3 text-base text-slate-500">Pick every day that’s usually open. You can change this later.</p>
-        <div className="mt-8 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+      <section aria-labelledby={headingId}>
+        <h1 id={headingId} className="font-heading text-3xl font-semibold">Which days can you take jobs?</h1>
+        <div className="mt-6 grid grid-cols-2 gap-2 sm:grid-cols-4">
           {PREFERRED_DAYS.map((day) => {
-            const on = answers.preferredDays.includes(day);
+            const on = (answers.preferredDays || []).includes(day);
             return (
-              <button
-                key={day}
-                type="button"
-                aria-pressed={on}
-                onClick={() => {
-                  const preferredDays = on
-                    ? answers.preferredDays.filter((d) => d !== day)
-                    : [...answers.preferredDays, day];
-                  onPatch({ preferredDays });
-                }}
-                className={cn(
-                  "rounded-2xl border px-3 py-4 text-left transition",
-                  on
-                    ? "border-[#5C0FFE] bg-[#5C0FFE]/8 text-slate-900 shadow-[0_10px_24px_-18px_rgba(92,15,254,0.9)]"
-                    : "border-slate-200 bg-white text-slate-700 hover:border-slate-300",
-                )}
-              >
-                <span className="block text-xs font-semibold uppercase tracking-wide text-slate-400">{day}</span>
-                <span className="mt-1 block text-sm font-semibold">{DAY_LABEL[day]}</span>
+              <button key={day} type="button" aria-pressed={on} onClick={() => onChange({ preferredDays: on ? answers.preferredDays.filter((item) => item !== day) : [...(answers.preferredDays || []), day] })} className={cn("rounded-2xl border px-3 py-4 text-left", on ? "border-violet-700 bg-violet-50" : "border-slate-300 bg-white")}>
+                <span className="block text-sm font-semibold">{DAY_LABEL[day]}</span>
               </button>
             );
           })}
         </div>
-        {error && <ErrorText message={error} />}
-        <div className="mt-6">
-          <OkButton onClick={onAdvance} />
-        </div>
-      </div>
+      </section>
     );
   }
-
-  if (step === "consent1099" || step === "consentBg" || step === "consentPay") {
-    const spec = {
-      consent1099: {
-        title: "This is a 1099 contractor role",
-        body: CONSENT_1099_INTRO,
-        extra: [NON_SOLICIT_EXPECTATION, CONFIDENTIALITY_EXPECTATION, INSURANCE_EXPECTATION],
-        label: CONSENT_1099_LABEL,
-        checked: answers.consent1099,
-        key: "consent1099" as const,
-      },
-      consentBg: {
-        title: "Background check disclosure",
-        body: BACKGROUND_DISCLOSURE,
-        extra: [] as string[],
-        label: BACKGROUND_CONSENT_COPY,
-        checked: answers.backgroundCheckConsent,
-        key: "backgroundCheckConsent" as const,
-      },
-      consentPay: {
-        title: "Are you comfortable with how pay works?",
-        body: "Everyone starts between 40% and 45% of the job’s value. Pay is weekly, for completed jobs. Travel time is not paid.",
-        extra: [] as string[],
-        label: PAY_CONSENT_COPY,
-        checked: answers.payConsent,
-        key: "payConsent" as const,
-      },
-    }[step];
+  if (step === "windows") {
     return (
-      <div>
-        <Kicker n={n} />
-        <h1 ref={headingRef} tabIndex={-1} className={PAGE_TITLE}>
-          {spec.title}
-        </h1>
-        <p className="mt-3 max-w-xl text-base leading-relaxed text-slate-500">{spec.body}</p>
-        {spec.extra.length > 0 && (
-          <div className="mt-4 max-w-xl space-y-3 text-base leading-relaxed text-slate-600">
-            {spec.extra.map((line) => (
-              <p key={line}>{line}</p>
-            ))}
-          </div>
-        )}
-        {step === "consentPay" && <PayExample />}
-        <label className="mt-8 flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-base text-slate-800 shadow-sm">
-          <input
-            type="checkbox"
-            checked={spec.checked}
-            onChange={(e) => onPatch({ [spec.key]: e.target.checked })}
-            className="mt-1 h-5 w-5 rounded border-slate-300 text-[#5C0FFE] focus:ring-[#8F7BFD]"
-          />
-          <span>{spec.label}</span>
-        </label>
-        {error && <ErrorText message={error} />}
-        <div className="mt-6 flex flex-wrap items-center gap-4">
-          <OkButton
-            onClick={() => {
-              if (!spec.checked) {
-                onError("Check the box to continue.");
-                return;
-              }
-              onAdvance();
-            }}
-          />
-          <button
-            type="button"
-            className="text-sm font-semibold text-slate-500 underline-offset-4 hover:text-slate-800 hover:underline"
-            onClick={() => onPatch({ [spec.key]: false }, true)}
-          >
-            I don’t agree
-          </button>
+      <section aria-labelledby={headingId}>
+        <h1 id={headingId} className="font-heading text-3xl font-semibold">When can you take jobs?</h1>
+        <div className="mt-6 space-y-2">
+          {TIME_WINDOWS.map((window) => {
+            const on = (answers.timeWindows || []).includes(window.value);
+            return (
+              <button key={window.value} type="button" aria-pressed={on} onClick={() => onChange({ timeWindows: on ? (answers.timeWindows || []).filter((item) => item !== window.value) : [...(answers.timeWindows || []), window.value] })} className={cn("block w-full rounded-2xl border px-4 py-3 text-left font-semibold", on ? "border-violet-700 bg-violet-50" : "border-slate-300")}>
+                {window.label}
+              </button>
+            );
+          })}
         </div>
-      </div>
+        <Field label="Jobs per week you want" inputMode="numeric" value={answers.jobsPerWeek ? String(answers.jobsPerWeek) : ""} onChange={(value) => onChange({ jobsPerWeek: Number(value.replace(/\D/g, "").slice(0, 2) || 0) })} />
+      </section>
     );
   }
-
-  if (step === "age") {
+  if (step === "requirements") {
+    const rows = [
+      { key: "ageAnswer", title: "I am 18 or older.", why: why("why_age") },
+      { key: "hasSmartphone", title: "I have a smartphone that can run the Novara app and take photos.", why: why("why_phone") },
+      { key: "hasVehicle", title: "I have a personal vehicle I can drive to jobs with my supplies.", why: why("why_vehicle") },
+      { key: "willHaveKit", title: "I have or will have a cleaning supply kit before my first job.", why: why("why_supplies") },
+      { key: "understandsContractor", title: "I understand this is independent contractor work, not employment, and that I will provide a W-9.", why: why("independent_contractor") },
+      { key: "understandsVerification", title: "I understand that if I pass, I will be asked to verify my identity and vehicle and to authorize a background check.", why: "This happens after a conditional approval, during onboarding." },
+    ] as const;
     return (
-      <div>
-        <Kicker n={n} />
-        <h1 ref={headingRef} tabIndex={-1} className={PAGE_TITLE}>
-          Are you 18 or older?
-        </h1>
-        <p className="mt-3 max-w-xl text-base leading-relaxed text-slate-500">
-          This role is only open to adults. We don’t ask for your birth date.
-        </p>
-        <label className="mt-8 flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-base text-slate-800 shadow-sm">
-          <input
-            type="checkbox"
-            checked={answers.age18}
-            onChange={(e) => onPatch({ age18: e.target.checked })}
-            className="mt-1 h-5 w-5 rounded border-slate-300 text-[#5C0FFE] focus:ring-[#8F7BFD]"
-          />
-          <span>{AGE_18_COPY}</span>
-        </label>
-        {error && <ErrorText message={error} />}
-        <div className="mt-6 flex flex-wrap items-center gap-4">
-          <OkButton
-            onClick={() => {
-              if (!answers.age18) {
-                onError("Check the box to continue.");
-                return;
-              }
-              onAdvance();
-            }}
-          />
-          <button
-            type="button"
-            className="text-sm font-semibold text-slate-500 underline-offset-4 hover:text-slate-800 hover:underline"
-            onClick={() => onPatch({ age18: false }, true)}
-          >
-            I am under 18
-          </button>
+      <section aria-labelledby={headingId}>
+        <h1 id={headingId} className="font-heading text-3xl font-semibold">Requirements</h1>
+        <p className="mt-3 text-base text-slate-700">Each one is shown before you answer. A no is recorded. It is not hidden.</p>
+        <div className="mt-6 space-y-6">
+          {rows.map((row) => (
+            <fieldset key={row.key} className="rounded-2xl border border-slate-300 p-4">
+              <legend className="px-1 text-base font-semibold">{row.title}</legend>
+              <p className="mt-1 text-sm leading-relaxed text-slate-700">Why we ask: {row.why}</p>
+              <Choice name={row.key} value={String(answers[row.key] || "")} options={YES_NO.map((item) => ({ value: item.value, label: item.label }))} onPick={(value) => onChange({ [row.key]: value, ...(row.key === "ageAnswer" ? { age18: value === "yes" } : {}) })} />
+            </fieldset>
+          ))}
         </div>
-      </div>
+      </section>
     );
   }
-
-  if (step === "car") {
+  if (step === "experience") {
     return (
-      <div>
-        <Kicker n={n} />
-        <h1 ref={headingRef} tabIndex={-1} className={PAGE_TITLE}>
-          Do you have a car you can drive to jobs?
-        </h1>
-        <p className="mt-3 max-w-xl text-base leading-relaxed text-slate-500">
-          A car is the only transportation we accept. You need a valid driver’s license, and the car has to be insured. Rideshare doesn’t count.
-        </p>
-        <ChoiceList
-          choices={choicesFor("car")}
-          selected={answers.transportation}
-          onPick={(value) => {
-            if (value !== TRANSPORTATION_CAR) {
-              onPatch({ transportation: value, validDriversLicense: false, autoInsured: false }, true);
-              return;
-            }
-            onPatch({ transportation: value });
-          }}
-        />
-        {answers.transportation === TRANSPORTATION_CAR && (
-          <div className="mt-4 space-y-3">
-            <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-base text-slate-800 shadow-sm">
-              <input
-                type="checkbox"
-                checked={answers.validDriversLicense}
-                onChange={(e) => onPatch({ validDriversLicense: e.target.checked })}
-                className="mt-1 h-5 w-5 rounded border-slate-300 text-[#5C0FFE] focus:ring-[#8F7BFD]"
-              />
-              <span>{LICENSE_COPY}</span>
-            </label>
-            <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-base text-slate-800 shadow-sm">
-              <input
-                type="checkbox"
-                checked={answers.autoInsured}
-                onChange={(e) => onPatch({ autoInsured: e.target.checked })}
-                className="mt-1 h-5 w-5 rounded border-slate-300 text-[#5C0FFE] focus:ring-[#8F7BFD]"
-              />
-              <span>{AUTO_INSURED_COPY}</span>
-            </label>
-          </div>
-        )}
-        {error && <ErrorText message={error} />}
-        {answers.transportation === TRANSPORTATION_CAR && (
-          <div className="mt-6 flex flex-col items-start gap-3">
-            <OkButton
-              onClick={() => {
-                if (!answers.validDriversLicense || !answers.autoInsured) {
-                  onError("Check both boxes to continue.");
-                  return;
-                }
-                onAdvance();
-              }}
-            />
-            <button
-              type="button"
-              className="text-sm font-semibold text-slate-500 underline-offset-4 hover:text-slate-800 hover:underline"
-              onClick={() => onPatch({ transportation: TRANSPORTATION_CAR, validDriversLicense: false }, true)}
-            >
-              I don’t have a valid driver’s license
-            </button>
-            <button
-              type="button"
-              className="text-sm font-semibold text-slate-500 underline-offset-4 hover:text-slate-800 hover:underline"
-              onClick={() => onPatch({ transportation: TRANSPORTATION_CAR, validDriversLicense: true, autoInsured: false }, true)}
-            >
-              My car isn’t insured
-            </button>
-          </div>
-        )}
-      </div>
+      <section aria-labelledby={headingId}>
+        <h1 id={headingId} className="font-heading text-3xl font-semibold">How many years have you cleaned professionally?</h1>
+        <p className="mt-3 text-base text-slate-700">This is not a requirement. It is used to plan training and job matching.</p>
+        <Choice name="experienceYears" value={answers.experienceYears || ""} options={EXPERIENCE_YEARS.map((row) => ({ value: row.value, label: row.label }))} onPick={(experienceYears) => onChange({ experienceYears })} />
+      </section>
     );
   }
-
-  const choices = choicesFor(step);
-  const selected = selectedValue(step, answers);
-  return (
-    <div>
-      <Kicker n={n} />
-      <h1 ref={headingRef} tabIndex={-1} className={PAGE_TITLE}>
-        {titleFor(step)}
-      </h1>
-      {(hintFor(step) || intent) && (
-        <p className="mt-3 max-w-xl text-base leading-relaxed text-slate-500">{intent || hintFor(step)}</p>
-      )}
-      {step === "supplies" && <ChecklistLink />}
-      <ChoiceList
-        choices={choices}
-        selected={selected}
-        onPick={(value) => onPatch(patchFor(step, value), true)}
-      />
-      {error && <ErrorText message={error} />}
-      {selected && (
-        <div className="mt-6">
-          <OkButton onClick={() => onPatch(patchFor(step, selected), true)} />
+  if (step === "cleaningTypes") {
+    return (
+      <section aria-labelledby={headingId}>
+        <h1 id={headingId} className="font-heading text-3xl font-semibold">Which kinds of cleaning have you done?</h1>
+        <p className="mt-3 text-base text-slate-700">Choose all that apply. This is not a requirement.</p>
+        <div className="mt-6 space-y-2">
+          {CLEANING_TYPES.map((type) => {
+            const on = (answers.cleaningTypes || []).includes(type.value);
+            return (
+              <button key={type.value} type="button" aria-pressed={on} onClick={() => onChange({ cleaningTypes: on ? (answers.cleaningTypes || []).filter((item) => item !== type.value) : [...(answers.cleaningTypes || []), type.value] })} className={cn("block w-full rounded-2xl border px-4 py-3 text-left font-semibold", on ? "border-violet-700 bg-violet-50" : "border-slate-300")}>
+                {type.label}
+              </button>
+            );
+          })}
         </div>
-      )}
-    </div>
-  );
-}
-
-function choicesFor(step: ApplicationStep): Choice[] {
-  switch (step) {
-    case "role":
-      return APPLICANT_ROLES.map((r) => ({
-        value: r.value,
-        label: r.label,
-        hint: r.value === OPEN_APPLICANT_ROLE || r.value === "Lead Cleaner (Contractor)" ? r.hint : "Opening soon",
-        disabled: r.value !== OPEN_APPLICANT_ROLE && r.value !== "Lead Cleaner (Contractor)",
-      }));
-    case "state":
-      return APPLICANT_STATES.map((s) => ({ value: s.value, label: s.label }));
-    case "contractorType":
-      return CONTRACTOR_TYPES.map((t) => ({ value: t.value, label: t.label, hint: t.hint }));
-    case "car":
-      return [
-        { value: TRANSPORTATION_CAR, label: "Yes — I have my own car", hint: "I can drive myself to every job" },
-        { value: TRANSPORTATION_NONE, label: "No, I don’t have a car", hint: "Rideshare, transit, or no vehicle" },
-      ];
-    case "authorized":
-      return [
-        { value: "Yes", label: "Yes" },
-        { value: "No", label: "No" },
-      ];
-    case "experience":
-      return EXPERIENCE_OPTIONS.map((o) => ({ value: o.value, label: o.label }));
-    case "availability":
-      return AVAILABILITY_OPTIONS.map((o) => ({ value: o.value, label: o.label }));
-    case "supplies":
-      return [
-        { value: "Yes", label: "Yes — I’ll get what a job needs", hint: "Including anything I don’t own yet" },
-        { value: "No", label: "No", hint: "I’m not able to get supplies" },
-      ];
-    default:
-      return [];
+      </section>
+    );
   }
-}
-
-function titleFor(step: ApplicationStep): string {
-  switch (step) {
-    case "role":
-      return "Which role are you applying for?";
-    case "state":
-      return "Which state do you live in?";
-    case "contractorType":
-      return "Are you applying as yourself or as a company?";
-    case "car":
-      return "Do you have a car you can drive to jobs?";
-    case "authorized":
-      return "Are you legally authorized to work in the U.S.?";
-    case "experience":
-      return "How much professional cleaning experience do you have?";
-    case "availability":
-      return "What’s your availability?";
-    case "supplies":
-      return "Are you willing to get the supplies a job needs?";
-    default:
-      return "";
-  }
-}
-
-function hintFor(step: ApplicationStep): string | null {
-  switch (step) {
-    case "car":
-      return "A car is the only transportation we accept. You need to drive yourself — rideshare doesn’t count.";
-    case "supplies":
-      return "Contractors bring their own supplies. You have to be willing to get whatever you don’t already own.";
-    case "role":
-      return "Field Cleaner is open now. The other roles are opening soon.";
-    case "state":
-      return "We hire in Maryland, Virginia, DC, and New York.";
-    default:
-      return null;
-  }
-}
-
-function selectedValue(step: ApplicationStep, answers: Answers): string {
-  switch (step) {
-    case "role":
-      return answers.role;
-    case "state":
-      return answers.state;
-    case "contractorType":
-      return answers.contractorType;
-    case "car":
-      return answers.transportation;
-    case "authorized":
-      return answers.authorizedToWork;
-    case "experience":
-      return answers.experience;
-    case "availability":
-      return answers.availability;
-    case "supplies":
-      return answers.willingToGetSupplies;
-    default:
-      return "";
-  }
-}
-
-function patchFor(step: ApplicationStep, value: string): Partial<Answers> {
-  switch (step) {
-    case "role":
-      return { role: value };
-    case "state":
-      return { state: value };
-    case "contractorType":
-      return { contractorType: value };
-    case "car":
-      return { transportation: value };
-    case "authorized":
-      return { authorizedToWork: value };
-    case "experience":
-      return { experience: value };
-    case "availability":
-      return { availability: value };
-    case "supplies":
-      return { willingToGetSupplies: value };
-    default:
-      return {};
-  }
-}
-
-function ChoiceList({
-  choices,
-  selected,
-  onPick,
-  compact = false,
-}: {
-  choices: Choice[];
-  selected: string;
-  onPick: (value: string) => void;
-  compact?: boolean;
-}) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
-      if (e.key === "Enter" && selected && !choices.find((c) => c.value === selected)?.disabled) {
-        e.preventDefault();
-        onPick(selected);
-        return;
-      }
-      const idx = "abcdefghijklmnopqrstuvwxyz".indexOf(e.key.toLowerCase());
-      if (idx < 0 || idx >= choices.length || choices[idx].disabled) return;
-      e.preventDefault();
-      onPick(choices[idx].value);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [choices, onPick, selected]);
-
   return (
-    <div className={cn(compact ? "space-y-2" : "mt-8 space-y-2.5")}>
-      {choices.map((choice, i) => {
-        const on = selected === choice.value && !choice.disabled;
-        const letter = String.fromCharCode(65 + i);
-        return (
-          <button
-            key={choice.value}
-            type="button"
-            aria-pressed={on}
-            aria-disabled={choice.disabled || undefined}
-            disabled={choice.disabled}
-            onClick={() => {
-              if (!choice.disabled) onPick(choice.value);
-            }}
-            className={cn(
-              "flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition sm:gap-4 sm:px-4 sm:py-4",
-              choice.disabled
-                ? "cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400"
-                : on
-                  ? "border-[#5C0FFE] bg-white shadow-[0_14px_30px_-20px_rgba(92,15,254,0.85)]"
-                  : "border-slate-200 bg-white/80 hover:border-[#8F7BFD]/60 hover:bg-white",
-            )}
-          >
-            <span
-              className={cn(
-                "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border text-xs font-bold",
-                on ? "border-[#5C0FFE] bg-[#5C0FFE] text-white" : "border-slate-200 text-slate-500",
-              )}
-            >
-              {on ? <RiCheckLine className="h-4 w-4" /> : letter}
-            </span>
-            <span className="min-w-0">
-              <span className={cn("block text-base font-semibold", choice.disabled ? "text-slate-400" : "text-slate-900")}>{choice.label}</span>
-              {choice.hint && (
-                <span className={cn("mt-0.5 block text-sm", choice.disabled ? "font-semibold text-amber-700" : "text-slate-500")}>
-                  {choice.hint}
-                </span>
-              )}
-            </span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function IdStep({
-  n,
-  answers,
-  error,
-  headingRef,
-  onPatch,
-  onAdvance,
-}: {
-  n: string;
-  answers: Answers;
-  error: string | null;
-  headingRef: RefObject<HTMLHeadingElement>;
-  onPatch: (partial: Partial<Answers>) => void;
-  onAdvance: () => void;
-}) {
-  const inputId = useId();
-  const [dragOver, setDragOver] = useState(false);
-  const [preview, setPreview] = useState<string | null>(null);
-
-  useEffect(() => {
-    const file = answers.idFile;
-    if (!file || !file.type.startsWith("image/") || /heic|heif/i.test(file.type)) {
-      setPreview(null);
-      return;
-    }
-    const url = URL.createObjectURL(file);
-    setPreview(url);
-    return () => URL.revokeObjectURL(url);
-  }, [answers.idFile]);
-
-  function take(file: File | null) {
-    onPatch({ idFile: file, idConfirmed: file ? answers.idConfirmed : false });
-  }
-
-  return (
-    <div>
-      <Kicker n={n} />
-      <h1 ref={headingRef} tabIndex={-1} className={PAGE_TITLE}>
-        Upload a valid government-issued photo ID
-      </h1>
-      <p className="mt-3 max-w-xl text-base leading-relaxed text-slate-500">
-        Driver’s license, state ID, or passport. It needs to be current, and the photo needs to be readable. JPG, PNG, or PDF, up to 4 MB.
+    <section aria-labelledby={headingId}>
+      <h1 id={headingId} className="font-heading text-3xl font-semibold">Review and submit</h1>
+      <dl className="mt-6 divide-y divide-slate-200 rounded-2xl border border-slate-300">
+        <Row label="Role" value={roleLabel(answers.role)} />
+        <Row label="Name" value={`${answers.firstName} ${answers.lastName}`} />
+        <Row label="Email" value={answers.email} />
+        <Row label="Mobile" value={answers.phone} />
+        <Row label="ZIP" value={answers.zipCode} />
+        <Row label="Days" value={(answers.preferredDays || []).map((day) => DAY_LABEL[day as keyof typeof DAY_LABEL] || day).join(", ")} />
+        <Row label="18 or older" value={answers.ageAnswer || "—"} />
+        <Row label="Smartphone" value={answers.hasSmartphone || "—"} />
+        <Row label="Vehicle" value={answers.hasVehicle || "—"} />
+        <Row label="Supply kit" value={answers.willHaveKit || "—"} />
+      </dl>
+      <Check label={why("application_privacy")} checked={Boolean(answers.privacyAccepted)} onChange={(privacyAccepted) => onChange({ privacyAccepted, answersAccurate: privacyAccepted })} />
+      <p className="mt-3 text-sm text-slate-700">
+        <a className="font-semibold underline" href="https://novaracleaning.com/privacy">Privacy notice</a>
       </p>
-      <p className="mt-3 max-w-xl text-base leading-relaxed text-slate-600">
-        {ID_PURPOSE_COPY}{" "}
-        <a href={PRIVACY_POLICY_URL} target="_blank" rel="noreferrer" className="font-semibold text-[#5C0FFE] underline-offset-2 hover:underline">
-          Privacy policy
-        </a>
-      </p>
-      <label
-        htmlFor={inputId}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragOver(true);
-        }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setDragOver(false);
-          take(e.dataTransfer.files?.[0] || null);
-        }}
-        className={cn(
-          "mt-8 flex min-h-40 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-4 py-8 text-center transition",
-          dragOver ? "border-[#5C0FFE] bg-[#5C0FFE]/5" : "border-slate-300 bg-white hover:border-[#8F7BFD]",
-        )}
-      >
-        {preview ? (
-          <img src={preview} alt="" className="mb-3 max-h-40 rounded-lg object-contain" />
-        ) : null}
-        <span className="text-sm font-semibold text-slate-800">
-          {answers.idFile ? answers.idFile.name : "Drop your ID here, or click to upload"}
-        </span>
-        <span className="mt-1 text-xs text-slate-500">Stored privately. Only Novara hiring staff can open it.</span>
-        <input
-          id={inputId}
-          type="file"
-          accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf,.heic,.heif"
-          className="sr-only"
-          onChange={(e) => take(e.target.files?.[0] || null)}
-        />
-      </label>
-      <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm text-slate-800">
-        <input
-          type="checkbox"
-          checked={answers.idConfirmed}
-          onChange={(e) => onPatch({ idConfirmed: e.target.checked })}
-          className="mt-0.5 h-5 w-5 rounded border-slate-300 text-[#5C0FFE] focus:ring-[#8F7BFD]"
-        />
-        <span>{ID_CONFIRM_COPY}</span>
-      </label>
-      {error && <ErrorText message={error} />}
-      <div className="mt-6">
-        <OkButton onClick={onAdvance} />
-      </div>
-    </div>
+    </section>
   );
 }
 
-function TextStep({
-  n,
-  title,
-  hint,
-  error,
-  headingRef,
-  onOk,
-  children,
-}: {
-  n: string;
-  title: string;
-  hint?: string;
-  error: string | null;
-  headingRef: RefObject<HTMLHeadingElement>;
-  onOk: () => void;
-  children: React.ReactNode;
-}) {
+function Row({ label, value }: { label: string; value: string | null }) {
   return (
-    <div>
-      <Kicker n={n} />
-      <h1 ref={headingRef} tabIndex={-1} className={PAGE_TITLE}>
-        {title}
-      </h1>
-      {hint && <p className="mt-3 max-w-xl text-base leading-relaxed text-slate-500">{hint}</p>}
-      <div className="mt-8">{children}</div>
-      {error && <ErrorText message={error} />}
-      <div className="mt-6">
-        <OkButton onClick={onOk} />
-      </div>
+    <div className="grid gap-1 px-4 py-3 sm:grid-cols-[140px_1fr]">
+      <dt className="text-sm font-semibold text-slate-600">{label}</dt>
+      <dd className="text-sm text-slate-900">{value || "—"}</dd>
     </div>
   );
 }
 
-function AddressSearchField({
-  onResolved,
-}: {
-  onResolved: (partial: Partial<Answers>) => void;
-}) {
-  const { suggestions, query, resolve, clear } = useAddressAutocomplete();
-  const [open, setOpen] = useState(false);
-  const [text, setText] = useState("");
-
-  async function pick(suggestion: AddressSuggestion) {
-    setOpen(false);
-    const parsed = await resolve(suggestion);
-    clear();
-    if (!parsed) return;
-    const street = parsed.street || parsed.formattedAddress || text;
-    const zipCode = String(parsed.zipCode || "").replace(/\D/g, "").slice(0, 5);
-    const state = applicantStateFromAddress(parsed.state);
-    setText("");
-    onResolved({
-      address: street,
-      ...(parsed.city ? { city: parsed.city } : {}),
-      ...(zipCode ? { zipCode } : {}),
-      ...(state ? { state } : { state: "" }),
-    });
-  }
-
-  return (
-    <div className="relative">
-      <label className="block">
-        <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">Search your address</span>
-        <input
-          type="text"
-          value={text}
-          placeholder="Start typing a street, city, or ZIP"
-          autoComplete="off"
-          role="combobox"
-          aria-expanded={open && suggestions.length > 0}
-          aria-autocomplete="list"
-          onChange={(e) => {
-            setText(e.target.value);
-            query(e.target.value);
-            setOpen(true);
-          }}
-          onFocus={() => {
-            if (text.trim().length >= 3) {
-              query(text);
-              setOpen(true);
-            }
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") {
-              setOpen(false);
-              clear();
-              return;
-            }
-            if (e.key !== "Enter") return;
-            e.preventDefault();
-            if (open && suggestions[0]) void pick(suggestions[0]);
-          }}
-          className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-base text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-[#5C0FFE] focus:ring-4 focus:ring-[#5C0FFE]/10"
-        />
-      </label>
-      {open && suggestions.length > 0 && (
-        <AddressSuggestionMenu
-          suggestions={suggestions}
-          onPick={(suggestion) => {
-            void pick(suggestion);
-          }}
-        />
-      )}
-    </div>
-  );
-}
-
-function Field({
-  label,
-  value,
-  onChange,
-  onEnter,
-  type = "text",
-  placeholder,
-  autoComplete,
-  inputMode,
-}: {
+function Field({ label, value, onChange, type = "text", autoComplete, inputMode }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
-  onEnter: () => void;
   type?: string;
-  placeholder?: string;
   autoComplete?: string;
-  inputMode?: "text" | "numeric" | "tel" | "email";
+  inputMode?: "numeric" | "tel" | "email" | "text";
 }) {
+  const id = useId();
   return (
-    <label className="block">
-      <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</span>
-      <input
-        type={type}
-        value={value}
-        placeholder={placeholder}
-        autoComplete={autoComplete}
-        inputMode={inputMode}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            onEnter();
-          }
-        }}
-        className="h-14 w-full rounded-2xl border border-slate-200 bg-white px-4 text-lg text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-[#5C0FFE] focus:ring-4 focus:ring-[#5C0FFE]/10"
-      />
+    <label htmlFor={id} className="mt-6 block text-sm font-semibold text-slate-800">
+      {label}
+      <input id={id} type={type} autoComplete={autoComplete} inputMode={inputMode} value={value} onChange={(event) => onChange(event.target.value)} className="mt-1.5 h-12 w-full rounded-xl border border-slate-300 px-3 text-base font-normal text-slate-900" />
     </label>
   );
 }
 
-function Area({
-  value,
-  onChange,
-  placeholder,
-}: {
+function Check({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
+  const id = useId();
+  return (
+    <label htmlFor={id} className="mt-4 flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-300 bg-white p-4 text-sm leading-relaxed text-slate-800">
+      <input id={id} type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="mt-1 h-5 w-5" />
+      <span>{label}</span>
+    </label>
+  );
+}
+
+function Choice({ name, value, options, onPick }: {
+  name: string;
   value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
+  options: Array<{ value: string; label: string; hint?: string; disabled?: boolean }>;
+  onPick: (value: string) => void;
 }) {
   return (
-    <textarea
-      value={value}
-      placeholder={placeholder}
-      rows={4}
-      onChange={(e) => onChange(e.target.value)}
-      className="w-full resize-y rounded-2xl border border-slate-200 bg-white px-4 py-3 text-lg text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-[#5C0FFE] focus:ring-4 focus:ring-[#5C0FFE]/10"
-    />
-  );
-}
-
-function Kicker({ n }: { n: string }) {
-  return (
-    <p className="mb-3 inline-flex rounded-md border border-violet-200 bg-violet-50 px-2 py-0.5 text-[11px] font-semibold tracking-wide text-violet-700">
-      {n}
-    </p>
-  );
-}
-
-function supplySummary(ids: string[]): string {
-  const labels = SUPPLY_ITEMS.filter((item) => ids.includes(item.id)).map((item) => item.label);
-  const text = labels.join(", ");
-  if (!text) return "none yet";
-  return text.length > 2000 ? `${text.slice(0, 1997)}...` : text;
-}
-
-function PayExample() {
-  const job = 250;
-  const rows = [
-    { pct: 40, note: "Where everyone starts" },
-    { pct: 45, note: "The top of the starting range" },
-  ];
-  return (
-    <MagicCard className="mt-5 overflow-hidden rounded-2xl border border-violet-200 bg-white">
-      <div className="relative z-[2] p-4">
-        <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">Example · a $250 job</p>
-        <div className="mt-3 space-y-3">
-          {rows.map((row) => {
-            const pay = (job * row.pct) / 100;
-            return (
-              <div key={row.pct}>
-                <div className="flex items-baseline justify-between text-sm">
-                  <span className="font-medium text-slate-800">{row.pct}% · ${pay.toFixed(2)}</span>
-                  <span className="text-xs text-slate-500">{row.note}</span>
-                </div>
-                <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-violet-100">
-                  <div className="h-full rounded-full" style={{ width: `${row.pct}%`, background: HIRING_GRADIENT }} />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        <p className="mt-3 text-xs leading-relaxed text-slate-500">You keep that share of the $250. Drive time between homes is not added on top.</p>
-      </div>
-    </MagicCard>
-  );
-}
-
-function SupplyPicker({ owned, onChange }: { owned: string[]; onChange: (ids: string[]) => void }) {
-  const selected = new Set(owned);
-  return (
-    <div className="max-h-[28rem] space-y-4 overflow-y-auto pr-1">
-      {SUPPLY_GROUPS.map((category) => {
-        const rows = SUPPLY_ITEMS.filter((item) => item.category === category);
-        if (!rows.length) return null;
-        return (
-          <div key={category}>
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{SUPPLY_CATEGORY_LABEL[category]}</p>
-            <ul className="mt-2 space-y-1.5">
-              {rows.map((item) => {
-                const on = selected.has(item.id);
-                return (
-                  <li key={item.id}>
-                    <button
-                      type="button"
-                      aria-pressed={on}
-                      onClick={() => {
-                        const next = new Set(selected);
-                        if (on) next.delete(item.id);
-                        else next.add(item.id);
-                        onChange([...next]);
-                      }}
-                      className={cn("flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-left text-sm", on ? "border-violet-400 bg-violet-50" : "border-slate-200 bg-white hover:border-violet-200")}
-                    >
-                      <Checkbox checked={on} className="pointer-events-none" tabIndex={-1} />
-                      <span className="text-slate-800">{item.label}</span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        );
-      })}
+    <div className="mt-6 space-y-2" role="radiogroup" aria-label={name}>
+      {options.map((option) => (
+        <button key={option.value} type="button" role="radio" aria-checked={value === option.value} disabled={option.disabled} onClick={() => onPick(option.value)} className={cn("block w-full rounded-2xl border px-4 py-3 text-left", option.disabled ? "cursor-not-allowed border-slate-200 text-slate-400" : value === option.value ? "border-violet-700 bg-violet-50" : "border-slate-300")}>
+          <span className="block font-semibold">{option.label}</span>
+          {option.hint && <span className="mt-0.5 block text-sm text-slate-600">{option.hint}</span>}
+        </button>
+      ))}
     </div>
-  );
-}
-
-function OkButton({ onClick, label = "OK", busy = false }: { onClick: () => void; label?: string; busy?: boolean }) {
-  return (
-    <ShimmerButton
-      type="button"
-      onClick={onClick}
-      disabled={busy}
-      background="#5C0FFE"
-      borderRadius="0.75rem"
-      className="h-11 px-5 text-sm font-semibold disabled:opacity-60"
-    >
-      {busy && <RiLoader4Line className="h-4 w-4 animate-spin" />}
-      {label}
-      {!busy && <span className="text-white/70">↵</span>}
-    </ShimmerButton>
-  );
-}
-
-function ErrorText({ message }: { message: string }) {
-  return (
-    <p role="alert" className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-      {message}
-    </p>
-  );
-}
-
-function ReviewRow({ label, value, onEdit }: { label: string; value: string | null | undefined; onEdit: () => void }) {
-  return (
-    <div className="flex items-start justify-between gap-4 px-4 py-3">
-      <div className="min-w-0">
-        <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</dt>
-        <dd className="mt-0.5 whitespace-pre-wrap text-sm font-medium text-slate-800">{value || "—"}</dd>
-      </div>
-      <button type="button" onClick={onEdit} className="shrink-0 text-xs font-semibold text-[#5C0FFE] hover:underline">
-        Edit
-      </button>
-    </div>
-  );
-}
-
-function ChecklistLink() {
-  return (
-    <a
-      href="/NovaraCleaning_Supply_Checklist_dd14.pdf"
-      target="_blank"
-      rel="noopener noreferrer"
-      className="mt-3 inline-flex text-sm font-semibold text-[#5C0FFE] underline-offset-4 hover:underline"
-    >
-      See the starter supply checklist
-    </a>
   );
 }

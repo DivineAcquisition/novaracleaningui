@@ -39,6 +39,7 @@ import {
 import { PhoneVerificationDialog } from "@/components/cleaner/PhoneVerificationDialog";
 import { PortalAgreementForm } from "@/components/cleaner/PortalAgreementForm";
 import { SupplyChecklistForm } from "@/components/cleaner/SupplyChecklistForm";
+import { ContractorIntakePanel } from "@/components/cleaner/ContractorIntakePanel";
 import { JobDayGuides } from "@/components/cleaner/JobDayGuides";
 import { onboardingGuide } from "@/lib/cleaner-onboarding-guides";
 import { W9OnboardingForm } from "@/components/cleaner/W9OnboardingForm";
@@ -463,6 +464,7 @@ export default function OnboardingPortal() {
       </header>
 
       <main className="max-w-2xl mx-auto px-4 py-6 sm:py-10 space-y-6">
+        <ContractorIntakePanel />
         {/* Welcome card */}
         <Card className="border-primary/20 shadow-sm">
           <CardHeader className="pb-3">

@@ -81,6 +81,7 @@ interface OfferDetail {
     is_reclean?: boolean | null;
     reclean_scope?: string | null;
     reclean_assessed_value_cents?: number | null;
+    lead_job?: boolean | null;
   } | null;
   customer: {
     first_name: string | null;
@@ -375,6 +376,12 @@ export default function CleanerJobOfferPage() {
             {/* Spell out the crew size and that the rate is a POOL. "45%" beside
                 a number that plainly isn't 45% of the job is the fastest way to
                 convince somebody they've been underpaid. */}
+            {offer.booking?.lead_job && (
+              <div className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-950">
+                <p className="font-semibold">Lead job</p>
+                <p>Lead rate {Number(offer.assignment.pay_percentage_snapshot || 0)}% of the job. You can accept or decline.</p>
+              </div>
+            )}
             <InfoRow
               icon={RiMoneyDollarCircleLine}
               label="Your pay"

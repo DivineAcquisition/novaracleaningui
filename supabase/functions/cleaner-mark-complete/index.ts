@@ -114,6 +114,20 @@ serve(async (req) => {
       });
     }
 
+    const { data: leadRow, error: leadErr } = await supabase
+      .from("bookings")
+      .select("lead_job, lead_walkthrough")
+      .eq("id", bookingId)
+      .maybeSingle();
+    if (!leadErr && leadRow?.lead_job) {
+      const walk = (leadRow.lead_walkthrough || {}) as { checklistDone?: boolean; photoCount?: number };
+      if (!walk.checklistDone || Number(walk.photoCount || 0) < 1) {
+        return json({
+          error: "A lead job stays open until the walkthrough checklist and completion photos are done.",
+        }, 400);
+      }
+    }
+
     const zoneNames = siteZoneNames(booking.photo_zones);
     if (zoneNames.length) {
       const { data: byBooking } = await supabase

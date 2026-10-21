@@ -1,18 +1,12 @@
 // ─── POST /api/hiring/apply ───────────────────────────────────────────────────
 //
-// Public application for hiring.novaracleaning.com. One question at a time on
-// the client; this route re-checks every gate, stores the photo ID in a
-// private bucket, then writes the Applicants row in Airtable and
-// public.cleaner_applicants.
+// Public application for hiring.novaracleaning.com.
 //
-// Hard stops (422): no car, no valid license, uninsured car, under 18,
-// not authorized to work, declined a consent, not willing to get supplies.
-// A current government-issued photo ID is required. Texts about the
-// application, and a truthfulness attestation, are required to submit.
-// The exact consent wording, time, IP, and user agent are stored with the row.
+// A complete application is decided by yes/no rules: conditional approval,
+// not a fit, waitlist, or needs review. A pass opens the existing onboarding.
+// No photo ID, work authorization, or phone screening is collected here.
 
 import { NextResponse } from "next/server";
-import { randomUUID } from "crypto";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import { primeAirtablePat } from "@/lib/airtable/sources/prime-pat";
 import {
@@ -22,9 +16,7 @@ import {
   type TalentApplicant,
 } from "@/lib/airtable/talent";
 import {
-  APPLICANT_ID_BUCKET,
   phoneDigits,
-  safeIdFilename,
   isApplicationIssue,
   buildHiringConsentRecord,
   validateHiringApplication,
@@ -32,7 +24,13 @@ import {
   type NormalizedHiringApplication,
 } from "@/lib/hiring/application";
 import { isHiringToken } from "@/lib/hiring/session";
-import { formatRosterDate, isReapplyBlocked } from "@/lib/pulse-check/roster";
+import { isReapplyBlocked } from "@/lib/pulse-check/roster";
+import { decideApplication } from "@/lib/contractor-intake/decide";
+import { applicantMessage } from "@/lib/contractor-intake/messages";
+import { INTAKE_SETTINGS_KEY, mergeIntakeSettings } from "@/lib/contractor-intake/settings";
+import { INTAKE_WORDING } from "@/lib/contractor-intake/wording";
+import { launchConditionalOnboarding } from "@/lib/talent/launch-onboarding";
+import { deliverCompliantEmail } from "@/lib/email-compliance/deliver";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -61,6 +59,20 @@ function isMissingConsentColumn(message: string): boolean {
   ) && /does not exist|schema cache|Could not find/i.test(message);
 }
 
+function isMissingIntakeColumn(message: string): boolean {
+  return /intake_stage|intake_decision|reapply_on|email_consent|lead_track/.test(message)
+    && /does not exist|schema cache|Could not find/i.test(message);
+}
+
+function withoutIntakeColumns(payload: Record<string, unknown>): Record<string, unknown> {
+  const copy = { ...payload };
+  delete copy.intake_stage;
+  delete copy.intake_decision;
+  delete copy.reapply_on;
+  delete copy.email_consent;
+  return copy;
+}
+
 type ApplicantRow = {
   id: string;
   stage: string;
@@ -87,7 +99,7 @@ async function writeApplicant(
       .from("cleaner_applicants")
       .insert({
         ...payload,
-        stage: "applicant",
+        stage: (payload.stage as string) || "applicant",
         stage_changed_at: new Date().toISOString(),
         stage_changed_by: "hiring-site",
       })
@@ -97,6 +109,23 @@ async function writeApplicant(
   };
 
   let result = await write(true);
+  if (result.error && isMissingIntakeColumn(result.error.message)) {
+    const stripped = withoutIntakeColumns(fields);
+    result = await (async () => {
+      if (existing) {
+        const { error } = await supabase.from("cleaner_applicants").update({ ...stripped, ...consentColumns, updated_at: new Date().toISOString() }).eq("id", existing.id);
+        return { error, applicantId: existing.id, created: false };
+      }
+      const { data: created, error } = await supabase.from("cleaner_applicants").insert({
+        ...stripped,
+        ...consentColumns,
+        stage: (stripped.stage as string) || "applicant",
+        stage_changed_at: new Date().toISOString(),
+        stage_changed_by: "hiring-site",
+      }).select("id").single();
+      return { error, applicantId: created?.id as string | undefined, created: true };
+    })();
+  }
   if (result.error && isMissingConsentColumn(result.error.message)) {
     // eslint-disable-next-line no-console
     console.warn("[hiring/apply] consent columns missing; saved wording on submission jsonb");
@@ -131,11 +160,11 @@ function airtableInput(
     experience: app.experience,
     preferredDays: app.preferredDays,
     transportation: app.transportation,
-    authorizedToWork: app.authorizedToWork,
-    consent1099: true,
-    backgroundCheckConsent: true,
-    payConsent: true,
-    willingToGetSupplies: "Yes",
+    authorizedToWork: null,
+    consent1099: app.consent1099,
+    backgroundCheckConsent: false,
+    payConsent: false,
+    willingToGetSupplies: app.willingToGetSupplies,
     suppliesOnHand: app.suppliesOnHand,
     reliabilityNote: app.reliabilityNote,
     notes: app.reasonNote,
@@ -183,7 +212,29 @@ function draftFromForm(form: FormData, file: File | null): HiringApplicationDraf
     idConfirmed: flag(form, "idConfirmed"),
     idFile: file ? { name: file.name, type: file.type, size: file.size } : null,
     hiringRole: str(form, "hiringRole") || null,
+    emailConsent: flag(form, "emailConsent"),
+    hasSmartphone: str(form, "hasSmartphone"),
+    hasVehicle: str(form, "hasVehicle"),
+    willHaveKit: str(form, "willHaveKit"),
+    understandsContractor: str(form, "understandsContractor"),
+    understandsVerification: str(form, "understandsVerification"),
+    ageAnswer: str(form, "ageAnswer"),
+    jobsPerWeek: Number(str(form, "jobsPerWeek") || 0),
+    timeWindows: jsonList(str(form, "timeWindows")),
+    cleaningTypes: jsonList(str(form, "cleaningTypes")),
+    experienceYears: str(form, "experienceYears"),
+    privacyAccepted: flag(form, "privacyAccepted"),
+    leadRoleOpen: flag(form, "leadRoleOpen"),
   };
+}
+
+function jsonList(raw: string): string[] {
+  try {
+    const parsed = JSON.parse(raw || "[]");
+    return Array.isArray(parsed) ? parsed.map((item) => String(item)) : [];
+  } catch {
+    return [];
+  }
 }
 
 export async function POST(req: Request): Promise<NextResponse> {
@@ -210,14 +261,31 @@ export async function POST(req: Request): Promise<NextResponse> {
   }
   const app = validated.value;
   const acceptedAt = new Date().toISOString();
-  const consentRecord = buildHiringConsentRecord({
-    acceptedAt,
-    ip: clientIp(req),
-    userAgent: req.headers.get("user-agent"),
-  });
-  if (!file) {
-    return NextResponse.json({ error: "Upload a photo or PDF of your government-issued photo ID.", code: "missing_id" }, { status: 400 });
-  }
+  const ip = clientIp(req);
+  const userAgent = req.headers.get("user-agent");
+  const consentRecord = {
+    ...buildHiringConsentRecord({ acceptedAt, ip, userAgent }),
+    smsConsent: app.smsConsent,
+    emailConsent: app.emailConsent,
+    backgroundCheckConsent: false,
+    payConsent: false,
+    idConfirmed: false,
+    acceptances: INTAKE_WORDING.filter((row) => {
+      if (row.id === "application_sms") return app.smsConsent;
+      if (row.id === "application_email") return app.emailConsent;
+      if (row.id === "independent_contractor") return app.understandsContractorWork;
+      if (row.id === "application_privacy") return app.privacyAccepted;
+      return false;
+    }).map((row) => ({
+      id: row.id,
+      version: row.version,
+      status: row.status,
+      wording: row.body,
+      acceptedAt,
+      ip,
+      device: userAgent?.slice(0, 500) || null,
+    })),
+  };
 
   let supabase;
   try {
@@ -247,20 +315,10 @@ export async function POST(req: Request): Promise<NextResponse> {
     const emailHit = (priorByEmail || []).includes(row);
     return emailHit || (rowDigits.length === 10 && rowDigits === digits);
   });
+  let removedContractor = false;
   for (const row of prior) {
     const lock = isReapplyBlocked(row);
-    if (lock.blocked) {
-      const until = formatRosterDate(lock.until);
-      return NextResponse.json(
-        {
-          error: until
-            ? `This contractor account was closed. You can apply again after ${until}.`
-            : "This contractor account was closed. You can apply again in 3 months.",
-          code: "reapply_blocked",
-        },
-        { status: 409 },
-      );
-    }
+    if (lock.blocked) removedContractor = true;
   }
 
   const { data: byEmail } = await supabase
@@ -286,43 +344,47 @@ export async function POST(req: Request): Promise<NextResponse> {
       (byPhone || []).find((row) => phoneDigits(row.phone as string | null) === digits) || null;
   }
 
-  const filename = safeIdFilename(file.name);
-  const path = `ids/${new Date().getUTCFullYear()}/${randomUUID()}-${filename}`;
-  const bytes = Buffer.from(await file.arrayBuffer());
-  const { error: upErr } = await supabase.storage.from(APPLICANT_ID_BUCKET).upload(path, bytes, {
-    contentType: app.idContentType,
-    upsert: false,
-  });
-  if (upErr) {
-    // eslint-disable-next-line no-console
-    console.error("[hiring/apply] id upload", upErr.message);
-    return NextResponse.json(
-      { error: "We couldn’t store your ID. Please try the upload again.", code: "id_upload" },
-      { status: 500 },
-    );
-  }
+  const { data: coverage } = await supabase
+    .from("service_coverage_zones")
+    .select("zip_code")
+    .eq("zip_code", app.zipCode)
+    .eq("is_active", true)
+    .maybeSingle();
 
-  const { data: signed, error: signErr } = await supabase.storage
-    .from(APPLICANT_ID_BUCKET)
-    .createSignedUrl(path, 60 * 60);
-  if (signErr || !signed?.signedUrl) {
-    await supabase.storage.from(APPLICANT_ID_BUCKET).remove([path]);
-    return NextResponse.json(
-      { error: "We couldn’t store your ID. Please try the upload again.", code: "id_upload" },
-      { status: 500 },
-    );
-  }
+  const { data: settingsRow } = await supabase.from("app_settings").select("value").eq("key", INTAKE_SETTINGS_KEY).maybeSingle();
+  const settings = mergeIntakeSettings(settingsRow?.value && typeof settingsRow.value === "object" ? settingsRow.value as Partial<import("@/lib/contractor-intake/settings").IntakeSettings> : null);
+  const duplicate = Boolean(existing) || prior.length > 0;
+  const decision = decideApplication({
+    role: app.role === "Lead Cleaner (Contractor)" ? "lead_cleaner" : "cleaner",
+    email: app.email,
+    phone: app.phone,
+    name: app.fullName,
+    zip: app.zipCode,
+    zipInServiceArea: Boolean(coverage),
+    daysAvailable: app.preferredDays.length,
+    jobsPerWeek: app.jobsPerWeek,
+    age18: app.age18,
+    hasSmartphone: app.hasSmartphone,
+    hasVehicle: app.hasVehicle,
+    willHaveKit: app.willHaveKit,
+    understandsContractorWork: app.understandsContractorWork,
+    understandsVerification: app.understandsVerification,
+    smsConsent: app.smsConsent,
+    emailConsent: app.emailConsent,
+    duplicate: duplicate || removedContractor,
+    incomplete: false,
+    reviewReason: removedContractor ? "These contact details are linked to a removed contractor." : null,
+  }, settings);
 
   let airtable: TalentApplicant;
   try {
     const primed = await primeAirtablePat();
     if (!primed) throw new Error("Airtable is not configured");
-    const input = airtableInput(app, signed.signedUrl, filename);
+    const input = airtableInput(app, "", "");
     airtable = isAirtableId(existing?.airtable_record_id)
       ? await updateTalentApplicantInAirtable(existing.airtable_record_id, input)
       : await createTalentApplicantInAirtable(input);
   } catch (err) {
-    await supabase.storage.from(APPLICANT_ID_BUCKET).remove([path]);
     // eslint-disable-next-line no-console
     console.error("[hiring/apply] airtable", (err as Error).message);
     return NextResponse.json(
@@ -347,34 +409,44 @@ export async function POST(req: Request): Promise<NextResponse> {
     availability: app.availability,
     preferred_days: app.preferredDays,
     transportation: app.transportation,
-    authorized_to_work: app.authorizedToWork,
-    consent_1099: true,
-    background_check_consent: true,
-    pay_consent: true,
-    willing_to_get_supplies: true,
+    authorized_to_work: null,
+    consent_1099: app.consent1099,
+    background_check_consent: false,
+    pay_consent: false,
+    willing_to_get_supplies: app.willingToGetSupplies === "Yes",
     supplies_on_hand: app.suppliesOnHand,
     reliability_note: app.reliabilityNote,
     reason_note: app.reasonNote,
-    government_id_path: path,
+    government_id_path: null,
+    stage: decision.stage === "conditional_approval" ? "onboarding" : decision.stage,
+    intake_stage: decision.stage,
+    intake_decision: decision,
+    reapply_on: decision.reapplyOn,
+    email_consent: app.emailConsent,
     airtable_record_id: airtable.airtableRecordId,
     airtable_last_modified: airtable.lastModified,
     submission: {
       ...airtable.submission,
       source: "hiring.novaracleaning.com",
       hiringRole: app.hiringRole,
-      governmentIdPath: path,
       consentRecord,
+      decision,
+      experienceYears: app.experienceYears,
+      timeWindows: app.timeWindows,
+      jobsPerWeek: app.jobsPerWeek,
+      cleaningTypes: app.cleaningTypes,
+      leadTrack: decision.leadTrack,
     },
     synced_at: new Date().toISOString(),
     ...(!existing || existing.stage === "applicant" ? { applied_at: new Date().toISOString() } : {}),
   };
 
   const consentColumns = {
-    age_18: true,
-    valid_drivers_license: true,
-    auto_insured: true,
-    sms_consent: true,
-    answers_accurate: true,
+    age_18: app.age18,
+    valid_drivers_license: app.hasVehicle,
+    auto_insured: false,
+    sms_consent: app.smsConsent,
+    answers_accurate: app.privacyAccepted,
     consent_version: app.consentVersion,
     consent_accepted_at: acceptedAt,
     consent_ip: consentRecord.ip,
@@ -406,8 +478,44 @@ export async function POST(req: Request): Promise<NextResponse> {
       });
     }
 
-    if (existing?.government_id_path && existing.government_id_path !== path) {
-      await supabase.storage.from(APPLICANT_ID_BUCKET).remove([existing.government_id_path]);
+    let onboardingSent = false;
+    if (decision.openOnboarding && applicantId) {
+      try {
+        const opened = await launchConditionalOnboarding(supabase, {
+          id: applicantId,
+          email: app.email,
+          phone: app.phone,
+          firstName: app.firstName,
+          lastName: app.lastName,
+          zip: app.zipCode,
+          state: app.state || null,
+          smsConsent: app.smsConsent,
+          leadTrack: decision.leadTrack,
+        });
+        onboardingSent = opened.emailed || Boolean(opened.inviteUrl);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error("[hiring/apply] onboarding", (err as Error).message);
+      }
+    } else if (app.emailConsent || app.smsConsent) {
+      const kind = decision.outcome === "pass" ? "conditional_approval" : decision.outcome === "not_a_fit" ? "not_a_fit" : decision.outcome === "waitlist" ? "waitlist" : "needs_review";
+      const notice = applicantMessage(kind, { firstName: app.firstName, body: decision.message });
+      try {
+        const { data: secret } = await supabase.from("app_secrets").select("value").eq("key", "RESEND_API_KEY").maybeSingle();
+        if (app.emailConsent && secret?.value) {
+          await deliverCompliantEmail(supabase, {
+            to: app.email,
+            subject: notice.subject,
+            html: `<p>${notice.text.replace(/\n/g, "<br>")}</p>`,
+            apiKey: String(secret.value),
+            declaredType: "contractor_operational",
+            templateKey: "contractor_invitation",
+          });
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error("[hiring/apply] notice", (err as Error).message);
+      }
     }
 
     const sessionToken = str(form, "sessionToken");
@@ -441,7 +549,19 @@ export async function POST(req: Request): Promise<NextResponse> {
         .eq("status", "open");
     }
 
-    return NextResponse.json({ ok: true, applicantId, updated: Boolean(existing) });
+    return NextResponse.json({
+      ok: true,
+      applicantId,
+      updated: Boolean(existing),
+      outcome: decision.outcome,
+      stage: decision.stage,
+      message: decision.leadTrack
+        ? `${decision.message} You are on the Lead Track: you start as a cleaner, and a person reviews lead status after you meet the requirements.`
+        : decision.message,
+      reapplyOn: decision.reapplyOn,
+      onboardingSent,
+      countsAsRejection: decision.countsAsRejection,
+    });
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error("[hiring/apply] local save", (err as Error).message, airtable.airtableRecordId);

@@ -216,56 +216,86 @@ export type ApplicantState = (typeof APPLICANT_STATES)[number]["value"];
 export type ContractorType = (typeof CONTRACTOR_TYPES)[number]["value"];
 export type PreferredDay = (typeof PREFERRED_DAYS)[number];
 
+export const EXPERIENCE_YEARS = [
+  { value: "under_1", label: "Under 1", airtable: "Not At All" },
+  { value: "1_to_2", label: "1 to 2", airtable: EXPERIENCE_SOMEWHAT },
+  { value: "3_to_5", label: "3 to 5", airtable: "Yes 1yr+" },
+  { value: "more_than_5", label: "More than 5", airtable: "Yes 1yr+" },
+] as const;
+
+export const CLEANING_TYPES = [
+  { value: "standard", label: "Standard" },
+  { value: "deep", label: "Deep" },
+  { value: "move_in_out", label: "Move-in or move-out" },
+  { value: "turnover", label: "Short-term rental turnover" },
+  { value: "commercial", label: "Commercial" },
+] as const;
+
+export const TIME_WINDOWS = [
+  { value: "weekday_morning", label: "Weekday mornings" },
+  { value: "weekday_afternoon", label: "Weekday afternoons" },
+  { value: "weekday_evening", label: "Weekday evenings" },
+  { value: "weekend", label: "Weekends" },
+] as const;
+
+export const YES_NO = [
+  { value: "yes", label: "Yes" },
+  { value: "no", label: "No" },
+] as const;
+
+/** Questions the application is not allowed to ask. */
+export const FORBIDDEN_APPLICATION_STEPS = ["id", "authorized", "consentBg", "consentPay"] as const;
+
 export type ApplicationStep =
   | "role"
   | "name"
   | "email"
   | "phone"
-  | "address"
+  | "comms"
   | "zip"
+  | "days"
+  | "windows"
+  | "requirements"
+  | "experience"
+  | "cleaningTypes"
+  | "review"
+  | "address"
   | "state"
   | "contractorType"
   | "car"
   | "id"
   | "authorized"
   | "age"
-  | "experience"
   | "availability"
-  | "days"
   | "consent1099"
   | "consentBg"
   | "consentPay"
   | "supplies"
   | "suppliesOnHand"
   | "reliability"
-  | "reason"
-  | "review";
+  | "reason";
 
 const BASE_STEPS: ApplicationStep[] = [
   "role",
   "name",
   "email",
   "phone",
-  "address",
-  "contractorType",
-  "car",
-  "id",
-  "authorized",
-  "age",
-  "experience",
-  "availability",
+  "comms",
+  "zip",
   "days",
-  "consent1099",
-  "consentBg",
-  "consentPay",
-  "supplies",
+  "windows",
+  "requirements",
+  "experience",
+  "cleaningTypes",
+  "review",
 ];
 
-export function visibleSteps(willingToGetSupplies: string): ApplicationStep[] {
-  const steps = [...BASE_STEPS];
-  if (willingToGetSupplies === "Yes") steps.push("suppliesOnHand");
-  steps.push("reliability", "reason", "review");
-  return steps;
+export function visibleSteps(_willingToGetSupplies?: string): ApplicationStep[] {
+  return [...BASE_STEPS];
+}
+
+export function applicationAsksForbiddenQuestion(steps: readonly string[] = BASE_STEPS): boolean {
+  return steps.some((step) => (FORBIDDEN_APPLICATION_STEPS as readonly string[]).includes(step));
 }
 
 export interface HiringApplicationDraft {
@@ -299,6 +329,20 @@ export interface HiringApplicationDraft {
   idConfirmed: boolean;
   idFile: { name: string; type: string; size: number } | null;
   hiringRole?: string | null;
+  emailConsent?: boolean;
+  hasSmartphone?: string;
+  hasVehicle?: string;
+  willHaveKit?: string;
+  understandsContractor?: string;
+  understandsVerification?: string;
+  ageAnswer?: string;
+  jobsPerWeek?: number;
+  timeWindows?: string[];
+  cleaningTypes?: string[];
+  experienceYears?: string;
+  privacyAccepted?: boolean;
+  /** Client hint only. The server reads the saved setting. */
+  leadRoleOpen?: boolean;
 }
 
 export interface NormalizedHiringApplication {
@@ -309,30 +353,41 @@ export interface NormalizedHiringApplication {
   phone: string;
   address: string;
   zipCode: string;
-  state: ApplicantState;
+  state: ApplicantState | "";
   role: ApplicantRole;
   contractorType: ContractorType;
-  transportation: typeof TRANSPORTATION_CAR;
-  authorizedToWork: "Yes";
-  experience: (typeof EXPERIENCE_OPTIONS)[number]["value"];
-  availability: (typeof AVAILABILITY_OPTIONS)[number]["value"];
+  transportation: string;
+  authorizedToWork: null;
+  experience: string;
+  experienceYears: string;
+  availability: string;
   preferredDays: PreferredDay[];
-  consent1099: true;
-  backgroundCheckConsent: true;
-  payConsent: true;
-  age18: true;
-  validDriversLicense: true;
-  autoInsured: true;
-  smsConsent: true;
-  answersAccurate: true;
+  timeWindows: string[];
+  jobsPerWeek: number;
+  cleaningTypes: string[];
+  consent1099: boolean;
+  backgroundCheckConsent: false;
+  payConsent: false;
+  age18: boolean;
+  hasSmartphone: boolean;
+  hasVehicle: boolean;
+  willHaveKit: boolean;
+  understandsContractorWork: boolean;
+  understandsVerification: boolean;
+  validDriversLicense: boolean;
+  autoInsured: boolean;
+  smsConsent: boolean;
+  emailConsent: boolean;
+  privacyAccepted: boolean;
+  answersAccurate: boolean;
   consentVersion: typeof CONSENT_VERSION;
-  willingToGetSupplies: "Yes";
+  willingToGetSupplies: "Yes" | "No";
   suppliesOnHand: string;
   reliabilityNote: string;
   reasonNote: string;
   department: typeof APPLICANT_DEPARTMENT;
   hiringRole: string | null;
-  idContentType: string;
+  idContentType: null;
 }
 
 export type ApplicationIssue = {
@@ -519,12 +574,36 @@ function includesValue<T extends { value: string }>(options: readonly T[], value
   return options.some((o) => o.value === value);
 }
 
-/** Validate a single step. `review` runs the full application. */
+function answered(value: string | null | undefined): "yes" | "no" | null {
+  const v = String(value || "").trim().toLowerCase();
+  if (v === "yes") return "yes";
+  if (v === "no") return "no";
+  return null;
+}
+
+function airtableExperience(years: string): string {
+  return EXPERIENCE_YEARS.find((row) => row.value === years)?.airtable
+    || (includesValue(EXPERIENCE_OPTIONS, years) ? years : "Not At All");
+}
+
+function airtableAvailability(days: string[], jobsPerWeek: number): (typeof AVAILABILITY_OPTIONS)[number]["value"] {
+  if (jobsPerWeek >= 5) return "Full-Time";
+  const weekend = days.some((day) => day === "Sat" || day === "Sun");
+  const weekday = days.some((day) => day !== "Sat" && day !== "Sun");
+  if (weekend && !weekday) return "Weekends Only";
+  if (weekday && !weekend) return "Weekdays Only";
+  return "Anytime When Need";
+}
+
+/** Validate a single step. A "no" on a requirement is an answer, not a block. */
 export function issuesForStep(step: ApplicationStep, draft: HiringApplicationDraft): ApplicationIssue | null {
   switch (step) {
     case "role":
-      if (!includesValue(APPLICANT_ROLES, draft.role)) {
-        return issue(400, "invalid_role", "Choose the role you’re applying for.");
+      if (draft.role !== OPEN_APPLICANT_ROLE && draft.role !== "Lead Cleaner (Contractor)") {
+        return issue(400, "invalid_role", "Choose Cleaner or Lead Cleaner.");
+      }
+      if (draft.role === "Lead Cleaner (Contractor)" && draft.leadRoleOpen === false) {
+        return issue(400, "invalid_role", "Lead Cleaner is not open to new applicants right now.");
       }
       return null;
     case "name": {
@@ -533,7 +612,7 @@ export function issuesForStep(step: ApplicationStep, draft: HiringApplicationDra
       if (first.length < 2) return issue(400, "missing_name", "Enter your first name.");
       if (last.length < 2) return issue(400, "missing_name", "Enter your last name.");
       if (first.length > 80 || last.length > 80) {
-        return issue(400, "missing_name", "Use the name that’s on your ID — up to 80 characters each.");
+        return issue(400, "missing_name", "Use your legal name — up to 80 characters each.");
       }
       return null;
     }
@@ -546,134 +625,61 @@ export function issuesForStep(step: ApplicationStep, draft: HiringApplicationDra
     }
     case "phone":
       if (!toE164Us(draft.phone)) {
-        return issue(400, "invalid_phone", "Enter a 10-digit US phone number.");
-      }
-      if (!draft.smsConsent) {
-        return issue(400, "missing_sms", "Agree to texts and calls about your application to continue.");
+        return issue(400, "invalid_phone", "Enter a 10-digit US mobile number.");
       }
       return null;
-    case "address": {
-      const address = oneLine(draft.address);
-      const city = oneLine(draft.city || "");
-      if (address.length < 5) return issue(400, "missing_address", "Search for your address so we can fill this in.");
-      if (address.length > 200) return issue(400, "missing_address", "Keep the address under 200 characters.");
-      if (city.length < 2) return issue(400, "missing_city", "Enter your city.");
-      if (city.length > 80) return issue(400, "missing_city", "Keep the city under 80 characters.");
-      if (!/^\d{5}$/.test(draft.zipCode.trim())) {
-        return issue(400, "invalid_zip", "Enter a 5-digit ZIP code.");
-      }
-      if (!includesValue(APPLICANT_STATES, draft.state)) {
-        return issue(400, "invalid_state", "Choose Maryland, Virginia, DC, or New York.");
+    case "comms":
+      if (!draft.smsConsent && !draft.emailConsent) {
+        return issue(400, "missing_channel", "Agree to application email, or to texts, so we have one way to reach you.");
       }
       return null;
-    }
     case "zip":
       if (!/^\d{5}$/.test(draft.zipCode.trim())) {
         return issue(400, "invalid_zip", "Enter a 5-digit ZIP code.");
       }
       return null;
-    case "state":
-      if (!includesValue(APPLICANT_STATES, draft.state)) {
-        return issue(400, "invalid_state", "Choose Maryland, Virginia, DC, or New York.");
-      }
-      return null;
-    case "contractorType":
-      if (!includesValue(CONTRACTOR_TYPES, draft.contractorType)) {
-        return issue(400, "invalid_contractor_type", "Tell us if you’re applying as yourself or as a company.");
-      }
-      return null;
-    case "car":
-      if (!draft.transportation) return issue(400, "missing_car", "Tell us whether you have a car.");
-      if (draft.transportation !== TRANSPORTATION_CAR) {
-        return issue(422, "no_car", gateCopy("no_car").body, true);
-      }
-      if (!draft.validDriversLicense) {
-        return issue(422, "no_license", gateCopy("no_license").body, true);
-      }
-      if (!draft.autoInsured) {
-        return issue(422, "no_auto_insurance", gateCopy("no_auto_insurance").body, true);
-      }
-      return null;
-    case "id":
-      return idIssue(draft);
-    case "authorized":
-      if (!draft.authorizedToWork) {
-        return issue(400, "missing_authorization", "Tell us whether you’re authorized to work in the U.S.");
-      }
-      if (draft.authorizedToWork !== "Yes") {
-        return issue(422, "not_authorized", gateCopy("not_authorized").body, true);
-      }
-      return null;
-    case "age":
-      if (!draft.age18) {
-        return issue(422, "under_18", gateCopy("under_18").body, true);
-      }
-      return null;
-    case "experience":
-      if (!includesValue(EXPERIENCE_OPTIONS, draft.experience)) {
-        return issue(400, "invalid_experience", "Choose the experience that fits you.");
-      }
-      return null;
-    case "availability":
-      if (!includesValue(AVAILABILITY_OPTIONS, draft.availability)) {
-        return issue(400, "invalid_availability", "Choose the availability that fits you.");
-      }
-      return null;
     case "days": {
-      const days = draft.preferredDays.filter((d) =>
+      const days = (draft.preferredDays || []).filter((d) =>
         (PREFERRED_DAYS as readonly string[]).includes(d),
       );
-      if (days.length === 0) return issue(400, "missing_days", "Pick at least one day you can work.");
+      if (days.length === 0) return issue(400, "missing_days", "Pick at least one day you can take jobs.");
       return null;
     }
-    case "consent1099":
-      if (!draft.consent1099) {
-        return issue(422, "missing_consent", gateCopy("missing_consent").body, true);
-      }
-      return null;
-    case "consentBg":
-      if (!draft.backgroundCheckConsent) {
-        return issue(422, "missing_consent", gateCopy("missing_consent").body, true);
-      }
-      return null;
-    case "consentPay":
-      if (!draft.payConsent) {
-        return issue(422, "missing_consent", gateCopy("missing_consent").body, true);
-      }
-      return null;
-    case "supplies":
-      if (!draft.willingToGetSupplies) {
-        return issue(400, "missing_supplies", "Tell us whether you’re willing to get supplies.");
-      }
-      if (draft.willingToGetSupplies !== "Yes") {
-        return issue(422, "not_willing_supplies", gateCopy("not_willing_supplies").body, true);
-      }
-      return null;
-    case "suppliesOnHand": {
-      const supplies = multiLine(draft.suppliesOnHand);
-      if (supplies.length < 2) {
-        return issue(400, "missing_supplies_list", "List what you already have. If you’re starting from scratch, write “none yet.”");
-      }
-      if (supplies.length > 2000) {
-        return issue(400, "missing_supplies_list", "Keep the supply list under 2,000 characters.");
+    case "windows": {
+      const windows = (draft.timeWindows || []).filter((w) =>
+        TIME_WINDOWS.some((row) => row.value === w),
+      );
+      if (windows.length === 0) return issue(400, "missing_windows", "Pick at least one time window.");
+      const jobs = Number(draft.jobsPerWeek);
+      if (!Number.isFinite(jobs) || jobs < 1 || jobs > 14) {
+        return issue(400, "missing_jobs", "Enter how many jobs per week you want, from 1 to 14.");
       }
       return null;
     }
-    case "reliability": {
-      const note = oneLine(draft.reliabilityNote);
-      if (note.length < 2) return issue(400, "missing_reliability", "Tell us a bit about your reliability.");
-      if (note.length > 1000) return issue(400, "missing_reliability", "Keep this to a few sentences (1,000 characters).");
+    case "requirements": {
+      const age = answered(draft.ageAnswer) || (draft.age18 === true ? "yes" : null);
+      const answers = [age, answered(draft.hasSmartphone), answered(draft.hasVehicle), answered(draft.willHaveKit), answered(draft.understandsContractor), answered(draft.understandsVerification)];
+      if (answers.some((value) => value == null)) {
+        return issue(400, "missing_requirement", "Answer every requirement, yes or no.");
+      }
       return null;
     }
-    case "reason": {
-      const note = oneLine(draft.reasonNote);
-      if (note.length < 2) return issue(400, "missing_reason", "Tell us why you want to join Novara.");
-      if (note.length > 1000) return issue(400, "missing_reason", "Keep this to a few sentences (1,000 characters).");
+    case "experience": {
+      const years = draft.experienceYears || "";
+      const legacy = includesValue(EXPERIENCE_OPTIONS, draft.experience || "");
+      if (!EXPERIENCE_YEARS.some((row) => row.value === years) && !legacy) {
+        return issue(400, "invalid_experience", "Choose how many years you have cleaned professionally.");
+      }
+      return null;
+    }
+    case "cleaningTypes": {
+      const types = (draft.cleaningTypes || []).filter((t) => CLEANING_TYPES.some((row) => row.value === t));
+      if (types.length === 0) return issue(400, "missing_cleaning_types", "Choose the kinds of cleaning you have done.");
       return null;
     }
     case "review":
-      if (!draft.answersAccurate) {
-        return issue(400, "missing_truthfulness", "Confirm that your answers are true and complete.");
+      if (!draft.privacyAccepted) {
+        return issue(400, "missing_privacy", "Acknowledge the privacy notice to submit.");
       }
       return null;
     default:
@@ -681,23 +687,8 @@ export function issuesForStep(step: ApplicationStep, draft: HiringApplicationDra
   }
 }
 
-function idIssue(draft: HiringApplicationDraft): ApplicationIssue | null {
-  if (!draft.idFile) return issue(400, "missing_id", "Upload a photo or PDF of your government-issued photo ID.");
-  if (!draft.idConfirmed) {
-    return issue(400, "missing_id", "Confirm this is a current, unexpired government-issued photo ID.");
-  }
-  if (draft.idFile.size <= 0) return issue(400, "invalid_id", "That file is empty. Upload the ID again.");
-  if (draft.idFile.size > ID_MAX_BYTES) {
-    return issue(400, "invalid_id", "ID photos need to be 4 MB or smaller.");
-  }
-  if (!idContentType(draft.idFile.name, draft.idFile.type)) {
-    return issue(400, "invalid_id", "Upload a JPG, PNG, WEBP, HEIC, or PDF.");
-  }
-  return null;
-}
-
 export function validateHiringApplication(draft: HiringApplicationDraft): ApplicationResult {
-  const steps = visibleSteps(draft.willingToGetSupplies);
+  const steps = visibleSteps();
   for (const step of steps) {
     const found = issuesForStep(step, draft);
     if (found) return found;
@@ -705,11 +696,18 @@ export function validateHiringApplication(draft: HiringApplicationDraft): Applic
 
   const firstName = oneLine(draft.firstName);
   const lastName = oneLine(draft.lastName);
-  const street = oneLine(draft.address);
-  const city = oneLine(draft.city || "");
-  const address = city && !street.toLowerCase().includes(city.toLowerCase()) ? `${street}, ${city}` : street;
-  const supplies = multiLine(draft.suppliesOnHand);
-  const contentType = idContentType(draft.idFile!.name, draft.idFile!.type)!;
+  const years = draft.experienceYears
+    || EXPERIENCE_YEARS.find((row) => row.airtable === draft.experience)?.value
+    || "";
+  const age = (answered(draft.ageAnswer) || (draft.age18 === true ? "yes" : null)) === "yes";
+  const smartphone = answered(draft.hasSmartphone) === "yes";
+  const vehicle = answered(draft.hasVehicle) === "yes";
+  const kit = answered(draft.willHaveKit) === "yes";
+  const contractor = answered(draft.understandsContractor) === "yes";
+  const verification = answered(draft.understandsVerification) === "yes";
+  const days = PREFERRED_DAYS.filter((d) => (draft.preferredDays || []).includes(d));
+  const jobs = Math.round(Number(draft.jobsPerWeek) || 0);
+  const state = includesValue(APPLICANT_STATES, draft.state) ? draft.state as ApplicantState : "";
 
   return {
     ok: true,
@@ -719,32 +717,43 @@ export function validateHiringApplication(draft: HiringApplicationDraft): Applic
       lastName,
       email: draft.email.trim().toLowerCase(),
       phone: toE164Us(draft.phone)!,
-      address,
+      address: "",
       zipCode: draft.zipCode.trim(),
-      state: draft.state as ApplicantState,
+      state,
       role: draft.role as ApplicantRole,
-      contractorType: draft.contractorType as ContractorType,
-      transportation: TRANSPORTATION_CAR,
-      authorizedToWork: "Yes",
-      experience: draft.experience as NormalizedHiringApplication["experience"],
-      availability: draft.availability as NormalizedHiringApplication["availability"],
-      preferredDays: PREFERRED_DAYS.filter((d) => draft.preferredDays.includes(d)),
-      consent1099: true,
-      backgroundCheckConsent: true,
-      payConsent: true,
-      age18: true,
-      validDriversLicense: true,
-      autoInsured: true,
-      smsConsent: true,
-      answersAccurate: true,
+      contractorType: "Individual",
+      transportation: vehicle ? TRANSPORTATION_CAR : TRANSPORTATION_NONE,
+      authorizedToWork: null,
+      experience: airtableExperience(years || draft.experience || ""),
+      experienceYears: years || draft.experience || "",
+      availability: airtableAvailability(days, jobs),
+      preferredDays: days,
+      timeWindows: (draft.timeWindows || []).filter((w) => TIME_WINDOWS.some((row) => row.value === w)),
+      jobsPerWeek: jobs,
+      cleaningTypes: (draft.cleaningTypes || []).filter((t) => CLEANING_TYPES.some((row) => row.value === t)),
+      consent1099: contractor,
+      backgroundCheckConsent: false,
+      payConsent: false,
+      age18: age,
+      hasSmartphone: smartphone,
+      hasVehicle: vehicle,
+      willHaveKit: kit,
+      understandsContractorWork: contractor,
+      understandsVerification: verification,
+      validDriversLicense: vehicle,
+      autoInsured: false,
+      smsConsent: Boolean(draft.smsConsent),
+      emailConsent: Boolean(draft.emailConsent),
+      privacyAccepted: Boolean(draft.privacyAccepted),
+      answersAccurate: Boolean(draft.privacyAccepted),
       consentVersion: CONSENT_VERSION,
-      willingToGetSupplies: "Yes",
-      suppliesOnHand: supplies,
-      reliabilityNote: oneLine(draft.reliabilityNote),
-      reasonNote: oneLine(draft.reasonNote),
+      willingToGetSupplies: kit ? "Yes" : "No",
+      suppliesOnHand: "",
+      reliabilityNote: "",
+      reasonNote: "",
       department: APPLICANT_DEPARTMENT,
       hiringRole: draft.hiringRole?.trim() || null,
-      idContentType: contentType,
+      idContentType: null,
     },
   };
 }

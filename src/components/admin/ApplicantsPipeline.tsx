@@ -133,7 +133,15 @@ type EffectiveStage =
   | "agreement_signed"
   | "active"
   | "rejected"
-  | "withdrawn";
+  | "withdrawn"
+  | "conditional_approval"
+  | "needs_review"
+  | "waitlist"
+  | "not_a_fit"
+  | "expired"
+  | "background_check"
+  | "pending_adverse_action"
+  | "trial";
 
 const STAGE_FILTERS: Array<{ id: "all" | EffectiveStage | "attention"; label: string }> = [
   { id: "all", label: "All" },
@@ -144,6 +152,9 @@ const STAGE_FILTERS: Array<{ id: "all" | EffectiveStage | "attention"; label: st
   { id: "agreement_signed", label: "Agreement signed" },
   { id: "active", label: "Active" },
   { id: "rejected", label: "Rejected" },
+  { id: "needs_review", label: "Needs review" },
+  { id: "waitlist", label: "Waitlist" },
+  { id: "not_a_fit", label: "Not a fit" },
   { id: "attention", label: "Needs attention" },
 ];
 
@@ -156,6 +167,14 @@ const STAGE_BADGE: Record<EffectiveStage, { label: string; cls: string }> = {
   active: { label: "Active", cls: "bg-violet-100 text-violet-800 border-violet-200" },
   rejected: { label: "Rejected", cls: "bg-rose-50 text-rose-700 border-rose-200" },
   withdrawn: { label: "Withdrawn", cls: "bg-slate-100 text-slate-600 border-slate-200" },
+  conditional_approval: { label: "Conditional approval", cls: "bg-emerald-50 text-emerald-800 border-emerald-200" },
+  needs_review: { label: "Needs review", cls: "bg-orange-50 text-orange-800 border-orange-200" },
+  waitlist: { label: "Waitlist", cls: "bg-sky-50 text-sky-800 border-sky-200" },
+  not_a_fit: { label: "Not a fit", cls: "bg-slate-100 text-slate-700 border-slate-200" },
+  expired: { label: "Expired", cls: "bg-slate-100 text-slate-600 border-slate-200" },
+  background_check: { label: "Background check", cls: "bg-indigo-50 text-indigo-800 border-indigo-200" },
+  pending_adverse_action: { label: "Pending adverse action", cls: "bg-rose-50 text-rose-800 border-rose-200" },
+  trial: { label: "Trial", cls: "bg-amber-50 text-amber-800 border-amber-200" },
 };
 
 const applicantName = (a: ApplicantRow) =>
@@ -948,8 +967,8 @@ export default function ApplicantsPipeline() {
                       >
                         <RiPhoneLine className="w-4 h-4 mr-1.5" />
                         {screenings.some((s) => s.status === "draft")
-                          ? "Resume phone screening"
-                          : "Start phone screening"}
+                          ? "Resume phone screening (optional)"
+                          : "Phone screening (optional)"}
                       </Button>
                     )}
                     {selected.stage === "applicant" && (

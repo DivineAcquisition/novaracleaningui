@@ -227,6 +227,8 @@ export interface CleanerSetupState {
   stripe_account_id?: string | null;
   /** 'complete' only after a validated W-9 is stored. Stripe does not set this. */
   w9_status?: string | null;
+  kit_confirmed?: boolean | null;
+  background_cleared?: boolean | null;
   /** Set when a payout method (Stripe or a manual method) is the active one. */
   payout_method_code?: string | null;
   /** 'verified' once Stripe payouts are on, or manual details are confirmed. */
@@ -401,6 +403,7 @@ export function isSetupStepUnlocked(
  */
 export function isCleanerReadyForFirstJob(c: CleanerSetupState): boolean {
   if (Number(c.completed_bookings || 0) > 0) return true;
+  if (c.kit_confirmed === false || c.background_cleared === false) return false;
   return cleanerSetupSteps(c)
     .filter((s) => s.id !== "payouts")
     .every((s) => s.done);

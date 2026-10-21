@@ -25,6 +25,17 @@ const VALID_ORDER: Record<string, number> = {
   cancelled: 99, no_show: 99,
 };
 
+function walkthroughSummaryLines(raw: unknown): string[] {
+  if (!raw || typeof raw !== "object") return [];
+  const row = raw as { checklistDone?: boolean; photoCount?: number; note?: string | null };
+  const count = Math.max(0, Number(row.photoCount) || 0);
+  return [
+    `Lead walkthrough checklist: ${row.checklistDone ? "complete" : "not complete"}`,
+    `Lead walkthrough photos: ${count}`,
+    `Lead walkthrough note: ${(row.note || "").trim() || "not recorded"}`,
+  ];
+}
+
 function json(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
     headers: { ...corsHeaders, "Content-Type": "application/json" }, status,
@@ -159,6 +170,7 @@ serve(async (req) => {
             scheduledWindow: booking.time_slot || booking.arrival_window,
             checklistCompleted: null,
             checklistTotal: null,
+            leadWalkthroughLines: walkthroughSummaryLines(booking.lead_walkthrough),
             photos: [
               ...(Array.isArray(booking.before_photos) ? booking.before_photos : []).map((url: string, i: number) => ({
                 label: `Before ${i + 1}`, url, phase: "before", jobId: booking.job_id || bookingId,

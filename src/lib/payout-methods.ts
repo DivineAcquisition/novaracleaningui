@@ -498,6 +498,8 @@ export type PayEarning = {
   kind: "job" | "extra" | "adjustment";
   reason: string | null;
   section: string | null;
+  leadJob?: boolean;
+  ratePercent?: number | null;
   /** approved = the same confirmed, unpaid earnings Stripe would pay. */
   status: "approved" | "hold" | "disputed" | "paid" | "cancelled";
   qcCleared: boolean;
@@ -1172,12 +1174,12 @@ export function buildPaymentSummary(input: {
   contractorName: string;
   methodName: string;
   paidOn: string;
-  jobs: { jobId: string | null; jobDate: string | null; grossCents: number }[];
+  jobs: { jobId: string | null; jobDate: string | null; grossCents: number; leadLabel?: string | null }[];
   adjustments: { reason: string; amountCents: number; section: string | null }[];
   netCents: number;
 }): { title: typeof PAYMENT_SUMMARY_TITLE; text: string; html: string; problems: string[] } {
   const jobLines = input.jobs.map((job) => {
-    const label = [job.jobId || "Job", job.jobDate].filter(Boolean).join(" · ");
+    const label = [job.jobId || "Job", job.jobDate, job.leadLabel].filter(Boolean).join(" · ");
     return `${label}    ${money(job.grossCents)}`;
   });
   const adjustmentLines = input.adjustments.map((row) => {
@@ -1202,7 +1204,7 @@ export function buildPaymentSummary(input: {
     "",
     NO_TAX_WITHHELD,
   ].join("\n");
-  const html = `<article><h1>${PAYMENT_SUMMARY_TITLE}</h1><p>${escapeHtml(input.contractorName)}</p><p>${escapeHtml(input.methodName)} · ${escapeHtml(input.paidOn)}</p><h2>Jobs</h2><ul>${input.jobs.map((job) => `<li>${escapeHtml([job.jobId || "Job", job.jobDate].filter(Boolean).join(" · "))} — ${money(job.grossCents)}</li>`).join("") || "<li>None</li>"}</ul><h2>Adjustments</h2><ul>${input.adjustments.map((row) => `<li>${escapeHtml(row.section === OVERPAYMENT_SECTION ? `Overpayment correction (section ${OVERPAYMENT_SECTION}): ${row.reason}` : row.reason)} — -${money(Math.abs(row.amountCents))}</li>`).join("") || "<li>None</li>"}</ul><p><strong>Net amount paid ${money(input.netCents)}</strong></p><p>${escapeHtml(NO_TAX_WITHHELD)}</p></article>`;
+  const html = `<article><h1>${PAYMENT_SUMMARY_TITLE}</h1><p>${escapeHtml(input.contractorName)}</p><p>${escapeHtml(input.methodName)} · ${escapeHtml(input.paidOn)}</p><h2>Jobs</h2><ul>${input.jobs.map((job) => `<li>${escapeHtml([job.jobId || "Job", job.jobDate, job.leadLabel].filter(Boolean).join(" · "))} — ${money(job.grossCents)}</li>`).join("") || "<li>None</li>"}</ul><h2>Adjustments</h2><ul>${input.adjustments.map((row) => `<li>${escapeHtml(row.section === OVERPAYMENT_SECTION ? `Overpayment correction (section ${OVERPAYMENT_SECTION}): ${row.reason}` : row.reason)} — -${money(Math.abs(row.amountCents))}</li>`).join("") || "<li>None</li>"}</ul><p><strong>Net amount paid ${money(input.netCents)}</strong></p><p>${escapeHtml(NO_TAX_WITHHELD)}</p></article>`;
   return { title: PAYMENT_SUMMARY_TITLE, text, html, problems: paymentSummaryProblems(text) };
 }
 

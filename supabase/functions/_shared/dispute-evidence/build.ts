@@ -142,6 +142,8 @@ export interface DisputeBuildInput {
   checklistTotal?: number | null;
   photos?: EvidencePhoto[];
   zoneLines?: string[];
+  /** Factual lead walkthrough lines. They are printed on the completion summary. */
+  leadWalkthroughLines?: string[];
   visits?: VisitLine[];
   remedy?: {
     offered?: string | null;
@@ -607,6 +609,7 @@ function summaryLines(input: DisputeBuildInput, pageCap: number, limits: Dispute
     lines.push(`Remedy offered: ${NOT_RECORDED}`);
   }
   for (const zone of input.zoneLines || []) lines.push(redactInternal(zone, input.redact));
+  for (const line of input.leadWalkthroughLines || []) lines.push(redactInternal(line, input.redact));
 
   const selected = selectCompletionPhotos(photos, photoSlotsForCap(pageCap));
   if (selected.omitted > 0) {

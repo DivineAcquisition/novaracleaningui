@@ -212,6 +212,13 @@ const NAV_ITEMS: NavItem[] = [
     description: "Acceptances · wording · privacy requests",
     adminOnly: true,
   },
+  {
+    title: "Intake",
+    url: "/admin/intake",
+    icon: RiUserStarLine,
+    description: "Applications · onboarding · Lead Cleaner",
+    adminOnly: true,
+  },
 ];
 
 // Segment-aware active check so prefix-colliding routes (e.g. /admin/partner vs

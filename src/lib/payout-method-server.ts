@@ -434,11 +434,20 @@ async function loadDraft(db: DB, settings: PayoutSettings, payRunAt: string) {
     };
   });
   const bookingIds = [...new Set([...(payouts || []), ...(extras || [])].map((row: { booking_id?: string | null }) => row.booking_id).filter(Boolean))] as string[];
-  const jobByBooking = new Map<string, { jobId: string | null; jobDate: string | null }>();
+  const jobByBooking = new Map<string, { jobId: string | null; jobDate: string | null; leadJob: boolean }>();
   if (bookingIds.length) {
     const { data: bookings } = await from(db, "bookings").select("id, job_id, service_date").in("id", bookingIds);
+    const { data: leadRows, error: leadErr } = await from(db, "bookings").select("id, lead_job").in("id", bookingIds);
+    const leadById = new Map<string, boolean>();
+    if (!leadErr) {
+      for (const row of leadRows || []) leadById.set(String(row.id), row.lead_job === true);
+    }
     for (const booking of bookings || []) {
-      jobByBooking.set(String(booking.id), { jobId: booking.job_id ? String(booking.job_id) : null, jobDate: booking.service_date || null });
+      jobByBooking.set(String(booking.id), {
+        jobId: booking.job_id ? String(booking.job_id) : null,
+        jobDate: booking.service_date || null,
+        leadJob: leadById.get(String(booking.id)) === true,
+      });
     }
   }
   const earnings: PayEarning[] = [];
@@ -451,7 +460,8 @@ async function loadDraft(db: DB, settings: PayoutSettings, payRunAt: string) {
       jobId: job?.jobId || (row.booking_id ? String(row.booking_id) : null),
       jobDate: row.service_date || job?.jobDate || null,
       kind: "job",
-      reason: null,
+      reason: job?.leadJob ? "Lead job" : null,
+      leadJob: Boolean(job?.leadJob),
       section: null,
       status: "approved",
       qcCleared: true,
@@ -995,10 +1005,11 @@ export async function paymentSummaryFor(db: DB, lineId: string, cleanerId: strin
   const method = findMethod(settings, String(loaded.line.method_code));
   const jobs = loaded.earnings
     .filter((row: { kind: string }) => row.kind !== "adjustment")
-    .map((row: { job_id?: string; job_date?: string; amount_cents?: number }) => ({
+    .map((row: { job_id?: string; job_date?: string; amount_cents?: number; reason?: string | null }) => ({
       jobId: row.job_id || null,
       jobDate: row.job_date || null,
       grossCents: Math.max(0, Number(row.amount_cents) || 0),
+      leadLabel: typeof row.reason === "string" && row.reason.startsWith("Lead job") ? row.reason : null,
     }));
   const adjustments = loaded.earnings
     .filter((row: { kind: string }) => row.kind === "adjustment")

@@ -571,6 +571,27 @@ serve(async (req) => {
 
     const jobValueCents = jobValueForPay(booking);
     const shares = await computeCrewPay(admin, jobValueCents, cleanerIds);
+    let leadPay: { leadPercent: number; helperPercent: number } | null = null;
+    if (booking.lead_job === true && cleanerIds.length >= 1) {
+      const { data: setting } = await admin.from("app_settings").select("value").eq("key", "contractor_intake_settings").maybeSingle();
+      const stored = (setting?.value || {}) as { leadPayPercent?: number; helperPayPercent?: number; laborCapPercent?: number | null };
+      const leadPercent = Number(stored.leadPayPercent) || 47;
+      const helperPercent = Number(stored.helperPayPercent) || 35;
+      const laborPercent = cleanerIds.length > 1 ? leadPercent + helperPercent : leadPercent;
+      const cap = stored.laborCapPercent == null ? null : Number(stored.laborCapPercent);
+      const needsAdmin = cap == null || laborPercent > cap;
+      if (needsAdmin && !String(body?.leadAdminNote || "").trim()) {
+        return json({
+          error: cap == null
+            ? "The labor cap is not set. A person has to approve this lead job."
+            : `Lead share plus helper share is ${laborPercent}%, above the ${cap}% labor cap.`,
+          code: "labor_cap",
+          laborPercent,
+          cap,
+        }, 409);
+      }
+      leadPay = { leadPercent, helperPercent };
+    }
     const shareByCleaner = new Map(shares.map((s) => [s.cleanerId, s]));
     const payoutOverrides = parsePayoutOverrides(body?.payoutCentsByCleaner);
     const lockedPayByCleaner = new Map<string, number>();
@@ -581,7 +602,9 @@ serve(async (req) => {
       const role = i === 0 ? "Lead" : "Support";
       const share = shareByCleaner.get(cid);
       const override = payoutOverrides.get(cid);
-      const payCents = override != null ? override : (share?.shareCents ?? null);
+      const leadPercent = leadPay ? (i === 0 ? leadPay.leadPercent : leadPay.helperPercent) : null;
+      const leadCents = leadPercent == null ? null : Math.round(jobValueCents * (leadPercent / 100));
+      const payCents = override != null ? override : (leadCents ?? share?.shareCents ?? null);
       if (payCents != null) lockedPayByCleaner.set(cid, payCents);
       const { error: upsertErr } = await admin.from("job_assignments").upsert(
         {
@@ -592,7 +615,7 @@ serve(async (req) => {
           accepted_at: now,
           responded_at: now,
           estimated_pay_cents: payCents,
-          pay_percentage_snapshot: share?.ratePercent ?? null,
+          pay_percentage_snapshot: leadPercent ?? share?.ratePercent ?? null,
           crew_size_snapshot: share?.crewSize ?? cleanerIds.length,
           reliability_neutral: Boolean(booking.is_reclean),
         },
@@ -614,7 +637,7 @@ serve(async (req) => {
           crew_size_before: priorCrewSize || null,
           crew_size_after: share.crewSize,
           rate_before: priorRate?.pay_percentage_snapshot ?? null,
-          rate_after: share.ratePercent,
+          rate_after: leadPercent ?? share.ratePercent,
           pay_before_cents: prior,
           pay_after_cents: payCents,
         }).then(() => undefined, () => undefined);

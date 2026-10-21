@@ -29,9 +29,10 @@ export function buildOnboardingInviteEmail(args: {
       <h2 style="margin:0 0 8px;font-size:20px">You're in — let's finish onboarding</h2>
       <p style="margin:0 0 16px;color:#475569">Hi ${first},</p>
       <p style="margin:0 0 16px;color:#475569">
-        You've been selected to join the Novara Cleaning contractor team.
-        This link opens your onboarding: the agreement, phone verification, supplies,
-        dress code, W-9, Stripe payouts, and training videos.
+        You are conditionally approved. Approval depends on finishing onboarding,
+        including identity and vehicle verification and a background check.
+        No phone call is required. This link opens onboarding: the agreement,
+        phone verification, supplies, dress code, W-9, payout method, and training.
       </p>
       <p style="margin:24px 0;text-align:center">
         <a href="${url}"

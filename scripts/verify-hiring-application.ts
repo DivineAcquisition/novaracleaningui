@@ -9,6 +9,7 @@ import {
   CONSENT_VERSION,
   EXPERIENCE_SOMEWHAT,
   OPEN_APPLICANT_ROLE,
+  applicationAsksForbiddenQuestion,
   TRANSPORTATION_CAR,
   TRANSPORTATION_NONE,
   applicantStateFromAddress,
@@ -68,6 +69,18 @@ function draft(overrides: Partial<HiringApplicationDraft> = {}): HiringApplicati
     idConfirmed: true,
     idFile: id,
     hiringRole: "field-tech",
+    emailConsent: true,
+    hasSmartphone: "yes",
+    hasVehicle: "yes",
+    willHaveKit: "yes",
+    understandsContractor: "yes",
+    understandsVerification: "yes",
+    ageAnswer: "yes",
+    jobsPerWeek: 3,
+    timeWindows: ["weekday_morning"],
+    cleaningTypes: ["standard"],
+    experienceYears: "3_to_5",
+    privacyAccepted: true,
     ...overrides,
   };
 }
@@ -81,63 +94,40 @@ if (good.ok) {
   check("phone stored as E.164", good.value.phone, "+13015550123");
   check("days stay in week order", good.value.preferredDays, ["Mon", "Fri"]);
   check("department is service delivery", good.value.department, "Service Delivery");
-  check("supplies follow-up is kept", good.value.suppliesOnHand, "Vacuum and all-purpose cleaner");
+  check("the supply list is collected later, not on the application", good.value.suppliesOnHand, "");
+  check("kit willingness is kept", good.value.willHaveKit, true);
   check("experience value is unchanged", good.value.experience, "Yes 1yr+");
   check("consent version is stored", good.value.consentVersion, CONSENT_VERSION);
 }
 
-const somewhat = validateHiringApplication(draft({ experience: EXPERIENCE_SOMEWHAT }));
+const somewhat = validateHiringApplication(draft({ experience: EXPERIENCE_SOMEWHAT, experienceYears: "" }));
 check("Somewhat experience is accepted", somewhat.ok, true);
 if (somewhat.ok) check("Somewhat is not trimmed", somewhat.value.experience, EXPERIENCE_SOMEWHAT);
-
-check(
-  "no car is a hard stop",
-  validateHiringApplication(draft({ transportation: TRANSPORTATION_NONE })),
-  { ok: false, status: 422, error: validateHiringApplication(draft({ transportation: TRANSPORTATION_NONE })).ok ? "" : (validateHiringApplication(draft({ transportation: TRANSPORTATION_NONE })) as { error: string }).error, code: "no_car", gate: true },
-);
 
 function codeOf(overrides: Partial<HiringApplicationDraft>) {
   const result = validateHiringApplication(draft(overrides));
   return result.ok ? "ok" : result.code;
 }
 
-check("no car code", codeOf({ transportation: TRANSPORTATION_NONE }), "no_car");
-check("not authorized code", codeOf({ authorizedToWork: "No" }), "not_authorized");
-check("declined 1099 code", codeOf({ consent1099: false }), "missing_consent");
-check("declined background check code", codeOf({ backgroundCheckConsent: false }), "missing_consent");
-check("declined pay code", codeOf({ payConsent: false }), "missing_consent");
-check("under 18 is a hard stop", codeOf({ age18: false }), "under_18");
-check("missing license is a hard stop", codeOf({ validDriversLicense: false }), "no_license");
-check("uninsured car is a hard stop", codeOf({ autoInsured: false }), "no_auto_insurance");
-check("missing text consent", codeOf({ smsConsent: false }), "missing_sms");
-check("missing truthfulness", codeOf({ answersAccurate: false }), "missing_truthfulness");
-check("unwilling supplies code", codeOf({ willingToGetSupplies: "No" }), "not_willing_supplies");
-check("yes supplies without a list", codeOf({ suppliesOnHand: " " }), "missing_supplies_list");
-check("none yet is an acceptable supply list", codeOf({ suppliesOnHand: "none yet" }), "ok");
-check("missing photo ID", codeOf({ idFile: null }), "missing_id");
-check("ID not confirmed", codeOf({ idConfirmed: false }), "missing_id");
-check("ID over 4MB", codeOf({ idFile: { name: "big.jpg", type: "image/jpeg", size: 4_000_001 } }), "invalid_id");
-check("text file rejected", codeOf({ idFile: { name: "notes.txt", type: "text/plain", size: 100 } }), "invalid_id");
-check("pdf accepted", codeOf({ idFile: { name: "passport.pdf", type: "application/pdf", size: 80_000 } }), "ok");
-check("heic accepted by extension", codeOf({ idFile: { name: "id.heic", type: "", size: 80_000 } }), "ok");
-check("bad state", codeOf({ state: "MD" }), "invalid_state");
-check("role outside Airtable choices", codeOf({ role: "Field Tech" }), "invalid_role");
+check("a no on the vehicle is still a complete application", codeOf({ hasVehicle: "no" }), "ok");
+check("a no on age is still a complete application", codeOf({ ageAnswer: "no", age18: false }), "ok");
+check("texts are not required when email is accepted", codeOf({ smsConsent: false, emailConsent: true }), "ok");
+check("one contact channel is required", codeOf({ smsConsent: false, emailConsent: false }), "missing_channel");
+check("work authorization is not a question", codeOf({ authorizedToWork: "No" }), "ok");
+check("background consent is not required to apply", codeOf({ backgroundCheckConsent: false }), "ok");
+check("pay consent is not required to apply", codeOf({ payConsent: false }), "ok");
+check("a photo ID is not required", codeOf({ idFile: null, idConfirmed: false }), "ok");
+check("the privacy notice is acknowledged before submit", codeOf({ privacyAccepted: false }), "missing_privacy");
+check("role outside the open choices", codeOf({ role: "Field Tech" }), "invalid_role");
+check("the application does not ask for an ID or work authorization", applicationAsksForbiddenQuestion(), false);
 
-const withList = visibleSteps("Yes");
-const withoutList = visibleSteps("No");
-check("yes to supplies adds the follow-up", withList.includes("suppliesOnHand"), true);
-check("no does not ask what they have", withoutList.includes("suppliesOnHand"), false);
-check(
-  "follow-up sits after the willingness question",
-  withList[withList.indexOf("supplies") + 1],
-  "suppliesOnHand",
-);
-check("car step rejects no vehicle before the ID", issuesForStep("car", draft({ transportation: TRANSPORTATION_NONE }))?.code, "no_car");
-check("age sits after work authorization", withList[withList.indexOf("authorized") + 1], "age");
-const under18 = validateHiringApplication(draft({ age18: false }));
-check("under 18 uses the gate screen", under18.ok ? false : under18.gate, true);
-const noSms = validateHiringApplication(draft({ smsConsent: false }));
-check("missing text consent stays on the question", noSms.ok ? true : noSms.gate, false);
+const steps = visibleSteps();
+check("zip is its own question", steps.includes("zip"), true);
+check("requirements come before experience", steps.indexOf("requirements") < steps.indexOf("experience"), true);
+check("photo ID is not a step", steps.includes("id"), false);
+const vehicleNo = validateHiringApplication(draft({ hasVehicle: "no" }));
+check("a vehicle no is stored as no", vehicleNo.ok && vehicleNo.value.hasVehicle === false, true);
+check("a vehicle no does not collect a taxpayer id", vehicleNo.ok && vehicleNo.value.idContentType === null, true);
 const record = buildHiringConsentRecord({
   acceptedAt: "2026-10-15T12:00:00.000Z",
   ip: " 203.0.113.4 ",
@@ -153,9 +143,8 @@ check("consent record says not to upload a Social Security card", record.texts.i
 check("consent record states company liability coverage", record.texts.insurance.includes("commercial general liability"), true);
 check("saved answers keep the new consents", sanitizeAnswers({ smsConsent: true, age18: false }).smsConsent, true);
 check("saved answers keep a no on age", sanitizeAnswers({ age18: false }).age18, false);
-check("California is not a service state", codeOf({ state: "California" }), "invalid_state");
-check("Texas is not a service state", codeOf({ state: "Texas" }), "invalid_state");
-check("address step asks for the city", issuesForStep("address", draft({ city: "" }))?.code, "missing_city");
+check("a bad ZIP is rejected", codeOf({ zipCode: "12" }), "invalid_zip");
+check("California is not asked as a work-authorization state", codeOf({ state: "California" }), "ok");
 check(
   "saved note uses the role, not the Indeed title",
   savedApplicationNote("Farryl").includes("House Cleaners"),
@@ -174,10 +163,8 @@ check("Google state DC prefills DC", applicantStateFromAddress("DC"), "DC");
 check("Google state California does not prefill", applicantStateFromAddress("CA"), "");
 check("Google state Texas does not prefill", applicantStateFromAddress("TX"), "");
 check("a state we do not hire stays blank", applicantStateFromAddress("OH"), "");
-check("address step asks for the ZIP on the same page", issuesForStep("address", draft({ zipCode: "" }))?.code, "invalid_zip");
-check("address step asks for the state on the same page", issuesForStep("address", draft({ state: "" }))?.code, "invalid_state");
-check("zip is not its own question", visibleSteps("No").includes("zip"), false);
-check("state is not its own question", visibleSteps("No").includes("state"), false);
+check("the ZIP step catches an empty ZIP", issuesForStep("zip", draft({ zipCode: "" }))?.code, "invalid_zip");
+check("state is not its own question", visibleSteps().includes("state"), false);
 const sessionRow = {
   id: "1",
   token: "a".repeat(48),

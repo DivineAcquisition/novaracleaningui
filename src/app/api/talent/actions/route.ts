@@ -59,6 +59,7 @@ interface ApplicantRow {
   cleaner_id: string | null;
   onboarding_launched_at: string | null;
   rejection_reason?: string | null;
+  sms_consent?: boolean | null;
 }
 
 interface CleanerRow {
@@ -144,6 +145,7 @@ async function sendOnboardingInvite(
   onboardingUrl: string,
   email: string | null,
   emailUnavailable: string | null,
+  allowSms = applicant.sms_consent === true,
 ): Promise<InviteOutcome> {
   const firstName = applicant.first_name || applicant.full_name || "there";
   const out: InviteOutcome = { emailed: false, smsSent: false, emailError: null, smsError: null };
@@ -165,15 +167,16 @@ async function sendOnboardingInvite(
   }
 
   const phone = usablePhone(applicant.phone);
-  if (!phone) {
+  if (!allowSms) {
+    out.smsError = "Texts were not sent because this applicant did not agree to application texts.";
+  } else if (!phone) {
     out.smsError = applicant.phone
       ? `"${applicant.phone}" isn't a sendable mobile number.`
       : "No phone on the applicant record.";
   } else {
     const message =
-      `Hi ${firstName}! It's Novara Cleaning — you've been selected to join our contractor team. ` +
-      `Start your onboarding here (agreement, payout setup & portal access): ${onboardingUrl} ` +
-      `Questions? Just reply to this text.`;
+      `Hi ${firstName}! It's Novara Cleaning. You are conditionally approved. ` +
+      `No phone call is required. Start onboarding here: ${onboardingUrl}`;
 
     // GHL is the canonical SMS channel. send-sms-notification is the fallback,
     // but note it ALSO falls back to GHL internally — so when GHL itself is the
@@ -228,7 +231,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   const { data: applicantData, error: aErr } = await supabase
     .from("cleaner_applicants")
     .select(
-      "id, email, phone, full_name, first_name, last_name, zip_code, state, stage, cleaner_id, onboarding_launched_at, rejection_reason",
+      "id, email, phone, full_name, first_name, last_name, zip_code, state, stage, cleaner_id, onboarding_launched_at, rejection_reason, sms_consent",
     )
     .eq("id", applicantId)
     .maybeSingle();
@@ -545,6 +548,24 @@ export async function POST(req: Request): Promise<NextResponse> {
             { error: "Payout setup is not complete yet. Finish Stripe, or confirm Cash App, Zelle, or Chime." },
             { status: 409 },
           );
+        }
+
+        const { data: intakeRow } = await supabase
+          .from("cleaners")
+          .select("intake_flow, kit_confirmed, background_cleared, intake_record")
+          .eq("id", cleaner.id)
+          .maybeSingle();
+        const intake = intakeRow as { intake_flow?: string | null; kit_confirmed?: boolean | null; background_cleared?: boolean | null; intake_record?: { nameMismatchOpen?: boolean } | null } | null;
+        if (intake?.intake_flow === "automated") {
+          if (intake.kit_confirmed === false) {
+            return NextResponse.json({ error: "The supply kit is not confirmed. Jobs and activation stay blocked until it is." }, { status: 409 });
+          }
+          if (intake.background_cleared === false) {
+            return NextResponse.json({ error: "The background check is not clear and has not been reviewed by a person." }, { status: 409 });
+          }
+          if (intake.intake_record?.nameMismatchOpen) {
+            return NextResponse.json({ error: "A name mismatch is still open. An admin has to resolve it with a note before activation." }, { status: 409 });
+          }
         }
 
         const { error: upErr } = await supabase
