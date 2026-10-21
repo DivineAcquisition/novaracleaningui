@@ -35,7 +35,7 @@ export const INTAKE_WORDING: WordingVersion[] = [
   draft(
     "application_privacy",
     "Application privacy notice",
-    "We collect your name, email, mobile number, ZIP, availability, and your yes or no answers so we can decide whether you can do the work. Novara hiring staff see it. We do not collect a Social Security number, date of birth, photo, or criminal history on this application. You can ask to see, correct, or delete it by emailing operations@novaracleaning.com.",
+    "We collect your name, email, mobile number, street address, city, state, ZIP, a photo of your current government-issued photo ID, the supplies you have, and your written answers so we can decide whether you qualify. People on the Novara hiring team can open it. We do not collect a Social Security number, a date of birth, or criminal history on this application. A background check, if one is ordered, happens after a conditional approval and needs a separate authorization. You can ask to see, correct, or delete what we hold by emailing operations@novaracleaning.com.",
   ),
   draft(
     "why_vehicle",

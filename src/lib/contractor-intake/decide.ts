@@ -18,6 +18,14 @@ export interface ApplicationAnswers {
   understandsVerification: boolean;
   smsConsent: boolean;
   emailConsent: boolean;
+  /**
+   * Qualification answers. Omitted means the caller did not send them.
+   * An explicit false does not qualify. The form rejects these before submit.
+   */
+  authorizedToWork?: boolean;
+  backgroundCheckConsent?: boolean;
+  payConsent?: boolean;
+  photoIdProvided?: boolean;
   /** Omitted answers are treated as meeting the jobs minimum. The form always sends a number. */
   jobsPerWeek?: number;
   duplicate: boolean;
@@ -46,6 +54,13 @@ const REQUIREMENTS: Array<{ key: keyof ApplicationAnswers; label: string }> = [
   { key: "willHaveKit", label: "You need a cleaning supply kit before your first job." },
   { key: "understandsContractorWork", label: "This work is as an independent contractor, and onboarding includes a W-9." },
   { key: "understandsVerification", label: "A pass continues only if identity, vehicle, and a background check are completed in onboarding." },
+];
+
+const QUALIFICATION: Array<{ key: "authorizedToWork" | "backgroundCheckConsent" | "payConsent" | "photoIdProvided"; label: string }> = [
+  { key: "authorizedToWork", label: "You need to be legally authorized to work in the United States." },
+  { key: "backgroundCheckConsent", label: "Accepting the background-check disclosure is required to qualify." },
+  { key: "payConsent", label: "Accepting the pay terms is required to qualify." },
+  { key: "photoIdProvided", label: "A current government-issued photo ID is required to qualify." },
 ];
 
 export function decideApplication(
@@ -110,12 +125,14 @@ export function decideApplication(
   }
 
   const missed = REQUIREMENTS.find((row) => answers[row.key] !== true);
-  if (missed) {
+  const missedQualification = QUALIFICATION.find((row) => answers[row.key] === false);
+  const blocked = missed || missedQualification;
+  if (blocked) {
     return {
       outcome: "not_a_fit",
       stage: "not_a_fit",
-      requirement: missed.label,
-      message: `${missed.label} You can apply again after ${again}.`,
+      requirement: blocked.label,
+      message: `${blocked.label} You can apply again after ${again}.`,
       reapplyOn: again,
       openOnboarding: false,
       countsAsRejection: true,

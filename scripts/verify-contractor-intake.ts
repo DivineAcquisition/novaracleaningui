@@ -74,6 +74,14 @@ check("pass message uses contractor language", !usesForbiddenApplicantLanguage(p
 
 const noCar = decideApplication(answers({ hasVehicle: false }), DEFAULT_INTAKE_SETTINGS, now);
 check("a no on the vehicle names that requirement", noCar.outcome === "not_a_fit" && /vehicle/i.test(noCar.message));
+const unauthorized = decideApplication(answers({ authorizedToWork: false }), DEFAULT_INTAKE_SETTINGS, now);
+check("a no on work authorization does not qualify", unauthorized.outcome === "not_a_fit" && unauthorized.openOnboarding === false && /authorized/i.test(unauthorized.message));
+const noBackground = decideApplication(answers({ backgroundCheckConsent: false }), DEFAULT_INTAKE_SETTINGS, now);
+check("declining the background disclosure does not qualify", noBackground.outcome === "not_a_fit" && noBackground.openOnboarding === false);
+const noPay = decideApplication(answers({ payConsent: false }), DEFAULT_INTAKE_SETTINGS, now);
+check("declining the pay terms does not qualify", noPay.outcome === "not_a_fit" && noPay.openOnboarding === false);
+const noId = decideApplication(answers({ photoIdProvided: false }), DEFAULT_INTAKE_SETTINGS, now);
+check("a missing photo ID does not qualify", noId.outcome === "not_a_fit" && noId.openOnboarding === false);
 check("the not-a-fit message includes the reapply date", noCar.reapplyOn === "2026-12-20");
 check("a not-a-fit is the only rejection", noCar.countsAsRejection && !pass.countsAsRejection);
 

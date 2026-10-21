@@ -1,7 +1,9 @@
 "use client";
 
-// Public contractor application. One step at a time. A "no" is an answer.
-// The server decides pass, not a fit, waitlist, or needs review.
+// Public contractor application. One step at a time. A "no" on a listed
+// requirement is an answer. Photo ID, work authorization, both consents,
+// the street address, the supply list, reliability, and why Novara are
+// required to qualify.
 
 import { useEffect, useId, useMemo, useState } from "react";
 import Link from "next/link";
@@ -9,10 +11,16 @@ import { useSearchParams } from "next/navigation";
 import { RiArrowLeftLine, RiCheckboxCircleFill, RiLoader4Line } from "@remixicon/react";
 import { SEO } from "@/components/SEO";
 import {
+  APPLICANT_STATES,
+  BACKGROUND_CONSENT_COPY,
+  BACKGROUND_DISCLOSURE,
   CLEANING_TYPES,
   DAY_LABEL,
   EXPERIENCE_YEARS,
+  ID_CONFIRM_COPY,
+  ID_PURPOSE_COPY,
   OPEN_APPLICANT_ROLE,
+  PAY_CONSENT_COPY,
   PREFERRED_DAYS,
   TIME_WINDOWS,
   YES_NO,
@@ -96,6 +104,7 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
   const [result, setResult] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [fax, setFax] = useState("");
+  const [idBlob, setIdBlob] = useState<File | null>(null);
   const headingId = useId();
 
   const steps = visibleSteps();
@@ -124,6 +133,7 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
       idFile: null,
       leadRoleOpen: false,
     });
+    setIdBlob(null);
     setStepIndex(session?.stepIndex || 0);
   }, [params, session]);
 
@@ -199,9 +209,20 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
         experienceYears: answers.experienceYears || "",
         privacyAccepted: String(Boolean(answers.privacyAccepted)),
         leadRoleOpen: String(leadOpen),
+        address: answers.address,
+        city: answers.city,
+        state: answers.state,
+        authorizedToWork: answers.authorizedToWork,
+        backgroundCheckConsent: String(Boolean(answers.backgroundCheckConsent)),
+        payConsent: String(Boolean(answers.payConsent)),
+        idConfirmed: String(Boolean(answers.idConfirmed)),
+        suppliesOnHand: answers.suppliesOnHand,
+        reliabilityNote: answers.reliabilityNote,
+        reasonNote: answers.reasonNote,
         faxNumber: fax,
       };
       Object.entries(entries).forEach(([key, value]) => body.set(key, value));
+      if (idBlob) body.set("idFile", idBlob);
       if (session?.token) body.set("sessionToken", session.token);
       const res = await fetch("/api/hiring/apply", { method: "POST", body });
       const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
@@ -224,7 +245,7 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
       <StayOnHost host={HIRING_HOST} origin={HIRING_ORIGIN} />
       <SEO
         title="Apply"
-        description="Apply to join the Novara contractor network. The application asks only whether you can do the work."
+        description="Apply to join the Novara contractor network. Photo ID, work authorization, and a current address are required to qualify."
         canonical="https://hiring.novaracleaning.com/hiring/apply"
       />
       <div className="h-1 w-full bg-slate-200">
@@ -256,6 +277,15 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
               leadOpen={leadOpen}
               error={error}
               submitting={submitting}
+              onFile={(file) => {
+                setIdBlob(file);
+                setAnswers((current) => ({
+                  ...current,
+                  idFile: file ? { name: file.name, type: file.type, size: file.size } : null,
+                  idConfirmed: false,
+                }));
+                setError(null);
+              }}
               onChange={(partial) => {
                 setError(null);
                 setAnswers((current) => ({ ...current, ...partial }));
@@ -286,7 +316,7 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
 }
 
 function Step({
-  step, answers, headingId, leadOpen, error: _error, submitting: _submitting, onChange,
+  step, answers, headingId, leadOpen, error: _error, submitting: _submitting, onChange, onFile,
 }: {
   step: ApplicationStep;
   answers: Answers;
@@ -295,6 +325,7 @@ function Step({
   error: string | null;
   submitting: boolean;
   onChange: (partial: Partial<Answers>) => void;
+  onFile: (file: File | null) => void;
 }) {
   void _error;
   void _submitting;
@@ -351,11 +382,24 @@ function Step({
       </section>
     );
   }
-  if (step === "zip") {
+  if (step === "address") {
     return (
       <section aria-labelledby={headingId}>
-        <h1 id={headingId} className="font-heading text-3xl font-semibold">What’s your ZIP code?</h1>
-        <p className="mt-3 text-base text-slate-700">We check it against the areas we cover. Outside the area goes on a waitlist, not a rejection.</p>
+        <h1 id={headingId} className="font-heading text-3xl font-semibold">Where do you live?</h1>
+        <p className="mt-3 text-base text-slate-700">Street, city, state, and ZIP are required to qualify. A ZIP outside the area we cover goes on a waitlist, not a rejection.</p>
+        <Field label="Street address" autoComplete="address-line1" value={answers.address} onChange={(address) => onChange({ address })} />
+        <Field label="City" autoComplete="address-level2" value={answers.city} onChange={(city) => onChange({ city })} />
+        <p className="mt-6 text-sm font-semibold text-slate-800">State</p>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          {APPLICANT_STATES.map((state) => {
+            const on = answers.state === state.value;
+            return (
+              <button key={state.value} type="button" aria-pressed={on} onClick={() => onChange({ state: state.value })} className={cn("rounded-2xl border px-3 py-4 text-left text-sm font-semibold", on ? "border-violet-700 bg-violet-50" : "border-slate-300 bg-white")}>
+                {state.label}
+              </button>
+            );
+          })}
+        </div>
         <Field label="ZIP code" inputMode="numeric" autoComplete="postal-code" value={answers.zipCode} onChange={(zipCode) => onChange({ zipCode: zipCode.replace(/\D/g, "").slice(0, 5) })} />
       </section>
     );
@@ -420,6 +464,79 @@ function Step({
       </section>
     );
   }
+  if (step === "authorized") {
+    return (
+      <section aria-labelledby={headingId}>
+        <h1 id={headingId} className="font-heading text-3xl font-semibold">Are you legally authorized to work in the United States?</h1>
+        <p className="mt-3 text-base text-slate-700">This is required to qualify. We do not collect immigration documents or a Social Security number.</p>
+        <Choice name="authorizedToWork" value={answers.authorizedToWork} options={[{ value: "Yes", label: "Yes" }, { value: "No", label: "No" }]} onPick={(authorizedToWork) => onChange({ authorizedToWork })} />
+      </section>
+    );
+  }
+  if (step === "id") {
+    return (
+      <section aria-labelledby={headingId}>
+        <h1 id={headingId} className="font-heading text-3xl font-semibold">Upload your government-issued photo ID</h1>
+        <p className="mt-3 text-base leading-relaxed text-slate-700">{ID_PURPOSE_COPY}</p>
+        <label className="mt-6 block text-sm font-semibold text-slate-800">
+          Photo or PDF
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf"
+            className="mt-1.5 block w-full text-base font-normal"
+            onChange={(event) => onFile(event.target.files?.[0] || null)}
+          />
+        </label>
+        {answers.idFile && <p className="mt-2 text-sm text-slate-700">{answers.idFile.name}</p>}
+        <Check label={ID_CONFIRM_COPY} checked={Boolean(answers.idConfirmed)} onChange={(idConfirmed) => onChange({ idConfirmed })} />
+      </section>
+    );
+  }
+  if (step === "consentBg") {
+    return (
+      <section aria-labelledby={headingId}>
+        <h1 id={headingId} className="font-heading text-3xl font-semibold">Background-check disclosure</h1>
+        <p className="mt-3 text-base leading-relaxed text-slate-700">{BACKGROUND_DISCLOSURE}</p>
+        <Check label={BACKGROUND_CONSENT_COPY} checked={Boolean(answers.backgroundCheckConsent)} onChange={(backgroundCheckConsent) => onChange({ backgroundCheckConsent })} />
+      </section>
+    );
+  }
+  if (step === "consentPay") {
+    return (
+      <section aria-labelledby={headingId}>
+        <h1 id={headingId} className="font-heading text-3xl font-semibold">Pay terms</h1>
+        <p className="mt-3 text-base text-slate-700">Accepting these terms is required to qualify.</p>
+        <Check label={PAY_CONSENT_COPY} checked={Boolean(answers.payConsent)} onChange={(payConsent) => onChange({ payConsent })} />
+      </section>
+    );
+  }
+  if (step === "suppliesOnHand") {
+    return (
+      <section aria-labelledby={headingId}>
+        <h1 id={headingId} className="font-heading text-3xl font-semibold">Which supplies do you already have?</h1>
+        <p className="mt-3 text-base text-slate-700">This list is required to qualify. If you’re starting from scratch, write “none yet.”</p>
+        <Area label="Supply list" value={answers.suppliesOnHand} maxLength={2000} onChange={(suppliesOnHand) => onChange({ suppliesOnHand })} />
+      </section>
+    );
+  }
+  if (step === "reliability") {
+    return (
+      <section aria-labelledby={headingId}>
+        <h1 id={headingId} className="font-heading text-3xl font-semibold">What should we know about your reliability?</h1>
+        <p className="mt-3 text-base text-slate-700">This note is required to qualify.</p>
+        <Area label="Reliability" value={answers.reliabilityNote} maxLength={1000} onChange={(reliabilityNote) => onChange({ reliabilityNote })} />
+      </section>
+    );
+  }
+  if (step === "reason") {
+    return (
+      <section aria-labelledby={headingId}>
+        <h1 id={headingId} className="font-heading text-3xl font-semibold">Why Novara?</h1>
+        <p className="mt-3 text-base text-slate-700">Tell us why you want to join. This is required to qualify.</p>
+        <Area label="Why Novara" value={answers.reasonNote} maxLength={1000} onChange={(reasonNote) => onChange({ reasonNote })} />
+      </section>
+    );
+  }
   if (step === "experience") {
     return (
       <section aria-labelledby={headingId}>
@@ -455,12 +572,19 @@ function Step({
         <Row label="Name" value={`${answers.firstName} ${answers.lastName}`} />
         <Row label="Email" value={answers.email} />
         <Row label="Mobile" value={answers.phone} />
-        <Row label="ZIP" value={answers.zipCode} />
+        <Row label="Address" value={[answers.address, answers.city, answers.state, answers.zipCode].filter(Boolean).join(", ")} />
         <Row label="Days" value={(answers.preferredDays || []).map((day) => DAY_LABEL[day as keyof typeof DAY_LABEL] || day).join(", ")} />
         <Row label="18 or older" value={answers.ageAnswer || "—"} />
         <Row label="Smartphone" value={answers.hasSmartphone || "—"} />
         <Row label="Vehicle" value={answers.hasVehicle || "—"} />
         <Row label="Supply kit" value={answers.willHaveKit || "—"} />
+        <Row label="Work authorization" value={answers.authorizedToWork || "—"} />
+        <Row label="Photo ID" value={answers.idFile?.name || "—"} />
+        <Row label="Background disclosure" value={answers.backgroundCheckConsent ? "Accepted" : "—"} />
+        <Row label="Pay terms" value={answers.payConsent ? "Accepted" : "—"} />
+        <Row label="Supplies" value={answers.suppliesOnHand} />
+        <Row label="Reliability" value={answers.reliabilityNote} />
+        <Row label="Why Novara" value={answers.reasonNote} />
       </dl>
       <Check label={why("application_privacy")} checked={Boolean(answers.privacyAccepted)} onChange={(privacyAccepted) => onChange({ privacyAccepted, answersAccurate: privacyAccepted })} />
       <p className="mt-3 text-sm text-slate-700">
@@ -476,6 +600,21 @@ function Row({ label, value }: { label: string; value: string | null }) {
       <dt className="text-sm font-semibold text-slate-600">{label}</dt>
       <dd className="text-sm text-slate-900">{value || "—"}</dd>
     </div>
+  );
+}
+
+function Area({ label, value, onChange, maxLength }: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  maxLength: number;
+}) {
+  const id = useId();
+  return (
+    <label htmlFor={id} className="mt-6 block text-sm font-semibold text-slate-800">
+      {label}
+      <textarea id={id} value={value} maxLength={maxLength} rows={5} onChange={(event) => onChange(event.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-300 px-3 py-3 text-base font-normal text-slate-900" />
+    </label>
   );
 }
 
