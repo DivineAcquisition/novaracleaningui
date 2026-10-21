@@ -8,7 +8,7 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { RiArrowLeftLine, RiCheckboxCircleFill, RiLoader4Line } from "@remixicon/react";
+import { RiArrowLeftLine, RiCheckLine, RiCheckboxCircleFill, RiLoader4Line } from "@remixicon/react";
 import { SEO } from "@/components/SEO";
 import {
   APPLICANT_STATES,
@@ -24,6 +24,7 @@ import {
   PREFERRED_DAYS,
   SUPPLY_HONESTY_COPY,
   TRUTHFULNESS_COPY,
+  applicantStateFromAddress,
   applicationSupplyChoices,
   isImportantSupply,
   payTermsForRole,
@@ -52,6 +53,9 @@ import {
   type RoleCatalog,
   type RoleInterestDraft,
 } from "@/lib/contractor-roles";
+import { AddressSuggestionMenu } from "@/components/booking/AddressSuggestionMenu";
+import { useAddressAutocomplete } from "@/hooks/use-address-autocomplete";
+import type { AddressSuggestion } from "@/lib/google-places-loader";
 import { HIRING_HOST, HIRING_ORIGIN } from "@/lib/site-hosts";
 import { StayOnHost } from "@/components/StayOnHost";
 import { formatPhoneNumber } from "@/lib/input-formatters";
@@ -59,7 +63,19 @@ import { HIRING_GRADIENT } from "@/components/hiring/HiringChrome";
 import type { PublicHiringSession } from "@/lib/hiring/session";
 import { cn } from "@/lib/utils";
 
+const PAGE_TITLE =
+  "font-heading text-[1.65rem] font-semibold leading-snug tracking-tight text-slate-900 outline-none focus-visible:!ring-0 focus-visible:!ring-offset-0 sm:text-[1.85rem]";
+const LOGO = "/novara-logo.png";
 const STORAGE_KEY = "novara-contractor-application";
+
+const REQUIREMENT_ROWS = [
+  { key: "ageAnswer", title: "Are you 18 or older?", why: "This role is only open to adults. We don’t ask for your birth date." },
+  { key: "hasSmartphone", title: "Do you have a smartphone that can run the Novara app and take photos?", why: "Job offers, check-in, and photos run in the Novara app on your phone." },
+  { key: "hasVehicle", title: "Do you have a personal vehicle you can drive to jobs?", why: "Jobs require carrying a full supply kit between homes." },
+  { key: "willHaveKit", title: "Will you have a cleaning supply kit before your first job?", why: "You supply your own products and equipment as an independent contractor." },
+  { key: "understandsContractor", title: "Do you understand this is independent contractor work, and that you will provide a W-9?", why: "This is independent contractor work, not employment." },
+  { key: "understandsVerification", title: "Do you understand that a pass continues only after identity, vehicle, and a background check in onboarding?", why: "This happens after a conditional approval, during onboarding." },
+] as const;
 const DRAFT_DAYS = 7;
 const UNSAVED = ["smsConsent", "emailConsent", "backgroundCheckConsent", "payConsent", "privacyAccepted", "answersAccurate", "suppliesHonest", "idConfirmed", "authorizedToWork", "idFile"] as const;
 
@@ -135,6 +151,7 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
   const [pay, setPay] = useState(rolePaySettings(DEFAULT_INTAKE_SETTINGS));
   const [answers, setAnswers] = useState<Answers>(EMPTY);
   const [stepIndex, setStepIndex] = useState(0);
+  const [requirementIndex, setRequirementIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(session?.status === "submitted");
   const [result, setResult] = useState("");
@@ -239,6 +256,15 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
     const terms = payTermsForRole(OPEN_APPLICANT_ROLE, { ...intakeSettings, leadRoleOpenToPublic: leadOpen });
     return { ...answers, role: OPEN_APPLICANT_ROLE, leadRoleOpen: leadOpen, rolePaySet: terms.open };
   }, [answers, leadOpen, intakeSettings]);
+  function goBack() {
+    setError(null);
+    if (step === "requirements" && requirementIndex > 0) {
+      setRequirementIndex((index) => index - 1);
+      return;
+    }
+    setStepIndex((index) => Math.max(0, index - 1));
+  }
+
   function advance(next = draft) {
     const found = issuesForStep(step, next, { catalog, access });
     if (found) {
@@ -318,69 +344,109 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
     }
   }
 
+  function continueForm() {
+    if (step === "requirements") {
+      const row = REQUIREMENT_ROWS[requirementIndex];
+      const value = String(draft[row.key] || "");
+      if (value !== "yes" && value !== "no") {
+        setError("Choose yes or no.");
+        return;
+      }
+      if (requirementIndex < REQUIREMENT_ROWS.length - 1) {
+        setError(null);
+        setRequirementIndex((index) => index + 1);
+        return;
+      }
+    }
+    if (step === "review") void submit();
+    else advance();
+  }
+
+  const showBack = stepIndex > 0 || (step === "requirements" && requirementIndex > 0);
+
   return (
-    <div className="flex min-h-dvh flex-col bg-white text-slate-900">
+    <div
+      className="flex min-h-dvh flex-col text-slate-900"
+      style={{
+        background:
+          "radial-gradient(80% 46% at 50% -12%, rgba(143,123,253,0.22), transparent 58%), linear-gradient(180deg, #FFFFFF 0%, #F7F5FC 100%)",
+      }}
+    >
       <StayOnHost host={HIRING_HOST} origin={HIRING_ORIGIN} />
       <SEO
         title="Apply"
-        description="Apply to join the Novara contractor network. Work authorization, address, and pay terms are part of the application. A photo ID is collected only after conditional approval."
+        description="Apply to clean with Novara. Search your address, then answer one question at a time."
         canonical="https://hiring.novaracleaning.com/hiring/apply"
       />
-      <div className="h-1 w-full bg-slate-200">
-        <div className="h-full" style={{ width: `${Math.round(((stepIndex + 1) / steps.length) * 100)}%`, background: HIRING_GRADIENT }} />
+      <style>{`
+        @keyframes nvQIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+        .nv-q { animation: nvQIn .45s cubic-bezier(.22,1,.36,1) both; }
+        @media (prefers-reduced-motion: reduce) { .nv-q { animation: none; } }
+      `}</style>
+      <div className="h-1 w-full bg-slate-200/80">
+        <div className="h-full transition-[width] duration-500 ease-out" style={{ width: `${Math.round(((stepIndex + 1) / steps.length) * 100)}%`, background: HIRING_GRADIENT }} />
       </div>
-      <header className="mx-auto flex w-full max-w-2xl items-center justify-between px-5 py-4">
-        <Link href={`${HIRING_ORIGIN}/hiring`} className="font-heading text-[15px] font-bold">Novara<span className="text-primary">Cleaning</span></Link>
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{done ? "Done" : `${stepIndex + 1} of ${steps.length}`}</p>
+      <header className="mx-auto flex w-full max-w-2xl items-center justify-between px-5 py-4 sm:px-6">
+        <Link href={`${HIRING_ORIGIN}/hiring`} className="flex items-center gap-2.5 transition hover:opacity-80">
+          <img src={LOGO} alt="" className="h-8 w-8 rounded-lg" />
+          <span className="font-heading text-[15px] font-bold tracking-tight">Novara<span className="text-primary">Cleaning</span></span>
+        </Link>
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{done ? "Done" : `${stepIndex + 1} of ${steps.length}`}</p>
       </header>
-      <main className="mx-auto w-full max-w-2xl flex-1 px-5 pb-12">
-        {!done && <p className="pt-2 text-sm text-slate-600">Your progress is saved on this device for up to 7 days. This is independent contractor work, not employment.</p>}
-        {done ? (
-          <div className="py-10">
-            <RiCheckboxCircleFill className="h-12 w-12 text-emerald-600" aria-hidden />
-            <h1 className="mt-4 font-heading text-3xl font-semibold">Application received</h1>
-            <p className="mt-4 max-w-xl text-base leading-relaxed text-slate-700">{result}</p>
-          </div>
-        ) : (
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (step === "review") void submit();
-              else advance();
-            }}
-          >
-            <Step
-              step={step}
-              answers={draft}
-              headingId={headingId}
-              leadOpen={leadOpen}
-              catalog={catalog}
-              access={access}
-              pay={pay}
-              error={error}
-              submitting={submitting}
-              intakeSettings={intakeSettings}
-              onChange={(partial) => {
-                setError(null);
-                setAnswers((current) => ({ ...current, ...partial }));
+      <main className="flex flex-1 flex-col">
+        <div className="m-auto w-full max-w-2xl px-5 py-6 sm:px-6 sm:py-10">
+          {done ? (
+            <div className="py-10 text-center">
+              <RiCheckboxCircleFill className="mx-auto h-14 w-14 text-emerald-500" aria-hidden />
+              <h1 className="mt-5 font-heading text-2xl font-semibold tracking-tight sm:text-3xl">Application received</h1>
+              <p className="mx-auto mt-4 max-w-md text-base leading-relaxed text-slate-600">{result}</p>
+            </div>
+          ) : (
+            <form
+              className="nv-q"
+              key={`${step}-${requirementIndex}`}
+              onSubmit={(event) => {
+                event.preventDefault();
+                continueForm();
               }}
-            />
-            {error && <p role="alert" className="mt-4 text-sm font-medium text-red-700">{error}</p>}
-            <div className="mt-8 flex items-center gap-4">
-              {stepIndex > 0 && (
-                <button type="button" onClick={() => { setError(null); setStepIndex((index) => index - 1); }} className="inline-flex h-12 items-center gap-2 rounded-full border border-slate-300 px-4 text-sm font-semibold">
-                  <RiArrowLeftLine className="h-4 w-4" aria-hidden /> Back
+            >
+              {showBack && (
+                <button type="button" onClick={goBack} className="mb-6 inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 transition hover:text-slate-800">
+                  <RiArrowLeftLine className="h-4 w-4" aria-hidden />
+                  Back
                 </button>
               )}
-              <button type="button" onClick={() => { localStorage.removeItem(STORAGE_KEY); setAnswers({ ...EMPTY, leadRoleOpen: leadOpen }); setStepIndex(0); setError(null); }} className="text-sm font-semibold text-slate-600 underline">
-                Start over
-              </button>
-              <button type="submit" disabled={submitting} className="inline-flex h-12 items-center rounded-full px-6 text-sm font-semibold text-white disabled:opacity-60" style={{ background: HIRING_GRADIENT }}>
-                {submitting ? <RiLoader4Line className="h-4 w-4 animate-spin" /> : step === "review" ? "Submit application" : "Continue"}
-              </button>
-            </div>
-          </form>
-        )}
+              <Step
+                step={step}
+                stepNumber={stepIndex + 1}
+                requirementIndex={requirementIndex}
+                answers={draft}
+                headingId={headingId}
+                leadOpen={leadOpen}
+                catalog={catalog}
+                access={access}
+                pay={pay}
+                error={error}
+                submitting={submitting}
+                intakeSettings={intakeSettings}
+                onChange={(partial) => {
+                  setError(null);
+                  setAnswers((current) => ({ ...current, ...partial }));
+                }}
+              />
+              {error && <p role="alert" className="mt-4 text-sm font-medium text-red-700">{error}</p>}
+              <div className="mt-6 flex flex-wrap items-center gap-4">
+                <button type="submit" disabled={submitting} className="inline-flex h-11 items-center gap-2 rounded-xl px-5 text-sm font-semibold text-white disabled:opacity-60" style={{ background: "#5C0FFE" }}>
+                  {submitting ? <RiLoader4Line className="h-4 w-4 animate-spin" /> : step === "review" ? "Submit" : "OK"}
+                  {!submitting && <span className="text-white/70">↵</span>}
+                </button>
+                <button type="button" onClick={() => { localStorage.removeItem(STORAGE_KEY); setAnswers({ ...EMPTY, leadRoleOpen: leadOpen }); setStepIndex(0); setRequirementIndex(0); setError(null); }} className="text-sm font-semibold text-slate-500 underline-offset-4 hover:text-slate-800 hover:underline">
+                  Start over
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
       </main>
       <input tabIndex={-1} autoComplete="off" aria-hidden className="hidden" value={fax} onChange={(event) => setFax(event.target.value)} name="faxNumber" />
     </div>
@@ -388,9 +454,11 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
 }
 
 function Step({
-  step, answers, headingId, leadOpen, catalog, access, pay, error: _error, submitting: _submitting, onChange, intakeSettings,
+  step, stepNumber, requirementIndex, answers, headingId, leadOpen, catalog, access, pay, error: _error, submitting: _submitting, onChange, intakeSettings,
 }: {
   step: ApplicationStep;
+  stepNumber: number;
+  requirementIndex: number;
   answers: Answers;
   headingId: string;
   leadOpen: boolean;
@@ -408,7 +476,8 @@ function Step({
   if (step === "role") {
     return (
       <section aria-labelledby={headingId}>
-        <h1 id={headingId} tabIndex={-1} className="font-heading text-3xl font-semibold">You are applying as a Field Cleaner</h1>
+        <Kicker n={String(stepNumber)} />
+        <h1 id={headingId} tabIndex={-1} className={PAGE_TITLE}>You are applying as a Field Cleaner</h1>
         <p className="mt-3 text-base text-slate-700">Field Cleaner is the base role. Other roles are optional, and declining one never changes the others.</p>
         <div className="mt-6">
           <RoleInterestFields
@@ -426,8 +495,9 @@ function Step({
   if (step === "name") {
     return (
       <section aria-labelledby={headingId}>
-        <h1 id={headingId} className="font-heading text-3xl font-semibold">What’s your name?</h1>
-        <div className="mt-6 grid gap-3 sm:grid-cols-2">
+        <Kicker n={String(stepNumber)} />
+        <h1 id={headingId} tabIndex={-1} className={PAGE_TITLE}>What’s your name?</h1>
+        <div className="mt-8 grid gap-4 sm:grid-cols-2">
           <Field label="First name" autoComplete="given-name" value={answers.firstName} onChange={(firstName) => onChange({ firstName })} />
           <Field label="Last name" autoComplete="family-name" value={answers.lastName} onChange={(lastName) => onChange({ lastName })} />
         </div>
@@ -437,7 +507,8 @@ function Step({
   if (step === "email") {
     return (
       <section aria-labelledby={headingId}>
-        <h1 id={headingId} className="font-heading text-3xl font-semibold">What’s your email?</h1>
+        <Kicker n={String(stepNumber)} />
+        <h1 id={headingId} tabIndex={-1} className={PAGE_TITLE}>What’s your email?</h1>
         <Field label="Email" type="email" autoComplete="email" value={answers.email} onChange={(email) => onChange({ email })} />
       </section>
     );
@@ -445,7 +516,8 @@ function Step({
   if (step === "phone") {
     return (
       <section aria-labelledby={headingId}>
-        <h1 id={headingId} className="font-heading text-3xl font-semibold">What’s your mobile number?</h1>
+        <Kicker n={String(stepNumber)} />
+        <h1 id={headingId} tabIndex={-1} className={PAGE_TITLE}>What’s your mobile number?</h1>
         <Field label="Mobile number" type="tel" autoComplete="tel" value={answers.phone} onChange={(phone) => onChange({ phone: formatPhoneNumber(phone) })} />
         <Check label={why("application_sms")} checked={Boolean(answers.smsConsent)} onChange={(smsConsent) => onChange({ smsConsent })} />
       </section>
@@ -454,7 +526,8 @@ function Step({
   if (step === "comms") {
     return (
       <section aria-labelledby={headingId}>
-        <h1 id={headingId} className="font-heading text-3xl font-semibold">How can we reach you?</h1>
+        <Kicker n={String(stepNumber)} />
+        <h1 id={headingId} tabIndex={-1} className={PAGE_TITLE}>How can we reach you?</h1>
         <p className="mt-3 text-base text-slate-700">Texts are optional. If you decline texts, email is required so we have one way to reach you.</p>
         <Check label={why("application_email")} checked={Boolean(answers.emailConsent)} onChange={(emailConsent) => onChange({ emailConsent })} />
       </section>
@@ -463,22 +536,34 @@ function Step({
   if (step === "address") {
     return (
       <section aria-labelledby={headingId}>
-        <h1 id={headingId} className="font-heading text-3xl font-semibold">Where do you live?</h1>
-        <p className="mt-3 text-base text-slate-700">Street, city, state, and ZIP are required to qualify. A ZIP outside the area we cover goes on a waitlist, not a rejection.</p>
-        <Field label="Street address" autoComplete="address-line1" value={answers.address} onChange={(address) => onChange({ address })} />
-        <Field label="City" autoComplete="address-level2" value={answers.city} onChange={(city) => onChange({ city })} />
-        <p className="mt-6 text-sm font-semibold text-slate-800">State</p>
-        <div className="mt-2 grid grid-cols-2 gap-2">
-          {APPLICANT_STATES.map((state) => {
-            const on = answers.state === state.value;
-            return (
-              <button key={state.value} type="button" aria-pressed={on} onClick={() => onChange({ state: state.value })} className={cn("rounded-2xl border px-3 py-4 text-left text-sm font-semibold", on ? "border-violet-700 bg-violet-50" : "border-slate-300 bg-white")}>
-                {state.label}
-              </button>
-            );
-          })}
+        <Kicker n={String(stepNumber)} />
+        <h1 id={headingId} tabIndex={-1} className={PAGE_TITLE}>Where do you live?</h1>
+        <p className="mt-3 max-w-xl text-base leading-relaxed text-slate-500">Search once. City, ZIP, and state fill in. We hire in Maryland, Virginia, DC, and New York.</p>
+        <div className="mt-8 space-y-4">
+          <AddressSearchField onResolved={onChange} />
+          {answers.address && (
+            <p className="text-sm text-slate-600">
+              Found · <span className="font-medium text-slate-900">{answers.address}</span>
+            </p>
+          )}
+          <Field label="City" autoComplete="address-level2" value={answers.city} onChange={(city) => onChange({ city })} />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="ZIP code" inputMode="numeric" autoComplete="postal-code" value={answers.zipCode} onChange={(zipCode) => onChange({ zipCode: zipCode.replace(/\D/g, "").slice(0, 5) })} />
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">State</span>
+              <select
+                value={answers.state}
+                onChange={(event) => onChange({ state: event.target.value })}
+                className="h-14 w-full rounded-2xl border border-slate-200 bg-white px-4 text-lg text-slate-900 outline-none transition focus:border-[#5C0FFE] focus:ring-4 focus:ring-[#5C0FFE]/10"
+              >
+                <option value="">Select a state</option>
+                {APPLICANT_STATES.map((state) => (
+                  <option key={state.value} value={state.value}>{state.label}</option>
+                ))}
+              </select>
+            </label>
+          </div>
         </div>
-        <Field label="ZIP code" inputMode="numeric" autoComplete="postal-code" value={answers.zipCode} onChange={(zipCode) => onChange({ zipCode: zipCode.replace(/\D/g, "").slice(0, 5) })} />
       </section>
     );
   }
@@ -518,27 +603,18 @@ function Step({
     );
   }
   if (step === "requirements") {
-    const rows = [
-      { key: "ageAnswer", title: "I am 18 or older.", why: why("why_age") },
-      { key: "hasSmartphone", title: "I have a smartphone that can run the Novara app and take photos.", why: why("why_phone") },
-      { key: "hasVehicle", title: "I have a personal vehicle I can drive to jobs with my supplies.", why: why("why_vehicle") },
-      { key: "willHaveKit", title: "I have or will have a cleaning supply kit before my first job.", why: why("why_supplies") },
-      { key: "understandsContractor", title: "I understand this is independent contractor work, not employment, and that I will provide a W-9.", why: why("independent_contractor") },
-      { key: "understandsVerification", title: "I understand that if I pass, I will be asked to verify my identity and vehicle and to authorize a background check.", why: "This happens after a conditional approval, during onboarding." },
-    ] as const;
+    const row = REQUIREMENT_ROWS[Math.min(requirementIndex, REQUIREMENT_ROWS.length - 1)];
     return (
       <section aria-labelledby={headingId}>
-        <h1 id={headingId} className="font-heading text-3xl font-semibold">Requirements</h1>
-        <p className="mt-3 text-base text-slate-700">Each one is shown before you answer. A no is recorded. It is not hidden.</p>
-        <div className="mt-6 space-y-6">
-          {rows.map((row) => (
-            <fieldset key={row.key} className="rounded-2xl border border-slate-300 p-4">
-              <legend className="px-1 text-base font-semibold">{row.title}</legend>
-              <p className="mt-1 text-sm leading-relaxed text-slate-700">Why we ask: {row.why}</p>
-              <Choice name={row.key} value={String(answers[row.key] || "")} options={YES_NO.map((item) => ({ value: item.value, label: item.label }))} onPick={(value) => onChange({ [row.key]: value, ...(row.key === "ageAnswer" ? { age18: value === "yes" } : {}) })} />
-            </fieldset>
-          ))}
-        </div>
+        <Kicker n={String(stepNumber)} />
+        <h1 id={headingId} tabIndex={-1} className={PAGE_TITLE}>{row.title}</h1>
+        <p className="mt-3 max-w-xl text-base leading-relaxed text-slate-500">{row.why}</p>
+        <Choice
+          name={row.key}
+          value={String(answers[row.key] || "")}
+          options={YES_NO.map((item) => ({ value: item.value, label: item.label }))}
+          onPick={(value) => onChange({ [row.key]: value, ...(row.key === "ageAnswer" ? { age18: value === "yes" } : {}) })}
+        />
       </section>
     );
   }
@@ -719,10 +795,88 @@ function Field({ label, value, onChange, type = "text", autoComplete, inputMode 
 }) {
   const id = useId();
   return (
-    <label htmlFor={id} className="mt-6 block text-sm font-semibold text-slate-800">
-      {label}
-      <input id={id} type={type} autoComplete={autoComplete} inputMode={inputMode} value={value} onChange={(event) => onChange(event.target.value)} className="mt-1.5 h-12 w-full rounded-xl border border-slate-300 px-3 text-base font-normal text-slate-900" />
+    <label htmlFor={id} className="block">
+      <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</span>
+      <input id={id} type={type} autoComplete={autoComplete} inputMode={inputMode} value={value} onChange={(event) => onChange(event.target.value)} className="h-14 w-full rounded-2xl border border-slate-200 bg-white px-4 text-lg font-normal text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-[#5C0FFE] focus:ring-4 focus:ring-[#5C0FFE]/10" />
     </label>
+  );
+}
+
+function Kicker({ n }: { n: string }) {
+  return (
+    <p className="mb-3 inline-flex rounded-md border border-violet-200 bg-violet-50 px-2 py-0.5 text-[11px] font-semibold tracking-wide text-violet-700">
+      {n}
+    </p>
+  );
+}
+
+function AddressSearchField({ onResolved }: { onResolved: (partial: Partial<Answers>) => void }) {
+  const { suggestions, query, resolve, clear } = useAddressAutocomplete();
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+
+  async function pick(suggestion: AddressSuggestion) {
+    setOpen(false);
+    const parsed = await resolve(suggestion);
+    clear();
+    if (!parsed) return;
+    const street = parsed.street || parsed.formattedAddress || text;
+    const zipCode = String(parsed.zipCode || "").replace(/\D/g, "").slice(0, 5);
+    const state = applicantStateFromAddress(parsed.state);
+    setText("");
+    onResolved({
+      address: street,
+      ...(parsed.city ? { city: parsed.city } : {}),
+      ...(zipCode ? { zipCode } : {}),
+      ...(state ? { state } : { state: "" }),
+    });
+  }
+
+  return (
+    <div className="relative">
+      <label className="block">
+        <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">Search your address</span>
+        <input
+          type="text"
+          value={text}
+          placeholder="Start typing a street, city, or ZIP"
+          autoComplete="off"
+          role="combobox"
+          aria-expanded={open && suggestions.length > 0}
+          aria-autocomplete="list"
+          onChange={(event) => {
+            setText(event.target.value);
+            query(event.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => {
+            if (text.trim().length >= 3) {
+              query(text);
+              setOpen(true);
+            }
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              setOpen(false);
+              clear();
+              return;
+            }
+            if (event.key !== "Enter") return;
+            event.preventDefault();
+            if (open && suggestions[0]) void pick(suggestions[0]);
+          }}
+          className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-base text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-[#5C0FFE] focus:ring-4 focus:ring-[#5C0FFE]/10"
+        />
+      </label>
+      {open && suggestions.length > 0 && (
+        <AddressSuggestionMenu
+          suggestions={suggestions}
+          onPick={(suggestion) => {
+            void pick(suggestion);
+          }}
+        />
+      )}
+    </div>
   );
 }
 
@@ -743,13 +897,37 @@ function Choice({ name, value, options, onPick }: {
   onPick: (value: string) => void;
 }) {
   return (
-    <div className="mt-6 space-y-2" role="radiogroup" aria-label={name}>
-      {options.map((option) => (
-        <button key={option.value} type="button" role="radio" aria-checked={value === option.value} disabled={option.disabled} onClick={() => onPick(option.value)} className={cn("block w-full rounded-2xl border px-4 py-3 text-left", option.disabled ? "cursor-not-allowed border-slate-200 text-slate-400" : value === option.value ? "border-violet-700 bg-violet-50" : "border-slate-300")}>
-          <span className="block font-semibold">{option.label}</span>
-          {option.hint && <span className="mt-0.5 block text-sm text-slate-600">{option.hint}</span>}
-        </button>
-      ))}
+    <div className="mt-8 space-y-2.5" role="radiogroup" aria-label={name}>
+      {options.map((option, index) => {
+        const on = value === option.value && !option.disabled;
+        const letter = String.fromCharCode(65 + index);
+        return (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            disabled={option.disabled}
+            onClick={() => onPick(option.value)}
+            className={cn(
+              "flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition sm:gap-4 sm:px-4 sm:py-4",
+              option.disabled
+                ? "cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400"
+                : on
+                  ? "border-[#5C0FFE] bg-white shadow-[0_14px_30px_-20px_rgba(92,15,254,0.85)]"
+                  : "border-slate-200 bg-white/80 hover:border-[#8F7BFD]/60 hover:bg-white",
+            )}
+          >
+            <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border text-xs font-bold", on ? "border-[#5C0FFE] bg-[#5C0FFE] text-white" : "border-slate-200 text-slate-500")}>
+              {on ? <RiCheckLine className="h-4 w-4" /> : letter}
+            </span>
+            <span className="min-w-0">
+              <span className="block text-base font-semibold text-slate-900">{option.label}</span>
+              {option.hint && <span className="mt-0.5 block text-sm text-slate-500">{option.hint}</span>}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
