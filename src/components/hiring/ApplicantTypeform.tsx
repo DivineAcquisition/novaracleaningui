@@ -289,7 +289,7 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
         <Link href={`${HIRING_ORIGIN}/hiring`} className="font-heading text-[15px] font-bold">Novara<span className="text-primary">Cleaning</span></Link>
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{done ? "Done" : `${stepIndex + 1} of ${steps.length}`}</p>
       </header>
-      <main className="mx-auto w-full max-w-2xl flex-1 px-5 pb-36">
+      <main className="mx-auto w-full max-w-2xl flex-1 px-5 pb-12">
         {!done && <p className="pt-2 text-sm text-slate-600">Your progress is saved on this device for up to 7 days. This is independent contractor work, not employment.</p>}
         {done ? (
           <div className="py-10">
@@ -335,19 +335,6 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
           </form>
         )}
       </main>
-      <footer className="fixed inset-x-0 bottom-0 border-t border-slate-200 bg-white/95 px-5 py-3 text-sm text-slate-700">
-        <div className="mx-auto max-w-2xl space-y-1">
-          <p>{intakeSettings.legalName} · {intakeSettings.legalAddress} · <a className="font-semibold underline" href="tel:+18447352070">{intakeSettings.applicantPhone}</a></p>
-          <p>
-            <a className="font-semibold underline" href={`mailto:${intakeSettings.applicantEmail}`}>{intakeSettings.applicantEmail}</a>
-            {" · "}
-            <a className="font-semibold underline" href="https://novaracleaning.com/privacy">Privacy notice</a>
-            {" · "}
-            <a className="font-semibold underline" href="https://novaracleaning.com/sms-consent">Text message terms</a>
-          </p>
-          <p>If you need an accommodation to complete this application, email <a className="font-semibold text-slate-900 underline" href={`mailto:${intakeSettings.applicantEmail}`}>{intakeSettings.applicantEmail}</a>.</p>
-        </div>
-      </footer>
       <input tabIndex={-1} autoComplete="off" aria-hidden className="hidden" value={fax} onChange={(event) => setFax(event.target.value)} name="faxNumber" />
     </div>
   );
