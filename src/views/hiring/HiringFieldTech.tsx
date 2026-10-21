@@ -224,8 +224,12 @@ export default function HiringFieldTech() {
                   Other contractor roles
                 </h2>
                 <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">
+<<<<<<< HEAD
                   Specialized Contractor and Commercial Cleaner open when demand does.{" "}
                   <Link href="/hiring/lead-cleaner" className="font-semibold text-[#5C0FFE]">Lead Cleaner is open now.</Link>
+=======
+                  Specialized Contractor and Commercial Cleaner open when demand does. Lead Cleaner is open now.
+>>>>>>> cbca445c (Open Lead Cleaner and rebuild the hiring page.)
                 </p>
               </div>
 

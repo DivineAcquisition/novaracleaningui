@@ -168,7 +168,7 @@ check("the approval message has one link and no call to schedule", note.text.inc
 check("approval copy avoids forbidden words", !usesForbiddenApplicantLanguage(note.text));
 check("applicant messages avoid employee language", usesForbiddenApplicantLanguage("You are hired as staff") && !usesForbiddenApplicantLanguage(pass.message));
 
-const closedLead = decideApplication(answers({ role: "lead_cleaner" }), DEFAULT_INTAKE_SETTINGS, now);
+const closedLead = decideApplication(answers({ role: "lead_cleaner" }), { ...DEFAULT_INTAKE_SETTINGS, leadRoleOpenToPublic: false }, now);
 check("a closed lead role waits for a person", closedLead.outcome === "needs_review" && closedLead.openOnboarding === false);
 const openLead = decideApplication(answers({ role: "lead_cleaner" }), { ...DEFAULT_INTAKE_SETTINGS, leadRoleOpenToPublic: true }, now);
 check("an open lead role can pass onto the lead track", openLead.outcome === "pass" && openLead.leadTrack === true);

@@ -434,9 +434,15 @@ export function isOpenApplicantRole(value: string | null | undefined): boolean {
   return value === OPEN_APPLICANT_ROLE || value === LEAD_APPLICANT_ROLE;
 }
 
+<<<<<<< HEAD
 /** Field Cleaner is the default. A Lead Cleaner link opens that role. */
 export function presetRoleForHiringPage(roleId: string | null | undefined): ApplicantRole {
   if (roleId === "lead-cleaner") return LEAD_APPLICANT_ROLE;
+=======
+/** Every public hiring page starts on Field Cleaner. The other roles are opening soon. */
+export function presetRoleForHiringPage(roleId: string | null | undefined): ApplicantRole {
+  if (roleId === "lead-cleaner") return "Lead Cleaner (Contractor)";
+>>>>>>> cbca445c (Open Lead Cleaner and rebuild the hiring page.)
   return OPEN_APPLICANT_ROLE;
 }
 

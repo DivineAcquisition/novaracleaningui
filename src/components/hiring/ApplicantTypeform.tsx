@@ -88,7 +88,7 @@ function why(id: string): string {
 
 export function ApplicantTypeform({ session }: { session?: PublicHiringSession | null }) {
   const params = useSearchParams();
-  const [leadOpen, setLeadOpen] = useState(false);
+  const [leadOpen, setLeadOpen] = useState(true);
   const [answers, setAnswers] = useState<Answers>(EMPTY);
   const [stepIndex, setStepIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -109,11 +109,14 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
       saved = {};
     }
     const fromSession = session?.answers || {};
+    const requested = params.get("role");
     setAnswers({
       ...EMPTY,
       ...saved,
       ...fromSession,
-      role: fromSession.role || saved.role || presetRoleForHiringPage(params.get("role")),
+      role: requested === "lead-cleaner"
+        ? presetRoleForHiringPage(requested)
+        : fromSession.role || saved.role || presetRoleForHiringPage(requested),
       firstName: fromSession.firstName || saved.firstName || session?.firstName || "",
       lastName: fromSession.lastName || saved.lastName || session?.lastName || "",
       email: fromSession.email || saved.email || "",
@@ -304,7 +307,7 @@ function Step({
           value={answers.role}
           options={[
             { value: OPEN_APPLICANT_ROLE, label: "Cleaner", hint: "Residential jobs on the Novara network" },
-            { value: "Lead Cleaner (Contractor)", label: "Lead Cleaner", hint: leadOpen ? "Open to new applicants" : "Opens after current contractors are invited", disabled: !leadOpen },
+            { value: "Lead Cleaner (Contractor)", label: "Lead Cleaner", hint: leadOpen ? "Lead jobs, walkthroughs, and trial jobs" : "Not open to new applicants right now", disabled: !leadOpen },
           ]}
           onPick={(role) => onChange({ role })}
         />
