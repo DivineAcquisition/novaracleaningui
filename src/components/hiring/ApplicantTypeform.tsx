@@ -929,8 +929,8 @@ function choicesFor(step: ApplicationStep): Choice[] {
       return APPLICANT_ROLES.map((r) => ({
         value: r.value,
         label: r.label,
-        hint: r.value === OPEN_APPLICANT_ROLE ? r.hint : "Opening soon",
-        disabled: r.value !== OPEN_APPLICANT_ROLE,
+        hint: r.value === OPEN_APPLICANT_ROLE || r.value === "Lead Cleaner (Contractor)" ? r.hint : "Opening soon",
+        disabled: r.value !== OPEN_APPLICANT_ROLE && r.value !== "Lead Cleaner (Contractor)",
       }));
     case "state":
       return APPLICANT_STATES.map((s) => ({ value: s.value, label: s.label }));

@@ -373,13 +373,15 @@ const EXT_MIME: Record<string, string> = {
 };
 
 export const OPEN_APPLICANT_ROLE: ApplicantRole = "Field Cleaner (Contractor)";
+export const LEAD_APPLICANT_ROLE: ApplicantRole = "Lead Cleaner (Contractor)";
 
 export function isOpenApplicantRole(value: string | null | undefined): boolean {
-  return value === OPEN_APPLICANT_ROLE;
+  return value === OPEN_APPLICANT_ROLE || value === LEAD_APPLICANT_ROLE;
 }
 
-/** Every public hiring page starts on Field Cleaner. The other roles are opening soon. */
-export function presetRoleForHiringPage(_roleId: string | null | undefined): ApplicantRole {
+/** Field Cleaner is the default. A Lead Cleaner link opens that role. */
+export function presetRoleForHiringPage(roleId: string | null | undefined): ApplicantRole {
+  if (roleId === "lead-cleaner") return LEAD_APPLICANT_ROLE;
   return OPEN_APPLICANT_ROLE;
 }
 

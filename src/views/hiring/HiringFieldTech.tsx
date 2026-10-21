@@ -22,6 +22,7 @@ import {
 import { SEO } from "@/components/SEO";
 import { WistiaPlayer } from "@/components/cleaner/WistiaPlayer";
 import { roleById, type HiringRoleId } from "@/lib/hiring/roles";
+import { hiringApplyUrl } from "@/lib/site-hosts";
 import {
   EvergreenBadge,
   HiringFooter,
@@ -83,7 +84,7 @@ export default function HiringFieldTech() {
         description="Join Novara Cleaning as a Field Tech independent contractor. Watch the role intro, then apply. Evergreen Specialized Contractor and Commercial Cleaner lists also open."
         canonical="https://hiring.novaracleaning.com/hiring/field-tech"
       />
-      <HiringNav ctaHref={`/hiring/apply?role=${defaultRole}`} ctaLabel="Apply" />
+      <HiringNav ctaHref={hiringApplyUrl(`?role=${defaultRole}`)} ctaLabel="Apply" />
 
       <section className="relative overflow-hidden border-b border-slate-200/80">
         <div
@@ -223,7 +224,8 @@ export default function HiringFieldTech() {
                   Other contractor roles
                 </h2>
                 <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">
-                  Lead Cleaner, Specialized Contractor, and company crews are opening soon. Field Cleaner is the role you can apply for now.
+                  Specialized Contractor and Commercial Cleaner open when demand does.{" "}
+                  <Link href="/hiring/lead-cleaner" className="font-semibold text-[#5C0FFE]">Lead Cleaner is open now.</Link>
                 </p>
               </div>
 

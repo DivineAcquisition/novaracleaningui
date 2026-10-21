@@ -4,7 +4,8 @@
 // role; Specialized Contractors + Commercial Cleaner sit on an active
 // evergreen list (applicants are selected when demand opens).
 
-export type HiringRoleId = "field-tech" | "specialized-contractors" | "commercial-cleaner";
+export type HiringRoleId = "field-tech" | "lead-cleaner" | "specialized-contractors" | "commercial-cleaner";
+export type HiringRoleGroup = "field" | "lead" | "specialty";
 
 export interface HiringRole {
   id: HiringRoleId;
@@ -17,6 +18,9 @@ export interface HiringRole {
   type: string;
   pay: string;
   evergreen: boolean;
+  group: HiringRoleGroup;
+  level: number;
+  featured?: boolean;
   highlights: string[];
   expectations: string[];
 }
@@ -32,8 +36,10 @@ export const HIRING_ROLES: HiringRole[] = [
       "Join Novara's field team as an independent contractor. Accept jobs near you, earn revenue-share pay, and run your own clean — backed by our scheduling, payments, and support.",
     location: "DMV (MD · DC · VA)",
     type: "1099 · Flexible",
-    pay: "35–45% revenue share",
+    pay: "35–45% of the job",
     evergreen: false,
+    group: "field",
+    level: 2,
     highlights: [
       "Revenue-share pay — 35% to start, up to 45% as you prove yourself",
       "You set availability; accept the jobs that fit your week",
@@ -49,6 +55,35 @@ export const HIRING_ROLES: HiringRole[] = [
     ],
   },
   {
+    id: "lead-cleaner",
+    slug: "lead-cleaner",
+    title: "Lead Cleaner",
+    shortTitle: "Lead Cleaner",
+    tagline: "Lead larger jobs, walk the finished work, and show new cleaners the standard.",
+    summary:
+      "An experienced independent contractor on the Novara network. Lead jobs pay 47% of the job. Solo jobs stay at your normal tier. You can accept or decline any lead, trial, or backup offer.",
+    location: "DMV (MD · DC · VA)",
+    type: "1099 · Lead jobs",
+    pay: "47% on jobs you lead",
+    evergreen: false,
+    group: "lead",
+    level: 3,
+    featured: true,
+    highlights: [
+      "47% of the job on lead jobs. Solo jobs stay at your tier rate",
+      "Final walkthrough and photos before a lead job closes",
+      "Show a new cleaner the work on a trial job. Novara decides the result",
+      "First look at urgent, same-day, and dropped jobs",
+    ],
+    expectations: [
+      "You may accept or decline any lead, trial, or backup offer",
+      "You do not approve, reject, or set pay for another contractor",
+      "Walkthrough notes are facts and photos",
+      "Novara pays every contractor directly",
+      "A verified vehicle and a full kit for a two-person job",
+    ],
+  },
+  {
     id: "specialized-contractors",
     slug: "specialized-contractors",
     title: "Specialized Contractors",
@@ -60,6 +95,8 @@ export const HIRING_ROLES: HiringRole[] = [
     type: "1099 · On-demand",
     pay: "Job-based · specialty rates",
     evergreen: true,
+    group: "specialty",
+    level: 2,
     highlights: [
       "Higher-complexity residential scopes when they open",
       "Selected from the evergreen list when needed — not a standing daily roster",
@@ -85,6 +122,8 @@ export const HIRING_ROLES: HiringRole[] = [
     type: "1099 · Scheduled / on-call",
     pay: "Job-based · commercial rates",
     evergreen: true,
+    group: "specialty",
+    level: 2,
     highlights: [
       "Commercial and office facilities when routes open",
       "Active evergreen list — selected when needed, not hired into idle capacity",
@@ -113,6 +152,8 @@ export function applicantRoleLabel(id: HiringRoleId): string {
   switch (id) {
     case "field-tech":
       return "Field Tech";
+    case "lead-cleaner":
+      return "Lead Cleaner";
     case "specialized-contractors":
       return "Specialized Contractor";
     case "commercial-cleaner":

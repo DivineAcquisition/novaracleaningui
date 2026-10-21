@@ -6,6 +6,7 @@
 import Link from "next/link";
 import { RiArrowRightLine, RiCheckboxCircleLine, RiFileTextLine, RiMapPin2Line } from "@remixicon/react";
 import { type HiringRoleId } from "@/lib/hiring/roles";
+import { hiringApplyUrl } from "@/lib/site-hosts";
 import { HIRING_GRADIENT } from "@/components/hiring/HiringChrome";
 import { cn } from "@/lib/utils";
 
@@ -16,9 +17,9 @@ interface Props {
 }
 
 const REQUIREMENTS = [
-  { icon: RiCheckboxCircleLine, label: "18 or older, and authorized to work in the U.S." },
-  { icon: RiMapPin2Line, label: "Your own insured car and a valid driver’s license" },
-  { icon: RiFileTextLine, label: "A photo ID, kept only to confirm who you are" },
+  { icon: RiCheckboxCircleLine, label: "18 or older" },
+  { icon: RiMapPin2Line, label: "A personal vehicle you can drive to jobs" },
+  { icon: RiFileTextLine, label: "A smartphone that can run the app and take photos" },
 ];
 
 export function HiringApplyForm({ defaultRole = "field-tech", className, compact }: Props) {
@@ -36,7 +37,7 @@ export function HiringApplyForm({ defaultRole = "field-tech", className, compact
       </h3>
       {!compact && (
         <p className="mt-1.5 text-sm leading-relaxed text-slate-500">
-          A short application. You’ll need to be 18 or older, with an insured car, a driver’s license, and a photo ID.
+          A short application. You’ll need to be 18 or older, with a personal vehicle and a smartphone. Identity is verified after you pass.
         </p>
       )}
       <ul className="mt-5 space-y-2.5">
@@ -48,7 +49,7 @@ export function HiringApplyForm({ defaultRole = "field-tech", className, compact
         ))}
       </ul>
       <Link
-        href={`/hiring/apply?role=${defaultRole}`}
+        href={hiringApplyUrl(`?role=${defaultRole}`)}
         className="mt-6 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full text-sm font-semibold text-white shadow-[0_12px_28px_-14px_rgba(92,15,254,0.65)] transition hover:opacity-95"
         style={{ background: HIRING_GRADIENT }}
       >
