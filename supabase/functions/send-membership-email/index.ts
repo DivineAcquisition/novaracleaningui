@@ -60,7 +60,7 @@ function renderCheckoutLink(d: MembershipEmailRequest["data"]): string {
   return buildEmailCard({
     title: `Start your ${plan} membership`,
     bodyHtml: `<p style="margin:0 0 12px;">Hi ${name},</p>
-<p style="margin:0 0 16px;">You're almost set. Use the button to add your card and activate your Novara ${plan} membership.</p>
+<p style="margin:0 0 16px;">Use the button to add your card and start your Novara ${plan} membership. Visits begin after payment.</p>
 <p style="margin:0 0 8px;">Monthly: <strong>${money(d.monthlyAmount)}/mo</strong></p>
 ${depositLine}${dateLine}`,
     buttonHref: d.url || "",

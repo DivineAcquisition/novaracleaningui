@@ -52,21 +52,6 @@ const PLAN_LABELS: Record<string, string> = {
   monthly: "Glow Monthly",
 };
 
-// Dollars per month, same catalog as supabase/functions/_shared/pricing.ts.
-const MEMBERSHIP_DOLLARS: Record<string, { monthly: number; biweekly: number; weekly: number }> = {
-  "0_999": { monthly: 129, biweekly: 199, weekly: 349 },
-  "1000_1500": { monthly: 159, biweekly: 249, weekly: 449 },
-  "1501_2000": { monthly: 199, biweekly: 319, weekly: 569 },
-  "2001_2500": { monthly: 229, biweekly: 369, weekly: 659 },
-  "2501_3000": { monthly: 279, biweekly: 449, weekly: 799 },
-  "3001_3500": { monthly: 319, biweekly: 499, weekly: 899 },
-  "3501_4000": { monthly: 369, biweekly: 579, weekly: 1039 },
-  "4001_4500": { monthly: 409, biweekly: 649, weekly: 1159 },
-  "4501_5000": { monthly: 459, biweekly: 719, weekly: 1279 },
-};
-
-const CADENCE_ORDER = ["weekly", "biweekly", "monthly"] as const;
-
 // deno-lint-ignore no-explicit-any
 async function loadSchedule(supabase: any, token: string): Promise<Row | null> {
   if (!token || token.length < 16) return null;
@@ -79,22 +64,15 @@ async function loadSchedule(supabase: any, token: string): Promise<Row | null> {
 }
 
 function planOptions(s: Row) {
-  const catalog = MEMBERSHIP_DOLLARS[String(s.home_size_id || "")];
+  // The internal booking already chose the frequency. The pay link shows
+  // that plan only — not the other Glow frequencies.
   const current = String(s.membership_plan || s.cadence || "monthly");
-  if (!catalog) {
-    return [{
-      cadence: current,
-      label: PLAN_LABELS[current] || "Recurring membership",
-      cents: Number(s.price_cents) || 0,
-      selected: true,
-    }];
-  }
-  return CADENCE_ORDER.map((cadence) => ({
-    cadence,
-    label: PLAN_LABELS[cadence],
-    cents: catalog[cadence] * 100,
-    selected: cadence === current,
-  }));
+  return [{
+    cadence: current,
+    label: PLAN_LABELS[current] || "Recurring membership",
+    cents: Number(s.price_cents) || 0,
+    selected: true,
+  }];
 }
 
 function summarize(s: Row) {
@@ -195,27 +173,10 @@ serve(async (req) => {
 
     if (action === "set_plan") {
       const cadence = String((body as Row)?.cadence || "").toLowerCase();
-      if (!CADENCE_ORDER.includes(cadence as (typeof CADENCE_ORDER)[number])) {
-        return json({ ok: false, error: "invalid_plan" }, 400);
+      const current = String(schedule.membership_plan || schedule.cadence || "monthly");
+      if (cadence !== current) {
+        return json({ ok: false, error: "This link uses the frequency already chosen." }, 409);
       }
-      const catalog = MEMBERSHIP_DOLLARS[String(schedule.home_size_id || "")];
-      const cents = catalog ? catalog[cadence as keyof typeof catalog] * 100 : Number(schedule.price_cents) || 0;
-      const nowIso = new Date().toISOString();
-      const { error } = await supabase
-        .from("customer_recurring_schedules")
-        .update({
-          cadence,
-          membership_plan: cadence,
-          price_cents: cents,
-          pay_url: null,
-          updated_at: nowIso,
-        })
-        .eq("id", schedule.id);
-      if (error) return json({ ok: false, error: "plan_update_failed" }, 500);
-      schedule.cadence = cadence;
-      schedule.membership_plan = cadence;
-      schedule.price_cents = cents;
-      schedule.pay_url = null;
       return json({ ok: true, membership: summarize(schedule) });
     }
 

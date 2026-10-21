@@ -284,7 +284,7 @@ async function sendPendingUntilDepositEmail(
       <h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">Deposit needed</h1>
       <p style="margin:0 0 12px">Hi ${fname},</p>
       <p style="margin:0 0 12px">Your <strong>${opts.serviceType}</strong> clean for <strong>${opts.serviceDate}</strong> (${opts.timeSlot})${where} is <strong>pending until your deposit is received</strong>.</p>
-      <p style="margin:0 0 12px">Booking <strong>${opts.bookingRef}</strong>. Total ${money(opts.totalCents)}. This is <em>not</em> a confirmed booking yet. Once we receive your ${money(opts.depositCents)} deposit, we'll confirm your appointment and send your confirmation details.</p>
+      <p style="margin:0 0 12px">Booking <strong>${opts.bookingRef}</strong>. Total ${money(opts.totalCents)}. The appointment stays pending until we receive your ${money(opts.depositCents)} deposit. After that payment, we'll send your appointment details.</p>
       ${payCta}
       ${remainingNote}`;
   const sent = await sendThroughCompliance(resendKey, {

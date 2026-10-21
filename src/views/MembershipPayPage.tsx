@@ -78,7 +78,6 @@ export default function MembershipPayPage() {
 
   // Pay step state
   const [payUrl, setPayUrl] = useState<string | null>(null);
-  const [savingPlan, setSavingPlan] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -106,25 +105,6 @@ export default function MembershipPayPage() {
   useEffect(() => {
     if (token) void load();
   }, [token, load]);
-
-  const choosePlan = async (cadence: string) => {
-    if (!summary || summary.plan === cadence || savingPlan) return;
-    setSavingPlan(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("membership-pay-page", {
-        body: { action: "set_plan", token, cadence },
-      });
-      if (error) throw error;
-      const d = data as { ok?: boolean; error?: string; membership?: MembershipSummary };
-      if (!d?.ok || !d.membership) throw new Error(d?.error || "Could not update the plan");
-      setSummary(d.membership);
-      setPayUrl(d.membership.payUrl);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not update the plan");
-    } finally {
-      setSavingPlan(false);
-    }
-  };
 
   const allAccepted = acceptanceGate?.ready === true;
   const canSign = allAccepted && legalName.trim().length >= 3 && !!signatureDataUrl;
@@ -232,14 +212,14 @@ export default function MembershipPayPage() {
   return (
     <div className="relative min-h-screen bg-background pb-16">
       <BrandAtmosphere />
-      <SEO title="Confirm & activate your membership — Novara Cleaning" noindex />
+      <SEO title="Sign and pay for your membership — Novara Cleaning" noindex />
       <div className="relative z-10 max-w-md mx-auto p-4 space-y-4">
         {/* Membership summary */}
         <header className="token-hero">
           <div className="flex items-center gap-2">
             <RiRepeatLine className="w-5 h-5" />
             <p className="text-sm font-semibold">
-              Hi {summary.firstName || "there"} — confirm your membership
+              Hi {summary.firstName || "there"} — your membership
             </p>
           </div>
           <p className="mt-2 text-xs text-white/80 leading-snug">
@@ -259,30 +239,9 @@ export default function MembershipPayPage() {
             </div>
           )}
           <p className="mt-2 text-[11px] text-white/80 leading-snug">
-            Choose the plan, then sign and submit payment to turn recurring cleans back on.
-            Cancel anytime.
+            Sign, then submit payment to start this membership. Cancel anytime.
           </p>
         </header>
-
-        {!!summary.plans?.length && !summary.agreementSigned && (
-          <div className="token-card space-y-2">
-            <p className="text-sm font-semibold text-foreground">Update your plan</p>
-            {summary.plans.map((plan) => (
-              <button
-                key={plan.cadence}
-                type="button"
-                disabled={savingPlan}
-                onClick={() => void choosePlan(plan.cadence)}
-                className={`flex w-full items-center justify-between rounded-xl border px-3 py-3 text-left text-sm ${
-                  plan.selected ? "border-primary bg-primary/5" : "border-[color:var(--hairline)]"
-                }`}
-              >
-                <span className="font-medium">{plan.label}</span>
-                <span>{money(plan.cents)}/mo</span>
-              </button>
-            ))}
-          </div>
-        )}
 
         {!summary.agreementSigned ? (
           /* ── STEP 1: LEGAL (required before payment unlocks) ── */

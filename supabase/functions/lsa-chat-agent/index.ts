@@ -717,7 +717,7 @@ serve(async (req) => {
           reply = "I still need a first name and an email to send the pay link.";
         }
       } else if (row?.pay_url) {
-        reply = `You're all set once the deposit is in. Here's the link again: ${row.pay_url}`;
+        reply = `The deposit still needs to be paid. Here's the link again: ${row.pay_url}`;
       } else if (![...sentBodies].some((sent) => sent.toLowerCase().includes("let me know what you think"))) {
         reply = "Let me know what you think.?";
         patch.status = "quoted";

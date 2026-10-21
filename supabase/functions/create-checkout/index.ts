@@ -458,7 +458,7 @@ serve(async (req) => {
       if (wantNotify && session.url) {
         const firstNm = bodyFirstName ? String(bodyFirstName) : "there";
         const planNm = MEMBERSHIP_PLAN_LABELS[membershipPlan] || planLabel;
-        const dateBit = firstServiceDate ? ` Your first clean is set for ${firstServiceDate}.` : "";
+        const dateBit = firstServiceDate ? ` First visit requested: ${firstServiceDate}.` : "";
         if (bodyPhone) {
           try {
             notify.sms = await sendSms(supabase, {

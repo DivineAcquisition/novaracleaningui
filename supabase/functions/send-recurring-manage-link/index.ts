@@ -86,8 +86,8 @@ serve(async (req) => {
         `Need to move it, skip it, or change your ${cadenceLabel} plan? Manage it here:\n${url}\n\nReply STOP to opt out.`;
     } else if (context === "created") {
       message =
-        `${greeting} your Novara ${cadenceLabel} cleaning plan is all set${sched.next_service_date ? ` — first visit ${dateLabel}${windowLabel ? ` (${windowLabel})` : ""}` : ""}. ` +
-        `Save this link to change dates/times, skip a visit, or pause anytime:\n${url}\n\nReply STOP to opt out.`;
+        `${greeting} a Novara ${cadenceLabel} cleaning plan is waiting on payment${sched.next_service_date ? ` — first visit requested ${dateLabel}${windowLabel ? ` (${windowLabel})` : ""}` : ""}. ` +
+        `Save this link to change dates/times, skip a visit, or pause after payment:\n${url}\n\nReply STOP to opt out.`;
     } else {
       message =
         `${greeting} here's your Novara recurring-clean manage link — change date/time, skip a visit, switch frequency, or pause anytime:\n${url}\n\nReply STOP to opt out.`;
