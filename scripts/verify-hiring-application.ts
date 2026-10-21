@@ -18,6 +18,8 @@ import {
   issuesForStep,
   savedApplicationNote,
   presetRoleForHiringPage,
+  PAY_CONSENT_COPY,
+  applicationSupplyChoices,
   validateHiringApplication,
   visibleSteps,
   type HiringApplicationDraft,
@@ -66,6 +68,7 @@ function draft(overrides: Partial<HiringApplicationDraft> = {}): HiringApplicati
     answersAccurate: true,
     willingToGetSupplies: "Yes",
     suppliesOnHand: "Vacuum and all-purpose cleaner",
+    suppliesHonest: true,
     reliabilityNote: "I show up when I say I will",
     reasonNote: "I want steady houses near me",
     idConfirmed: true,
@@ -97,6 +100,8 @@ if (good.ok) {
   check("days stay in week order", good.value.preferredDays, ["Mon", "Fri"]);
   check("department is service delivery", good.value.department, "Service Delivery");
   check("the supply list is kept", good.value.suppliesOnHand, "Vacuum and all-purpose cleaner");
+  const marked = validateHiringApplication(draft({ suppliesOwned: ["vacuum", "mop_bucket"], suppliesOnHand: "" }));
+  check("marked vacuum and mop are kept", marked.ok && marked.value.suppliesOnHand, "Vacuum with attachments, Mop & bucket (or spray mop)");
   check("the street address is kept", good.value.address, "2805 Mayfield Ave");
   check("the city is kept", good.value.city, "Baltimore");
   check("the state is kept", good.value.state, "Maryland");
@@ -134,8 +139,12 @@ check("an ID over 4 MB is rejected", codeOf({ idFile: { name: "license.jpg", typ
 check("a text file is not a photo ID", codeOf({ idFile: { name: "notes.txt", type: "text/plain", size: 100 } }), "invalid_id");
 check("the street address is required", codeOf({ address: "" }), "missing_address");
 check("the city is required", codeOf({ city: "" }), "missing_city");
-check("the supply list is required", codeOf({ suppliesOnHand: "" }), "missing_supplies_list");
-check("none yet is a supply list", codeOf({ suppliesOnHand: "none yet" }), "ok");
+check("an unmarked supply list needs an honest confirmation", codeOf({ suppliesOnHand: "", suppliesHonest: false }), "missing_supplies_honesty");
+check("an honest empty supply list is none yet", codeOf({ suppliesOnHand: "", suppliesOwned: [], suppliesHonest: true }), "ok");
+check("pay terms include surge and mileage past 35 miles", /35 miles/.test(PAY_CONSENT_COPY) && /surge pay and mileage pay/.test(PAY_CONSENT_COPY), true);
+const supplyChoices = applicationSupplyChoices();
+check("vacuum is the first supply", supplyChoices[0]?.id, "vacuum");
+check("mop is the second supply", supplyChoices[1]?.id, "mop_bucket");
 check("reliability is required", codeOf({ reliabilityNote: "" }), "missing_reliability");
 check("why Novara is required", codeOf({ reasonNote: "" }), "missing_reason");
 check("the privacy notice is acknowledged before submit", codeOf({ privacyAccepted: false }), "missing_privacy");

@@ -56,6 +56,7 @@ export interface HiringSessionAnswers {
   timeWindows?: string[];
   cleaningTypes?: string[];
   privacyAccepted?: boolean;
+  suppliesHonest?: boolean;
 }
 
 export interface HiringSessionRow {
@@ -160,6 +161,7 @@ export function sanitizeAnswers(input: unknown): HiringSessionAnswers {
     "answersAccurate",
     "emailConsent",
     "privacyAccepted",
+    "suppliesHonest",
   ] as const) {
     if (typeof raw[key] === "boolean") out[key] = raw[key];
   }

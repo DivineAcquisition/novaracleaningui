@@ -22,6 +22,9 @@ import {
   OPEN_APPLICANT_ROLE,
   PAY_CONSENT_COPY,
   PREFERRED_DAYS,
+  SUPPLY_HONESTY_COPY,
+  applicationSupplyChoices,
+  isImportantSupply,
   TIME_WINDOWS,
   YES_NO,
   isApplicationIssue,
@@ -71,6 +74,8 @@ const EMPTY: Answers = {
   answersAccurate: false,
   willingToGetSupplies: "",
   suppliesOnHand: "",
+  suppliesOwned: [],
+  suppliesHonest: false,
   reliabilityNote: "",
   reasonNote: "",
   idConfirmed: false,
@@ -217,6 +222,8 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
         payConsent: String(Boolean(answers.payConsent)),
         idConfirmed: String(Boolean(answers.idConfirmed)),
         suppliesOnHand: answers.suppliesOnHand,
+        suppliesOwned: JSON.stringify(answers.suppliesOwned || []),
+        suppliesHonest: String(Boolean(answers.suppliesHonest)),
         reliabilityNote: answers.reliabilityNote,
         reasonNote: answers.reasonNote,
         faxNumber: fax,
@@ -505,17 +512,34 @@ function Step({
     return (
       <section aria-labelledby={headingId}>
         <h1 id={headingId} className="font-heading text-3xl font-semibold">Pay terms</h1>
-        <p className="mt-3 text-base text-slate-700">Accepting these terms is required to qualify.</p>
+        <p className="mt-3 text-base text-slate-700">You start at 40–45% of each job. If you travel more than 35 miles for a job, you also get surge pay and mileage pay. Accepting these terms is required to qualify.</p>
         <Check label={PAY_CONSENT_COPY} checked={Boolean(answers.payConsent)} onChange={(payConsent) => onChange({ payConsent })} />
       </section>
     );
   }
   if (step === "suppliesOnHand") {
+    const choices = applicationSupplyChoices();
+    const owned = answers.suppliesOwned || [];
     return (
       <section aria-labelledby={headingId}>
         <h1 id={headingId} className="font-heading text-3xl font-semibold">Which supplies do you already have?</h1>
-        <p className="mt-3 text-base text-slate-700">This list is required to qualify. If you’re starting from scratch, write “none yet.”</p>
-        <Area label="Supply list" value={answers.suppliesOnHand} maxLength={2000} onChange={(suppliesOnHand) => onChange({ suppliesOnHand })} />
+        <p className="mt-3 text-base text-slate-700">Answer honestly. Every job requires you to show up prepared with the proper equipment. Mark only what you already have. Vacuum and mop are important.</p>
+        <div className="mt-6 space-y-2">
+          {choices.map((item) => {
+            const on = owned.includes(item.id);
+            return (
+              <button key={item.id} type="button" aria-pressed={on} onClick={() => {
+                const next = on ? owned.filter((id) => id !== item.id) : [...owned, item.id];
+                const labels = choices.filter((choice) => next.includes(choice.id)).map((choice) => choice.label);
+                onChange({ suppliesOwned: next, suppliesOnHand: labels.join(", ") || "none yet" });
+              }} className={cn("block w-full rounded-2xl border px-4 py-3 text-left", on ? "border-violet-700 bg-violet-50" : "border-slate-300")}>
+                <span className="block font-semibold">{item.label}</span>
+                {isImportantSupply(item.id) && <span className="mt-0.5 block text-sm text-slate-600">Important. Jobs need this.</span>}
+              </button>
+            );
+          })}
+        </div>
+        <Check label={SUPPLY_HONESTY_COPY} checked={Boolean(answers.suppliesHonest)} onChange={(suppliesHonest) => onChange({ suppliesHonest })} />
       </section>
     );
   }

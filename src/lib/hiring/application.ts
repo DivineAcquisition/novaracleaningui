@@ -1,3 +1,4 @@
+import { SUPPLY_ITEMS } from "@/lib/cleaner-supplies";
 import { postalStateCode } from "@/lib/us-states";
 
 // ─── Public applicant intake ────────────────────────────────────────────────
@@ -65,7 +66,35 @@ export const BACKGROUND_DISCLOSURE =
 export const BACKGROUND_CONSENT_COPY =
   "I have read this disclosure. I understand a criminal-history check and a driving-record check may be run, that Novara may decline me based on the report, and that I will sign a separate authorization immediately before any check is ordered.";
 
-export const PAY_CONSENT_COPY = "I’m comfortable starting at 40–45% of each job.";
+export const PAY_CONSENT_COPY =
+  "I’m comfortable starting at 40–45% of each job. If a job is more than 35 miles away, I also get surge pay and mileage pay for that travel.";
+
+export const SUPPLY_HONESTY_COPY =
+  "This list is honest. I marked only the supplies I already have. Every job requires me to show up prepared with the proper equipment.";
+
+const IMPORTANT_SUPPLY_IDS = ["vacuum", "mop_bucket"] as const;
+
+/** Job supplies on the application. Vacuum and mop come first. */
+export function applicationSupplyChoices() {
+  const needed = SUPPLY_ITEMS.filter((item) => item.neededForJob);
+  return [
+    ...needed.filter((item) => (IMPORTANT_SUPPLY_IDS as readonly string[]).includes(item.id)),
+    ...needed.filter((item) => !(IMPORTANT_SUPPLY_IDS as readonly string[]).includes(item.id)),
+  ];
+}
+
+export function isImportantSupply(id: string): boolean {
+  return (IMPORTANT_SUPPLY_IDS as readonly string[]).includes(id);
+}
+
+export function suppliesListText(owned: string[] | undefined, fallback: string): string {
+  const labels = applicationSupplyChoices()
+    .filter((item) => (owned || []).includes(item.id))
+    .map((item) => item.label);
+  if (labels.length) return labels.join(", ");
+  const text = fallback.replace(/\s+/g, " ").trim();
+  return text.length >= 2 ? text : "none yet";
+}
 
 export const TRUTHFULNESS_COPY = "My answers on this application are true and complete.";
 
@@ -340,6 +369,8 @@ export interface HiringApplicationDraft {
   answersAccurate: boolean;
   willingToGetSupplies: string;
   suppliesOnHand: string;
+  suppliesOwned?: string[];
+  suppliesHonest?: boolean;
   reliabilityNote: string;
   reasonNote: string;
   idConfirmed: boolean;
@@ -400,6 +431,7 @@ export interface NormalizedHiringApplication {
   consentVersion: typeof CONSENT_VERSION;
   willingToGetSupplies: "Yes" | "No";
   suppliesOnHand: string;
+  suppliesOwned: string[];
   reliabilityNote: string;
   reasonNote: string;
   department: typeof APPLICANT_DEPARTMENT;
@@ -731,16 +763,15 @@ export function issuesForStep(step: ApplicationStep, draft: HiringApplicationDra
         return issue(422, "missing_pay_consent", "Accept the pay terms to qualify.", true);
       }
       return null;
-    case "suppliesOnHand": {
-      const supplies = multiLine(draft.suppliesOnHand);
-      if (supplies.length < 2) {
-        return issue(400, "missing_supplies_list", "List what you already have. If you’re starting from scratch, write “none yet.”");
-      }
-      if (supplies.length > 2000) {
-        return issue(400, "missing_supplies_list", "Keep the supply list under 2,000 characters.");
+    case "suppliesOnHand":
+      if (!draft.suppliesHonest) {
+        return issue(
+          400,
+          "missing_supplies_honesty",
+          "Confirm this list is honest. Every job requires you to show up prepared with the proper equipment.",
+        );
       }
       return null;
-    }
     case "reliability": {
       const note = oneLine(draft.reliabilityNote);
       if (note.length < 2) return issue(400, "missing_reliability", "Tell us a bit about your reliability.");
@@ -843,7 +874,10 @@ export function validateHiringApplication(draft: HiringApplicationDraft): Applic
       answersAccurate: Boolean(draft.privacyAccepted),
       consentVersion: CONSENT_VERSION,
       willingToGetSupplies: kit ? "Yes" : "No",
-      suppliesOnHand: multiLine(draft.suppliesOnHand),
+      suppliesOnHand: suppliesListText(draft.suppliesOwned, draft.suppliesOnHand).slice(0, 2000),
+      suppliesOwned: applicationSupplyChoices()
+        .filter((item) => (draft.suppliesOwned || []).includes(item.id))
+        .map((item) => item.id),
       reliabilityNote: oneLine(draft.reliabilityNote),
       reasonNote: oneLine(draft.reasonNote),
       department: APPLICANT_DEPARTMENT,

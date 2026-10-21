@@ -47,9 +47,9 @@ export async function GET(req: Request): Promise<NextResponse> {
     .select("id, full_name, email, stage, intake_stage, intake_decision, created_at, reapply_on")
     .order("created_at", { ascending: true })
     .limit(200);
-  const applicants = applicantSelect.error
+  const applicants = (applicantSelect.error
     ? (await supabase.from("cleaner_applicants").select("id, full_name, email, stage, created_at").order("created_at", { ascending: true }).limit(200)).data
-    : applicantSelect.data;
+    : applicantSelect.data) as Array<{ intake_stage?: string | null; stage?: string | null }> | null;
   const stages = (applicants || []).map((row) => String(row.intake_stage || row.stage || "applied"));
   const cleanerSelect = await supabase
     .from("cleaners")
@@ -143,7 +143,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       addendumSigned: Boolean(body.addendumSigned),
       rubric: Array.isArray(body.rubric) ? body.rubric as [] : [],
     });
-    if (!reviewed.ok) return NextResponse.json({ error: reviewed.error }, { status: 400 });
+    if (reviewed.ok === false) return NextResponse.json({ error: reviewed.error }, { status: 400 });
     const cleanerId = String(body.cleanerId || "");
     const status = body.decision === "approve" ? "lead" : body.decision === "lead_track" ? null : null;
     await supabase.from("cleaners").update({
