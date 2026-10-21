@@ -18,7 +18,7 @@ import {
   issuesForStep,
   savedApplicationNote,
   presetRoleForHiringPage,
-  PAY_CONSENT_COPY,
+  PAY_TRAVEL_SENTENCE,
   applicationSupplyChoices,
   validateHiringApplication,
   visibleSteps,
@@ -110,7 +110,7 @@ if (good.ok) {
   check("work authorization yes is kept", good.value.authorizedToWork, "Yes");
   check("background consent is kept", good.value.backgroundCheckConsent, true);
   check("pay consent is kept", good.value.payConsent, true);
-  check("photo ID type is kept", good.value.idContentType, "image/jpeg");
+  check("a new application does not store an ID type", good.value.idContentType, null);
   check("kit willingness is kept", good.value.willHaveKit, true);
   check("experience value is unchanged", good.value.experience, "Yes 1yr+");
   check("consent version is stored", good.value.consentVersion, CONSENT_VERSION);
@@ -129,19 +129,16 @@ check("a no on the vehicle is still a complete application", codeOf({ hasVehicle
 check("a no on age is still a complete application", codeOf({ ageAnswer: "no", age18: false }), "ok");
 check("texts are not required when email is accepted", codeOf({ smsConsent: false, emailConsent: true }), "ok");
 check("one contact channel is required", codeOf({ smsConsent: false, emailConsent: false }), "missing_channel");
-check("a no on work authorization does not qualify", codeOf({ authorizedToWork: "No" }), "not_authorized");
+check("a no on work authorization is still a complete answer", codeOf({ authorizedToWork: "No" }), "ok");
 check("work authorization has to be answered", codeOf({ authorizedToWork: "" }), "missing_authorization");
 check("background consent is required to qualify", codeOf({ backgroundCheckConsent: false }), "missing_background_consent");
 check("pay consent is required to qualify", codeOf({ payConsent: false }), "missing_pay_consent");
-check("a photo ID is required to qualify", codeOf({ idFile: null, idConfirmed: false }), "missing_id");
-check("the photo ID has to be confirmed", codeOf({ idConfirmed: false }), "missing_id");
-check("an ID over 4 MB is rejected", codeOf({ idFile: { name: "license.jpg", type: "image/jpeg", size: 4_000_001 } }), "invalid_id");
-check("a text file is not a photo ID", codeOf({ idFile: { name: "notes.txt", type: "text/plain", size: 100 } }), "invalid_id");
+check("a missing photo ID does not block the application", codeOf({ idFile: null, idConfirmed: false }), "ok");
 check("the street address is required", codeOf({ address: "" }), "missing_address");
 check("the city is required", codeOf({ city: "" }), "missing_city");
 check("an unmarked supply list needs an honest confirmation", codeOf({ suppliesOnHand: "", suppliesHonest: false }), "missing_supplies_honesty");
 check("an honest empty supply list is none yet", codeOf({ suppliesOnHand: "", suppliesOwned: [], suppliesHonest: true }), "ok");
-check("pay terms include surge and mileage past 35 miles", /35 miles/.test(PAY_CONSENT_COPY) && /surge pay and mileage pay/.test(PAY_CONSENT_COPY), true);
+check("pay terms include surge and mileage past 35 miles", /35 miles/.test(PAY_TRAVEL_SENTENCE) && /surge pay and mileage pay/.test(PAY_TRAVEL_SENTENCE), true);
 const supplyChoices = applicationSupplyChoices();
 check("vacuum is the first supply", supplyChoices[0]?.id, "vacuum");
 check("mop is the second supply", supplyChoices[1]?.id, "mop_bucket");
@@ -155,7 +152,7 @@ const steps = visibleSteps();
 check("address collects the street, city, state, and ZIP", steps.includes("address") && !steps.includes("zip") && !steps.includes("state"), true);
 check("requirements come before the qualification packet", steps.indexOf("requirements") < steps.indexOf("authorized"), true);
 check("qualification comes before experience", steps.indexOf("reason") < steps.indexOf("experience"), true);
-check("photo ID is a step", steps.includes("id"), true);
+check("photo ID is not an application step", steps.includes("id"), false);
 check("work authorization is a step", steps.includes("authorized"), true);
 check("background consent is a step", steps.includes("consentBg"), true);
 check("pay consent is a step", steps.includes("consentPay"), true);
@@ -164,7 +161,7 @@ check("reliability is a step", steps.includes("reliability"), true);
 check("why Novara is a step", steps.includes("reason"), true);
 const vehicleNo = validateHiringApplication(draft({ hasVehicle: "no" }));
 check("a vehicle no is stored as no", vehicleNo.ok && vehicleNo.value.hasVehicle === false, true);
-check("a vehicle no still keeps the photo ID", vehicleNo.ok && vehicleNo.value.idContentType === "image/jpeg", true);
+check("a vehicle no does not require a photo ID", vehicleNo.ok && vehicleNo.value.idContentType === null, true);
 const record = buildHiringConsentRecord({
   acceptedAt: "2026-10-15T12:00:00.000Z",
   ip: " 203.0.113.4 ",
@@ -178,7 +175,7 @@ check("consent record discloses the driving record", record.texts.backgroundDisc
 check("consent record points at a later signed authorization", record.texts.backgroundDisclosure.includes("immediately before"), true);
 check("consent record says not to upload a Social Security card", record.texts.idPurpose.includes("Do not upload a Social Security card"), true);
 check("consent record states company liability coverage", record.texts.insurance.includes("commercial general liability"), true);
-check("saved answers keep the new consents", sanitizeAnswers({ smsConsent: true, age18: false }).smsConsent, true);
+check("saved answers drop consent checkboxes", sanitizeAnswers({ smsConsent: true, payConsent: true, authorizedToWork: "No" }).smsConsent, undefined);
 check("saved answers keep a no on age", sanitizeAnswers({ age18: false }).age18, false);
 check("a bad ZIP is rejected", codeOf({ zipCode: "12" }), "invalid_zip");
 check("California is not a state we can qualify", codeOf({ state: "California" }), "invalid_state");

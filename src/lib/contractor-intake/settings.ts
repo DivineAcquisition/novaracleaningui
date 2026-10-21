@@ -30,6 +30,17 @@ export interface IntakeSettings {
   leadReviewEveryDays: number;
   householdVehicleNeedsReview: boolean;
   leadRoleOpenToPublic: boolean;
+  /** Shown for Field Cleaner. Empty means that role cannot be applied for. */
+  fieldCleanerPayLabel: string;
+  /** Null until the owner sets it. The role stays closed. */
+  recurringHomeCleanerPayLabel: string | null;
+  turnoverCleanerPayLabel: string | null;
+  /** Off until counsel says a "No" should be handled differently. Default is needs review. */
+  workAuthorizationRejectOnNo: boolean;
+  legalName: string;
+  legalAddress: string;
+  applicantPhone: string;
+  applicantEmail: string;
 }
 
 export const DEFAULT_INTAKE_SETTINGS: IntakeSettings = {
@@ -59,6 +70,14 @@ export const DEFAULT_INTAKE_SETTINGS: IntakeSettings = {
   leadReviewEveryDays: 30,
   householdVehicleNeedsReview: true,
   leadRoleOpenToPublic: true,
+  fieldCleanerPayLabel: "40–45%",
+  recurringHomeCleanerPayLabel: null,
+  turnoverCleanerPayLabel: null,
+  workAuthorizationRejectOnNo: false,
+  legalName: "Novara Cleaning LLC",
+  legalAddress: "7404 Executive Place, Lanham, MD 20706",
+  applicantPhone: "(844) 735-2070",
+  applicantEmail: "operations@novaracleaning.com",
 };
 
 export const INTAKE_SETTINGS_KEY = "contractor_intake_settings";
@@ -72,6 +91,13 @@ export function mergeIntakeSettings(raw: Partial<IntakeSettings> | null | undefi
   if (merged.laborCapPercent != null && !Number.isFinite(Number(merged.laborCapPercent))) {
     merged.laborCapPercent = null;
   }
+  if (raw && "recurringHomeCleanerPayLabel" in raw && !String(raw.recurringHomeCleanerPayLabel || "").trim()) {
+    merged.recurringHomeCleanerPayLabel = null;
+  }
+  if (raw && "turnoverCleanerPayLabel" in raw && !String(raw.turnoverCleanerPayLabel || "").trim()) {
+    merged.turnoverCleanerPayLabel = null;
+  }
+  merged.workAuthorizationRejectOnNo = raw?.workAuthorizationRejectOnNo === true;
   return merged;
 }
 

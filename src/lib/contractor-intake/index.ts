@@ -6,3 +6,4 @@ export * from "./lead";
 export * from "./messages";
 export * from "./verification";
 export * from "./lead-application";
+export * from "./id-retention";

@@ -8,6 +8,8 @@ export interface WordingVersion {
   status: WordingStatus;
   title: string;
   body: string;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
 }
 
 export const WORDING_STATUS_LABEL = "Draft pending legal review";
@@ -35,7 +37,7 @@ export const INTAKE_WORDING: WordingVersion[] = [
   draft(
     "application_privacy",
     "Application privacy notice",
-    "We collect your name, email, mobile number, street address, city, state, ZIP, a photo of your current government-issued photo ID, the supplies you have, and your written answers so we can decide whether you qualify. People on the Novara hiring team can open it. We do not collect a Social Security number, a date of birth, or criminal history on this application. A background check, if one is ordered, happens after a conditional approval and needs a separate authorization. You can ask to see, correct, or delete what we hold by emailing operations@novaracleaning.com.",
+    "We collect your name, email, mobile number, street address, city, state, ZIP, the supplies you mark, and your written answers so we can decide whether you qualify. People on the Novara hiring team can open it. We do not collect a Social Security number, a date of birth, or criminal history on this application. A photo of your government ID and a selfie are collected later, only if you are conditionally approved, and only to confirm your identity. Those images are deleted on the schedule in settings. A background check, if one is ordered, happens after a conditional approval and needs a separate authorization. You can ask to see, correct, or delete what we hold by emailing operations@novaracleaning.com.",
   ),
   draft(
     "why_vehicle",

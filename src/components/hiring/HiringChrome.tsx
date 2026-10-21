@@ -8,6 +8,7 @@
 import Link from "next/link";
 import { RiArrowRightLine } from "@remixicon/react";
 import { BRAND } from "@/lib/brand";
+import { DEFAULT_INTAKE_SETTINGS } from "@/lib/contractor-intake/settings";
 import { cn } from "@/lib/utils";
 
 export const HIRING_GRADIENT = BRAND.gradient;
@@ -76,21 +77,20 @@ export function HiringFooter() {
             Novara<span className="text-primary">Cleaning</span>
           </span>
         </Link>
-        <div className="flex flex-wrap items-center justify-center gap-5 text-xs font-medium text-muted-foreground">
-          <a
-            href="https://novaracleaning.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="transition hover:text-foreground"
-          >
-            novaracleaning.com
-          </a>
-          <a href="mailto:hello@novaracleaning.com" className="transition hover:text-foreground">
-            hello@novaracleaning.com
-          </a>
-          <Link href="/hiring" className="transition hover:text-foreground">
-            Careers
-          </Link>
+        <div className="max-w-xl text-center text-xs font-medium leading-relaxed text-muted-foreground sm:text-right">
+          <p>{DEFAULT_INTAKE_SETTINGS.legalName}</p>
+          <p>{DEFAULT_INTAKE_SETTINGS.legalAddress}</p>
+          <p>
+            <a href="tel:+18447352070" className="hover:text-foreground">{DEFAULT_INTAKE_SETTINGS.applicantPhone}</a>
+            {" · "}
+            <a href={`mailto:${DEFAULT_INTAKE_SETTINGS.applicantEmail}`} className="hover:text-foreground">{DEFAULT_INTAKE_SETTINGS.applicantEmail}</a>
+          </p>
+          <p className="mt-2 flex flex-wrap justify-center gap-4 sm:justify-end">
+            <a href="https://novaracleaning.com/privacy" className="hover:text-foreground">Privacy notice</a>
+            <a href="https://novaracleaning.com/sms-consent" className="hover:text-foreground">Text message terms</a>
+            <Link href="/hiring" className="hover:text-foreground">Careers</Link>
+          </p>
+          <p className="mt-2">If you need an accommodation to apply, email {DEFAULT_INTAKE_SETTINGS.applicantEmail}.</p>
         </div>
       </div>
     </footer>

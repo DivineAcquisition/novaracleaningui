@@ -82,11 +82,11 @@ export function applicantMessage(
     case "activated":
       return finish(kind, "You are active on the Novara network", `Hi ${name}, you are active and in the probation period described in your agreement. Job offers can come through the app.`);
     case "lead_invite":
-      return finish(kind, "Lead Cleaner invitation", `Hi ${name}, you meet the Lead Cleaner requirements on file. This invitation is optional. You can apply, or you can leave it.${link ? `\n\n${link}` : ""}`);
+      return finish(kind, "Lead Field Cleaner invitation", `Hi ${name}, you meet the Lead Field Cleaner requirements on file. This invitation is optional. You can apply, or you can leave it.${link ? `\n\n${link}` : ""}`);
     case "lead_paused":
       return finish(kind, "Lead status is paused", `Hi ${name}, ${extra || "Lead status is paused. You are still an active cleaner."}`);
     case "lead_decision":
-      return finish(kind, "Lead Cleaner decision", `Hi ${name}, ${extra || "A person recorded a decision on your Lead Cleaner application."}`);
+      return finish(kind, "Lead Field Cleaner decision", `Hi ${name}, ${extra || "A person recorded a decision on your Lead Field Cleaner application."}`);
     default:
       return finish("submitted", "We received your application", `Hi ${name}, we received your application.`);
   }

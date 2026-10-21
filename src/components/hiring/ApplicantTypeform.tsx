@@ -11,20 +11,25 @@ import { useSearchParams } from "next/navigation";
 import { RiArrowLeftLine, RiCheckboxCircleFill, RiLoader4Line } from "@remixicon/react";
 import { SEO } from "@/components/SEO";
 import {
+  APPLICANT_ROLE_CHOICES,
   APPLICANT_STATES,
   BACKGROUND_CONSENT_COPY,
   BACKGROUND_DISCLOSURE,
   CLEANING_TYPES,
   DAY_LABEL,
   EXPERIENCE_YEARS,
-  ID_CONFIRM_COPY,
-  ID_PURPOSE_COPY,
+  LEAD_APPLICANT_ROLE,
   OPEN_APPLICANT_ROLE,
   PAY_CONSENT_COPY,
+  PAY_RATE_SENTENCE,
+  PAY_TRAVEL_SENTENCE,
   PREFERRED_DAYS,
   SUPPLY_HONESTY_COPY,
+  TRUTHFULNESS_COPY,
   applicationSupplyChoices,
   isImportantSupply,
+  payTermsForRole,
+  roleChoice,
   TIME_WINDOWS,
   YES_NO,
   isApplicationIssue,
@@ -37,6 +42,7 @@ import {
   type HiringApplicationDraft,
 } from "@/lib/hiring/application";
 import { wordingById } from "@/lib/contractor-intake/wording";
+import { DEFAULT_INTAKE_SETTINGS, type IntakeSettings } from "@/lib/contractor-intake/settings";
 import { HIRING_HOST, HIRING_ORIGIN } from "@/lib/site-hosts";
 import { StayOnHost } from "@/components/StayOnHost";
 import { formatPhoneNumber } from "@/lib/input-formatters";
@@ -45,6 +51,8 @@ import type { PublicHiringSession } from "@/lib/hiring/session";
 import { cn } from "@/lib/utils";
 
 const STORAGE_KEY = "novara-contractor-application";
+const DRAFT_DAYS = 7;
+const UNSAVED = ["smsConsent", "emailConsent", "backgroundCheckConsent", "payConsent", "privacyAccepted", "answersAccurate", "suppliesHonest", "idConfirmed", "authorizedToWork", "idFile"] as const;
 
 type Answers = HiringApplicationDraft & { ageAnswer: string };
 
@@ -102,6 +110,7 @@ function why(id: string): string {
 export function ApplicantTypeform({ session }: { session?: PublicHiringSession | null }) {
   const params = useSearchParams();
   const [leadOpen, setLeadOpen] = useState(true);
+  const [intakeSettings, setIntakeSettings] = useState<IntakeSettings>(DEFAULT_INTAKE_SETTINGS);
   const [answers, setAnswers] = useState<Answers>(EMPTY);
   const [stepIndex, setStepIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -109,7 +118,6 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
   const [result, setResult] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [fax, setFax] = useState("");
-  const [idBlob, setIdBlob] = useState<File | null>(null);
   const headingId = useId();
 
   const steps = visibleSteps();
@@ -118,7 +126,14 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
   useEffect(() => {
     let saved: Partial<Answers> = {};
     try {
-      saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") as Partial<Answers>;
+      const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") as Partial<Answers> & { savedAt?: string };
+      const savedAt = Date.parse(String(parsed.savedAt || ""));
+      if (!Number.isFinite(savedAt) || Date.now() - savedAt > DRAFT_DAYS * 86_400_000) {
+        localStorage.removeItem(STORAGE_KEY);
+        saved = {};
+      } else {
+        saved = parsed;
+      }
     } catch {
       saved = {};
     }
@@ -137,24 +152,33 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
       phone: fromSession.phone || saved.phone || session?.phone || "",
       idFile: null,
       leadRoleOpen: false,
+      authorizedToWork: "",
+      smsConsent: false,
+      emailConsent: false,
+      backgroundCheckConsent: false,
+      payConsent: false,
+      privacyAccepted: false,
+      answersAccurate: false,
+      suppliesHonest: false,
+      idConfirmed: false,
     });
-    setIdBlob(null);
     setStepIndex(session?.stepIndex || 0);
   }, [params, session]);
 
   useEffect(() => {
     fetch("/api/hiring/intake")
       .then((res) => res.json())
-      .then((data: { leadRoleOpenToPublic?: boolean }) => {
-        setLeadOpen(Boolean(data.leadRoleOpenToPublic));
-        setAnswers((current) => ({ ...current, leadRoleOpen: Boolean(data.leadRoleOpenToPublic) }));
+      .then((data: { leadRoleOpenToPublic?: boolean; settings?: Partial<IntakeSettings> }) => {
+        setLeadOpen(data.leadRoleOpenToPublic !== false);
+        if (data.settings) setIntakeSettings({ ...DEFAULT_INTAKE_SETTINGS, ...data.settings });
+        setAnswers((current) => ({ ...current, leadRoleOpen: data.leadRoleOpenToPublic !== false }));
       })
       .catch(() => undefined);
   }, []);
 
   useEffect(() => {
-    const { idFile: _file, ...rest } = answers;
-    void _file;
+    const rest = { ...answers, savedAt: new Date().toISOString() } as Record<string, unknown>;
+    for (const key of UNSAVED) delete rest[key];
     localStorage.setItem(STORAGE_KEY, JSON.stringify(rest));
     if (!session?.token || session.status === "submitted") return;
     const handle = window.setTimeout(() => {
@@ -167,7 +191,10 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
     return () => window.clearTimeout(handle);
   }, [answers, session, stepIndex]);
 
-  const draft = useMemo(() => ({ ...answers, leadRoleOpen: leadOpen }), [answers, leadOpen]);
+  const draft = useMemo(() => {
+    const terms = payTermsForRole(answers.role, { ...intakeSettings, leadRoleOpenToPublic: leadOpen });
+    return { ...answers, leadRoleOpen: leadOpen, rolePaySet: terms.open };
+  }, [answers, leadOpen, intakeSettings]);
 
   function advance(next = draft) {
     const found = issuesForStep(step, next);
@@ -213,6 +240,7 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
         cleaningTypes: JSON.stringify(answers.cleaningTypes || []),
         experienceYears: answers.experienceYears || "",
         privacyAccepted: String(Boolean(answers.privacyAccepted)),
+        answersAccurate: String(Boolean(answers.answersAccurate)),
         leadRoleOpen: String(leadOpen),
         address: answers.address,
         city: answers.city,
@@ -229,7 +257,6 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
         faxNumber: fax,
       };
       Object.entries(entries).forEach(([key, value]) => body.set(key, value));
-      if (idBlob) body.set("idFile", idBlob);
       if (session?.token) body.set("sessionToken", session.token);
       const res = await fetch("/api/hiring/apply", { method: "POST", body });
       const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
@@ -252,7 +279,7 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
       <StayOnHost host={HIRING_HOST} origin={HIRING_ORIGIN} />
       <SEO
         title="Apply"
-        description="Apply to join the Novara contractor network. Photo ID, work authorization, and a current address are required to qualify."
+        description="Apply to join the Novara contractor network. Work authorization, address, and pay terms are part of the application. A photo ID is collected only after conditional approval."
         canonical="https://hiring.novaracleaning.com/hiring/apply"
       />
       <div className="h-1 w-full bg-slate-200">
@@ -262,7 +289,8 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
         <Link href={`${HIRING_ORIGIN}/hiring`} className="font-heading text-[15px] font-bold">Novara<span className="text-primary">Cleaning</span></Link>
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{done ? "Done" : `${stepIndex + 1} of ${steps.length}`}</p>
       </header>
-      <main className="mx-auto w-full max-w-2xl flex-1 px-5 pb-28">
+      <main className="mx-auto w-full max-w-2xl flex-1 px-5 pb-36">
+        {!done && <p className="pt-2 text-sm text-slate-600">Your progress is saved on this device for up to 7 days. This is independent contractor work, not employment.</p>}
         {done ? (
           <div className="py-10">
             <RiCheckboxCircleFill className="h-12 w-12 text-emerald-600" aria-hidden />
@@ -284,15 +312,7 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
               leadOpen={leadOpen}
               error={error}
               submitting={submitting}
-              onFile={(file) => {
-                setIdBlob(file);
-                setAnswers((current) => ({
-                  ...current,
-                  idFile: file ? { name: file.name, type: file.type, size: file.size } : null,
-                  idConfirmed: false,
-                }));
-                setError(null);
-              }}
+              intakeSettings={intakeSettings}
               onChange={(partial) => {
                 setError(null);
                 setAnswers((current) => ({ ...current, ...partial }));
@@ -305,6 +325,9 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
                   <RiArrowLeftLine className="h-4 w-4" aria-hidden /> Back
                 </button>
               )}
+              <button type="button" onClick={() => { localStorage.removeItem(STORAGE_KEY); setAnswers({ ...EMPTY, leadRoleOpen: leadOpen }); setStepIndex(0); setError(null); }} className="text-sm font-semibold text-slate-600 underline">
+                Start over
+              </button>
               <button type="submit" disabled={submitting} className="inline-flex h-12 items-center rounded-full px-6 text-sm font-semibold text-white disabled:opacity-60" style={{ background: HIRING_GRADIENT }}>
                 {submitting ? <RiLoader4Line className="h-4 w-4 animate-spin" /> : step === "review" ? "Submit application" : "Continue"}
               </button>
@@ -313,8 +336,16 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
         )}
       </main>
       <footer className="fixed inset-x-0 bottom-0 border-t border-slate-200 bg-white/95 px-5 py-3 text-sm text-slate-700">
-        <div className="mx-auto max-w-2xl">
-          If you need an accommodation to complete this application, email <a className="font-semibold text-slate-900 underline" href="mailto:operations@novaracleaning.com">operations@novaracleaning.com</a>.
+        <div className="mx-auto max-w-2xl space-y-1">
+          <p>{intakeSettings.legalName} · {intakeSettings.legalAddress} · <a className="font-semibold underline" href="tel:+18447352070">{intakeSettings.applicantPhone}</a></p>
+          <p>
+            <a className="font-semibold underline" href={`mailto:${intakeSettings.applicantEmail}`}>{intakeSettings.applicantEmail}</a>
+            {" · "}
+            <a className="font-semibold underline" href="https://novaracleaning.com/privacy">Privacy notice</a>
+            {" · "}
+            <a className="font-semibold underline" href="https://novaracleaning.com/sms-consent">Text message terms</a>
+          </p>
+          <p>If you need an accommodation to complete this application, email <a className="font-semibold text-slate-900 underline" href={`mailto:${intakeSettings.applicantEmail}`}>{intakeSettings.applicantEmail}</a>.</p>
         </div>
       </footer>
       <input tabIndex={-1} autoComplete="off" aria-hidden className="hidden" value={fax} onChange={(event) => setFax(event.target.value)} name="faxNumber" />
@@ -323,7 +354,7 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
 }
 
 function Step({
-  step, answers, headingId, leadOpen, error: _error, submitting: _submitting, onChange, onFile,
+  step, answers, headingId, leadOpen, error: _error, submitting: _submitting, onChange, intakeSettings,
 }: {
   step: ApplicationStep;
   answers: Answers;
@@ -332,7 +363,7 @@ function Step({
   error: string | null;
   submitting: boolean;
   onChange: (partial: Partial<Answers>) => void;
-  onFile: (file: File | null) => void;
+  intakeSettings: IntakeSettings;
 }) {
   void _error;
   void _submitting;
@@ -340,15 +371,23 @@ function Step({
     return (
       <section aria-labelledby={headingId}>
         <h1 id={headingId} tabIndex={-1} className="font-heading text-3xl font-semibold">Which role are you applying for?</h1>
-        <Choice
-          name="role"
-          value={answers.role}
-          options={[
-            { value: OPEN_APPLICANT_ROLE, label: "Cleaner", hint: "Residential jobs on the Novara network" },
-            { value: "Lead Cleaner (Contractor)", label: "Lead Cleaner", hint: leadOpen ? "Lead jobs, walkthroughs, and trial jobs" : "Not open to new applicants right now", disabled: !leadOpen },
-          ]}
-          onPick={(role) => onChange({ role })}
-        />
+        <div className="mt-6 space-y-2">
+          {APPLICANT_ROLE_CHOICES.map((role) => {
+            const terms = payTermsForRole(role.value, { ...intakeSettings, leadRoleOpenToPublic: leadOpen });
+            const closedLead = role.value === LEAD_APPLICANT_ROLE && !leadOpen;
+            const disabled = closedLead || !terms.open;
+            const on = answers.role === role.value;
+            return (
+              <button key={role.value} type="button" disabled={disabled} aria-pressed={on} onClick={() => onChange({ role: role.value })} className={cn("block w-full rounded-2xl border px-4 py-3 text-left", disabled ? "cursor-not-allowed border-slate-200 text-slate-400" : on ? "border-violet-700 bg-violet-50" : "border-slate-300")}>
+                <span className="block font-semibold">{role.label}</span>
+                <span className="mt-0.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">{role.tag}</span>
+                <span className="mt-1 block text-sm text-slate-600">{role.description}</span>
+                {closedLead && <span className="mt-1 block text-sm text-slate-500">Not open to new applicants right now.</span>}
+                {!closedLead && !terms.open && <span className="mt-1 block text-sm text-slate-500">Not open until a pay rate is set.</span>}
+              </button>
+            );
+          })}
+        </div>
       </section>
     );
   }
@@ -475,27 +514,8 @@ function Step({
     return (
       <section aria-labelledby={headingId}>
         <h1 id={headingId} className="font-heading text-3xl font-semibold">Are you legally authorized to work in the United States?</h1>
-        <p className="mt-3 text-base text-slate-700">This is required to qualify. We do not collect immigration documents or a Social Security number.</p>
+        <p className="mt-3 text-base text-slate-700">Why we ask: We ask everyone the same question so we can follow the law. This is not an employment form and we do not ask for documents here.</p>
         <Choice name="authorizedToWork" value={answers.authorizedToWork} options={[{ value: "Yes", label: "Yes" }, { value: "No", label: "No" }]} onPick={(authorizedToWork) => onChange({ authorizedToWork })} />
-      </section>
-    );
-  }
-  if (step === "id") {
-    return (
-      <section aria-labelledby={headingId}>
-        <h1 id={headingId} className="font-heading text-3xl font-semibold">Upload your government-issued photo ID</h1>
-        <p className="mt-3 text-base leading-relaxed text-slate-700">{ID_PURPOSE_COPY}</p>
-        <label className="mt-6 block text-sm font-semibold text-slate-800">
-          Photo or PDF
-          <input
-            type="file"
-            accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf"
-            className="mt-1.5 block w-full text-base font-normal"
-            onChange={(event) => onFile(event.target.files?.[0] || null)}
-          />
-        </label>
-        {answers.idFile && <p className="mt-2 text-sm text-slate-700">{answers.idFile.name}</p>}
-        <Check label={ID_CONFIRM_COPY} checked={Boolean(answers.idConfirmed)} onChange={(idConfirmed) => onChange({ idConfirmed })} />
       </section>
     );
   }
@@ -512,7 +532,17 @@ function Step({
     return (
       <section aria-labelledby={headingId}>
         <h1 id={headingId} className="font-heading text-3xl font-semibold">Pay terms</h1>
-        <p className="mt-3 text-base text-slate-700">You start at 40–45% of each job. If you travel more than 35 miles for a job, you also get surge pay and mileage pay. Accepting these terms is required to qualify.</p>
+        {(() => {
+          const terms = payTermsForRole(answers.role, { ...intakeSettings, leadRoleOpenToPublic: leadOpen });
+          return (
+            <>
+              <p className="mt-3 text-sm font-semibold uppercase tracking-wide text-slate-500">{terms.roleName}</p>
+              <p className="mt-2 text-base text-slate-800">{terms.rateLine || "A pay rate is not set for this role."}</p>
+              <p className="mt-2 text-base text-slate-700">{PAY_RATE_SENTENCE}</p>
+              <p className="mt-2 text-base text-slate-700">{PAY_TRAVEL_SENTENCE}</p>
+            </>
+          );
+        })()}
         <Check label={PAY_CONSENT_COPY} checked={Boolean(answers.payConsent)} onChange={(payConsent) => onChange({ payConsent })} />
       </section>
     );
@@ -592,7 +622,7 @@ function Step({
     <section aria-labelledby={headingId}>
       <h1 id={headingId} className="font-heading text-3xl font-semibold">Review and submit</h1>
       <dl className="mt-6 divide-y divide-slate-200 rounded-2xl border border-slate-300">
-        <Row label="Role" value={roleLabel(answers.role)} />
+        <Row label="Role" value={roleChoice(answers.role)?.label || roleLabel(answers.role)} />
         <Row label="Name" value={`${answers.firstName} ${answers.lastName}`} />
         <Row label="Email" value={answers.email} />
         <Row label="Mobile" value={answers.phone} />
@@ -603,17 +633,21 @@ function Step({
         <Row label="Vehicle" value={answers.hasVehicle || "—"} />
         <Row label="Supply kit" value={answers.willHaveKit || "—"} />
         <Row label="Work authorization" value={answers.authorizedToWork || "—"} />
-        <Row label="Photo ID" value={answers.idFile?.name || "—"} />
         <Row label="Background disclosure" value={answers.backgroundCheckConsent ? "Accepted" : "—"} />
         <Row label="Pay terms" value={answers.payConsent ? "Accepted" : "—"} />
         <Row label="Supplies" value={answers.suppliesOnHand} />
         <Row label="Reliability" value={answers.reliabilityNote} />
         <Row label="Why Novara" value={answers.reasonNote} />
       </dl>
-      <Check label={why("application_privacy")} checked={Boolean(answers.privacyAccepted)} onChange={(privacyAccepted) => onChange({ privacyAccepted, answersAccurate: privacyAccepted })} />
+      <Check label="I have read the application privacy notice." checked={Boolean(answers.privacyAccepted)} onChange={(privacyAccepted) => onChange({ privacyAccepted })} />
       <p className="mt-3 text-sm text-slate-700">
-        <a className="font-semibold underline" href="https://novaracleaning.com/privacy">Privacy notice</a>
+        <a className="font-semibold underline" href="https://novaracleaning.com/privacy">Read the full privacy notice</a>
       </p>
+      <details className="mt-3 rounded-2xl border border-slate-300 p-4 text-sm leading-relaxed text-slate-700">
+        <summary className="cursor-pointer font-semibold">Application privacy notice</summary>
+        <p className="mt-2">{why("application_privacy")}</p>
+      </details>
+      <Check label={TRUTHFULNESS_COPY} checked={Boolean(answers.answersAccurate)} onChange={(answersAccurate) => onChange({ answersAccurate })} />
     </section>
   );
 }

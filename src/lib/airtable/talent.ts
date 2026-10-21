@@ -318,6 +318,22 @@ export async function updateTalentApplicantInAirtable(
  * Courtesy write-back: stamp "Imported" on rows whose Application Status is
  * still New/empty. Never touches rows a human has already moved along.
  */
+/** Clear the government-ID attachment. Airtable accepts an empty attachment list. */
+export async function clearTalentGovernmentId(recordId: string): Promise<"cleared" | "failed"> {
+  try {
+    await updateRecords(
+      TALENT_APPLICANTS_TABLE,
+      [{ id: recordId, fields: { [TALENT_FIELDS.governmentId]: [] } }],
+      { typecast: true },
+    );
+    return "cleared";
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("[airtable] clear government id", (err as Error).message);
+    return "failed";
+  }
+}
+
 export async function markImported(records: TalentApplicant[]): Promise<number> {
   const toMark = records.filter((r) => {
     const s = (r.airtableApplicationStatus || "").toLowerCase();

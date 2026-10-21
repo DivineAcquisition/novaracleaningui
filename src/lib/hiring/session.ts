@@ -10,7 +10,7 @@ import { splitPersonName, stateFromIndeedJob } from "./indeed";
 import { HIRING_ORIGIN } from "@/lib/site-hosts";
 
 export const HIRING_APPLY_ORIGIN = HIRING_ORIGIN;
-export const SESSION_TTL_DAYS = 30;
+export const SESSION_TTL_DAYS = 7;
 
 export type HiringSessionStatus = "open" | "submitted";
 
@@ -126,7 +126,7 @@ export function sanitizeAnswers(input: unknown): HiringSessionAnswers {
   text("state", 40);
   text("contractorType", 40);
   text("transportation", 40);
-  text("authorizedToWork", 10);
+  // Work authorization is answered again on the visit they submit.
   text("experience", 40);
   text("availability", 40);
   text("willingToGetSupplies", 10);
@@ -150,18 +150,9 @@ export function sanitizeAnswers(input: unknown): HiringSessionAnswers {
   if (Array.isArray(raw.cleaningTypes)) out.cleaningTypes = raw.cleaningTypes.map((d) => String(d)).slice(0, 8);
   if (typeof raw.jobsPerWeek === "number") out.jobsPerWeek = raw.jobsPerWeek;
   for (const key of [
-    "consent1099",
-    "backgroundCheckConsent",
-    "payConsent",
-    "idConfirmed",
     "age18",
     "validDriversLicense",
     "autoInsured",
-    "smsConsent",
-    "answersAccurate",
-    "emailConsent",
-    "privacyAccepted",
-    "suppliesHonest",
   ] as const) {
     if (typeof raw[key] === "boolean") out[key] = raw[key];
   }

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { ONBOARDING_PANELS } from "@/lib/contractor-intake/onboarding";
-import { wordingById, WORDING_STATUS_LABEL } from "@/lib/contractor-intake/wording";
+import { wordingById } from "@/lib/contractor-intake/wording";
 
 async function authHeaders(): Promise<HeadersInit> {
   const { data } = await supabase.auth.getSession();
@@ -42,7 +42,7 @@ export function ContractorIntakePanel() {
     <section className="space-y-4 rounded-2xl border border-border bg-card p-4">
       <div>
         <h2 className="text-lg font-semibold">Verification</h2>
-        <p className="text-sm text-muted-foreground">These checks replaced the screening call. {WORDING_STATUS_LABEL}.</p>
+        <p className="text-sm text-muted-foreground">These checks replaced the screening call.</p>
       </div>
       {notice && <p className="text-sm">{notice}</p>}
       {ONBOARDING_PANELS.map((panel) => (

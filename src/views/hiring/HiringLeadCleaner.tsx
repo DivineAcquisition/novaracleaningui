@@ -14,8 +14,8 @@ export default function HiringLeadCleaner() {
   return (
     <HiringShell>
       <SEO
-        title="Lead Cleaner"
-        description="Lead Cleaner is open. Lead jobs pay 47% of the job. Solo jobs stay at your tier rate. Apply on the Novara hiring site."
+        title="Lead Field Cleaner"
+        description="Lead Field Cleaner is open. Lead jobs pay 47% of the job. Solo jobs stay at your tier rate. Apply on the Novara hiring site."
         canonical="https://hiring.novaracleaning.com/hiring/lead-cleaner"
       />
       <HiringNav ctaHref={hiringApplyUrl("?role=lead-cleaner")} ctaLabel="Apply" />
@@ -28,7 +28,7 @@ export default function HiringLeadCleaner() {
         <h1 className="mt-3 font-heading text-4xl font-extrabold tracking-tight text-slate-900 sm:text-5xl">{role.title}</h1>
         <p className="mt-4 text-lg leading-relaxed text-slate-600">{role.summary}</p>
         <a href={hiringApplyUrl("?role=lead-cleaner")} className="mt-8 inline-flex h-12 items-center rounded-full px-6 text-sm font-semibold text-white" style={{ background: HIRING_GRADIENT }}>
-          Start the Lead Cleaner application
+          Start the Lead Field Cleaner application
         </a>
 
         <section className="mt-12">

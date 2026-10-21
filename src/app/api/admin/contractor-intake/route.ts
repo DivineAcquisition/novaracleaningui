@@ -16,6 +16,7 @@ import { leadEligible, reviewLeadAssignment, type ReliabilityRecord } from "@/li
 import { reviewLeadApplication } from "@/lib/contractor-intake/lead-application";
 import { applicantMessage } from "@/lib/contractor-intake/messages";
 import { canSendFinalAdverse, openPreAdverse } from "@/lib/contractor-intake/onboarding";
+import { runApplicantIdCleanup } from "@/lib/contractor-intake/run-id-cleanup";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -87,9 +88,17 @@ export async function GET(req: Request): Promise<NextResponse> {
     imagesOverdue: Boolean(row.identity_image_delete_at) && !row.identity_images_deleted_at && Date.parse(String(row.identity_image_delete_at)) < Date.now(),
     complianceComplete: row.intake_flow !== "automated" || (row.intake_record as { complianceComplete?: boolean } | null)?.complianceComplete === true,
   }));
+  let applicationIdsPastDeletion = 0;
+  try {
+    const preview = await runApplicantIdCleanup(supabase, { dryRun: true });
+    applicationIdsPastDeletion = preview.planned.length;
+  } catch {
+    applicationIdsPastDeletion = 0;
+  }
   return NextResponse.json({
     ok: true,
     wordingStatus: WORDING_STATUS_LABEL,
+    applicationIdsPastDeletion,
     settings,
     wording,
     counts: countByStage(stages),
@@ -123,11 +132,30 @@ export async function POST(req: Request): Promise<NextResponse> {
   if (action === "mark_reviewed") {
     const wording = await loadWording(supabase);
     const id = String(body.id || "");
-    const next = wording.map((row) => row.id === id ? { ...row, status: "reviewed" as const } : row);
+    const next = wording.map((row) => row.id === id ? { ...row, status: "reviewed" as const, reviewedBy: admin.email, reviewedAt: new Date().toISOString() } : row);
     if (!next.some((row) => row.id === id)) return NextResponse.json({ error: "Unknown wording." }, { status: 404 });
     const { error } = await supabase.from("app_settings").upsert({ key: INTAKE_WORDING_KEY, value: next });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ ok: true, wording: next });
+  }
+
+  if (action === "save_wording") {
+    const wording = await loadWording(supabase);
+    const id = String(body.id || "");
+    const text = String(body.body || "");
+    const next = wording.map((row) => {
+      if (row.id !== id || row.body === text) return row;
+      return { ...row, body: text, version: Number(row.version || 1) + 1, status: "draft" as const, reviewedBy: null, reviewedAt: null };
+    });
+    const { error } = await supabase.from("app_settings").upsert({ key: INTAKE_WORDING_KEY, value: next });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true, wording: next });
+  }
+
+  if (action === "id_cleanup_preview" || action === "id_cleanup") {
+    const dryRun = action !== "id_cleanup" || body.confirm !== true;
+    const result = await runApplicantIdCleanup(supabase, { dryRun });
+    return NextResponse.json({ ok: true, ...result });
   }
 
   if (action === "open_lead_role") {

@@ -720,7 +720,7 @@ export default function ApplicantsPipeline() {
                       ["Preferred days", (selected.preferred_days || []).join(", ")],
                       ["Transportation", selected.transportation],
                       ["Photo ID", (selected.government_id_path || airtableIdUrl(selected)) ? "Uploaded" : null],
-                      ["Authorized to work", selected.authorized_to_work],
+                      ["Authorized to work", selected.authorized_to_work ? `${selected.authorized_to_work}. Do not reject on this answer alone. Follow the review checklist and counsel guidance.` : null],
                       ["1099 consent", selected.consent_1099 == null ? null : selected.consent_1099 ? "Yes" : "No"],
                       ["BG check consent", selected.background_check_consent == null ? null : selected.background_check_consent ? "Yes" : "No"],
                       ["Pay consent", selected.pay_consent == null ? null : selected.pay_consent ? "Yes" : "No"],

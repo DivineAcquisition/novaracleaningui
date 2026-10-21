@@ -3,7 +3,7 @@ import { DEFAULT_INTAKE_SETTINGS, reapplyOn, type IntakeSettings } from "./setti
 export type IntakeOutcome = "pass" | "not_a_fit" | "waitlist" | "needs_review";
 
 export interface ApplicationAnswers {
-  role: "cleaner" | "lead_cleaner";
+  role: "cleaner" | "lead_cleaner" | "recurring_home" | "turnover";
   email: string;
   phone: string;
   name: string;
@@ -22,10 +22,13 @@ export interface ApplicationAnswers {
    * Qualification answers. Omitted means the caller did not send them.
    * An explicit false does not qualify. The form rejects these before submit.
    */
-  authorizedToWork?: boolean;
+  /**
+   * Undefined means the caller did not ask. False is a "No".
+   * Null means the question was skipped.
+   */
+  authorizedToWork?: boolean | null;
   backgroundCheckConsent?: boolean;
   payConsent?: boolean;
-  photoIdProvided?: boolean;
   /** Omitted answers are treated as meeting the jobs minimum. The form always sends a number. */
   jobsPerWeek?: number;
   duplicate: boolean;
@@ -45,6 +48,7 @@ export interface ApplicationDecision {
   countsAsRejection: boolean;
   /** Outside applicants who pass start as cleaners and wait for a person to decide lead status. */
   leadTrack: boolean;
+  reviewReason: string | null;
 }
 
 const REQUIREMENTS: Array<{ key: keyof ApplicationAnswers; label: string }> = [
@@ -56,12 +60,24 @@ const REQUIREMENTS: Array<{ key: keyof ApplicationAnswers; label: string }> = [
   { key: "understandsVerification", label: "A pass continues only if identity, vehicle, and a background check are completed in onboarding." },
 ];
 
-const QUALIFICATION: Array<{ key: "authorizedToWork" | "backgroundCheckConsent" | "payConsent" | "photoIdProvided"; label: string }> = [
-  { key: "authorizedToWork", label: "You need to be legally authorized to work in the United States." },
+const QUALIFICATION: Array<{ key: "backgroundCheckConsent" | "payConsent"; label: string }> = [
   { key: "backgroundCheckConsent", label: "Accepting the background-check disclosure is required to qualify." },
   { key: "payConsent", label: "Accepting the pay terms is required to qualify." },
-  { key: "photoIdProvided", label: "A current government-issued photo ID is required to qualify." },
 ];
+
+function reviewDecision(message: string, reviewReason: string | null = null): ApplicationDecision {
+  return {
+    outcome: "needs_review",
+    stage: "needs_review",
+    requirement: null,
+    message,
+    reapplyOn: null,
+    openOnboarding: false,
+    countsAsRejection: false,
+    leadTrack: false,
+    reviewReason,
+  };
+}
 
 export function decideApplication(
   answers: ApplicationAnswers,
@@ -80,6 +96,7 @@ export function decideApplication(
       openOnboarding: false,
       countsAsRejection: false,
       leadTrack: false,
+      reviewReason: null,
     };
   }
 
@@ -95,7 +112,15 @@ export function decideApplication(
       openOnboarding: false,
       countsAsRejection: false,
       leadTrack: false,
+      reviewReason: answers.reviewReason || null,
     };
+  }
+
+  if (answers.authorizedToWork === false || answers.authorizedToWork === null) {
+    return reviewDecision(
+      `A person will review this. You can expect an answer within ${settings.reviewBusinessDays} business days.`,
+      "work authorization answer",
+    );
   }
 
   if (!answers.zipInServiceArea) {
@@ -108,6 +133,7 @@ export function decideApplication(
       openOnboarding: false,
       countsAsRejection: false,
       leadTrack: false,
+      reviewReason: null,
     };
   }
 
@@ -121,6 +147,7 @@ export function decideApplication(
       openOnboarding: false,
       countsAsRejection: false,
       leadTrack: false,
+      reviewReason: null,
     };
   }
 
@@ -137,6 +164,7 @@ export function decideApplication(
       openOnboarding: false,
       countsAsRejection: true,
       leadTrack: false,
+      reviewReason: null,
     };
   }
 
@@ -150,6 +178,7 @@ export function decideApplication(
       openOnboarding: false,
       countsAsRejection: true,
       leadTrack: false,
+      reviewReason: null,
     };
   }
 
@@ -164,6 +193,7 @@ export function decideApplication(
       openOnboarding: false,
       countsAsRejection: true,
       leadTrack: false,
+      reviewReason: null,
     };
   }
 
@@ -172,11 +202,12 @@ export function decideApplication(
       outcome: "needs_review",
       stage: "needs_review",
       requirement: null,
-      message: `Lead Cleaner is not open to new applicants right now. A person will review this. You can expect an answer within ${settings.reviewBusinessDays} business days.`,
+      message: `Lead Field Cleaner is not open to new applicants right now. A person will review this. You can expect an answer within ${settings.reviewBusinessDays} business days.`,
       reapplyOn: null,
       openOnboarding: false,
       countsAsRejection: false,
       leadTrack: false,
+      reviewReason: null,
     };
   }
 
@@ -189,6 +220,7 @@ export function decideApplication(
     openOnboarding: true,
     countsAsRejection: false,
     leadTrack: answers.role === "lead_cleaner",
+    reviewReason: null,
   };
 }
 

@@ -9,7 +9,6 @@
 // No phone screening is collected here.
 
 import { NextResponse } from "next/server";
-import { randomUUID } from "crypto";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import { primeAirtablePat } from "@/lib/airtable/sources/prime-pat";
 import {
@@ -19,9 +18,8 @@ import {
   type TalentApplicant,
 } from "@/lib/airtable/talent";
 import {
-  APPLICANT_ID_BUCKET,
+  payTermsForRole,
   phoneDigits,
-  safeIdFilename,
   isApplicationIssue,
   buildHiringConsentRecord,
   validateHiringApplication,
@@ -287,23 +285,34 @@ export async function POST(req: Request): Promise<NextResponse> {
     emailConsent: app.emailConsent,
     backgroundCheckConsent: app.backgroundCheckConsent,
     payConsent: app.payConsent,
-    idConfirmed: true,
-    acceptances: INTAKE_WORDING.filter((row) => {
-      if (row.id === "application_sms") return app.smsConsent;
-      if (row.id === "application_email") return app.emailConsent;
-      if (row.id === "independent_contractor") return app.understandsContractorWork;
-      if (row.id === "application_privacy") return app.privacyAccepted;
-      if (row.id === "background_disclosure") return app.backgroundCheckConsent;
-      return false;
-    }).map((row) => ({
-      id: row.id,
-      version: row.version,
-      status: row.status,
-      wording: row.body,
-      acceptedAt,
-      ip,
-      device: userAgent?.slice(0, 500) || null,
-    })),
+    idConfirmed: false,
+    acceptances: [
+      ...INTAKE_WORDING.filter((row) => {
+        if (row.id === "application_sms") return app.smsConsent;
+        if (row.id === "application_email") return app.emailConsent;
+        if (row.id === "independent_contractor") return app.understandsContractorWork;
+        if (row.id === "application_privacy") return app.privacyAccepted;
+        if (row.id === "background_disclosure") return app.backgroundCheckConsent;
+        return false;
+      }).map((row) => ({
+        id: row.id,
+        version: row.version,
+        status: row.status,
+        wording: row.body,
+        acceptedAt,
+        ip,
+        device: userAgent?.slice(0, 500) || null,
+      })),
+      ...(app.answersAccurate ? [{
+        id: "answers_accurate",
+        version: 1,
+        status: "draft" as const,
+        wording: "My answers on this application are true and complete.",
+        acceptedAt,
+        ip,
+        device: userAgent?.slice(0, 500) || null,
+      }] : []),
+    ],
   };
 
   let supabase;
@@ -374,7 +383,13 @@ export async function POST(req: Request): Promise<NextResponse> {
   const settings = mergeIntakeSettings(settingsRow?.value && typeof settingsRow.value === "object" ? settingsRow.value as Partial<import("@/lib/contractor-intake/settings").IntakeSettings> : null);
   const duplicate = Boolean(existing) || prior.length > 0;
   const decision = decideApplication({
-    role: app.role === "Lead Cleaner (Contractor)" ? "lead_cleaner" : "cleaner",
+    role: app.role === "Lead Cleaner (Contractor)"
+      ? "lead_cleaner"
+      : app.role === "Recurring Home Cleaner (Contractor)"
+        ? "recurring_home"
+        : app.role === "Turnover Cleaner (Contractor)"
+          ? "turnover"
+          : "cleaner",
     email: app.email,
     phone: app.phone,
     name: app.fullName,
@@ -390,46 +405,30 @@ export async function POST(req: Request): Promise<NextResponse> {
     understandsVerification: app.understandsVerification,
     smsConsent: app.smsConsent,
     emailConsent: app.emailConsent,
-    authorizedToWork: app.authorizedToWork === "Yes",
+    authorizedToWork: app.authorizedToWork === "Yes" ? true : app.authorizedToWork === "No" ? false : null,
     backgroundCheckConsent: app.backgroundCheckConsent,
     payConsent: app.payConsent,
-    photoIdProvided: Boolean(app.idContentType),
     duplicate: duplicate || removedContractor,
     incomplete: false,
     reviewReason: removedContractor ? "These contact details are linked to a removed contractor." : null,
   }, settings);
 
-  if (!file || !app.idContentType) {
+  const terms = payTermsForRole(app.role, settings);
+  if (app.payConsent) {
+    consentRecord.acceptances.push({
+      id: "pay_terms",
+      version: 1,
+      status: "draft",
+      wording: terms.text,
+      acceptedAt,
+      ip,
+      device: userAgent?.slice(0, 500) || null,
+    });
+  }
+  if (!terms.open) {
     return NextResponse.json(
-      { error: "Upload a photo or PDF of your government-issued photo ID.", code: "missing_id" },
+      { error: "This role is not open until a pay rate is set.", code: "role_pay_unset" },
       { status: 400 },
-    );
-  }
-
-  const filename = safeIdFilename(file.name);
-  const path = `ids/${new Date().getUTCFullYear()}/${randomUUID()}-${filename}`;
-  const bytes = Buffer.from(await file.arrayBuffer());
-  const { error: upErr } = await supabase.storage.from(APPLICANT_ID_BUCKET).upload(path, bytes, {
-    contentType: app.idContentType,
-    upsert: false,
-  });
-  if (upErr) {
-    // eslint-disable-next-line no-console
-    console.error("[hiring/apply] id upload", upErr.message);
-    return NextResponse.json(
-      { error: "We couldn’t store your ID. Please try the upload again.", code: "id_upload" },
-      { status: 500 },
-    );
-  }
-
-  const { data: signed, error: signErr } = await supabase.storage
-    .from(APPLICANT_ID_BUCKET)
-    .createSignedUrl(path, 60 * 60);
-  if (signErr || !signed?.signedUrl) {
-    await supabase.storage.from(APPLICANT_ID_BUCKET).remove([path]);
-    return NextResponse.json(
-      { error: "We couldn’t store your ID. Please try the upload again.", code: "id_upload" },
-      { status: 500 },
     );
   }
 
@@ -437,12 +436,11 @@ export async function POST(req: Request): Promise<NextResponse> {
   try {
     const primed = await primeAirtablePat();
     if (!primed) throw new Error("Airtable is not configured");
-    const input = airtableInput(app, signed.signedUrl, filename);
+    const input = airtableInput(app, "", "");
     airtable = isAirtableId(existing?.airtable_record_id)
       ? await updateTalentApplicantInAirtable(existing.airtable_record_id, input)
       : await createTalentApplicantInAirtable(input);
   } catch (err) {
-    await supabase.storage.from(APPLICANT_ID_BUCKET).remove([path]);
     // eslint-disable-next-line no-console
     console.error("[hiring/apply] airtable", (err as Error).message);
     return NextResponse.json(
@@ -477,7 +475,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     supplies_on_hand: app.suppliesOnHand,
     reliability_note: app.reliabilityNote,
     reason_note: app.reasonNote,
-    government_id_path: path,
+    government_id_path: existing?.government_id_path || null,
     stage: decision.stage === "conditional_approval" ? "onboarding" : decision.stage,
     intake_stage: decision.stage,
     intake_decision: decision,
@@ -492,7 +490,8 @@ export async function POST(req: Request): Promise<NextResponse> {
       street: app.address,
       city: app.city,
       suppliesOwned: app.suppliesOwned,
-      governmentIdPath: path,
+      payTermsText: terms.text,
+      payTermsRole: terms.roleName,
       consentRecord,
       decision,
       experienceYears: app.experienceYears,
@@ -522,10 +521,6 @@ export async function POST(req: Request): Promise<NextResponse> {
     let applicantId = existing?.id;
     const saved = await writeApplicant(supabase, existing, fields, consentColumns);
     applicantId = saved.applicantId;
-
-    if (existing?.government_id_path && existing.government_id_path !== path) {
-      await supabase.storage.from(APPLICANT_ID_BUCKET).remove([existing.government_id_path]);
-    }
 
     if (saved.created) {
       await supabase.from("events").insert({

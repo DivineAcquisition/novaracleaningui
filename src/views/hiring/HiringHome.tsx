@@ -87,7 +87,7 @@ function FeaturedRole({ role }: { role: HiringRole }) {
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">{role.summary}</p>
         <RoleMeta role={role} />
         <span className="mt-6 inline-flex h-11 items-center gap-2 rounded-full px-5 text-sm font-semibold text-white" style={{ background: HIRING_GRADIENT }}>
-          View Lead Cleaner
+          View {role.shortTitle}
           <RiArrowRightLine className="h-4 w-4" aria-hidden />
         </span>
       </div>

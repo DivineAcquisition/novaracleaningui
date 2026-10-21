@@ -4,7 +4,7 @@
 // role; Specialized Contractors + Commercial Cleaner sit on an active
 // evergreen list (applicants are selected when demand opens).
 
-export type HiringRoleId = "field-tech" | "lead-cleaner" | "specialized-contractors" | "commercial-cleaner";
+export type HiringRoleId = "field-tech" | "lead-cleaner" | "recurring-home-cleaner" | "turnover-cleaner" | "specialized-contractors" | "commercial-cleaner";
 export type HiringRoleGroup = "field" | "lead" | "specialty";
 
 export interface HiringRole {
@@ -57,8 +57,8 @@ export const HIRING_ROLES: HiringRole[] = [
   {
     id: "lead-cleaner",
     slug: "lead-cleaner",
-    title: "Lead Cleaner",
-    shortTitle: "Lead Cleaner",
+    title: "Lead Field Cleaner",
+    shortTitle: "Lead Field Cleaner",
     tagline: "Lead larger jobs, walk the finished work, and show new cleaners the standard.",
     summary:
       "An experienced independent contractor on the Novara network. Lead jobs pay 47% of the job. Solo jobs stay at your normal tier. You can accept or decline any lead, trial, or backup offer.",
@@ -82,6 +82,38 @@ export const HIRING_ROLES: HiringRole[] = [
       "Novara pays every contractor directly",
       "A verified vehicle and a full kit for a two-person job",
     ],
+  },
+  {
+    id: "recurring-home-cleaner",
+    slug: "recurring-home-cleaner",
+    title: "Recurring Home Cleaner",
+    shortTitle: "Recurring",
+    tagline: "Residential weekly and biweekly homes. A voluntary independent contractor track.",
+    summary: "Residential only. Weekly and biweekly homes. You choose this track. It is independent contractor work.",
+    location: "DMV (MD · DC · VA)",
+    type: "Independent Contractor",
+    pay: "Set in intake settings",
+    evergreen: false,
+    group: "field",
+    level: 2,
+    highlights: ["Residential homes on a weekly or biweekly rhythm", "Voluntary track", "You bring your own supplies"],
+    expectations: ["Show up prepared with the proper equipment", "Vacuum and mop are part of a normal home"],
+  },
+  {
+    id: "turnover-cleaner",
+    slug: "turnover-cleaner",
+    title: "Turnover Cleaner",
+    shortTitle: "Turnover",
+    tagline: "Short-term rental and rental-unit turnovers, with same-day windows.",
+    summary: "Turnovers for short-term rentals and rental units. Same-day windows. Independent contractor work.",
+    location: "DMV (MD · DC · VA)",
+    type: "Independent Contractor",
+    pay: "Set in intake settings",
+    evergreen: false,
+    group: "specialty",
+    level: 2,
+    highlights: ["Short-term rental and rental-unit turnovers", "Same-day windows", "You bring your own supplies"],
+    expectations: ["Show up prepared with the proper equipment", "Vacuum and mop are part of a turnover"],
   },
   {
     id: "specialized-contractors",
@@ -126,7 +158,7 @@ export const HIRING_ROLES: HiringRole[] = [
     level: 2,
     highlights: [
       "Commercial and office facilities when routes open",
-      "Active evergreen list — selected when needed, not hired into idle capacity",
+      "Active evergreen list — selected when needed, not added while there is no work",
       "Recurring and one-off commercial scopes",
       "Contractor portal + Stripe payouts",
     ],
@@ -153,7 +185,11 @@ export function applicantRoleLabel(id: HiringRoleId): string {
     case "field-tech":
       return "Field Tech";
     case "lead-cleaner":
-      return "Lead Cleaner";
+      return "Lead Field Cleaner";
+    case "recurring-home-cleaner":
+      return "Recurring Home Cleaner";
+    case "turnover-cleaner":
+      return "Turnover Cleaner";
     case "specialized-contractors":
       return "Specialized Contractor";
     case "commercial-cleaner":

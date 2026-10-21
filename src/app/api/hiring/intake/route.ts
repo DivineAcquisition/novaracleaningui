@@ -2,8 +2,8 @@
 
 import { NextResponse } from "next/server";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
-import { INTAKE_SETTINGS_KEY, mergeIntakeSettings } from "@/lib/contractor-intake/settings";
-import { INTAKE_WORDING, WORDING_STATUS_LABEL } from "@/lib/contractor-intake/wording";
+import { DEFAULT_INTAKE_SETTINGS, INTAKE_SETTINGS_KEY, mergeIntakeSettings } from "@/lib/contractor-intake/settings";
+import { INTAKE_WORDING } from "@/lib/contractor-intake/wording";
 import { applicationHostAllowed, HIRING_ORIGIN, requestHost } from "@/lib/site-hosts";
 
 export const runtime = "nodejs";
@@ -16,21 +16,18 @@ export async function GET(req: Request): Promise<NextResponse> {
       { status: 403 },
     );
   }
-  let leadRoleOpenToPublic = false;
-  let minDaysAvailable = 2;
+  let settings = DEFAULT_INTAKE_SETTINGS;
   try {
     const supabase = getAdminSupabase();
     const { data } = await supabase.from("app_settings").select("value").eq("key", INTAKE_SETTINGS_KEY).maybeSingle();
-    const settings = mergeIntakeSettings(data?.value && typeof data.value === "object" ? data.value : null);
-    leadRoleOpenToPublic = settings.leadRoleOpenToPublic;
-    minDaysAvailable = settings.minDaysAvailable;
+    settings = mergeIntakeSettings(data?.value && typeof data.value === "object" ? data.value : null);
   } catch {
     // Defaults stay in force when settings cannot be read.
   }
   return NextResponse.json({
-    leadRoleOpenToPublic,
-    minDaysAvailable,
-    wordingStatus: WORDING_STATUS_LABEL,
+    leadRoleOpenToPublic: settings.leadRoleOpenToPublic,
+    minDaysAvailable: settings.minDaysAvailable,
+    settings,
     why: Object.fromEntries(INTAKE_WORDING.filter((row) => row.id.startsWith("why_") || row.id.startsWith("application_")).map((row) => [row.id, row.body])),
   });
 }

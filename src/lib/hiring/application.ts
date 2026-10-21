@@ -1,4 +1,5 @@
 import { SUPPLY_ITEMS } from "@/lib/cleaner-supplies";
+import { DEFAULT_INTAKE_SETTINGS, type IntakeSettings } from "@/lib/contractor-intake/settings";
 import { postalStateCode } from "@/lib/us-states";
 
 // ─── Public applicant intake ────────────────────────────────────────────────
@@ -66,8 +67,13 @@ export const BACKGROUND_DISCLOSURE =
 export const BACKGROUND_CONSENT_COPY =
   "I have read this disclosure. I understand a criminal-history check and a driving-record check may be run, that Novara may decline me based on the report, and that I will sign a separate authorization immediately before any check is ordered.";
 
-export const PAY_CONSENT_COPY =
-  "I’m comfortable starting at 40–45% of each job. If a job is more than 35 miles away, I also get surge pay and mileage pay for that travel.";
+export const PAY_CONSENT_COPY = "I have read the pay terms for this role.";
+
+export const PAY_RATE_SENTENCE =
+  "This is a percentage of the job price, paid to you as an independent contractor. Final pay is stated in your agreement.";
+
+export const PAY_TRAVEL_SENTENCE =
+  "If a job is more than 35 miles away, you also get surge pay and mileage pay for that travel.";
 
 export const SUPPLY_HONESTY_COPY =
   "This list is honest. I marked only the supplies I already have. Every job requires me to show up prepared with the proper equipment.";
@@ -187,8 +193,18 @@ export const APPLICANT_ROLES = [
   },
   {
     value: "Lead Cleaner (Contractor)",
-    label: "Lead Cleaner",
-    hint: "Run the job and set the standard on site",
+    label: "Lead Field Cleaner",
+    hint: "Lead the job on site",
+  },
+  {
+    value: "Recurring Home Cleaner (Contractor)",
+    label: "Recurring Home Cleaner",
+    hint: "Weekly and biweekly homes",
+  },
+  {
+    value: "Turnover Cleaner (Contractor)",
+    label: "Turnover Cleaner",
+    hint: "Rental-unit turnovers",
   },
   {
     value: "Specialized Contractor",
@@ -276,7 +292,6 @@ export const YES_NO = [
 export const QUALIFICATION_STEPS = [
   "address",
   "authorized",
-  "id",
   "consentBg",
   "consentPay",
   "suppliesOnHand",
@@ -324,7 +339,6 @@ const BASE_STEPS: ApplicationStep[] = [
   "windows",
   "requirements",
   "authorized",
-  "id",
   "consentBg",
   "consentPay",
   "suppliesOnHand",
@@ -390,6 +404,8 @@ export interface HiringApplicationDraft {
   privacyAccepted?: boolean;
   /** Client hint only. The server reads the saved setting. */
   leadRoleOpen?: boolean;
+  /** False when that role has no pay rate in settings. */
+  rolePaySet?: boolean;
 }
 
 export interface NormalizedHiringApplication {
@@ -405,7 +421,7 @@ export interface NormalizedHiringApplication {
   role: ApplicantRole;
   contractorType: ContractorType;
   transportation: string;
-  authorizedToWork: "Yes";
+  authorizedToWork: "Yes" | "No";
   experience: string;
   experienceYears: string;
   availability: string;
@@ -436,7 +452,8 @@ export interface NormalizedHiringApplication {
   reasonNote: string;
   department: typeof APPLICANT_DEPARTMENT;
   hiringRole: string | null;
-  idContentType: string;
+  idContentType: string | null;
+  payTermsText: string;
 }
 
 export type ApplicationIssue = {
@@ -478,15 +495,81 @@ const EXT_MIME: Record<string, string> = {
 
 export const OPEN_APPLICANT_ROLE: ApplicantRole = "Field Cleaner (Contractor)";
 export const LEAD_APPLICANT_ROLE: ApplicantRole = "Lead Cleaner (Contractor)";
+export const RECURRING_APPLICANT_ROLE = "Recurring Home Cleaner (Contractor)";
+export const TURNOVER_APPLICANT_ROLE = "Turnover Cleaner (Contractor)";
 
-export function isOpenApplicantRole(value: string | null | undefined): boolean {
-  return value === OPEN_APPLICANT_ROLE || value === LEAD_APPLICANT_ROLE;
+export const APPLICANT_ROLE_CHOICES = [
+  {
+    value: OPEN_APPLICANT_ROLE,
+    label: "Field Cleaner",
+    description: "Residential homes across the area we cover. You accept the jobs that fit your week.",
+    tag: "Independent Contractor",
+  },
+  {
+    value: LEAD_APPLICANT_ROLE,
+    label: "Lead Field Cleaner",
+    description: "Lead the job on site and complete the walkthrough. Outside applicants are closed when that setting is off.",
+    tag: "Independent Contractor",
+  },
+  {
+    value: RECURRING_APPLICANT_ROLE,
+    label: "Recurring Home Cleaner",
+    description: "Residential only. Weekly and biweekly homes. This track is voluntary.",
+    tag: "Independent Contractor",
+  },
+  {
+    value: TURNOVER_APPLICANT_ROLE,
+    label: "Turnover Cleaner",
+    description: "Short-term rental and rental-unit turnovers, with same-day windows.",
+    tag: "Independent Contractor",
+  },
+] as const;
+
+export function roleChoice(value: string | null | undefined) {
+  return APPLICANT_ROLE_CHOICES.find((row) => row.value === value) || null;
 }
 
-/** Field Cleaner is the default. A Lead Cleaner link opens that role. */
-export function presetRoleForHiringPage(roleId: string | null | undefined): ApplicantRole {
+export function isOpenApplicantRole(value: string | null | undefined): boolean {
+  return APPLICANT_ROLE_CHOICES.some((row) => row.value === value);
+}
+
+/** Field Cleaner is the default. A role link opens that role. */
+export function presetRoleForHiringPage(roleId: string | null | undefined): string {
   if (roleId === "lead-cleaner") return LEAD_APPLICANT_ROLE;
+  if (roleId === "recurring-home-cleaner") return RECURRING_APPLICANT_ROLE;
+  if (roleId === "turnover-cleaner") return TURNOVER_APPLICANT_ROLE;
   return OPEN_APPLICANT_ROLE;
+}
+
+export function payTermsForRole(role: string, settings: IntakeSettings = DEFAULT_INTAKE_SETTINGS): {
+  open: boolean;
+  roleName: string;
+  rateLine: string;
+  text: string;
+} {
+  const name = roleChoice(role)?.label || "Field Cleaner";
+  const field = settings.fieldCleanerPayLabel.trim();
+  const travel = PAY_TRAVEL_SENTENCE;
+  const closer = PAY_RATE_SENTENCE;
+  if (role === LEAD_APPLICANT_ROLE) {
+    const open = settings.leadRoleOpenToPublic && Boolean(field) && settings.leadPayPercent > 0;
+    const rateLine = field
+      ? `Field jobs start at ${field} of the job price. Jobs you lead pay ${settings.leadPayPercent}% of the job price.`
+      : "";
+    return { open, roleName: name, rateLine, text: [rateLine, closer, travel].filter(Boolean).join(" ") };
+  }
+  if (role === RECURRING_APPLICANT_ROLE) {
+    const rate = (settings.recurringHomeCleanerPayLabel || "").trim();
+    const rateLine = rate ? `Recurring Home Cleaner: ${rate} of the job price.` : "";
+    return { open: Boolean(rate), roleName: name, rateLine, text: rate ? `${rateLine} ${closer} ${travel}` : "" };
+  }
+  if (role === TURNOVER_APPLICANT_ROLE) {
+    const rate = (settings.turnoverCleanerPayLabel || "").trim();
+    const rateLine = rate ? `Turnover Cleaner: ${rate} of the job price.` : "";
+    return { open: Boolean(rate), roleName: name, rateLine, text: rate ? `${rateLine} ${closer} ${travel}` : "" };
+  }
+  const rateLine = field ? `Field Cleaner: ${field} of the job price.` : "";
+  return { open: Boolean(field), roleName: "Field Cleaner", rateLine, text: field ? `${rateLine} ${closer} ${travel}` : "" };
 }
 
 export function hiringIntentNote(_roleId: string | null | undefined): string | null {
@@ -663,11 +746,14 @@ function idIssue(draft: HiringApplicationDraft): ApplicationIssue | null {
 export function issuesForStep(step: ApplicationStep, draft: HiringApplicationDraft): ApplicationIssue | null {
   switch (step) {
     case "role":
-      if (draft.role !== OPEN_APPLICANT_ROLE && draft.role !== "Lead Cleaner (Contractor)") {
-        return issue(400, "invalid_role", "Choose Cleaner or Lead Cleaner.");
+      if (!APPLICANT_ROLE_CHOICES.some((row) => row.value === draft.role)) {
+        return issue(400, "invalid_role", "Choose one of the open contractor roles.");
       }
-      if (draft.role === "Lead Cleaner (Contractor)" && draft.leadRoleOpen === false) {
-        return issue(400, "invalid_role", "Lead Cleaner is not open to new applicants right now.");
+      if (draft.role === LEAD_APPLICANT_ROLE && draft.leadRoleOpen === false) {
+        return issue(400, "invalid_role", "Lead Field Cleaner is not open to new applicants right now.");
+      }
+      if (draft.rolePaySet === false) {
+        return issue(400, "role_pay_unset", "This role is not open until a pay rate is set.");
       }
       return null;
     case "name": {
@@ -745,10 +831,7 @@ export function issuesForStep(step: ApplicationStep, draft: HiringApplicationDra
     }
     case "authorized":
       if (draft.authorizedToWork !== "Yes" && draft.authorizedToWork !== "No") {
-        return issue(400, "missing_authorization", "Tell us whether you’re authorized to work in the U.S.");
-      }
-      if (draft.authorizedToWork !== "Yes") {
-        return issue(422, "not_authorized", gateCopy("not_authorized").body, true);
+        return issue(400, "missing_authorization", "Answer yes or no. We ask everyone the same question.");
       }
       return null;
     case "id":
@@ -760,7 +843,7 @@ export function issuesForStep(step: ApplicationStep, draft: HiringApplicationDra
       return null;
     case "consentPay":
       if (!draft.payConsent) {
-        return issue(422, "missing_pay_consent", "Accept the pay terms to qualify.", true);
+        return issue(400, "missing_pay_consent", "Tick “I have read the pay terms for this role” before you submit. This is not a decision on your application.");
       }
       return null;
     case "suppliesOnHand":
@@ -799,7 +882,10 @@ export function issuesForStep(step: ApplicationStep, draft: HiringApplicationDra
     }
     case "review":
       if (!draft.privacyAccepted) {
-        return issue(400, "missing_privacy", "Acknowledge the privacy notice to submit.");
+        return issue(400, "missing_privacy", "Tick “I have read the application privacy notice” to submit.");
+      }
+      if (!draft.answersAccurate) {
+        return issue(400, "missing_truthfulness", "Tick “My answers on this application are true and complete” to submit.");
       }
       return null;
     default:
@@ -828,11 +914,6 @@ export function validateHiringApplication(draft: HiringApplicationDraft): Applic
   const days = PREFERRED_DAYS.filter((d) => (draft.preferredDays || []).includes(d));
   const jobs = Math.round(Number(draft.jobsPerWeek) || 0);
   const state = draft.state as ApplicantState;
-  const uploaded = draft.idFile;
-  const contentType = uploaded ? idContentType(uploaded.name, uploaded.type) : null;
-  if (!uploaded || !contentType) {
-    return issue(400, "missing_id", "Upload a photo or PDF of your government-issued photo ID.");
-  }
 
   return {
     ok: true,
@@ -849,7 +930,7 @@ export function validateHiringApplication(draft: HiringApplicationDraft): Applic
       role: draft.role as ApplicantRole,
       contractorType: "Individual",
       transportation: vehicle ? TRANSPORTATION_CAR : TRANSPORTATION_NONE,
-      authorizedToWork: "Yes",
+      authorizedToWork: draft.authorizedToWork === "No" ? "No" : "Yes",
       experience: airtableExperience(years || draft.experience || ""),
       experienceYears: years || draft.experience || "",
       availability: airtableAvailability(days, jobs),
@@ -871,7 +952,7 @@ export function validateHiringApplication(draft: HiringApplicationDraft): Applic
       smsConsent: Boolean(draft.smsConsent),
       emailConsent: Boolean(draft.emailConsent),
       privacyAccepted: Boolean(draft.privacyAccepted),
-      answersAccurate: Boolean(draft.privacyAccepted),
+      answersAccurate: Boolean(draft.answersAccurate),
       consentVersion: CONSENT_VERSION,
       willingToGetSupplies: kit ? "Yes" : "No",
       suppliesOnHand: suppliesListText(draft.suppliesOwned, draft.suppliesOnHand).slice(0, 2000),
@@ -882,7 +963,8 @@ export function validateHiringApplication(draft: HiringApplicationDraft): Applic
       reasonNote: oneLine(draft.reasonNote),
       department: APPLICANT_DEPARTMENT,
       hiringRole: draft.hiringRole?.trim() || null,
-      idContentType: contentType,
+      idContentType: null,
+      payTermsText: "",
     },
   };
 }

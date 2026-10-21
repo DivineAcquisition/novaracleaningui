@@ -12,6 +12,7 @@ import {
   canSendFinalAdverse,
   compliancePanel,
   decideApplication,
+  planIdDeletion,
   helperPayCents,
   imagesOverdue,
   leadEligible,
@@ -75,13 +76,13 @@ check("pass message uses contractor language", !usesForbiddenApplicantLanguage(p
 const noCar = decideApplication(answers({ hasVehicle: false }), DEFAULT_INTAKE_SETTINGS, now);
 check("a no on the vehicle names that requirement", noCar.outcome === "not_a_fit" && /vehicle/i.test(noCar.message));
 const unauthorized = decideApplication(answers({ authorizedToWork: false }), DEFAULT_INTAKE_SETTINGS, now);
-check("a no on work authorization does not qualify", unauthorized.outcome === "not_a_fit" && unauthorized.openOnboarding === false && /authorized/i.test(unauthorized.message));
+check("a no on work authorization waits for a person", unauthorized.outcome === "needs_review" && unauthorized.openOnboarding === false && unauthorized.countsAsRejection === false && unauthorized.reapplyOn === null && unauthorized.reviewReason === "work authorization answer");
 const noBackground = decideApplication(answers({ backgroundCheckConsent: false }), DEFAULT_INTAKE_SETTINGS, now);
 check("declining the background disclosure does not qualify", noBackground.outcome === "not_a_fit" && noBackground.openOnboarding === false);
 const noPay = decideApplication(answers({ payConsent: false }), DEFAULT_INTAKE_SETTINGS, now);
 check("declining the pay terms does not qualify", noPay.outcome === "not_a_fit" && noPay.openOnboarding === false);
-const noId = decideApplication(answers({ photoIdProvided: false }), DEFAULT_INTAKE_SETTINGS, now);
-check("a missing photo ID does not qualify", noId.outcome === "not_a_fit" && noId.openOnboarding === false);
+const noId = decideApplication(answers(), DEFAULT_INTAKE_SETTINGS, now);
+check("a missing photo ID does not change a pass", noId.outcome === "pass");
 check("the not-a-fit message includes the reapply date", noCar.reapplyOn === "2026-12-20");
 check("a not-a-fit is the only rejection", noCar.countsAsRejection && !pass.countsAsRejection);
 
@@ -180,6 +181,12 @@ const closedLead = decideApplication(answers({ role: "lead_cleaner" }), { ...DEF
 check("a closed lead role waits for a person", closedLead.outcome === "needs_review" && closedLead.openOnboarding === false);
 const openLead = decideApplication(answers({ role: "lead_cleaner" }), { ...DEFAULT_INTAKE_SETTINGS, leadRoleOpenToPublic: true }, now);
 check("an open lead role can pass onto the lead track", openLead.outcome === "pass" && openLead.leadTrack === true);
+const held = planIdDeletion({ stage: "not_a_fit", decidedAt: "2020-01-01", uploadedAt: "2020-01-01", hasHold: true, identityResultAt: null, now });
+check("an open data request keeps the photo ID", held.delete === false && held.reason === "hold");
+const oldRejection = planIdDeletion({ stage: "not_a_fit", decidedAt: "2020-01-01", uploadedAt: "2020-01-01", hasHold: false, identityResultAt: null, now });
+check("a rejected application past retention deletes the ID", oldRejection.delete === true && oldRejection.reason === "not_approved");
+const fresh = planIdDeletion({ stage: "not_a_fit", decidedAt: now.toISOString(), uploadedAt: now.toISOString(), hasHold: false, identityResultAt: null, now });
+check("a new rejection keeps the ID until retention ends", fresh.delete === false);
 
 function applicantWait() {
   const start = new Date("2026-10-01T00:00:00.000Z");
