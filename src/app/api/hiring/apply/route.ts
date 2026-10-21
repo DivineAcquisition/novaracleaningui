@@ -31,6 +31,7 @@ import { INTAKE_SETTINGS_KEY, mergeIntakeSettings } from "@/lib/contractor-intak
 import { INTAKE_WORDING } from "@/lib/contractor-intake/wording";
 import { launchConditionalOnboarding } from "@/lib/talent/launch-onboarding";
 import { deliverCompliantEmail } from "@/lib/email-compliance/deliver";
+import { applicationHostAllowed, HIRING_ORIGIN, requestHost } from "@/lib/site-hosts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -248,6 +249,16 @@ export async function POST(req: Request): Promise<NextResponse> {
   // Honeypot. Pretend it worked so a bot doesn't retry.
   if (str(form, "faxNumber").trim()) {
     return NextResponse.json({ ok: true });
+  }
+
+  if (!applicationHostAllowed(requestHost(req))) {
+    return NextResponse.json(
+      {
+        error: `Applications are accepted only at ${HIRING_ORIGIN}/hiring/apply.`,
+        code: "wrong_host",
+      },
+      { status: 403 },
+    );
   }
 
   const uploaded = form.get("idFile");

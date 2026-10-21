@@ -23,6 +23,7 @@ import {
 } from "../src/lib/hiring/application";
 import { parseIndeedApplicant, splitPersonName, stateFromIndeedJob } from "../src/lib/hiring/indeed";
 import { hiringApplyUrl, isHiringToken, sanitizeAnswers, toPublicSession } from "../src/lib/hiring/session";
+import { applicationHostAllowed, contractorOnboardingUrl, hiringApplyUrl as hiringPage, onboardingHostAllowed } from "../src/lib/site-hosts";
 
 let failures = 0;
 function check(name: string, actual: unknown, expected: unknown) {
@@ -251,6 +252,10 @@ check(
 );
 check("session token shape", isHiringToken("a".repeat(48)), true);
 check("apply url uses the hiring host", hiringApplyUrl("abc"), "https://hiring.novaracleaning.com/hiring/apply/abc");
+check("apply links stay on the hiring host", hiringPage("?role=field-tech"), "https://hiring.novaracleaning.com/hiring/apply?role=field-tech");
+check("onboarding links stay on the contractor host", contractorOnboardingUrl("abc"), "https://contractor.novaracleaning.com/cleaner/auth?invite=abc");
+check("the application api rejects the contractor host", applicationHostAllowed("contractor.novaracleaning.com"), false);
+check("onboarding rejects the hiring host", onboardingHostAllowed("hiring.novaracleaning.com"), false);
 check("saved answers drop the uploaded file", sanitizeAnswers({ firstName: "Ada", idFile: { name: "x" } }), { firstName: "Ada" });
 
 if (failures > 0) {

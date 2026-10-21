@@ -30,8 +30,9 @@ import { updateSession } from "@/integrations/supabase/middleware";
 //                                    /partner/* — everything else 308s away,
 //                                    and /partner/* is served ONLY here.
 //
-// hiring.novaracleaning.com — public careers site (open roles + apply).
-// Owned paths: /hiring/*. DNS points here; Framer is no longer the front door.
+// hiring.novaracleaning.com — the public application only.
+// Owned paths: /hiring/*. A pass hands the person to contractor.novaracleaning.com
+// for onboarding. The application is never served on the contractor host.
 //
 // docs.novaracleaning.com — internal workspace guides ("how the tool works").
 //                    UNLIKE commercial.* and partner.*, this host is NOT
@@ -71,9 +72,10 @@ type SubdomainKey = keyof typeof HOSTS;
 const ROUTE_OWNER: Array<[string, SubdomainKey]> = [
   ["/admin", "admin"],
 
-  // Contractor portal: the entire cleaner journey lives here.
-  // - /cleaner/onboarding, /cleaner/ob-portal, /ob-portal: application
-  //   funnel (post-hiring-site hand-off from hiring.novaracleaning.com)
+  // Contractor portal: onboarding and the signed-in contractor journey.
+  // The public application stays on hiring.novaracleaning.com.
+  // - /cleaner/onboarding, /cleaner/ob-portal, /ob-portal: onboarding
+  //   after a conditional approval (invite link from hiring)
   // - /cleaner/auth, /cleaner/dashboard, /cleaner/mobile-dashboard,
   //   /cleaner/reset-password: signed-in cleaner portal
   // - /contractor/*: legacy contractor routes

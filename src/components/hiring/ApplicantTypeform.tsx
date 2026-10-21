@@ -26,6 +26,8 @@ import {
   type HiringApplicationDraft,
 } from "@/lib/hiring/application";
 import { wordingById } from "@/lib/contractor-intake/wording";
+import { HIRING_HOST, HIRING_ORIGIN } from "@/lib/site-hosts";
+import { StayOnHost } from "@/components/StayOnHost";
 import { formatPhoneNumber } from "@/lib/input-formatters";
 import { HIRING_GRADIENT } from "@/components/hiring/HiringChrome";
 import type { PublicHiringSession } from "@/lib/hiring/session";
@@ -216,6 +218,7 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
 
   return (
     <div className="flex min-h-dvh flex-col bg-white text-slate-900">
+      <StayOnHost host={HIRING_HOST} origin={HIRING_ORIGIN} />
       <SEO
         title="Apply"
         description="Apply to join the Novara contractor network. The application asks only whether you can do the work."
@@ -225,7 +228,7 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
         <div className="h-full" style={{ width: `${Math.round(((stepIndex + 1) / steps.length) * 100)}%`, background: HIRING_GRADIENT }} />
       </div>
       <header className="mx-auto flex w-full max-w-2xl items-center justify-between px-5 py-4">
-        <Link href="/hiring" className="font-heading text-[15px] font-bold">Novara<span className="text-primary">Cleaning</span></Link>
+        <Link href={`${HIRING_ORIGIN}/hiring`} className="font-heading text-[15px] font-bold">Novara<span className="text-primary">Cleaning</span></Link>
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{done ? "Done" : `${stepIndex + 1} of ${steps.length}`}</p>
       </header>
       <main className="mx-auto w-full max-w-2xl flex-1 px-5 pb-28">

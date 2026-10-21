@@ -8,11 +8,22 @@ import { acceptVehiclePhoto, identityPath } from "@/lib/contractor-intake/verifi
 import { applicantDeadline, imageDeleteOn, openPreAdverse } from "@/lib/contractor-intake/onboarding";
 import { INTAKE_WORDING } from "@/lib/contractor-intake/wording";
 import { DEFAULT_INTAKE_SETTINGS } from "@/lib/contractor-intake/settings";
+import { CONTRACTOR_ORIGIN, onboardingHostAllowed, requestHost } from "@/lib/site-hosts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function wrongHost(req: Request): NextResponse | null {
+  if (onboardingHostAllowed(requestHost(req))) return null;
+  return NextResponse.json(
+    { error: `Onboarding opens only at ${CONTRACTOR_ORIGIN}.` },
+    { status: 403 },
+  );
+}
+
 export async function GET(req: Request): Promise<NextResponse> {
+  const blocked = wrongHost(req);
+  if (blocked) return blocked;
   try {
     const user = await requireUser(req);
     const supabase = getAdminSupabase();
@@ -40,6 +51,8 @@ export async function GET(req: Request): Promise<NextResponse> {
 }
 
 export async function POST(req: Request): Promise<NextResponse> {
+  const blocked = wrongHost(req);
+  if (blocked) return blocked;
   try {
     const user = await requireUser(req);
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;

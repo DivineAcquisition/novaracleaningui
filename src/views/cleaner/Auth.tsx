@@ -23,6 +23,8 @@ import { z } from "zod";
 import { SEO } from "@/components/SEO";
 import { resolveCleanerAuth } from "@/lib/cleaner-auth";
 import { AuthScaffold, AuthCard, GoogleIcon, AUTH_INPUT_CLS, AUTH_GRADIENT } from "@/components/auth/AuthScaffold";
+import { StayOnHost } from "@/components/StayOnHost";
+import { CONTRACTOR_HOST, CONTRACTOR_ORIGIN } from "@/lib/site-hosts";
 
 const CLEANER_FEATURES = [
   { icon: RiBriefcaseLine, label: "Steady work", desc: "Get matched to cleaning jobs near you." },
@@ -300,6 +302,7 @@ export default function CleanerAuth() {
       features={CLEANER_FEATURES}
       stats={CLEANER_STATS}
     >
+      <StayOnHost host={CONTRACTOR_HOST} origin={CONTRACTOR_ORIGIN} />
       <SEO title="Contractor Login" noindex />
       <AuthCard>
         <div className="space-y-1.5">

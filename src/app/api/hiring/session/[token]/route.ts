@@ -13,14 +13,25 @@ import {
   toPublicSession,
   type HiringSessionAnswers,
 } from "@/lib/hiring/session";
+import { applicationHostAllowed, HIRING_ORIGIN, requestHost } from "@/lib/site-hosts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function wrongHost(req: Request): NextResponse | null {
+  if (applicationHostAllowed(requestHost(req))) return null;
+  return NextResponse.json(
+    { error: `Applications are accepted only at ${HIRING_ORIGIN}/hiring/apply.` },
+    { status: 403 },
+  );
+}
+
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: { token: string } },
 ): Promise<NextResponse> {
+  const blocked = wrongHost(req);
+  if (blocked) return blocked;
   let supabase;
   try {
     supabase = getAdminSupabase();
@@ -43,6 +54,8 @@ export async function PATCH(
   req: Request,
   { params }: { params: { token: string } },
 ): Promise<NextResponse> {
+  const blocked = wrongHost(req);
+  if (blocked) return blocked;
   let supabase;
   try {
     supabase = getAdminSupabase();

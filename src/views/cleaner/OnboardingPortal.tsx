@@ -40,6 +40,8 @@ import { PhoneVerificationDialog } from "@/components/cleaner/PhoneVerificationD
 import { PortalAgreementForm } from "@/components/cleaner/PortalAgreementForm";
 import { SupplyChecklistForm } from "@/components/cleaner/SupplyChecklistForm";
 import { ContractorIntakePanel } from "@/components/cleaner/ContractorIntakePanel";
+import { CONTRACTOR_HOST, CONTRACTOR_ORIGIN } from "@/lib/site-hosts";
+import { StayOnHost } from "@/components/StayOnHost";
 import { JobDayGuides } from "@/components/cleaner/JobDayGuides";
 import { onboardingGuide } from "@/lib/cleaner-onboarding-guides";
 import { W9OnboardingForm } from "@/components/cleaner/W9OnboardingForm";
@@ -440,6 +442,7 @@ export default function OnboardingPortal() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/10">
+      <StayOnHost host={CONTRACTOR_HOST} origin={CONTRACTOR_ORIGIN} />
       <SEO title="Onboarding Portal" noindex />
 
       {/* Header */}

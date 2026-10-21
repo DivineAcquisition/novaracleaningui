@@ -5,14 +5,14 @@ import { randomBytes } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { edgeResult } from "@/lib/edge-invoke";
 import { applicantMessage } from "@/lib/contractor-intake/messages";
+import { contractorOnboardingUrl } from "@/lib/site-hosts";
 import { sendOnboardingInviteEmail } from "@/lib/talent/onboarding-email";
 import { usableInviteEmail } from "@/lib/talent/onboarding-invite";
 
-const ONBOARDING_AUTH_BASE = "https://contractor.novaracleaning.com/cleaner/auth";
 const INVITE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
 export function onboardingInviteUrl(token: string): string {
-  return `${ONBOARDING_AUTH_BASE}?invite=${encodeURIComponent(token)}`;
+  return contractorOnboardingUrl(token);
 }
 
 function usablePhone(input: string | null | undefined): string | null {

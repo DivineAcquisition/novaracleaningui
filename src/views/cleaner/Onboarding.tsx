@@ -36,6 +36,8 @@ import { PhoneVerificationDialog } from "@/components/cleaner/PhoneVerificationD
 import { SignaturePad } from "@/components/booking/SignaturePad";
 import { AgreementPdfPreview } from "@/components/cleaner/AgreementPdfPreview";
 import { resolveCleanerAuth } from "@/lib/cleaner-auth";
+import { StayOnHost } from "@/components/StayOnHost";
+import { CONTRACTOR_HOST, CONTRACTOR_ORIGIN } from "@/lib/site-hosts";
 import { US_STATES, postalStateCode } from "@/lib/us-states";
 
 const DAYS_OF_WEEK = [
@@ -419,6 +421,7 @@ export default function CleanerOnboarding() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/10 py-8 px-4">
+      <StayOnHost host={CONTRACTOR_HOST} origin={CONTRACTOR_ORIGIN} />
       <SEO title="Contractor Onboarding" noindex />
       <div className="max-w-lg mx-auto">
         {/* Header */}

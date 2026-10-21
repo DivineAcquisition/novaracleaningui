@@ -4,11 +4,18 @@ import { NextResponse } from "next/server";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import { INTAKE_SETTINGS_KEY, mergeIntakeSettings } from "@/lib/contractor-intake/settings";
 import { INTAKE_WORDING, WORDING_STATUS_LABEL } from "@/lib/contractor-intake/wording";
+import { applicationHostAllowed, HIRING_ORIGIN, requestHost } from "@/lib/site-hosts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(): Promise<NextResponse> {
+export async function GET(req: Request): Promise<NextResponse> {
+  if (!applicationHostAllowed(requestHost(req))) {
+    return NextResponse.json(
+      { error: `Applications are accepted only at ${HIRING_ORIGIN}/hiring/apply.` },
+      { status: 403 },
+    );
+  }
   let leadRoleOpenToPublic = false;
   let minDaysAvailable = 2;
   try {

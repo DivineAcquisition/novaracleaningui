@@ -44,6 +44,7 @@ create table if not exists public.contractor_data_requests (
 );
 
 alter table public.contractor_data_requests enable row level security;
+revoke all on table public.contractor_data_requests from anon, authenticated;
 
 CREATE OR REPLACE FUNCTION public.cleaner_ready_for_first_job(p_id uuid)
 RETURNS boolean

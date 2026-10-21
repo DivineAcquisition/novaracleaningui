@@ -7,8 +7,9 @@
 import { randomBytes } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { splitPersonName, stateFromIndeedJob } from "./indeed";
+import { HIRING_ORIGIN } from "@/lib/site-hosts";
 
-export const HIRING_APPLY_ORIGIN = "https://hiring.novaracleaning.com";
+export const HIRING_APPLY_ORIGIN = HIRING_ORIGIN;
 export const SESSION_TTL_DAYS = 30;
 
 export type HiringSessionStatus = "open" | "submitted";

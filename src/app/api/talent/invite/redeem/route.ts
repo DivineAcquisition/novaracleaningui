@@ -7,11 +7,18 @@
 
 import { NextResponse } from "next/server";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
+import { CONTRACTOR_ORIGIN, onboardingHostAllowed, requestHost } from "@/lib/site-hosts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request): Promise<NextResponse> {
+  if (!onboardingHostAllowed(requestHost(req))) {
+    return NextResponse.json(
+      { error: `Onboarding opens only at ${CONTRACTOR_ORIGIN}/cleaner/auth.` },
+      { status: 403 },
+    );
+  }
   let body: { inviteToken?: string };
   try {
     body = (await req.json()) as { inviteToken?: string };

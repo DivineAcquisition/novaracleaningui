@@ -30,11 +30,11 @@ import { deriveDownstreamFields, type ScreeningAnswers } from "@/lib/phone-scree
 import { sendOnboardingInviteEmail } from "@/lib/talent/onboarding-email";
 import { usableInviteEmail } from "@/lib/talent/onboarding-invite";
 import { sendApplicantRejectEmail } from "@/lib/talent/reject-email";
+import { contractorOnboardingUrl } from "@/lib/site-hosts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const ONBOARDING_AUTH_BASE = "https://contractor.novaracleaning.com/cleaner/auth";
 /** Invite links stay valid for 14 days; resend mints a fresh token/window. */
 const INVITE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
@@ -43,7 +43,7 @@ function mintInviteToken(): string {
 }
 
 function onboardingInviteUrl(token: string): string {
-  return `${ONBOARDING_AUTH_BASE}?invite=${encodeURIComponent(token)}`;
+  return contractorOnboardingUrl(token);
 }
 
 interface ApplicantRow {
