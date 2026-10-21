@@ -31,6 +31,7 @@ import { isReapplyBlocked } from "@/lib/pulse-check/roster";
 import { decideApplication } from "@/lib/contractor-intake/decide";
 import { applicantMessage } from "@/lib/contractor-intake/messages";
 import { INTAKE_SETTINGS_KEY, mergeIntakeSettings } from "@/lib/contractor-intake/settings";
+import { ROLE_COPY_KEY, accessFromCatalog, mergeRoleCatalog, parseRoleInterest } from "@/lib/contractor-roles";
 import { INTAKE_WORDING } from "@/lib/contractor-intake/wording";
 import { launchConditionalOnboarding } from "@/lib/talent/launch-onboarding";
 import { deliverCompliantEmail } from "@/lib/email-compliance/deliver";
@@ -231,7 +232,17 @@ function draftFromForm(form: FormData, file: File | null): HiringApplicationDraf
     experienceYears: str(form, "experienceYears"),
     privacyAccepted: flag(form, "privacyAccepted"),
     leadRoleOpen: flag(form, "leadRoleOpen"),
+    roleInterests: parseRoleInterest(jsonValue(str(form, "roleInterests"))),
   };
+}
+
+function jsonValue(raw: string): unknown {
+  if (!raw.trim()) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
 }
 
 function jsonList(raw: string): string[] {
@@ -268,7 +279,26 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   const uploaded = form.get("idFile");
   const file = uploaded instanceof File && uploaded.size > 0 ? uploaded : null;
-  const validated = validateHiringApplication(draftFromForm(form, file));
+  const draft = draftFromForm(form, file);
+
+  let supabase;
+  try {
+    supabase = getAdminSupabase();
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("[hiring/apply] supabase", (err as Error).message);
+    return NextResponse.json(
+      { error: "We couldn’t save your application. Please try again in a moment.", code: "config" },
+      { status: 500 },
+    );
+  }
+
+  const { data: settingsRow } = await supabase.from("app_settings").select("value").eq("key", INTAKE_SETTINGS_KEY).maybeSingle();
+  const settings = mergeIntakeSettings(settingsRow?.value && typeof settingsRow.value === "object" ? settingsRow.value as Partial<import("@/lib/contractor-intake/settings").IntakeSettings> : null);
+  const { data: copyRow } = await supabase.from("app_settings").select("value").eq("key", ROLE_COPY_KEY).maybeSingle();
+  const catalog = mergeRoleCatalog(copyRow?.value);
+  const access = accessFromCatalog(catalog, { leadRoleOpenToPublic: settings.leadRoleOpenToPublic, eligibleOrInvited: false });
+  const validated = validateHiringApplication(draft, { catalog, access });
   if (isApplicationIssue(validated)) {
     return NextResponse.json(
       { error: validated.error, code: validated.code, gate: validated.gate },
@@ -315,17 +345,6 @@ export async function POST(req: Request): Promise<NextResponse> {
     ],
   };
 
-  let supabase;
-  try {
-    supabase = getAdminSupabase();
-  } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error("[hiring/apply] supabase", (err as Error).message);
-    return NextResponse.json(
-      { error: "We couldn’t save your application. Please try again in a moment.", code: "config" },
-      { status: 500 },
-    );
-  }
   const digits = phoneDigits(app.phone);
 
   const { data: priorByEmail } = await supabase
@@ -379,17 +398,10 @@ export async function POST(req: Request): Promise<NextResponse> {
     .eq("is_active", true)
     .maybeSingle();
 
-  const { data: settingsRow } = await supabase.from("app_settings").select("value").eq("key", INTAKE_SETTINGS_KEY).maybeSingle();
-  const settings = mergeIntakeSettings(settingsRow?.value && typeof settingsRow.value === "object" ? settingsRow.value as Partial<import("@/lib/contractor-intake/settings").IntakeSettings> : null);
   const duplicate = Boolean(existing) || prior.length > 0;
+  const legacyLead = app.role === "Lead Cleaner (Contractor)" && !draft.roleInterests;
   const decision = decideApplication({
-    role: app.role === "Lead Cleaner (Contractor)"
-      ? "lead_cleaner"
-      : app.role === "Recurring Home Cleaner (Contractor)"
-        ? "recurring_home"
-        : app.role === "Turnover Cleaner (Contractor)"
-          ? "turnover"
-          : "cleaner",
+    role: legacyLead ? "lead_cleaner" : "cleaner",
     email: app.email,
     phone: app.phone,
     name: app.fullName,
@@ -499,6 +511,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       jobsPerWeek: app.jobsPerWeek,
       cleaningTypes: app.cleaningTypes,
       leadTrack: decision.leadTrack,
+      roleApplications: app.roleApplications,
     },
     synced_at: new Date().toISOString(),
     ...(!existing || existing.stage === "applicant" ? { applied_at: new Date().toISOString() } : {}),
@@ -556,6 +569,14 @@ export async function POST(req: Request): Promise<NextResponse> {
           leadTrack: decision.leadTrack,
         });
         onboardingSent = opened.emailed || Boolean(opened.inviteUrl);
+        if (opened.cleanerId && app.roleApplications.length) {
+          const current = await supabase.from("cleaners").select("intake_record").eq("id", opened.cleanerId).maybeSingle();
+          const record = current.data?.intake_record && typeof current.data.intake_record === "object" ? current.data.intake_record as Record<string, unknown> : {};
+          await supabase.from("cleaners").update({
+            intake_record: { ...record, roleApplications: app.roleApplications },
+            updated_at: new Date().toISOString(),
+          }).eq("id", opened.cleanerId);
+        }
       } catch (err) {
         // eslint-disable-next-line no-console
         console.error("[hiring/apply] onboarding", (err as Error).message);

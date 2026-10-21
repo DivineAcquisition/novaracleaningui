@@ -51,7 +51,7 @@ export function HiringNav({ ctaHref = "#positions", ctaLabel = "Open roles" }: {
             href="/hiring/field-tech"
             className="hidden rounded-full border border-border bg-background px-3.5 py-2 text-[13px] font-semibold text-foreground transition hover:border-primary/30 hover:bg-brand-50 sm:inline-flex"
           >
-            Field Tech
+            Field Cleaner
           </Link>
           <a
             href={ctaHref}

@@ -6,6 +6,7 @@
 
 import { randomBytes } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { parseRoleInterest, type RoleInterestDraft } from "@/lib/contractor-roles";
 import { splitPersonName, stateFromIndeedJob } from "./indeed";
 import { HIRING_ORIGIN } from "@/lib/site-hosts";
 
@@ -57,6 +58,7 @@ export interface HiringSessionAnswers {
   cleaningTypes?: string[];
   privacyAccepted?: boolean;
   suppliesHonest?: boolean;
+  roleInterests?: RoleInterestDraft;
 }
 
 export interface HiringSessionRow {
@@ -149,6 +151,9 @@ export function sanitizeAnswers(input: unknown): HiringSessionAnswers {
   if (Array.isArray(raw.timeWindows)) out.timeWindows = raw.timeWindows.map((d) => String(d)).slice(0, 8);
   if (Array.isArray(raw.cleaningTypes)) out.cleaningTypes = raw.cleaningTypes.map((d) => String(d)).slice(0, 8);
   if (typeof raw.jobsPerWeek === "number") out.jobsPerWeek = raw.jobsPerWeek;
+  if (raw.roleInterests && typeof raw.roleInterests === "object") {
+    out.roleInterests = parseRoleInterest(raw.roleInterests);
+  }
   for (const key of [
     "age18",
     "validDriversLicense",

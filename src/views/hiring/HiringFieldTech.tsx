@@ -22,6 +22,8 @@ import {
 import { SEO } from "@/components/SEO";
 import { WistiaPlayer } from "@/components/cleaner/WistiaPlayer";
 import { roleById, type HiringRoleId } from "@/lib/hiring/roles";
+import { payLine, rolePaySettings } from "@/lib/contractor-roles";
+import { DEFAULT_INTAKE_SETTINGS } from "@/lib/contractor-intake/settings";
 import { hiringApplyUrl } from "@/lib/site-hosts";
 import {
   EvergreenBadge,
@@ -42,7 +44,7 @@ const HIGHLIGHTS = [
   {
     icon: RiMoneyDollarCircleLine,
     title: "Revenue-share pay",
-    body: "Earn a percentage of every job's revenue — 35% to start, rising to 45% as you prove yourself. The more jobs you ace, the more you make per clean.",
+    body: "You earn a share of each job. The share follows your tier in pay settings.",
   },
   {
     icon: RiCalendarScheduleLine,
@@ -80,8 +82,8 @@ export default function HiringFieldTech() {
   return (
     <HiringShell>
       <SEO
-        title="Field Tech Role"
-        description="Join Novara Cleaning as a Field Tech independent contractor. Watch the role intro, then apply. Evergreen Specialized Contractor and Commercial Cleaner lists also open."
+        title="Field Cleaner"
+        description="Apply as a Field Cleaner, an independent contractor with Novara Cleaning. Watch the role intro, then apply."
         canonical="https://hiring.novaracleaning.com/hiring/field-tech"
       />
       <HiringNav ctaHref={hiringApplyUrl(`?role=${defaultRole}`)} ctaLabel="Apply" />
@@ -121,7 +123,7 @@ export default function HiringFieldTech() {
               {field.location}
             </span>
             <span>{field.type}</span>
-            <span>{field.pay}</span>
+            <span>Pay: {payLine("field_cleaner", rolePaySettings(DEFAULT_INTAKE_SETTINGS))}</span>
           </div>
         </div>
       </section>
@@ -224,8 +226,7 @@ export default function HiringFieldTech() {
                   Other contractor roles
                 </h2>
                 <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">
-                  Specialized Contractor and Commercial Cleaner open when demand does.{" "}
-                  <Link href="/hiring/lead-cleaner" className="font-semibold text-[#5C0FFE]">Lead Cleaner is open now.</Link>
+                  Specialized Contractor and Commercial Cleaner open when demand does. Lead Field Cleaner is listed with the other roles.
                 </p>
               </div>
 

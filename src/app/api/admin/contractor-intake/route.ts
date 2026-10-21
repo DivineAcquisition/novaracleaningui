@@ -11,6 +11,23 @@ import {
   type IntakeSettings,
 } from "@/lib/contractor-intake/settings";
 import { INTAKE_WORDING, WORDING_STATUS_LABEL, type WordingVersion } from "@/lib/contractor-intake/wording";
+import { deliverCompliantEmail } from "@/lib/email-compliance/deliver";
+import {
+  ROLE_COPY_KEY,
+  draftWording,
+  editQuestionCopy,
+  editRoleCopy,
+  markCopyReviewed,
+  mergeRoleCatalog,
+  recordRoleDecision,
+  rolePaySettings,
+  sectionsFromUnknown,
+  setRolePublic,
+  type ContractorRoleId,
+  type RoleCatalog,
+  type RoleDecisionKind,
+  type SavedRoleSection,
+} from "@/lib/contractor-roles";
 import { complianceDashboard, countByStage, type DashboardRow } from "@/lib/contractor-intake/verification";
 import { leadEligible, reviewLeadAssignment, type ReliabilityRecord } from "@/lib/contractor-intake/lead";
 import { reviewLeadApplication } from "@/lib/contractor-intake/lead-application";
@@ -33,6 +50,37 @@ async function loadWording(supabase: ReturnType<typeof getAdminSupabase>): Promi
   return INTAKE_WORDING.map((seed) => stored.find((row) => row.id === seed.id) || seed);
 }
 
+async function loadRoleCatalog(supabase: ReturnType<typeof getAdminSupabase>): Promise<RoleCatalog> {
+  const { data } = await supabase.from("app_settings").select("value").eq("key", ROLE_COPY_KEY).maybeSingle();
+  return mergeRoleCatalog(data?.value);
+}
+
+async function saveRoleCatalog(supabase: ReturnType<typeof getAdminSupabase>, catalog: RoleCatalog): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { error } = await supabase.from("app_settings").upsert({ key: ROLE_COPY_KEY, value: catalog });
+  return error ? { ok: false, error: error.message } : { ok: true };
+}
+
+async function loadRoleReviews(supabase: ReturnType<typeof getAdminSupabase>): Promise<Array<{ applicantId: string | null; cleanerId: string | null; name: string; email: string | null; sections: SavedRoleSection[] }>> {
+  const reviews: Array<{ applicantId: string | null; cleanerId: string | null; name: string; email: string | null; sections: SavedRoleSection[] }> = [];
+  const applicants = await supabase.from("cleaner_applicants").select("id, full_name, email, submission").order("created_at", { ascending: false }).limit(150);
+  for (const row of applicants.data || []) {
+    const submission = row.submission && typeof row.submission === "object" ? row.submission as { roleApplications?: unknown } : {};
+    const sections = sectionsFromUnknown(submission.roleApplications);
+    if (sections.length) reviews.push({ applicantId: String(row.id), cleanerId: null, name: String(row.full_name || ""), email: row.email ? String(row.email) : null, sections });
+  }
+  const cleaners = await supabase.from("cleaners").select("id, first_name, last_name, email, intake_record").limit(200);
+  for (const row of cleaners.data || []) {
+    const record = row.intake_record && typeof row.intake_record === "object" ? row.intake_record as { roleApplications?: unknown } : {};
+    const sections = sectionsFromUnknown(record.roleApplications);
+    if (!sections.length) continue;
+    const name = [row.first_name, row.last_name].filter(Boolean).join(" ");
+    const existing = reviews.find((item) => item.email && row.email && item.email.toLowerCase() === String(row.email).toLowerCase());
+    if (existing) existing.cleanerId = String(row.id);
+    else reviews.push({ applicantId: null, cleanerId: String(row.id), name, email: row.email ? String(row.email) : null, sections });
+  }
+  return reviews;
+}
+
 export async function GET(req: Request): Promise<NextResponse> {
   try {
     await requireAdmin(req);
@@ -43,6 +91,7 @@ export async function GET(req: Request): Promise<NextResponse> {
   const supabase = getAdminSupabase();
   const settings = await loadSettings(supabase);
   const wording = await loadWording(supabase);
+  const roleCatalog = await loadRoleCatalog(supabase);
   const applicantSelect = await supabase
     .from("cleaner_applicants")
     .select("id, full_name, email, stage, intake_stage, intake_decision, created_at, reapply_on")
@@ -101,6 +150,10 @@ export async function GET(req: Request): Promise<NextResponse> {
     applicationIdsPastDeletion,
     settings,
     wording,
+    roleCatalog,
+    draftRoles: draftWording(roleCatalog),
+    pay: rolePaySettings(settings),
+    roleReviews: await loadRoleReviews(supabase),
     counts: countByStage(stages),
     needsReview: (applicants || []).filter((row) => row.intake_stage === "needs_review" || row.stage === "needs_review"),
     eligible,
@@ -156,6 +209,109 @@ export async function POST(req: Request): Promise<NextResponse> {
     const dryRun = action !== "id_cleanup" || body.confirm !== true;
     const result = await runApplicantIdCleanup(supabase, { dryRun });
     return NextResponse.json({ ok: true, ...result });
+  }
+
+  if (action === "save_role_copy") {
+    const catalog = await loadRoleCatalog(supabase);
+    const id = String(body.id || "");
+    const patch = (body.patch && typeof body.patch === "object" ? body.patch : {}) as Record<string, unknown>;
+    const kind = String(body.kind || "");
+    const next = kind === "question"
+      ? editQuestionCopy(catalog, id, {
+        prompt: typeof patch.prompt === "string" ? patch.prompt : undefined,
+        why: typeof patch.why === "string" ? patch.why : undefined,
+        helper: typeof patch.helper === "string" ? patch.helper : undefined,
+        reviewerGuide: typeof patch.reviewerGuide === "string" ? patch.reviewerGuide : undefined,
+        options: Array.isArray(patch.options) ? patch.options.map((item) => String(item)) : undefined,
+      })
+      : editRoleCopy(catalog, id as ContractorRoleId, {
+        name: typeof patch.name === "string" ? patch.name : undefined,
+        tag: typeof patch.tag === "string" ? patch.tag : undefined,
+        shortDescription: typeof patch.shortDescription === "string" ? patch.shortDescription : undefined,
+        whatYoullDo: Array.isArray(patch.whatYoullDo) ? patch.whatYoullDo.map((item) => String(item)) : undefined,
+        whatYoullNeed: Array.isArray(patch.whatYoullNeed) ? patch.whatYoullNeed.map((item) => String(item)) : undefined,
+      });
+    if (kind === "question" && !next.questions.some((row) => row.id === id)) {
+      return NextResponse.json({ error: "Unknown question." }, { status: 404 });
+    }
+    if (kind !== "question" && !next.roles.some((row) => row.id === id)) {
+      return NextResponse.json({ error: "Unknown role." }, { status: 404 });
+    }
+    const saved = await saveRoleCatalog(supabase, next);
+    if (saved.ok === false) return NextResponse.json({ error: saved.error }, { status: 500 });
+    return NextResponse.json({ ok: true, roleCatalog: next, draftRoles: draftWording(next) });
+  }
+
+  if (action === "mark_role_reviewed") {
+    const catalog = await loadRoleCatalog(supabase);
+    const id = String(body.id || "");
+    const next = markCopyReviewed(catalog, id);
+    const saved = await saveRoleCatalog(supabase, next);
+    if (saved.ok === false) return NextResponse.json({ error: saved.error }, { status: 500 });
+    return NextResponse.json({ ok: true, roleCatalog: next, draftRoles: draftWording(next) });
+  }
+
+  if (action === "set_role_public") {
+    const catalog = await loadRoleCatalog(supabase);
+    const id = String(body.id || "") as ContractorRoleId;
+    if (!catalog.roles.some((row) => row.id === id)) return NextResponse.json({ error: "Unknown role." }, { status: 404 });
+    const next = setRolePublic(catalog, id, Boolean(body.publicEnabled));
+    const saved = await saveRoleCatalog(supabase, next);
+    if (saved.ok === false) return NextResponse.json({ error: saved.error }, { status: 500 });
+    return NextResponse.json({ ok: true, roleCatalog: next });
+  }
+
+  if (action === "role_decision") {
+    const reviews = await loadRoleReviews(supabase);
+    const applicantId = String(body.applicantId || "");
+    const cleanerId = String(body.cleanerId || "");
+    const target = reviews.find((row) => (applicantId && row.applicantId === applicantId) || (cleanerId && row.cleanerId === cleanerId));
+    if (!target) return NextResponse.json({ error: "That application is not in the review queue." }, { status: 404 });
+    const reviewed = recordRoleDecision(target.sections, {
+      roleId: String(body.roleId || "") as ContractorRoleId,
+      decision: String(body.decision || "") as RoleDecisionKind,
+      note: String(body.note || ""),
+      reviewer: admin.email,
+      at: new Date().toISOString(),
+      firstName: String(body.firstName || target.name || ""),
+    });
+    if (reviewed.ok === false) return NextResponse.json({ error: reviewed.error }, { status: 400 });
+    if (target.applicantId) {
+      const { data: existing } = await supabase.from("cleaner_applicants").select("submission").eq("id", target.applicantId).maybeSingle();
+      const submission = existing?.submission && typeof existing.submission === "object" ? existing.submission as Record<string, unknown> : {};
+      await supabase.from("cleaner_applicants").update({
+        submission: { ...submission, roleApplications: reviewed.sections },
+      }).eq("id", target.applicantId);
+    }
+    if (target.cleanerId) {
+      const { data: existing } = await supabase.from("cleaners").select("intake_record").eq("id", target.cleanerId).maybeSingle();
+      const record = existing?.intake_record && typeof existing.intake_record === "object" ? existing.intake_record as Record<string, unknown> : {};
+      await supabase.from("cleaners").update({
+        intake_record: { ...record, roleApplications: reviewed.sections },
+        updated_at: new Date().toISOString(),
+      }).eq("id", target.cleanerId);
+    }
+    await supabase.from("events").insert({
+      event_type: "role.decision",
+      source: "contractor-intake",
+      cleaner_id: target.cleanerId || null,
+      summary: `${body.roleId} ${body.decision} by ${admin.email}`,
+      data: { applicantId: target.applicantId, cleanerId: target.cleanerId, roleId: body.roleId, decision: body.decision, nextStep: reviewed.nextStep },
+    });
+    if (target.email) {
+      const { data: secret } = await supabase.from("app_secrets").select("value").eq("key", "RESEND_API_KEY").maybeSingle();
+      if (secret?.value) {
+        await deliverCompliantEmail(supabase, {
+          to: target.email,
+          subject: reviewed.message.subject,
+          html: `<p>${reviewed.message.text.replace(/\n/g, "<br>")}</p>`,
+          apiKey: String(secret.value),
+          declaredType: "contractor_operational",
+          templateKey: "contractor_reject",
+        }).catch(() => undefined);
+      }
+    }
+    return NextResponse.json({ ok: true, sections: reviewed.sections, message: reviewed.message.text, nextStep: reviewed.nextStep });
   }
 
   if (action === "open_lead_role") {

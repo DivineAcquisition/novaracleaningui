@@ -190,7 +190,22 @@ check(
   "Saved for Farryl · Field Cleaner, residential homes in the DMV. You can close this and come back.",
 );
 check("specialty pages still start on Field Cleaner", presetRoleForHiringPage("specialized-contractors"), OPEN_APPLICANT_ROLE);
-check("the lead cleaner link starts on Lead Cleaner", presetRoleForHiringPage("lead-cleaner"), "Lead Cleaner (Contractor)");
+check("every hiring link starts on Field Cleaner", presetRoleForHiringPage("lead-cleaner"), OPEN_APPLICANT_ROLE);
+check(
+  "confirming the Field Cleaner description is required",
+  codeOf({ roleInterests: { additional: [], confirmed: {}, answers: {} } }),
+  "missing_role_confirmation",
+);
+check(
+  "Field Cleaner confirmation is enough on its own",
+  codeOf({ roleInterests: { additional: [], confirmed: { field_cleaner: true }, answers: {} } }),
+  "ok",
+);
+check(
+  "a selected role needs its own confirmation",
+  codeOf({ roleInterests: { additional: ["turnover_cleaner"], confirmed: { field_cleaner: true }, answers: {} } }),
+  "missing_role_confirmation",
+);
 check("Google state MD prefills Maryland", applicantStateFromAddress("MD"), "Maryland");
 check("Google state name prefills Virginia", applicantStateFromAddress("Virginia"), "Virginia");
 check("Google state DC prefills DC", applicantStateFromAddress("DC"), "DC");

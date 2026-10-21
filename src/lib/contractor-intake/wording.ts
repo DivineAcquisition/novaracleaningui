@@ -81,8 +81,13 @@ export const INTAKE_WORDING: WordingVersion[] = [
   ),
   draft(
     "lead_addendum",
-    "Lead Cleaner addendum",
+    "Lead Field Cleaner addendum",
     "A lead job may be accepted or declined. Lead jobs pay the lead rate in your settings. Solo jobs stay at your normal rate. Walkthrough and trial notes are factual records. You have no authority to approve, reject, discipline, set pay for, or remove another contractor. Novara pays every contractor directly. You can step down from lead status at any time.",
+  ),
+  draft(
+    "recurring_home_addendum",
+    "Recurring Home addendum",
+    "A recurring home may be accepted or declined. Recurring homes are residential only. The notice period before you stop servicing a home is set in this addendum. Accepting a recurring home does not change the independent contractor agreement.",
   ),
 ];
 

@@ -11,14 +11,12 @@ import { useSearchParams } from "next/navigation";
 import { RiArrowLeftLine, RiCheckboxCircleFill, RiLoader4Line } from "@remixicon/react";
 import { SEO } from "@/components/SEO";
 import {
-  APPLICANT_ROLE_CHOICES,
   APPLICANT_STATES,
   BACKGROUND_CONSENT_COPY,
   BACKGROUND_DISCLOSURE,
   CLEANING_TYPES,
   DAY_LABEL,
   EXPERIENCE_YEARS,
-  LEAD_APPLICANT_ROLE,
   OPEN_APPLICANT_ROLE,
   PAY_CONSENT_COPY,
   PAY_RATE_SENTENCE,
@@ -29,12 +27,10 @@ import {
   applicationSupplyChoices,
   isImportantSupply,
   payTermsForRole,
-  roleChoice,
   TIME_WINDOWS,
   YES_NO,
   isApplicationIssue,
   issuesForStep,
-  presetRoleForHiringPage,
   roleLabel,
   validateHiringApplication,
   visibleSteps,
@@ -43,6 +39,19 @@ import {
 } from "@/lib/hiring/application";
 import { wordingById } from "@/lib/contractor-intake/wording";
 import { DEFAULT_INTAKE_SETTINGS, type IntakeSettings } from "@/lib/contractor-intake/settings";
+import { RoleInterestFields } from "@/components/hiring/RoleInterestFields";
+import {
+  accessFromCatalog,
+  additionalFromQuery,
+  emptyRoleInterest,
+  parseRoleInterest,
+  roleCanBeSelected,
+  roleById,
+  rolePaySettings,
+  seedRoleCatalog,
+  type RoleCatalog,
+  type RoleInterestDraft,
+} from "@/lib/contractor-roles";
 import { HIRING_HOST, HIRING_ORIGIN } from "@/lib/site-hosts";
 import { StayOnHost } from "@/components/StayOnHost";
 import { formatPhoneNumber } from "@/lib/input-formatters";
@@ -101,16 +110,29 @@ const EMPTY: Answers = {
   privacyAccepted: false,
   ageAnswer: "",
   leadRoleOpen: false,
+  roleInterests: emptyRoleInterest(),
 };
 
 function why(id: string): string {
   return wordingById(id)?.body || "";
 }
 
+function hiringAccess(catalog: RoleCatalog, settings: IntakeSettings, leadOpen: boolean) {
+  const access = accessFromCatalog(catalog, { leadRoleOpenToPublic: leadOpen, eligibleOrInvited: false });
+  return {
+    ...access,
+    recurringPublic: access.recurringPublic && Boolean((settings.recurringHomeCleanerPayLabel || "").trim()),
+    turnoverPublic: access.turnoverPublic && Boolean((settings.turnoverCleanerPayLabel || "").trim()),
+    fieldPublic: access.fieldPublic && Boolean(settings.fieldCleanerPayLabel.trim()),
+  };
+}
+
 export function ApplicantTypeform({ session }: { session?: PublicHiringSession | null }) {
   const params = useSearchParams();
-  const [leadOpen, setLeadOpen] = useState(true);
+  const [leadOpen, setLeadOpen] = useState(false);
   const [intakeSettings, setIntakeSettings] = useState<IntakeSettings>(DEFAULT_INTAKE_SETTINGS);
+  const [catalog, setCatalog] = useState<RoleCatalog>(seedRoleCatalog);
+  const [pay, setPay] = useState(rolePaySettings(DEFAULT_INTAKE_SETTINGS));
   const [answers, setAnswers] = useState<Answers>(EMPTY);
   const [stepIndex, setStepIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -138,14 +160,16 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
       saved = {};
     }
     const fromSession = session?.answers || {};
-    const requested = params.get("role");
     setAnswers({
       ...EMPTY,
       ...saved,
       ...fromSession,
-      role: requested === "lead-cleaner"
-        ? presetRoleForHiringPage(requested)
-        : fromSession.role || saved.role || presetRoleForHiringPage(requested),
+      role: OPEN_APPLICANT_ROLE,
+      roleInterests: parseRoleInterest({
+        ...emptyRoleInterest(),
+        ...(saved.roleInterests || {}),
+        ...(fromSession.roleInterests || {}),
+      }),
       firstName: fromSession.firstName || saved.firstName || session?.firstName || "",
       lastName: fromSession.lastName || saved.lastName || session?.lastName || "",
       email: fromSession.email || saved.email || "",
@@ -168,13 +192,32 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
   useEffect(() => {
     fetch("/api/hiring/intake")
       .then((res) => res.json())
-      .then((data: { leadRoleOpenToPublic?: boolean; settings?: Partial<IntakeSettings> }) => {
-        setLeadOpen(data.leadRoleOpenToPublic !== false);
-        if (data.settings) setIntakeSettings({ ...DEFAULT_INTAKE_SETTINGS, ...data.settings });
-        setAnswers((current) => ({ ...current, leadRoleOpen: data.leadRoleOpenToPublic !== false }));
+      .then((data: { leadRoleOpenToPublic?: boolean; settings?: Partial<IntakeSettings>; catalog?: RoleCatalog; pay?: ReturnType<typeof rolePaySettings> }) => {
+        const nextSettings = data.settings ? { ...DEFAULT_INTAKE_SETTINGS, ...data.settings } : DEFAULT_INTAKE_SETTINGS;
+        const nextCatalog = data.catalog ? data.catalog : seedRoleCatalog();
+        const open = data.leadRoleOpenToPublic === true;
+        setIntakeSettings(nextSettings);
+        setCatalog(nextCatalog);
+        if (data.pay) setPay(data.pay);
+        setLeadOpen(open);
+        const access = hiringAccess(nextCatalog, nextSettings, open);
+        const requested = additionalFromQuery(params.get("role"), access);
+        setAnswers((current) => {
+          const interests: RoleInterestDraft = current.roleInterests || emptyRoleInterest();
+          const kept = (interests.additional || []).filter((id) => roleCanBeSelected(id, access));
+          return {
+            ...current,
+            role: OPEN_APPLICANT_ROLE,
+            leadRoleOpen: open,
+            roleInterests: {
+              ...interests,
+              additional: Array.from(new Set([...kept, ...requested])),
+            },
+          };
+        });
       })
       .catch(() => undefined);
-  }, []);
+  }, [params]);
 
   useEffect(() => {
     const rest = { ...answers, savedAt: new Date().toISOString() } as Record<string, unknown>;
@@ -191,13 +234,13 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
     return () => window.clearTimeout(handle);
   }, [answers, session, stepIndex]);
 
+  const access = useMemo(() => hiringAccess(catalog, intakeSettings, leadOpen), [catalog, intakeSettings, leadOpen]);
   const draft = useMemo(() => {
-    const terms = payTermsForRole(answers.role, { ...intakeSettings, leadRoleOpenToPublic: leadOpen });
-    return { ...answers, leadRoleOpen: leadOpen, rolePaySet: terms.open };
+    const terms = payTermsForRole(OPEN_APPLICANT_ROLE, { ...intakeSettings, leadRoleOpenToPublic: leadOpen });
+    return { ...answers, role: OPEN_APPLICANT_ROLE, leadRoleOpen: leadOpen, rolePaySet: terms.open };
   }, [answers, leadOpen, intakeSettings]);
-
   function advance(next = draft) {
-    const found = issuesForStep(step, next);
+    const found = issuesForStep(step, next, { catalog, access });
     if (found) {
       setError(found.error);
       return;
@@ -207,10 +250,10 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
   }
 
   async function submit() {
-    const found = validateHiringApplication(draft);
+    const found = validateHiringApplication(draft, { catalog, access });
     if (isApplicationIssue(found)) {
       setError(found.error);
-      const failing = steps.find((id) => issuesForStep(id, draft));
+      const failing = steps.find((id) => issuesForStep(id, draft, { catalog, access }));
       if (failing) setStepIndex(steps.indexOf(failing));
       return;
     }
@@ -219,7 +262,8 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
     try {
       const body = new FormData();
       const entries: Record<string, string> = {
-        role: answers.role,
+        role: OPEN_APPLICANT_ROLE,
+        roleInterests: JSON.stringify(answers.roleInterests || emptyRoleInterest()),
         firstName: answers.firstName,
         lastName: answers.lastName,
         email: answers.email,
@@ -310,6 +354,9 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
               answers={draft}
               headingId={headingId}
               leadOpen={leadOpen}
+              catalog={catalog}
+              access={access}
+              pay={pay}
               error={error}
               submitting={submitting}
               intakeSettings={intakeSettings}
@@ -341,12 +388,15 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
 }
 
 function Step({
-  step, answers, headingId, leadOpen, error: _error, submitting: _submitting, onChange, intakeSettings,
+  step, answers, headingId, leadOpen, catalog, access, pay, error: _error, submitting: _submitting, onChange, intakeSettings,
 }: {
   step: ApplicationStep;
   answers: Answers;
   headingId: string;
   leadOpen: boolean;
+  catalog: RoleCatalog;
+  access: ReturnType<typeof accessFromCatalog>;
+  pay: ReturnType<typeof rolePaySettings>;
   error: string | null;
   submitting: boolean;
   onChange: (partial: Partial<Answers>) => void;
@@ -354,26 +404,21 @@ function Step({
 }) {
   void _error;
   void _submitting;
+  void leadOpen;
   if (step === "role") {
     return (
       <section aria-labelledby={headingId}>
-        <h1 id={headingId} tabIndex={-1} className="font-heading text-3xl font-semibold">Which role are you applying for?</h1>
-        <div className="mt-6 space-y-2">
-          {APPLICANT_ROLE_CHOICES.map((role) => {
-            const terms = payTermsForRole(role.value, { ...intakeSettings, leadRoleOpenToPublic: leadOpen });
-            const closedLead = role.value === LEAD_APPLICANT_ROLE && !leadOpen;
-            const disabled = closedLead || !terms.open;
-            const on = answers.role === role.value;
-            return (
-              <button key={role.value} type="button" disabled={disabled} aria-pressed={on} onClick={() => onChange({ role: role.value })} className={cn("block w-full rounded-2xl border px-4 py-3 text-left", disabled ? "cursor-not-allowed border-slate-200 text-slate-400" : on ? "border-violet-700 bg-violet-50" : "border-slate-300")}>
-                <span className="block font-semibold">{role.label}</span>
-                <span className="mt-0.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">{role.tag}</span>
-                <span className="mt-1 block text-sm text-slate-600">{role.description}</span>
-                {closedLead && <span className="mt-1 block text-sm text-slate-500">Not open to new applicants right now.</span>}
-                {!closedLead && !terms.open && <span className="mt-1 block text-sm text-slate-500">Not open until a pay rate is set.</span>}
-              </button>
-            );
-          })}
+        <h1 id={headingId} tabIndex={-1} className="font-heading text-3xl font-semibold">You are applying as a Field Cleaner</h1>
+        <p className="mt-3 text-base text-slate-700">Field Cleaner is the base role. Other roles are optional, and declining one never changes the others.</p>
+        <div className="mt-6">
+          <RoleInterestFields
+            mode="application"
+            interests={answers.roleInterests || emptyRoleInterest()}
+            access={access}
+            catalog={catalog}
+            pay={pay}
+            onChange={(roleInterests) => onChange({ roleInterests, role: OPEN_APPLICANT_ROLE })}
+          />
         </div>
       </section>
     );
@@ -609,7 +654,8 @@ function Step({
     <section aria-labelledby={headingId}>
       <h1 id={headingId} className="font-heading text-3xl font-semibold">Review and submit</h1>
       <dl className="mt-6 divide-y divide-slate-200 rounded-2xl border border-slate-300">
-        <Row label="Role" value={roleChoice(answers.role)?.label || roleLabel(answers.role)} />
+        <Row label="Role" value={roleLabel(answers.role)} />
+        <Row label="Also interested" value={(answers.roleInterests?.additional || []).map((id) => roleById(catalog, id)?.name || "").filter(Boolean).join(", ") || "None"} />
         <Row label="Name" value={`${answers.firstName} ${answers.lastName}`} />
         <Row label="Email" value={answers.email} />
         <Row label="Mobile" value={answers.phone} />

@@ -49,6 +49,8 @@ import { edgeResult } from "@/lib/edge-invoke";
 import PhoneScreeningForm from "@/components/admin/PhoneScreeningForm";
 import { RECOMMENDATION_LABEL, declineReasonLabel, type Recommendation } from "@/lib/phone-screening";
 import { GOVERNMENT_ID_FIELD_ID, availabilityLabel, experienceLabel } from "@/lib/hiring/application";
+import { RoleApplicationReview } from "@/components/admin/RoleApplicationReview";
+import { sectionsFromUnknown } from "@/lib/contractor-roles";
 
 // Onboarding is considered stalled when launched this long ago without a
 // signed agreement.
@@ -750,6 +752,12 @@ export default function ApplicantsPipeline() {
                       {selected.reason_note}
                     </p>
                   )}
+                  <RoleApplicationReview
+                    applicantId={selected.id}
+                    cleanerId={selected.cleaner_id}
+                    firstName={selected.first_name || selected.full_name}
+                    sections={sectionsFromUnknown((selected.submission as { roleApplications?: unknown } | null)?.roleApplications)}
+                  />
                 </section>
 
                 {/* Onboarding progress (live from existing systems) */}

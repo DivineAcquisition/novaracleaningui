@@ -1,5 +1,15 @@
 import { SUPPLY_ITEMS } from "@/lib/cleaner-supplies";
 import { DEFAULT_INTAKE_SETTINGS, type IntakeSettings } from "@/lib/contractor-intake/settings";
+import {
+  accessFromCatalog,
+  buildRoleSections,
+  roleInterestIssue,
+  seedRoleCatalog,
+  type RoleAccess,
+  type RoleCatalog,
+  type RoleInterestDraft,
+  type SavedRoleSection,
+} from "@/lib/contractor-roles";
 import { postalStateCode } from "@/lib/us-states";
 
 // ─── Public applicant intake ────────────────────────────────────────────────
@@ -194,7 +204,7 @@ export const APPLICANT_ROLES = [
   {
     value: "Lead Cleaner (Contractor)",
     label: "Lead Field Cleaner",
-    hint: "Lead the job on site",
+    hint: "Larger jobs, walkthroughs, and trial jobs",
   },
   {
     value: "Recurring Home Cleaner (Contractor)",
@@ -406,6 +416,8 @@ export interface HiringApplicationDraft {
   leadRoleOpen?: boolean;
   /** False when that role has no pay rate in settings. */
   rolePaySet?: boolean;
+  /** Optional roles beside Field Cleaner. Absent on older saved applications. */
+  roleInterests?: RoleInterestDraft;
 }
 
 export interface NormalizedHiringApplication {
@@ -454,6 +466,7 @@ export interface NormalizedHiringApplication {
   hiringRole: string | null;
   idContentType: string | null;
   payTermsText: string;
+  roleApplications: SavedRoleSection[];
 }
 
 export type ApplicationIssue = {
@@ -533,11 +546,8 @@ export function isOpenApplicantRole(value: string | null | undefined): boolean {
   return APPLICANT_ROLE_CHOICES.some((row) => row.value === value);
 }
 
-/** Field Cleaner is the default. A role link opens that role. */
-export function presetRoleForHiringPage(roleId: string | null | undefined): string {
-  if (roleId === "lead-cleaner") return LEAD_APPLICANT_ROLE;
-  if (roleId === "recurring-home-cleaner") return RECURRING_APPLICANT_ROLE;
-  if (roleId === "turnover-cleaner") return TURNOVER_APPLICANT_ROLE;
+/** Every application starts as Field Cleaner. Extra roles are added beside it. */
+export function presetRoleForHiringPage(_roleId: string | null | undefined): ApplicantRole {
   return OPEN_APPLICANT_ROLE;
 }
 
@@ -742,20 +752,44 @@ function idIssue(draft: HiringApplicationDraft): ApplicationIssue | null {
   return null;
 }
 
+export interface ApplicationValidationOptions {
+  catalog?: RoleCatalog;
+  access?: RoleAccess;
+}
+
+function roleOptions(draft: HiringApplicationDraft, options?: ApplicationValidationOptions): { catalog: RoleCatalog; access: RoleAccess } {
+  const catalog = options?.catalog || seedRoleCatalog();
+  const access = options?.access || accessFromCatalog(catalog, {
+    leadRoleOpenToPublic: draft.leadRoleOpen !== false,
+    eligibleOrInvited: false,
+  });
+  return { catalog, access };
+}
+
 /** Validate a single step. A "no" on a listed requirement is an answer. Qualification fields are required. */
-export function issuesForStep(step: ApplicationStep, draft: HiringApplicationDraft): ApplicationIssue | null {
+export function issuesForStep(
+  step: ApplicationStep,
+  draft: HiringApplicationDraft,
+  options?: ApplicationValidationOptions,
+): ApplicationIssue | null {
   switch (step) {
-    case "role":
-      if (!APPLICANT_ROLE_CHOICES.some((row) => row.value === draft.role)) {
-        return issue(400, "invalid_role", "Choose one of the open contractor roles.");
+    case "role": {
+      if (draft.role !== OPEN_APPLICANT_ROLE && draft.role !== "Lead Cleaner (Contractor)") {
+        return issue(400, "invalid_role", "Apply as a Field Cleaner.");
       }
-      if (draft.role === LEAD_APPLICANT_ROLE && draft.leadRoleOpen === false) {
+      if (draft.role === "Lead Cleaner (Contractor)" && draft.leadRoleOpen === false) {
         return issue(400, "invalid_role", "Lead Field Cleaner is not open to new applicants right now.");
       }
       if (draft.rolePaySet === false) {
         return issue(400, "role_pay_unset", "This role is not open until a pay rate is set.");
       }
+      if (draft.roleInterests) {
+        const { catalog, access } = roleOptions(draft, options);
+        const found = roleInterestIssue(draft.roleInterests, catalog, access, "application");
+        if (found) return issue(400, found.code, found.error);
+      }
       return null;
+    }
     case "name": {
       const first = oneLine(draft.firstName);
       const last = oneLine(draft.lastName);
@@ -893,10 +927,13 @@ export function issuesForStep(step: ApplicationStep, draft: HiringApplicationDra
   }
 }
 
-export function validateHiringApplication(draft: HiringApplicationDraft): ApplicationResult {
+export function validateHiringApplication(
+  draft: HiringApplicationDraft,
+  options?: ApplicationValidationOptions,
+): ApplicationResult {
   const steps = visibleSteps();
   for (const step of steps) {
-    const found = issuesForStep(step, draft);
+    const found = issuesForStep(step, draft, options);
     if (found) return found;
   }
 
@@ -914,6 +951,13 @@ export function validateHiringApplication(draft: HiringApplicationDraft): Applic
   const days = PREFERRED_DAYS.filter((d) => (draft.preferredDays || []).includes(d));
   const jobs = Math.round(Number(draft.jobsPerWeek) || 0);
   const state = draft.state as ApplicantState;
+  let roleApplications: SavedRoleSection[] = [];
+  if (draft.roleInterests) {
+    const { catalog, access } = roleOptions(draft, options);
+    const built = buildRoleSections(draft.roleInterests, catalog, access, new Date().toISOString());
+    if (built.ok === false) return issue(400, built.code, built.error);
+    roleApplications = built.sections;
+  }
 
   return {
     ok: true,
@@ -965,6 +1009,7 @@ export function validateHiringApplication(draft: HiringApplicationDraft): Applic
       hiringRole: draft.hiringRole?.trim() || null,
       idContentType: null,
       payTermsText: "",
+      roleApplications,
     },
   };
 }

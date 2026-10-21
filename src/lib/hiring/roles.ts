@@ -29,8 +29,8 @@ export const HIRING_ROLES: HiringRole[] = [
   {
     id: "field-tech",
     slug: "field-tech",
-    title: "Field Tech",
-    shortTitle: "Field Tech",
+    title: "Field Cleaner",
+    shortTitle: "Field Cleaner",
     tagline: "Independent contractor cleaners for residential homes across the DMV.",
     summary:
       "Join Novara's field team as an independent contractor. Accept jobs near you, earn revenue-share pay, and run your own clean — backed by our scheduling, payments, and support.",
@@ -133,7 +133,7 @@ export const HIRING_ROLES: HiringRole[] = [
       "Higher-complexity residential scopes when they open",
       "Selected from the evergreen list when needed — not a standing daily roster",
       "Bring proven specialty experience (deep, move-out, post-construction)",
-      "Same contractor portal and payout rails as Field Tech",
+      "Same contractor portal and payout rails as Field Cleaner",
     ],
     expectations: [
       "Reliable transportation and your own specialty supplies",
@@ -183,7 +183,7 @@ export function roleById(id: HiringRoleId): HiringRole {
 export function applicantRoleLabel(id: HiringRoleId): string {
   switch (id) {
     case "field-tech":
-      return "Field Tech";
+      return "Field Cleaner";
     case "lead-cleaner":
       return "Lead Field Cleaner";
     case "recurring-home-cleaner":

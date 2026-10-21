@@ -39,7 +39,7 @@ export function reviewLeadApplication(input: {
 }): { ok: true } | { ok: false; error: string } {
   if (!input.note.trim()) return { ok: false, error: "A note is required." };
   if (input.decision === "approve" && !input.addendumSigned) {
-    return { ok: false, error: "Approval requires the signed Lead Cleaner addendum." };
+    return { ok: false, error: "Approval requires the signed Lead Field Cleaner addendum." };
   }
   const scenarios = new Set(LEAD_SCENARIOS.map((row) => row.id));
   for (const mark of input.rubric) {

@@ -19,6 +19,8 @@ export interface IntakeSettings {
   /** Null until the owner sets it. A lead job then needs admin approval. */
   laborCapPercent: number | null;
   leadPayPercent: number;
+  /** Existing turnover cleaner share: 70% of the turnover price. */
+  turnoverPayPercent: number;
   helperPayPercent: number;
   leadMinTenureDays: number;
   leadMinCompletedJobs: number;
@@ -59,6 +61,7 @@ export const DEFAULT_INTAKE_SETTINGS: IntakeSettings = {
   trainingRetakes: 2,
   laborCapPercent: null,
   leadPayPercent: 47,
+  turnoverPayPercent: 70,
   helperPayPercent: 35,
   leadMinTenureDays: 90,
   leadMinCompletedJobs: 20,

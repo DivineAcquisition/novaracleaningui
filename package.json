@@ -58,6 +58,7 @@
     "urgent-hire:verify": "tsx scripts/verify-urgent-hire.ts",
     "geocode:verify": "tsx scripts/verify-geocode.ts",
     "hiring:verify": "tsx scripts/verify-hiring-application.ts",
+    "roles:verify": "tsx scripts/verify-contractor-roles.ts",
     "address-lookup:verify": "tsx scripts/verify-address-lookup.ts",
     "commercial:verify:sql": "bash scripts/migrations/verify-commercial-onboarding.sh",
     "commercial:verify:ui": "tsx scripts/commercial/verify-onboarding-ui.ts",

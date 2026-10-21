@@ -216,7 +216,7 @@ const NAV_ITEMS: NavItem[] = [
     title: "Intake",
     url: "/admin/intake",
     icon: RiUserStarLine,
-    description: "Applications · onboarding · Lead Cleaner",
+    description: "Applications · onboarding · Lead Field Cleaner",
     adminOnly: true,
   },
 ];

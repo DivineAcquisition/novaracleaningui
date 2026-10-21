@@ -31,6 +31,7 @@ export function ContractorLayout({ children }: { children: React.ReactNode }) {
     { title: "Offers", url: "/cleaner/job-offers", icon: RiNotification3Line, description: "Accept or decline", tourAnchor: TOUR.navOffers },
     { title: "Job lookup", url: "/contractor/jobs", icon: RiBriefcaseLine, description: "Check in · complete", tourAnchor: TOUR.navJobLookup },
     { title: "Turnovers", url: "/cleaner/turnovers", icon: RiHome4Line, description: "Airbnb · STR" },
+    { title: "Add a role", url: "/cleaner/add-role", icon: RiBriefcaseLine, description: "Recurring · turnover · lead" },
     { title: "Profile", url: "/cleaner/profile", icon: RiUserLine, description: "Payouts · notifications", tourAnchor: TOUR.navProfile },
     { title: "Training", url: "/cleaner/training/app", icon: RiGraduationCapLine, description: "App walkthroughs", tourAnchor: TOUR.navTraining },
   ];

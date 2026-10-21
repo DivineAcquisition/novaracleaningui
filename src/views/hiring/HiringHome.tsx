@@ -4,11 +4,12 @@
 // page (status, centered hero, counts, values, filters, featured role, list),
 // in Novara's white UI.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { RiArrowRightLine, RiMapPin2Line } from "@remixicon/react";
 import { SEO } from "@/components/SEO";
 import { HIRING_ROLES, type HiringRole, type HiringRoleGroup } from "@/lib/hiring/roles";
+import { RoleHiringCards } from "@/components/hiring/RoleHiringCards";
 import {
   EvergreenBadge,
   HiringFooter,
@@ -16,7 +17,14 @@ import {
   HiringShell,
   HIRING_GRADIENT,
 } from "@/components/hiring/HiringChrome";
-import { hiringApplyUrl } from "@/lib/site-hosts";
+import {
+  accessFromCatalog,
+  publicRoleCards,
+  rolePaySettings,
+  seedRoleCatalog,
+  type PublicRoleCard,
+} from "@/lib/contractor-roles";
+import { DEFAULT_INTAKE_SETTINGS } from "@/lib/contractor-intake/settings";
 import { cn } from "@/lib/utils";
 
 const LEVELS = ["", "Starting", "Practiced", "Lead", "Specialty"];
@@ -64,37 +72,6 @@ function RoleMeta({ role }: { role: HiringRole }) {
   );
 }
 
-function FeaturedRole({ role }: { role: HiringRole }) {
-  return (
-    <Link
-      href={`/hiring/${role.slug}`}
-      className="group relative mb-4 block overflow-hidden rounded-3xl border border-[#5C0FFE]/20 bg-white p-6 shadow-[0_24px_60px_-36px_rgba(92,15,254,0.55)] sm:p-7"
-    >
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-[#8F7BFD]/20 blur-3xl"
-      />
-      <div className="relative">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-white" style={{ background: HIRING_GRADIENT }}>
-            Open
-          </span>
-          <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-600">
-            {role.shortTitle}
-          </span>
-        </div>
-        <h3 className="mt-4 font-heading text-2xl font-bold tracking-tight text-slate-900">{role.title}</h3>
-        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">{role.summary}</p>
-        <RoleMeta role={role} />
-        <span className="mt-6 inline-flex h-11 items-center gap-2 rounded-full px-5 text-sm font-semibold text-white" style={{ background: HIRING_GRADIENT }}>
-          View {role.shortTitle}
-          <RiArrowRightLine className="h-4 w-4" aria-hidden />
-        </span>
-      </div>
-    </Link>
-  );
-}
-
 function RoleRow({ role }: { role: HiringRole }) {
   const body = (
     <article className="rounded-2xl border border-slate-200 bg-white p-5 transition group-hover:border-[#8F7BFD]/50 group-hover:shadow-[0_16px_40px_-28px_rgba(92,15,254,0.45)] sm:p-6">
@@ -130,21 +107,42 @@ function RoleRow({ role }: { role: HiringRole }) {
   );
 }
 
+function seedCards(): PublicRoleCard[] {
+  const catalog = seedRoleCatalog();
+  const access = accessFromCatalog(catalog, { leadRoleOpenToPublic: false, eligibleOrInvited: false });
+  access.recurringPublic = Boolean((DEFAULT_INTAKE_SETTINGS.recurringHomeCleanerPayLabel || "").trim());
+  access.turnoverPublic = Boolean((DEFAULT_INTAKE_SETTINGS.turnoverCleanerPayLabel || "").trim());
+  return publicRoleCards(catalog, rolePaySettings(DEFAULT_INTAKE_SETTINGS), access);
+}
+
 export default function HiringHome() {
   const [group, setGroup] = useState<(typeof FILTERS)[number]["id"]>("all");
-  const openCount = HIRING_ROLES.filter((role) => !role.evergreen).length;
-  const visible = useMemo(
-    () => HIRING_ROLES.filter((role) => group === "all" || role.group === group),
+  const [cards, setCards] = useState<PublicRoleCard[]>(seedCards);
+  useEffect(() => {
+    fetch("/api/hiring/intake")
+      .then((res) => res.json())
+      .then((data: { cards?: PublicRoleCard[] }) => {
+        if (Array.isArray(data.cards) && data.cards.length) setCards(data.cards);
+      })
+      .catch(() => undefined);
+  }, []);
+  const visibleCards = cards.filter((card) => {
+    if (group === "specialty") return false;
+    if (group === "lead") return card.id === "lead_field_cleaner";
+    if (group === "field") return card.id !== "lead_field_cleaner";
+    return true;
+  });
+  const openCount = cards.filter((card) => card.applyQuery).length;
+  const specialty = useMemo(
+    () => HIRING_ROLES.filter((role) => role.group === "specialty" && (group === "all" || group === "specialty")),
     [group],
   );
-  const featured = visible.find((role) => role.featured && !role.evergreen);
-  const rest = visible.filter((role) => role !== featured);
 
   return (
     <HiringShell>
       <SEO
         title="Careers"
-        description="Open independent contractor roles at Novara Cleaning. Field Tech and Lead Cleaner are open across the DMV."
+        description="Independent contractor roles at Novara Cleaning. Field Cleaner, Recurring Home Cleaner, Turnover Cleaner, and Lead Field Cleaner across the DMV."
         canonical="https://hiring.novaracleaning.com/hiring"
       />
       <HiringNav ctaHref="#positions" ctaLabel={`${openCount} open roles`} />
@@ -172,9 +170,11 @@ export default function HiringHome() {
               See open roles
               <RiArrowRightLine className="h-4 w-4" aria-hidden />
             </a>
-            <Link href={hiringApplyUrl("?role=lead-cleaner")} className="inline-flex h-12 items-center rounded-full border border-slate-200 bg-white px-6 text-sm font-semibold text-slate-800">
-              Apply as Lead Cleaner
-            </Link>
+            {cards.some((card) => card.id === "lead_field_cleaner" && card.applyQuery) && (
+              <a href="#positions" className="inline-flex h-12 items-center rounded-full border border-slate-200 bg-white px-6 text-sm font-semibold text-slate-800">
+                Lead Field Cleaner is open
+              </a>
+            )}
           </div>
         </div>
         <dl className="relative mx-auto mt-12 grid max-w-4xl grid-cols-2 gap-3 sm:grid-cols-4">
@@ -210,7 +210,7 @@ export default function HiringHome() {
             <h2 className="mt-2 font-heading text-3xl font-bold text-slate-900">Find where you fit</h2>
           </div>
           <p className="text-sm text-slate-500">
-            Showing <span className="font-semibold text-slate-900">{visible.length}</span> of {HIRING_ROLES.length} roles
+            Showing <span className="font-semibold text-slate-900">{visibleCards.length + specialty.length}</span> roles
           </p>
         </div>
 
@@ -220,7 +220,11 @@ export default function HiringHome() {
               <h3 className="px-2 pb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Role</h3>
               <div className="flex gap-1.5 overflow-x-auto lg:flex-col" role="group" aria-label="Filter roles">
                 {FILTERS.map((filter) => {
-                  const count = filter.id === "all" ? HIRING_ROLES.length : HIRING_ROLES.filter((role) => role.group === filter.id).length;
+                  const cardCount = filter.id === "specialty"
+                    ? 0
+                    : cards.filter((card) => filter.id === "all" || (filter.id === "lead" ? card.id === "lead_field_cleaner" : card.id !== "lead_field_cleaner")).length;
+                  const specialtyCount = filter.id === "lead" ? 0 : HIRING_ROLES.filter((role) => role.group === "specialty").length;
+                  const count = cardCount + (filter.id === "field" ? 0 : specialtyCount);
                   const on = group === filter.id;
                   return (
                     <button
@@ -242,9 +246,9 @@ export default function HiringHome() {
             </div>
           </aside>
           <div className="min-w-0 flex-1 space-y-3">
-            {featured && <FeaturedRole role={featured} />}
-            {rest.map((role) => <RoleRow key={role.id} role={role} />)}
-            {visible.length === 0 && <p className="text-sm text-slate-600">No roles in this filter.</p>}
+            <RoleHiringCards cards={visibleCards} />
+            {specialty.map((role) => <RoleRow key={role.id} role={role} />)}
+            {visibleCards.length + specialty.length === 0 && <p className="text-sm text-slate-600">No roles in this filter.</p>}
           </div>
         </div>
       </main>
