@@ -25,7 +25,9 @@ import {
   visibleSteps,
   type HiringApplicationDraft,
 } from "../src/lib/hiring/application";
-import { parseIndeedApplicant, splitPersonName, stateFromIndeedJob } from "../src/lib/hiring/indeed";
+import { indeedApplicationLinkState, parseIndeedApplicant, splitPersonName, stateFromIndeedJob } from "../src/lib/hiring/indeed";
+import { indeedApplicationEmail, indeedLinkIsNew } from "../src/lib/hiring/indeed-invites";
+import { usesForbiddenApplicantLanguage } from "../src/lib/contractor-intake/decide";
 import { hiringApplyUrl, isHiringToken, sanitizeAnswers, toPublicSession } from "../src/lib/hiring/session";
 import { applicationHostAllowed, contractorOnboardingUrl, hiringApplyUrl as hiringPage, onboardingHostAllowed } from "../src/lib/site-hosts";
 
@@ -319,6 +321,16 @@ check("onboarding links stay on the contractor host", contractorOnboardingUrl("a
 check("the application api rejects the contractor host", applicationHostAllowed("contractor.novaracleaning.com"), false);
 check("onboarding rejects the hiring host", onboardingHostAllowed("hiring.novaracleaning.com"), false);
 check("saved answers drop the uploaded file", sanitizeAnswers({ firstName: "Ada", idFile: { name: "x" } }), { firstName: "Ada" });
+check("Maryland Indeed applications get a link", indeedApplicationLinkState("House Cleaners Needed (DMV), Baltimore, MD"), "Maryland");
+check("Virginia Indeed applications get a link", indeedApplicationLinkState("House Cleaners Needed (DMV), Arlington, VA"), "Virginia");
+check("DC Indeed applications get a link", indeedApplicationLinkState("House Cleaners Needed, Washington, DC"), "DC");
+check("New York Indeed applications do not get a link", indeedApplicationLinkState("House Cleaners Needed, New York, NY"), null);
+check("Los Angeles Indeed applications do not get a link", indeedApplicationLinkState("House Cleaners Needed (LA), Los Angeles, CA"), null);
+const linkMail = indeedApplicationEmail({ firstName: "Ada", url: "https://hiring.novaracleaning.com/hiring/apply/abc" });
+check("the application link email uses contractor language", !usesForbiddenApplicantLanguage(`${linkMail.subject}\n${linkMail.text}`), true);
+check("mail after the cursor is new", indeedLinkIsNew("2026-10-22T15:00:00.000Z", Date.parse("2026-10-22T14:00:00.000Z")), true);
+check("mail before the cursor is left alone", indeedLinkIsNew("2026-10-22T13:00:00.000Z", Date.parse("2026-10-22T14:00:00.000Z")), false);
+check("undated mail is left alone", indeedLinkIsNew(null, Date.parse("2026-10-22T14:00:00.000Z")), false);
 
 if (failures > 0) {
   console.error(`\n${failures} failed`);

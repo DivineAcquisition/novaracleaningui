@@ -229,3 +229,14 @@ export const FORBIDDEN_APPLICANT_LANGUAGE = /\b(hires?|hired|employees?|staff|sh
 export function usesForbiddenApplicantLanguage(value: string): boolean {
   return FORBIDDEN_APPLICANT_LANGUAGE.test(value);
 }
+
+/** A repeat application blocks onboarding only when the person is already active, removed, or closed out. */
+export function blocksRepeatApplication(input: {
+  removedContractor: boolean;
+  activeCleaner: boolean;
+  existingStage: string | null;
+}): boolean {
+  if (input.removedContractor || input.activeCleaner) return true;
+  const stage = String(input.existingStage || "").toLowerCase();
+  return stage === "active" || stage === "rejected" || stage === "withdrawn";
+}

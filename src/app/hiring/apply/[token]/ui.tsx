@@ -17,10 +17,15 @@ export function TokenizedApply({ token }: { token: string }) {
         const data = (await res.json().catch(() => ({}))) as {
           error?: string;
           session?: PublicHiringSession;
+          nextUrl?: string | null;
         };
         if (cancelled) return;
         if (!res.ok || !data.session) {
           setError(data.error || "This application link is not valid.");
+          return;
+        }
+        if (data.nextUrl) {
+          window.location.replace(data.nextUrl);
           return;
         }
         setSession(data.session);

@@ -790,3 +790,8 @@ verify_jwt = false
 # Form 1099-NEC Copy B and Copy C. Admin JWT is checked again inside the function.
 [functions.nec-1099]
 verify_jwt = true
+
+# Lists Indeed application mail for the Field Cleaner link. Service role, or
+# anon bearer plus x-cron-secret. Gmail is read inside the function.
+[functions.indeed-gmail-list]
+verify_jwt = true

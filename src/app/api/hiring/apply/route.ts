@@ -32,11 +32,12 @@ import {
 } from "@/lib/hiring/application";
 import { isHiringToken } from "@/lib/hiring/session";
 import { isReapplyBlocked } from "@/lib/pulse-check/roster";
-import { decideApplication } from "@/lib/contractor-intake/decide";
+import { blocksRepeatApplication, decideApplication } from "@/lib/contractor-intake/decide";
 import { applicantMessage } from "@/lib/contractor-intake/messages";
 import { INTAKE_SETTINGS_KEY, mergeIntakeSettings } from "@/lib/contractor-intake/settings";
 import { ROLE_COPY_KEY, accessFromCatalog, mergeRoleCatalog, parseRoleInterest } from "@/lib/contractor-roles";
 import { INTAKE_WORDING } from "@/lib/contractor-intake/wording";
+import { beforeYouStartUrl as beforeYouStartLink } from "@/lib/site-hosts";
 import { launchConditionalOnboarding } from "@/lib/talent/launch-onboarding";
 import { deliverCompliantEmail } from "@/lib/email-compliance/deliver";
 import { applicationHostAllowed, HIRING_ORIGIN, requestHost } from "@/lib/site-hosts";
@@ -374,7 +375,7 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   const { data: byEmail } = await supabase
     .from("cleaner_applicants")
-    .select("id, stage, airtable_record_id, government_id_path")
+    .select("id, stage, airtable_record_id, government_id_path, invite_token, invite_expires_at")
     .ilike("email", app.email)
     .maybeSingle();
 
@@ -383,12 +384,14 @@ export async function POST(req: Request): Promise<NextResponse> {
     stage: string;
     airtable_record_id: string | null;
     government_id_path: string | null;
+    invite_token?: string | null;
+    invite_expires_at?: string | null;
   } | null;
 
   if (!existing) {
     const { data: byPhone } = await supabase
       .from("cleaner_applicants")
-      .select("id, stage, airtable_record_id, government_id_path, phone")
+      .select("id, stage, airtable_record_id, government_id_path, phone, invite_token, invite_expires_at")
       .ilike("phone", `%${digits.slice(-4)}%`)
       .limit(20);
     existing =
@@ -402,7 +405,12 @@ export async function POST(req: Request): Promise<NextResponse> {
     .eq("is_active", true)
     .maybeSingle();
 
-  const duplicate = Boolean(existing) || prior.length > 0;
+  const activeCleaner = prior.some((row) => String(row.status || "").toLowerCase() === "active");
+  const blocking = blocksRepeatApplication({
+    removedContractor,
+    activeCleaner,
+    existingStage: existing?.stage || null,
+  });
   const legacyLead = app.role === "Lead Cleaner (Contractor)" && !draft.roleInterests;
   const decision = decideApplication({
     role: legacyLead ? "lead_cleaner" : "cleaner",
@@ -424,7 +432,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     authorizedToWork: app.authorizedToWork === "Yes" ? true : app.authorizedToWork === "No" ? false : null,
     backgroundCheckConsent: app.backgroundCheckConsent,
     payConsent: app.payConsent,
-    duplicate: duplicate || removedContractor,
+    duplicate: blocking,
     incomplete: false,
     reviewReason: removedContractor ? "These contact details are linked to a removed contractor." : null,
   }, settings);
@@ -600,7 +608,14 @@ export async function POST(req: Request): Promise<NextResponse> {
 
     let onboardingSent = false;
     let beforeYouStartUrl: string | null = null;
-    if (decision.openOnboarding && applicantId) {
+    const inviteExpires = existing?.invite_expires_at ? new Date(String(existing.invite_expires_at)).getTime() : 0;
+    const reusableInvite = existing?.stage === "onboarding" && existing.invite_token && inviteExpires > Date.now()
+      ? String(existing.invite_token)
+      : null;
+    if (decision.openOnboarding && applicantId && reusableInvite) {
+      beforeYouStartUrl = beforeYouStartLink(reusableInvite);
+      onboardingSent = true;
+    } else if (decision.openOnboarding && applicantId) {
       try {
         const opened = await launchConditionalOnboarding(supabase, {
           id: applicantId,

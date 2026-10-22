@@ -13,7 +13,7 @@ import {
   toPublicSession,
   type HiringSessionAnswers,
 } from "@/lib/hiring/session";
-import { applicationHostAllowed, HIRING_ORIGIN, requestHost } from "@/lib/site-hosts";
+import { applicationHostAllowed, beforeYouStartUrl, HIRING_ORIGIN, requestHost } from "@/lib/site-hosts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,7 +47,20 @@ export async function GET(
       { status: 410 },
     );
   }
-  return NextResponse.json({ ok: true, session: toPublicSession(row) });
+  const session = toPublicSession(row);
+  let nextUrl: string | null = null;
+  if (row.status === "submitted" && row.applicant_id) {
+    const { data: applicant } = await supabase
+      .from("cleaner_applicants")
+      .select("invite_token, invite_expires_at, stage")
+      .eq("id", row.applicant_id)
+      .maybeSingle();
+    const expires = applicant?.invite_expires_at ? new Date(String(applicant.invite_expires_at)).getTime() : 0;
+    if (applicant?.stage === "onboarding" && applicant.invite_token && expires > Date.now()) {
+      nextUrl = beforeYouStartUrl(String(applicant.invite_token));
+    }
+  }
+  return NextResponse.json({ ok: true, session, nextUrl });
 }
 
 export async function PATCH(

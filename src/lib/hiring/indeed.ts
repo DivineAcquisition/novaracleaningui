@@ -44,6 +44,13 @@ export function stateFromIndeedJob(jobTitle: string | null | undefined): Applica
   return null;
 }
 
+/** Indeed applications in these states get the Field Cleaner application link. */
+export function indeedApplicationLinkState(jobTitle: string | null | undefined): ApplicantState | null {
+  const state = stateFromIndeedJob(jobTitle);
+  if (state === "Maryland" || state === "Virginia" || state === "DC") return state;
+  return null;
+}
+
 export function splitPersonName(full: string): { firstName: string; lastName: string } {
   const parts = full.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return { firstName: "", lastName: "" };

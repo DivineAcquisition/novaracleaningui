@@ -19,6 +19,7 @@ import {
   canActivate,
   canSendFinalAdverse,
   compliancePanel,
+  blocksRepeatApplication,
   decideApplication,
   planIdDeletion,
   helperPayCents,
@@ -99,6 +100,11 @@ check("out of area is a waitlist and not a rejection", outside.outcome === "wait
 
 const duplicate = decideApplication(answers({ duplicate: true }));
 check("a duplicate goes to review", duplicate.outcome === "needs_review" && duplicate.openOnboarding === false);
+check("an unfinished applicant can still qualify", blocksRepeatApplication({ removedContractor: false, activeCleaner: false, existingStage: "screening" }) === false);
+check("an applicant still in onboarding can continue", blocksRepeatApplication({ removedContractor: false, activeCleaner: false, existingStage: "onboarding" }) === false);
+check("an active contractor blocks a second application", blocksRepeatApplication({ removedContractor: false, activeCleaner: true, existingStage: "active" }) === true);
+check("a rejected application blocks a second application", blocksRepeatApplication({ removedContractor: false, activeCleaner: false, existingStage: "rejected" }) === true);
+check("a withdrawn application blocks a second application", blocksRepeatApplication({ removedContractor: false, activeCleaner: false, existingStage: "withdrawn" }) === true);
 
 check("wording starts as draft", INTAKE_WORDING.every((row) => row.status === "draft"));
 check("vehicle reason is stored", /personal vehicle/i.test(wordingById("why_vehicle")?.body || ""));

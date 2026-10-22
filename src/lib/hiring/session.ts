@@ -69,6 +69,7 @@ export interface HiringSessionRow {
   phone: string | null;
   source: string;
   job_title: string | null;
+  applicant_id?: string | null;
   answers: HiringSessionAnswers | null;
   step_index: number | null;
   status: string;
@@ -205,7 +206,7 @@ export async function loadHiringSession(
   const { data, error } = await supabase
     .from("hiring_application_sessions")
     .select(
-      "id, token, email, full_name, phone, source, job_title, answers, step_index, status, expires_at, submitted_at",
+      "id, token, email, full_name, phone, source, job_title, answers, step_index, status, expires_at, submitted_at, applicant_id",
     )
     .eq("token", token)
     .maybeSingle();

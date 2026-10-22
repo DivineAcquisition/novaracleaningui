@@ -45,7 +45,7 @@ export async function launchConditionalOnboarding(
   if (!cleanerId) {
     const payload = {
       first_name: applicant.firstName,
-      last_name: applicant.lastName,
+      last_name: applicant.lastName || "",
       email: applicant.email,
       phone: applicant.phone,
       home_zip: applicant.zip,
