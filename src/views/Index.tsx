@@ -27,7 +27,8 @@ import { useBooking } from "@/contexts/BookingContext";
 
 import { supabase } from "@/integrations/supabase/client";
 import { formatPhoneNumber } from "@/lib/input-formatters";
-import { BookingFooter } from "@/components/booking/BookingFooter";import { AnimatedShinyText } from "@/components/magicui/animated-shiny-text";
+import { BookingFooter } from "@/components/booking/BookingFooter";
+import { AnimatedShinyText } from "@/components/magicui/animated-shiny-text";
 import { BlurFade } from "@/components/magicui/blur-fade";
 import { BorderBeam } from "@/components/magicui/border-beam";
 import { MagicCard } from "@/components/magicui/magic-card";
