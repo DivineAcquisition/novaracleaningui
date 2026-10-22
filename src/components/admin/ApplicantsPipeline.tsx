@@ -83,6 +83,7 @@ interface ApplicantRow {
   supplies_on_hand: string | null;
   government_id_path: string | null;
   submission: Record<string, unknown> | null;
+  intake_stage?: string | null;
   reliability_note: string | null;
   reason_note: string | null;
   stage: string;
@@ -186,8 +187,16 @@ const payoutsReady = (c: LinkedCleaner | undefined): boolean =>
   Boolean(c && (c.payouts_enabled || c.ob_payouts_setup || c.stripe_account_id || c.payout_method_status === "verified"));
 
 function effectiveStage(a: ApplicantRow, c: LinkedCleaner | undefined): EffectiveStage {
+  if (a.intake_stage === "needs_review" || a.intake_stage === "waitlist" || a.intake_stage === "not_a_fit") {
+    return a.intake_stage;
+  }
   if (a.stage === "onboarding" && c?.ob_agreement_signed) return "agreement_signed";
   return (a.stage as EffectiveStage) || "applicant";
+}
+
+function notReadyYet(a: ApplicantRow): boolean {
+  const readiness = a.submission?.readiness;
+  return Boolean(readiness && typeof readiness === "object" && (readiness as { answer?: string }).answer === "not_yet");
 }
 
 function isStalled(a: ApplicantRow, c: LinkedCleaner | undefined): boolean {
@@ -632,6 +641,11 @@ export default function ApplicantsPipeline() {
                               Stalled
                             </Badge>
                           )}
+                          {notReadyYet(a) && (
+                            <Badge variant="outline" className="text-[11px] bg-slate-50 text-slate-700 border-slate-300">
+                              Not ready yet
+                            </Badge>
+                          )}
                           {isHoldDue(a) && (
                             <Badge variant="outline" className="text-[11px] bg-rose-50 text-rose-700 border-rose-200">
                               Follow-up due
@@ -715,6 +729,7 @@ export default function ApplicantsPipeline() {
                   <DetailGrid
                     rows={[
                       ["Role", selected.role],
+                      ["Ready to start", notReadyYet(selected) ? "Not ready yet" : (selected.submission?.readiness && typeof selected.submission.readiness === "object" && (selected.submission.readiness as { answer?: string }).answer) || "—"],
                       ["Department", selected.department],
                       ["Type", selected.contractor_type],
                       ["Experience", experienceLabel(selected.experience) || selected.experience],

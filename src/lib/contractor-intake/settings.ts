@@ -43,6 +43,10 @@ export interface IntakeSettings {
   legalAddress: string;
   applicantPhone: string;
   applicantEmail: string;
+  /** Estimated minutes for each before-you-start step. Labels on the page say these are estimates. */
+  beforeStartMinutes: Record<string, number>;
+  /** Empty until counsel names the background-check company. Footers then say “named in your authorization.” */
+  backgroundCheckCompany: string;
 }
 
 export const DEFAULT_INTAKE_SETTINGS: IntakeSettings = {
@@ -81,6 +85,21 @@ export const DEFAULT_INTAKE_SETTINGS: IntakeSettings = {
   legalAddress: "7404 Executive Place, Lanham, MD 20706",
   applicantPhone: "(844) 735-2070",
   applicantEmail: "operations@novaracleaning.com",
+  beforeStartMinutes: {
+    identity: 8,
+    vehicle: 6,
+    agreement: 10,
+    phone: 3,
+    supplies: 8,
+    job_day: 5,
+    dress_code: 3,
+    background: 6,
+    w9: 8,
+    payouts: 8,
+    training: 20,
+    trial: 0,
+  },
+  backgroundCheckCompany: "",
 };
 
 export const INTAKE_SETTINGS_KEY = "contractor_intake_settings";
@@ -101,6 +120,16 @@ export function mergeIntakeSettings(raw: Partial<IntakeSettings> | null | undefi
     merged.turnoverCleanerPayLabel = null;
   }
   merged.workAuthorizationRejectOnNo = raw?.workAuthorizationRejectOnNo === true;
+  const minutes = { ...DEFAULT_INTAKE_SETTINGS.beforeStartMinutes };
+  const incoming = raw?.beforeStartMinutes;
+  if (incoming && typeof incoming === "object") {
+    for (const [key, value] of Object.entries(incoming)) {
+      const n = Number(value);
+      if (Number.isFinite(n) && n >= 0 && n <= 180) minutes[key] = n;
+    }
+  }
+  merged.beforeStartMinutes = minutes;
+  merged.backgroundCheckCompany = String(raw?.backgroundCheckCompany || "").trim();
   return merged;
 }
 

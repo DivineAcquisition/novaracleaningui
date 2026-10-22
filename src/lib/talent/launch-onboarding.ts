@@ -5,14 +5,14 @@ import { randomBytes } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { edgeResult } from "@/lib/edge-invoke";
 import { applicantMessage } from "@/lib/contractor-intake/messages";
-import { contractorOnboardingUrl } from "@/lib/site-hosts";
+import { applicantDeadline } from "@/lib/contractor-intake/onboarding";
+import { DEFAULT_INTAKE_SETTINGS, type IntakeSettings } from "@/lib/contractor-intake/settings";
+import { beforeYouStartUrl } from "@/lib/site-hosts";
 import { sendOnboardingInviteEmail } from "@/lib/talent/onboarding-email";
 import { usableInviteEmail } from "@/lib/talent/onboarding-invite";
 
-const INVITE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
-
 export function onboardingInviteUrl(token: string): string {
-  return contractorOnboardingUrl(token);
+  return beforeYouStartUrl(token);
 }
 
 function usablePhone(input: string | null | undefined): string | null {
@@ -32,9 +32,10 @@ export async function launchConditionalOnboarding(
     lastName: string | null;
     zip: string | null;
     state: string | null;
-    smsConsent: boolean;
-    leadTrack: boolean;
-  },
+  smsConsent: boolean;
+  leadTrack: boolean;
+},
+  settings: IntakeSettings = DEFAULT_INTAKE_SETTINGS,
 ): Promise<{ inviteUrl: string; emailed: boolean; smsSent: boolean; emailError: string | null; smsError: string | null; cleanerId: string | null }> {
   let cleanerId: string | null = null;
   if (applicant.email) {
@@ -79,7 +80,7 @@ export async function launchConditionalOnboarding(
 
   const token = randomBytes(24).toString("hex");
   const inviteUrl = onboardingInviteUrl(token);
-  const expires = new Date(Date.now() + INVITE_TTL_MS).toISOString();
+  const expires = applicantDeadline(new Date(), settings).toISOString();
   const invitePatch = {
     stage: "onboarding",
     intake_stage: "conditional_approval",

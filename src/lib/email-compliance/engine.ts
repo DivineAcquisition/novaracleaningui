@@ -7,6 +7,8 @@
 // settings the owner can change. Defaults are the starting values from the
 // agreements. Clearing the postal address blocks marketing.
 
+import { operationsFooter } from "./operations-footer";
+
 export const EMAIL_TYPES = [
   "customer_service",
   "customer_marketing",
@@ -782,6 +784,31 @@ export function buildFooter(
   urls: { unsubscribe?: string | null; preferences?: string | null; withdraw?: string | null },
   ctx: FooterContext = {},
 ): FooterBundle {
+  if (type === "contractor_operational" || type === "contractor_tax") {
+    const address = hasMailingAddress(identity.mailingAddress) ? formatAddress(identity.mailingAddress) : "";
+    const domain = identity.website.replace(/^https?:\/\//, "").replace(/\/$/, "");
+    const ops = operationsFooter({
+      templateKey: type === "contractor_tax" ? "contractor_tax" : ctx.templateKey,
+      legalName: identity.legalName,
+      senderName: identity.contractor.displayName,
+      addressLine: address,
+      email: identity.contractor.address,
+      phone: identity.phone,
+      privacyUrl: identity.privacyUrl,
+      officialDomain: domain,
+      payoutTaxLine: identity.payoutTaxLine,
+      taxYear: ctx.taxYear,
+      consentDate: ctx.consentDate,
+      correctionDays: String(identity.unsubscribeHonorBusinessDays),
+      paperCopy: identity.paperCopyLine,
+      withdraw: identity.withdrawConsentLine,
+      unsubscribeUrl: urls.unsubscribe,
+      recruitingReason: ctx.reason,
+    });
+    const wrapped = `<!--NOVARA_FOOTER_START-->${ops.html}<!--NOVARA_FOOTER_END-->`;
+    const versionKeySource = `${type}\n${ops.text}\n${identity.legalName}\n${address}`;
+    return { versionKey: versionKey(versionKeySource), html: wrapped, darkHtml: ops.html, text: ops.text };
+  }
   const model = footerModel(identity, type, urls, ctx);
   const html = `<!--NOVARA_FOOTER_START--><style>@media (prefers-color-scheme: dark){.novara-footer{background:#18181b !important;}.novara-footer p{color:#e4e4e7 !important;}.novara-footer a{color:#ddd6fe !important;}}</style>${renderFooter(model, "light")}<!--NOVARA_FOOTER_END-->`;
   const darkHtml = renderFooter(model, "dark");

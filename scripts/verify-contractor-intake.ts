@@ -3,6 +3,14 @@
 //   Run: npx tsx scripts/verify-contractor-intake.ts
 
 import {
+  beforeYouStartSteps,
+  beforeYouStartTotal,
+  dueReminderHours,
+  readyItemsForRole,
+  recordReadiness,
+  emptyReadiness,
+} from "../src/lib/contractor-intake/before-you-start";
+import {
   DEFAULT_INTAKE_SETTINGS,
   INTAKE_WORDING,
   LEAD_GUARDRAILS,
@@ -198,6 +206,48 @@ function applicantWait() {
 }
 
 void addBusinessDays;
+
+const steps = beforeYouStartSteps(DEFAULT_INTAKE_SETTINGS.beforeStartMinutes);
+check("before you start reads the live onboarding steps", steps.map((step) => step.id), ["identity", "vehicle", "agreement", "phone", "supplies", "job_day", "dress_code", "background", "w9", "payouts", "training", "trial"]);
+check("before you start totals the settings minutes", beforeYouStartTotal(steps), Object.values(DEFAULT_INTAKE_SETTINGS.beforeStartMinutes).reduce((sum, n) => sum + n, 0));
+check("lead adds a reference and turnover does not", readyItemsForRole("Lead Cleaner (Contractor)").some((item) => item.includes("reference")) && !readyItemsForRole("Turnover Cleaner (Contractor)").some((item) => item.includes("reference")), true);
+check("background and the trial wait on Novara", steps.filter((step) => step.waitsOnNovara).map((step) => step.id), ["background", "trial"]);
+const saved = recordReadiness(emptyReadiness(), "not_yet", "2026-10-22T00:00:00.000Z");
+check("not yet is recorded and is not a rejection", saved.answer, "not_yet");
+check("a yes replaces not yet", recordReadiness(saved, "yes", "2026-10-22T01:00:00.000Z").answer, "yes");
+check("the 24 hour reminder waits until the hour", dueReminderHours({
+  answer: "not_yet",
+  launchedAt: "2026-10-22T00:00:00.000Z",
+  deadlineAt: "2026-11-01T00:00:00.000Z",
+  hours: [24, 48],
+  sent: [],
+  now: new Date("2026-10-22T12:00:00.000Z"),
+}), []);
+check("the 24 hour reminder is due after a day", dueReminderHours({
+  answer: "not_yet",
+  launchedAt: "2026-10-22T00:00:00.000Z",
+  deadlineAt: "2026-11-01T00:00:00.000Z",
+  hours: [24, 48],
+  sent: [],
+  now: new Date("2026-10-23T01:00:00.000Z"),
+}), [24]);
+check("yes stops reminders", dueReminderHours({
+  answer: "yes",
+  launchedAt: "2026-10-22T00:00:00.000Z",
+  deadlineAt: "2026-11-01T00:00:00.000Z",
+  hours: [24, 48],
+  sent: [],
+  now: new Date("2026-10-24T00:00:00.000Z"),
+}), []);
+check("a passed deadline does not reject and does not remind", dueReminderHours({
+  answer: "not_yet",
+  launchedAt: "2026-10-22T00:00:00.000Z",
+  deadlineAt: "2026-10-23T00:00:00.000Z",
+  hours: [24, 48],
+  sent: [],
+  now: new Date("2026-10-24T00:00:00.000Z"),
+}), []);
+check("before you start wording is draft", INTAKE_WORDING.find((row) => row.id === "before_start_title")?.status, "draft");
 
 if (failures) {
   console.error(`\n${failures} failed`);

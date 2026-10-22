@@ -35,6 +35,8 @@ import {
   NON_SOLICIT_EXPECTATION,
   OPEN_APPLICANT_ROLE,
   PAY_CONSENT_COPY,
+  PAY_TRAVEL_SENTENCE,
+  payTermsForRole,
   PREFERRED_DAYS,
   PRIVACY_POLICY_URL,
   SMS_CONSENT_COPY,
@@ -173,6 +175,7 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
   const [error, setError] = useState<string | null>(null);
   const [gate, setGate] = useState<string | null>(null);
   const [done, setDone] = useState(session?.status === "submitted");
+  const [resultMessage, setResultMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [fax, setFax] = useState("");
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -282,14 +285,20 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
       body.set("hiringRole", hiringRole || "");
       body.set("faxNumber", fax);
       if (session?.token) body.set("sessionToken", session.token);
-      if (answers.idFile) body.set("idFile", answers.idFile);
+      if (!answers.idFile) return;
+      body.set("idFile", answers.idFile);
       const res = await fetch("/api/hiring/apply", { method: "POST", body });
-      const data = (await res.json().catch(() => ({}))) as { error?: string; code?: string; gate?: boolean; ok?: boolean };
+      const data = (await res.json().catch(() => ({}))) as { error?: string; code?: string; gate?: boolean; ok?: boolean; message?: string; beforeYouStartUrl?: string | null };
       if (!res.ok) {
         if (data.gate && data.code) setGate(data.code);
         else setError(data.error || "Could not submit your application.");
         return;
       }
+      if (data.beforeYouStartUrl) {
+        window.location.assign(data.beforeYouStartUrl);
+        return;
+      }
+      setResultMessage(data.message || "");
       setDone(true);
     } catch {
       setError("Something went wrong. Please try again.");
@@ -308,7 +317,7 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
     >
       <SEO
         title="Apply"
-        description="Apply to clean with Novara. One question at a time. You need to be 18 or older, with your own insured car and a valid driver’s license."
+        description="Apply to clean with Novara. One question at a time. You need to be 18 or older, with your own insured car, a valid driver’s license, and a photo ID."
         canonical="https://hiring.novaracleaning.com/hiring/apply"
       />
       <style>{`
@@ -348,7 +357,7 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
       <main className="flex flex-1 flex-col">
         <div className="m-auto w-full max-w-2xl px-5 py-6 sm:px-6 sm:py-10">
           {done ? (
-            <Success name={answers.firstName} />
+            <Success name={answers.firstName} message={resultMessage} />
           ) : gate ? (
             <GateScreen code={gate} onBack={back} />
           ) : (
@@ -398,7 +407,7 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
   );
 }
 
-function Success({ name }: { name: string }) {
+function Success({ name, message }: { name: string; message: string }) {
   return (
     <div className="nv-q py-10 text-center">
       <RiCheckboxCircleFill className="mx-auto h-14 w-14 text-emerald-500" />
@@ -406,8 +415,7 @@ function Success({ name }: { name: string }) {
         Application received{name ? `, ${name}` : ""}
       </h1>
       <p className="mx-auto mt-4 max-w-md text-base leading-relaxed text-slate-600">
-        Thanks for applying for Field Cleaner. We review every submission and reach out when it’s a fit.
-        The other roles are opening soon.
+        {message || "Thanks for applying for Field Cleaner. We will write to you with the result."}
       </p>
       <Link
         href="/hiring"
@@ -490,6 +498,7 @@ function Question({
           />
           <ReviewRow label="Applying as" value={answers.contractorType === "Individual" ? "Just me" : answers.contractorType} onEdit={() => onEdit("contractorType")} />
           <ReviewRow label="Car" value="Own car, valid license, insured" onEdit={() => onEdit("car")} />
+          <ReviewRow label="Photo ID" value={answers.idFile?.name || "Uploaded"} onEdit={() => onEdit("id")} />
           <ReviewRow label="Authorized to work" value={answers.authorizedToWork || "Yes"} onEdit={() => onEdit("authorized")} />
           <ReviewRow label="Age" value="18 or older" onEdit={() => onEdit("age")} />
           <ReviewRow label="Texts and calls" value="Agreed" onEdit={() => onEdit("phone")} />
@@ -723,7 +732,7 @@ function Question({
       },
       consentPay: {
         title: "Are you comfortable with how pay works?",
-        body: "Everyone starts between 40% and 45% of the job’s value. Pay is weekly, for completed jobs. Travel time is not paid.",
+        body: payTermsForRole(answers.role || OPEN_APPLICANT_ROLE).text || `Field Cleaner pay is a percentage of the job price. ${PAY_TRAVEL_SENTENCE}`,
         extra: [] as string[],
         label: PAY_CONSENT_COPY,
         checked: answers.payConsent,
@@ -1191,7 +1200,7 @@ function IdStep({
         <span className="text-sm font-semibold text-slate-800">
           {answers.idFile ? answers.idFile.name : "Drop your ID here, or click to upload"}
         </span>
-        <span className="mt-1 text-xs text-slate-500">Stored privately. Only Novara hiring staff can open it.</span>
+        <span className="mt-1 text-xs text-slate-500">Stored privately. Only people reviewing applications at Novara can open it.</span>
         <input
           id={inputId}
           type="file"
@@ -1426,7 +1435,7 @@ function PayExample() {
             );
           })}
         </div>
-        <p className="mt-3 text-xs leading-relaxed text-slate-500">You keep that share of the $250. Drive time between homes is not added on top.</p>
+        <p className="mt-3 text-xs leading-relaxed text-slate-500">You keep that share of the $250. {PAY_TRAVEL_SENTENCE}</p>
       </div>
     </MagicCard>
   );

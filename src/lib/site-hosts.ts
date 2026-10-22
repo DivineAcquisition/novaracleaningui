@@ -49,3 +49,14 @@ export function hiringApplyUrl(path = ""): string {
 export function contractorOnboardingUrl(inviteToken: string): string {
   return `${CONTRACTOR_ORIGIN}/cleaner/auth?invite=${encodeURIComponent(inviteToken)}`;
 }
+
+/** The page between conditional approval and the first onboarding step. */
+export function beforeYouStartUrl(inviteToken: string): string {
+  return `${HIRING_ORIGIN}/hiring/before-you-start?invite=${encodeURIComponent(inviteToken)}`;
+}
+
+export function beforeYouStartHostAllowed(host: string): boolean {
+  if (isLocalOrPreviewHost(host)) return true;
+  const name = host.toLowerCase();
+  return name === HIRING_HOST || name === CONTRACTOR_HOST;
+}

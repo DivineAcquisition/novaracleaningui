@@ -8,6 +8,7 @@
 // list, the reliability note, and why Novara are required to qualify.
 // No phone screening is collected here.
 
+import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import { primeAirtablePat } from "@/lib/airtable/sources/prime-pat";
@@ -18,8 +19,11 @@ import {
   type TalentApplicant,
 } from "@/lib/airtable/talent";
 import {
+  APPLICANT_ID_BUCKET,
   payTermsForRole,
+  pipelineStage,
   phoneDigits,
+  safeIdFilename,
   isApplicationIssue,
   buildHiringConsentRecord,
   validateHiringApplication,
@@ -444,15 +448,50 @@ export async function POST(req: Request): Promise<NextResponse> {
     );
   }
 
+  if (!file || !app.idContentType) {
+    return NextResponse.json(
+      { error: "Upload a photo or PDF of your government-issued photo ID.", code: "missing_id" },
+      { status: 400 },
+    );
+  }
+
+  const filename = safeIdFilename(file.name);
+  const path = `ids/${new Date().getUTCFullYear()}/${randomUUID()}-${filename}`;
+  const bytes = Buffer.from(await file.arrayBuffer());
+  const { error: upErr } = await supabase.storage.from(APPLICANT_ID_BUCKET).upload(path, bytes, {
+    contentType: app.idContentType,
+    upsert: false,
+  });
+  if (upErr) {
+    // eslint-disable-next-line no-console
+    console.error("[hiring/apply] id upload", upErr.message);
+    return NextResponse.json(
+      { error: "We couldn’t store your ID. Please try the upload again.", code: "id_upload" },
+      { status: 500 },
+    );
+  }
+
+  const { data: signed, error: signErr } = await supabase.storage
+    .from(APPLICANT_ID_BUCKET)
+    .createSignedUrl(path, 60 * 60);
+  if (signErr || !signed?.signedUrl) {
+    await supabase.storage.from(APPLICANT_ID_BUCKET).remove([path]);
+    return NextResponse.json(
+      { error: "We couldn’t store your ID. Please try the upload again.", code: "id_upload" },
+      { status: 500 },
+    );
+  }
+
   let airtable: TalentApplicant;
   try {
     const primed = await primeAirtablePat();
     if (!primed) throw new Error("Airtable is not configured");
-    const input = airtableInput(app, "", "");
+    const input = airtableInput(app, signed.signedUrl, filename);
     airtable = isAirtableId(existing?.airtable_record_id)
       ? await updateTalentApplicantInAirtable(existing.airtable_record_id, input)
       : await createTalentApplicantInAirtable(input);
   } catch (err) {
+    await supabase.storage.from(APPLICANT_ID_BUCKET).remove([path]);
     // eslint-disable-next-line no-console
     console.error("[hiring/apply] airtable", (err as Error).message);
     return NextResponse.json(
@@ -487,8 +526,8 @@ export async function POST(req: Request): Promise<NextResponse> {
     supplies_on_hand: app.suppliesOnHand,
     reliability_note: app.reliabilityNote,
     reason_note: app.reasonNote,
-    government_id_path: existing?.government_id_path || null,
-    stage: decision.stage === "conditional_approval" ? "onboarding" : decision.stage,
+    government_id_path: path,
+    stage: pipelineStage(decision.stage),
     intake_stage: decision.stage,
     intake_decision: decision,
     reapply_on: decision.reapplyOn,
@@ -502,6 +541,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       street: app.address,
       city: app.city,
       suppliesOwned: app.suppliesOwned,
+      governmentIdPath: path,
       payTermsText: terms.text,
       payTermsRole: terms.roleName,
       consentRecord,
@@ -535,6 +575,10 @@ export async function POST(req: Request): Promise<NextResponse> {
     const saved = await writeApplicant(supabase, existing, fields, consentColumns);
     applicantId = saved.applicantId;
 
+    if (existing?.government_id_path && existing.government_id_path !== path) {
+      await supabase.storage.from(APPLICANT_ID_BUCKET).remove([existing.government_id_path]);
+    }
+
     if (saved.created) {
       await supabase.from("events").insert({
         event_type: "applicant.created",
@@ -555,6 +599,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     }
 
     let onboardingSent = false;
+    let beforeYouStartUrl: string | null = null;
     if (decision.openOnboarding && applicantId) {
       try {
         const opened = await launchConditionalOnboarding(supabase, {
@@ -567,8 +612,9 @@ export async function POST(req: Request): Promise<NextResponse> {
           state: app.state || null,
           smsConsent: app.smsConsent,
           leadTrack: decision.leadTrack,
-        });
+        }, settings);
         onboardingSent = opened.emailed || Boolean(opened.inviteUrl);
+        beforeYouStartUrl = opened.inviteUrl || null;
         if (opened.cleanerId && app.roleApplications.length) {
           const current = await supabase.from("cleaners").select("intake_record").eq("id", opened.cleanerId).maybeSingle();
           const record = current.data?.intake_record && typeof current.data.intake_record === "object" ? current.data.intake_record as Record<string, unknown> : {};
@@ -639,6 +685,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       updated: Boolean(existing),
       outcome: decision.outcome,
       stage: decision.stage,
+      beforeYouStartUrl,
       message: decision.leadTrack
         ? `${decision.message} You are on the Lead Track: you start as a cleaner, and a person reviews lead status after you meet the requirements.`
         : decision.message,
@@ -652,7 +699,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     return NextResponse.json(
       {
         error:
-          "Your application reached our hiring desk, but the confirmation didn’t finish. Please email hello@novaracleaning.com instead of submitting again.",
+          "We couldn’t finish saving your application. Please submit it once more. If this happens again, email operations@novaracleaning.com.",
         code: "local_save",
       },
       { status: 502 },

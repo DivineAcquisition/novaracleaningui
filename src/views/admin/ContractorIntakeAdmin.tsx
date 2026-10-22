@@ -101,6 +101,10 @@ export default function ContractorIntakeAdmin() {
           Projected labor {assignment.laborPercent ?? "—"}%. {assignment.needsAdmin ? assignment.reason : "Inside the labor cap."}
         </p>
         <PayWarnings settings={(data?.settings || {}) as Record<string, unknown>} />
+        <BeforeStartMinutes
+          minutes={((data?.settings as { beforeStartMinutes?: Record<string, number> } | undefined)?.beforeStartMinutes) || {}}
+          onSave={(beforeStartMinutes) => void post({ action: "save_settings", settings: { ...(data?.settings as object), beforeStartMinutes } })}
+        />
         <button type="button" className="mt-3 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white" onClick={() => void post({ action: "open_lead_role" })}>
           Open Lead Field Cleaner to new applicants
         </button>
@@ -173,22 +177,70 @@ export default function ContractorIntakeAdmin() {
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Wording</h2>
         <ul className="mt-3 space-y-3">
           {wording.map((row) => (
-            <li key={row.id} className="rounded-xl border border-slate-200 p-3">
-              <div className="flex items-center justify-between gap-3">
-                <p className="font-semibold">{row.title}</p>
-                <span className="text-xs uppercase tracking-wide text-amber-800">{row.status === "reviewed" ? `Reviewed${row.reviewedAt ? ` ${row.reviewedAt}` : ""}` : `${WORDING_STATUS_LABEL} · v${row.version || 1}`}</span>
-              </div>
-              <p className="mt-2 text-sm text-slate-700">{row.body}</p>
-              {row.status !== "reviewed" && (
-                <button type="button" className="mt-2 text-sm font-semibold underline" onClick={() => void post({ action: "mark_reviewed", id: row.id })}>
-                  Mark reviewed
-                </button>
-              )}
-            </li>
+            <WordingEditor key={row.id} row={row} onSave={(body) => void post({ action: "save_wording", id: row.id, body })} onReview={() => void post({ action: "mark_reviewed", id: row.id })} />
           ))}
         </ul>
       </section>
     </div>
+  );
+}
+
+function BeforeStartMinutes({
+  minutes,
+  onSave,
+}: {
+  minutes: Record<string, number>;
+  onSave: (minutes: Record<string, number>) => void;
+}) {
+  const [draft, setDraft] = useState(minutes);
+  const keys = Object.keys(minutes);
+  if (!keys.length) return null;
+  return (
+    <section className="mt-6">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Before you start, estimated minutes</h2>
+      <p className="mt-1 text-sm text-slate-600">Shown as estimates. A zero means the step waits on Novara.</p>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        {keys.map((key) => (
+          <label key={key} className="flex items-center justify-between gap-3 text-sm">
+            <span>{key.replaceAll("_", " ")}</span>
+            <input
+              className="h-10 w-20 rounded-lg border border-slate-200 px-2"
+              inputMode="numeric"
+              value={draft[key] ?? 0}
+              onChange={(event) => setDraft({ ...draft, [key]: Number(event.target.value.replace(/[^\d]/g, "") || 0) })}
+            />
+          </label>
+        ))}
+      </div>
+      <button type="button" className="mt-3 text-sm font-semibold underline" onClick={() => onSave(draft)}>Save step times</button>
+    </section>
+  );
+}
+
+function WordingEditor({
+  row,
+  onSave,
+  onReview,
+}: {
+  row: { id: string; title: string; status: string; body: string; version?: number; reviewedAt?: string | null };
+  onSave: (body: string) => void;
+  onReview: () => void;
+}) {
+  const [body, setBody] = useState(row.body);
+  return (
+    <li className="rounded-xl border border-slate-200 p-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="font-semibold">{row.title}</p>
+        <span className="text-xs uppercase tracking-wide text-amber-800">{row.status === "reviewed" ? `Reviewed${row.reviewedAt ? ` ${row.reviewedAt}` : ""}` : `${WORDING_STATUS_LABEL} · v${row.version || 1}`}</span>
+      </div>
+      <textarea className="mt-2 w-full rounded-lg border border-slate-200 p-2 text-sm" rows={3} value={body} onChange={(event) => setBody(event.target.value)} />
+      <div className="mt-2 flex gap-3">
+        <button type="button" className="text-sm font-semibold underline" onClick={() => onSave(body)}>Save wording</button>
+        {row.status !== "reviewed" && (
+          <button type="button" className="text-sm font-semibold underline" onClick={onReview}>Mark reviewed</button>
+        )}
+      </div>
+    </li>
   );
 }
 

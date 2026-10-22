@@ -30,7 +30,7 @@ import { deriveDownstreamFields, type ScreeningAnswers } from "@/lib/phone-scree
 import { sendOnboardingInviteEmail } from "@/lib/talent/onboarding-email";
 import { usableInviteEmail } from "@/lib/talent/onboarding-invite";
 import { sendApplicantRejectEmail } from "@/lib/talent/reject-email";
-import { contractorOnboardingUrl } from "@/lib/site-hosts";
+import { beforeYouStartUrl } from "@/lib/site-hosts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,7 +43,7 @@ function mintInviteToken(): string {
 }
 
 function onboardingInviteUrl(token: string): string {
-  return contractorOnboardingUrl(token);
+  return beforeYouStartUrl(token);
 }
 
 interface ApplicantRow {

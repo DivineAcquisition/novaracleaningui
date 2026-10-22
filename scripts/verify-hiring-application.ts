@@ -11,6 +11,7 @@ import {
   EXPERIENCE_SOMEWHAT,
   OPEN_APPLICANT_ROLE,
   applicationMissingQualification,
+  pipelineStage,
   TRANSPORTATION_CAR,
   TRANSPORTATION_NONE,
   applicantStateFromAddress,
@@ -110,7 +111,7 @@ if (good.ok) {
   check("work authorization yes is kept", good.value.authorizedToWork, "Yes");
   check("background consent is kept", good.value.backgroundCheckConsent, true);
   check("pay consent is kept", good.value.payConsent, true);
-  check("a new application does not store an ID type", good.value.idContentType, null);
+  check("a photo ID keeps its file type", good.value.idContentType, "image/jpeg");
   check("kit willingness is kept", good.value.willHaveKit, true);
   check("experience value is unchanged", good.value.experience, "Yes 1yr+");
   check("consent version is stored", good.value.consentVersion, CONSENT_VERSION);
@@ -135,7 +136,7 @@ check("a no on work authorization is still a complete answer", codeOf({ authoriz
 check("work authorization has to be answered", codeOf({ authorizedToWork: "" }), "missing_authorization");
 check("background consent is required to qualify", codeOf({ backgroundCheckConsent: false }), "missing_background_consent");
 check("pay consent is required to qualify", codeOf({ payConsent: false }), "missing_pay_consent");
-check("a missing photo ID does not block the application", codeOf({ idFile: null, idConfirmed: false }), "ok");
+check("a missing photo ID blocks the application", codeOf({ idFile: null, idConfirmed: false }), "missing_id");
 check("the street address is required", codeOf({ address: "" }), "missing_address");
 check("the city is required", codeOf({ city: "" }), "missing_city");
 check("an empty supply list asks for what they have", codeOf({ suppliesOnHand: "", suppliesOwned: [], suppliesHonest: false }), "missing_supplies_list");
@@ -154,12 +155,16 @@ const steps = visibleSteps();
 check("address collects the street, city, state, and ZIP", steps.includes("address") && !steps.includes("zip") && !steps.includes("state"), true);
 check("the car question comes before work authorization", steps.indexOf("car") < steps.indexOf("authorized"), true);
 check("experience comes before why Novara", steps.indexOf("experience") < steps.indexOf("reason"), true);
-check("photo ID is not an application step", steps.includes("id"), false);
+check("photo ID is an application step", steps.includes("id"), true);
+check("photo ID comes after the car question", steps.indexOf("car") < steps.indexOf("id") && steps.indexOf("id") < steps.indexOf("authorized"), true);
 check("work authorization is a step", steps.includes("authorized"), true);
 check("background consent is a step", steps.includes("consentBg"), true);
 check("pay consent is a step", steps.includes("consentPay"), true);
 check("the supply list follows a yes on supplies", visibleSteps("Yes").includes("suppliesOnHand"), true);
 check("jobs per week is not a question", steps.includes("windows"), false);
+check("a review result uses a stage the table allows", pipelineStage("needs_review"), "screening");
+check("a waitlist uses a stage the table allows", pipelineStage("waitlist"), "hold");
+check("a pass opens onboarding", pipelineStage("conditional_approval"), "onboarding");
 check("leaving jobs per week blank does not block", codeOf({ jobsPerWeek: 0, timeWindows: [] }), "ok");
 check("reliability is a step", steps.includes("reliability"), true);
 check("why Novara is a step", steps.includes("reason"), true);

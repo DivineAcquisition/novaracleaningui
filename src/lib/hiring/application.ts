@@ -346,6 +346,7 @@ const BASE_STEPS: ApplicationStep[] = [
   "address",
   "contractorType",
   "car",
+  "id",
   "authorized",
   "age",
   "experience",
@@ -362,6 +363,26 @@ export function visibleSteps(willingToGetSupplies?: string): ApplicationStep[] {
   if (willingToGetSupplies === "Yes") steps.push("suppliesOnHand");
   steps.push("reliability", "reason", "review");
   return steps;
+}
+
+const PIPELINE_STAGES = new Set([
+  "applicant",
+  "screening",
+  "hold",
+  "onboarding",
+  "agreement_signed",
+  "active",
+  "rejected",
+  "withdrawn",
+]);
+
+/** Map an intake decision onto a stage the applicant table accepts. */
+export function pipelineStage(decisionStage: string): string {
+  if (decisionStage === "conditional_approval") return "onboarding";
+  if (decisionStage === "not_a_fit") return "rejected";
+  if (decisionStage === "needs_review") return "screening";
+  if (decisionStage === "waitlist") return "hold";
+  return PIPELINE_STAGES.has(decisionStage) ? decisionStage : "hold";
 }
 
 export function applicationMissingQualification(steps: readonly string[] = BASE_STEPS): boolean {
@@ -1050,7 +1071,7 @@ export function validateHiringApplication(
       reasonNote: oneLine(draft.reasonNote),
       department: APPLICANT_DEPARTMENT,
       hiringRole: draft.hiringRole?.trim() || null,
-      idContentType: null,
+      idContentType: draft.idFile ? idContentType(draft.idFile.name, draft.idFile.type) : null,
       payTermsText: "",
       roleApplications,
     },
