@@ -16,6 +16,7 @@ import { BottomNavigation } from "@/components/booking/BottomNavigation";
 import { HOME_SIZE_RANGES } from "@/lib/pricing-system";
 import { useBookingSwipe } from "@/hooks/use-booking-swipe";
 import { BookingFooter } from "@/components/booking/BookingFooter";
+import { HomeSizePlan } from "@/components/booking/HomeSizePlan";
 import { PageTransition } from "@/components/booking/PageTransition";
 import { SEO } from "@/components/SEO";
 
@@ -87,8 +88,6 @@ export default function BookingHome() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-5 mb-6">
             {HOME_SIZE_RANGES.filter(size => size.id !== '5000_plus').map((size, index, sizes) => {
               const isSelected = bookingData.homeSizeId === size.id;
-              const span = sizes.length <= 1 ? 1 : index / (sizes.length - 1);
-              const mark = Math.round(16 + span * 36);
               return (
                 <Card
                   key={size.id}
@@ -103,16 +102,8 @@ export default function BookingHome() {
                       <RiCheckboxCircleLine className="w-4 h-4 text-primary-foreground" />
                     </div>
                   )}
-                  <CardContent className="p-5 md:p-6 text-center">
-                    <div className="mx-auto mb-3 flex h-14 w-14 items-end justify-center" aria-hidden>
-                      <span
-                        className={cn(
-                          "block rounded-[3px] border",
-                          isSelected ? "border-primary bg-primary/25" : "border-primary/30 bg-primary/10",
-                        )}
-                        style={{ width: mark, height: mark }}
-                      />
-                    </div>
+                  <CardContent className="p-4 md:p-5 text-center">
+                    <HomeSizePlan index={index} total={sizes.length} selected={isSelected} />
                     <h3 className="text-lg md:text-xl font-bold text-foreground mb-1">
                       {size.label}
                     </h3>
