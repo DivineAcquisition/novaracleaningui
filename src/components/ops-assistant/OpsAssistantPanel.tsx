@@ -84,6 +84,19 @@ export function OpsAssistantPanel() {
     endRef.current?.scrollIntoView({ block: "end" });
   }, [messages.length, sending, open]);
 
+  const suggestions = [
+    "How does dispatch work?",
+    "What should I do with a late job?",
+    "Where do I refund a booking?",
+  ];
+
+  const sendDraft = () => {
+    const q = draft.trim();
+    if (!q || sending) return;
+    void ask(q, "chat");
+    setDraft("");
+  };
+
   if (!open) return null;
 
   const contextLine =
@@ -121,10 +134,24 @@ export function OpsAssistantPanel() {
 
       <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
         {messages.length === 0 && (
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            Ask how a screen works, or — in the workspace — about the record in front of you.
-            Same conversation on the docs site and in the admin workspace.
-          </p>
+          <div className="space-y-3">
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              Ask how a screen works, or about the record in front of you. The same conversation stays open on the docs site and in the workspace.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {suggestions.map((prompt) => (
+                <button
+                  key={prompt}
+                  type="button"
+                  disabled={sending}
+                  onClick={() => void ask(prompt, "chat")}
+                  className="rounded-full border border-primary/20 bg-brand-50 px-3 py-1.5 text-left text-xs font-medium text-primary hover:bg-brand-100 disabled:opacity-50"
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
+          </div>
         )}
         {messages.map((m) => (
           <article
@@ -246,32 +273,28 @@ export function OpsAssistantPanel() {
         className="border-t border-[color:var(--hairline)] p-3"
         onSubmit={(e) => {
           e.preventDefault();
-          const q = draft.trim();
-          if (!q) return;
-          void ask(q, "chat");
-          setDraft("");
+          sendDraft();
         }}
       >
-        <div className="flex items-end gap-2">
+        <div className="rounded-2xl border border-[color:var(--hairline)] bg-background p-2 focus-within:border-primary/40">
           <textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
-                const q = draft.trim();
-                if (!q) return;
-                void ask(q, "chat");
-                setDraft("");
+                sendDraft();
               }
             }}
             rows={2}
             placeholder={surface === "docs" ? "Ask about this guide…" : "Ask about this screen…"}
-            className="min-h-[44px] flex-1 resize-none rounded-lg border border-[color:var(--hairline)] bg-background px-3 py-2 text-sm outline-none focus:border-primary/40"
+            className="min-h-[44px] w-full resize-none bg-transparent px-2 py-1.5 text-sm outline-none"
           />
-          <Button type="submit" size="icon" disabled={sending || !draft.trim()} aria-label="Send">
-            <RiSendPlane2Line className="h-4 w-4" />
-          </Button>
+          <div className="flex justify-end">
+            <Button type="submit" size="icon" className="rounded-full" disabled={sending || !draft.trim()} aria-label="Send">
+              <RiSendPlane2Line className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
         <p className="mt-1.5 text-[10px] text-muted-foreground">
           Assist and draft only. Same history on both the workspace and the docs site.

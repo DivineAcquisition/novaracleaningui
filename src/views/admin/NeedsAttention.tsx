@@ -66,6 +66,17 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { supabase } from "@/integrations/supabase/client";
 import { callScheduleRisk } from "@/lib/schedule-risk-client";
 import { callUrgentHire } from "@/lib/urgent-hire-client";
@@ -256,6 +267,7 @@ function RiskCard({
   const [dismissReason, setDismissReason] = useState("");
   const [etaNote, setEtaNote] = useState("");
   const [etaOpen, setEtaOpen] = useState(false);
+  const [confirmSend, setConfirmSend] = useState(false);
 
   useEffect(() => {
     setDraft(row.draft_body || "");
@@ -637,7 +649,7 @@ function RiskCard({
               className="text-sm"
             />
             <div className="flex flex-wrap gap-2">
-              <Button size="sm" onClick={send} disabled={busy !== null}>
+              <Button size="sm" onClick={() => setConfirmSend(true)} disabled={busy !== null || !draft.trim()}>
                 {busy === "send" ? (
                   <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" />
                 ) : (
@@ -645,6 +657,28 @@ function RiskCard({
                 )}
                 Send to {row.first_name || "customer"}
               </Button>
+              <AlertDialog open={confirmSend} onOpenChange={setConfirmSend}>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Send this to {row.first_name || "the customer"}?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This goes out by {row.message_channel === "email" ? "email" : "text"} with the message in the box.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <p className="max-h-40 overflow-auto whitespace-pre-wrap rounded-lg border bg-muted/40 p-3 text-sm">{draft}</p>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Keep editing</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => {
+                        setConfirmSend(false);
+                        void send();
+                      }}
+                    >
+                      Send message
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
               <Button size="sm" variant="outline" onClick={loadCoverage} disabled={busy !== null}>
                 <RiUserSharedLine className="w-4 h-4 mr-1.5" />
                 Find coverage
@@ -1008,17 +1042,17 @@ export default function NeedsAttention() {
           {grouped.noShow.length === 0 &&
           grouped.awaitingMessage.length === 0 &&
           grouped.handled.length === 0 ? (
-            <Card className="border-emerald-200 bg-emerald-50/40">
-              <CardContent className="py-8 text-center">
-                <RiShieldCheckLine className="w-8 h-8 mx-auto text-emerald-600 mb-2" />
-                <p className="text-sm font-medium text-emerald-900">
-                  Nothing at risk. Every crew is tracking to its projection.
-                </p>
-                <p className="text-xs text-emerald-800/80 mt-1">
-                  The schedule is swept every 5 minutes against projected end times.
-                </p>
-              </CardContent>
-            </Card>
+            <Empty className="border-emerald-200 bg-emerald-50/40">
+              <EmptyHeader>
+                <EmptyMedia className="bg-emerald-100 text-emerald-700">
+                  <RiShieldCheckLine />
+                </EmptyMedia>
+                <EmptyTitle className="text-emerald-900">Nothing at risk</EmptyTitle>
+                <EmptyDescription className="text-emerald-800/80">
+                  Every crew is tracking to its projection. The schedule is swept every 5 minutes.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           ) : null}
 
           {grouped.noShow.length > 0 ? (

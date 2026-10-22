@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import AssistantKnowledge from "@/views/admin/AssistantKnowledge";
@@ -217,10 +218,14 @@ function ReviewQueue() {
           <RiLoader4Line className="h-4 w-4 animate-spin" /> Loading
         </p>
       ) : insights.length === 0 ? (
-        <div className="rounded-xl border border-[color:var(--hairline)] bg-card p-6 text-center text-sm text-muted-foreground">
-          Nothing in this state. Patterns surface on the monthly cycle — or when you run aggregation
-          — once they cross the minimum signal threshold.
-        </div>
+        <Empty>
+          <EmptyHeader>
+            <EmptyTitle>Nothing in this state</EmptyTitle>
+            <EmptyDescription>
+              Patterns surface on the monthly cycle, or when you run aggregation, once they cross the minimum signal threshold.
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       ) : (
         insights.map((insight) => (
           <InsightCard

@@ -54,6 +54,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { MediaThumb } from "@/components/job-media/MediaThumb";
 import { SensitiveAccess } from "@/components/compliance/SensitiveAccess";
 import { isVideoFile, videoTooLargeMessage } from "@/lib/job-media";
@@ -513,9 +514,12 @@ export default function AdminBookings({
               {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
             </div>
           ) : visibleBookings.length === 0 ? (
-            <p className="p-12 text-center text-sm text-slate-500">
-              No bookings matched. Try <strong>All bookings</strong> or search by name or email.
-            </p>
+            <Empty className="m-6 border-slate-200">
+              <EmptyHeader>
+                <EmptyTitle>No bookings matched</EmptyTitle>
+                <EmptyDescription>Try All bookings, or search by name or email.</EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           ) : (
             <div className="divide-y divide-slate-100">
               {visibleBookings.map((b) => {

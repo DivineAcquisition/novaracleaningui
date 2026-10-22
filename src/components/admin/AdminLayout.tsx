@@ -56,6 +56,7 @@ import { BrandAtmosphere } from "@/components/brand/atmosphere";
 import { Button } from "@/components/ui/button";
 import { BRAND } from "@/lib/brand";
 import { supabase } from "@/integrations/supabase/client";
+import { AdminCommandMenu } from "@/components/admin/AdminCommandMenu";
 import { cn } from "@/lib/utils";
 import { useAdminRole } from "@/hooks/use-admin-role";
 import { OpsAssistantProvider, useOpsAssistant } from "@/components/ops-assistant/OpsAssistantProvider";
@@ -293,6 +294,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       <AdminMain
         active={active}
         user={user}
+        pages={navItems.map((item) => ({ title: item.title, url: item.url, description: item.description }))}
         onOpenMobile={() => setMobileOpen(true)}
       >
         {children}
@@ -307,11 +309,13 @@ function AdminMain({
   children,
   active,
   user,
+  pages,
   onOpenMobile,
 }: {
   children: ReactNode;
   active: NavItem | undefined;
   user: { email?: string | null } | null;
+  pages: { title: string; url: string; description: string }[];
   onOpenMobile: () => void;
 }) {
   const { open } = useOpsAssistant();
@@ -349,6 +353,7 @@ function AdminMain({
           )}
         </div>
         <div className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
+          <AdminCommandMenu pages={pages} />
           <OpsAssistantToggle />
           <span className="hidden md:inline truncate max-w-[200px] font-mono tabular-nums">
             {user?.email}

@@ -23,7 +23,9 @@ import {
   RiLineChartLine,
 } from "@remixicon/react";
 import { supabase } from "@/integrations/supabase/client";
+import { Bar, BarChart, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAdminRole } from "@/hooks/use-admin-role";
@@ -553,42 +555,28 @@ function KpiTile({
   );
 }
 
+const trendConfig = {
+  bookings: { label: "Jobs", color: "#5C0FFE" },
+  revenue: { label: "Revenue ($)", color: "#C4B5FD" },
+} satisfies ChartConfig;
+
 function TrendStrip({ rows }: { rows: DailyRow[] }) {
-  const maxBookings = Math.max(1, ...rows.map((r) => r.bookings_created || 0));
-  const maxRevenue = Math.max(1, ...rows.map((r) => r.revenue_completed_cents || 0));
+  const data = rows.map((row) => ({
+    day: row.day.slice(5),
+    bookings: row.bookings_created || 0,
+    revenue: Math.round((row.revenue_completed_cents || 0) / 100),
+  }));
   return (
-    <div className="space-y-3">
-      <div className="flex items-end gap-1 h-32">
-        {rows.map((r) => {
-          const heightBookings = (r.bookings_created || 0) === 0 ? 0 : Math.max(4, ((r.bookings_created || 0) / maxBookings) * 100);
-          const heightRevenue = (r.revenue_completed_cents || 0) === 0 ? 0 : Math.max(4, ((r.revenue_completed_cents || 0) / maxRevenue) * 100);
-          return (
-            <div key={r.day} className="flex-1 flex flex-col items-center justify-end gap-0.5" title={r.day}>
-              <div
-                className="w-full rounded-t-sm bg-violet-500/80"
-                style={{ height: `${heightBookings}%` }}
-              />
-              <div
-                className="w-full rounded-t-sm bg-violet-200"
-                style={{ height: `${heightRevenue}%` }}
-              />
-            </div>
-          );
-        })}
-      </div>
-      <div className="flex items-center justify-between text-[11px] text-slate-500">
-        <span>{rows[0]?.day}</span>
-        <div className="flex items-center gap-3">
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-sm bg-violet-500/80" /> Jobs
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-sm bg-violet-200" /> Revenue
-          </span>
-        </div>
-        <span>{rows[rows.length - 1]?.day}</span>
-      </div>
-    </div>
+    <ChartContainer config={trendConfig} className="aspect-auto h-40 w-full">
+      <BarChart data={data} barGap={1}>
+        <XAxis dataKey="day" tickLine={false} axisLine={false} interval="preserveStartEnd" />
+        <YAxis yAxisId="jobs" hide />
+        <YAxis yAxisId="revenue" orientation="right" hide />
+        <ChartTooltip content={<ChartTooltipContent />} />
+        <Bar yAxisId="jobs" dataKey="bookings" fill="var(--color-bookings)" radius={2} />
+        <Bar yAxisId="revenue" dataKey="revenue" fill="var(--color-revenue)" radius={2} />
+      </BarChart>
+    </ChartContainer>
   );
 }
 

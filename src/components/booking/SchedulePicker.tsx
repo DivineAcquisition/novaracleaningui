@@ -12,6 +12,7 @@ import {
 } from "@remixicon/react";
 import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -100,6 +101,18 @@ export function SchedulePicker({
 
   const selectedDateStr = selectedDate ? format(selectedDate, 'yyyy-MM-dd') : null;
   const slotsForSelectedDate = selectedDateStr ? availabilityByDate[selectedDateStr] || {} : {};
+
+  const fullDates = useMemo(() => {
+    const full = new Set<string>();
+    for (const [date, slots] of Object.entries(availabilityByDate)) {
+      const everyClosed = TIME_SLOTS.every((slot) => {
+        const row = slots[slot.id];
+        return Boolean(row) && !row.available;
+      });
+      if (everyClosed) full.add(date);
+    }
+    return full;
+  }, [availabilityByDate]);
 
   const isDateDisabled = (date: Date) => {
     if (isBefore(startOfDay(date), startOfDay(minDate))) return true;
@@ -229,12 +242,14 @@ export function SchedulePicker({
               const isSelected = selectedDate && isSameDay(day, selectedDate);
               const isToday = isSameDay(day, new Date());
               const isCurrentMonth = isSameMonth(day, currentMonth);
+              const isFull = fullDates.has(format(day, "yyyy-MM-dd"));
               
               return (
                 <button
                   key={day.toISOString()}
                   onClick={() => !disabled && onDateSelect(day)}
                   disabled={disabled}
+                  aria-label={isFull ? `${format(day, "MMMM d")}, full` : format(day, "MMMM d")}
                   className={cn(
                     "aspect-square rounded-lg flex flex-col items-center justify-center text-sm font-medium transition-all relative",
                     "hover:bg-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/50",
@@ -246,13 +261,17 @@ export function SchedulePicker({
                   )}
                 >
                   <span>{format(day, "d")}</span>
-                  {isToday && !isSelected && (
+                  {isToday && !isSelected && !isFull && (
                     <span className="absolute bottom-1 w-1 h-1 rounded-full bg-primary" />
+                  )}
+                  {isFull && !isSelected && (
+                    <span className="absolute bottom-1 w-1 h-1 rounded-full bg-rose-500" />
                   )}
                 </button>
               );
             })}
           </div>
+          <p className="mt-3 text-[11px] text-muted-foreground">A rose dot means that day is full.</p>
         </div>
 
         {/* Step 2: Time Selection */}
@@ -270,6 +289,16 @@ export function SchedulePicker({
               <RiTimeLine className="w-10 h-10 mb-3 opacity-30" />
               <p className="text-sm">Select a date first to see available times</p>
             </div>
+          ) : selectedDate && !isAdminMode && selectedDateStr && fullDates.has(selectedDateStr) ? (
+            <Empty className="border-0 bg-transparent py-6">
+              <EmptyHeader>
+                <EmptyMedia>
+                  <RiTimeLine />
+                </EmptyMedia>
+                <EmptyTitle>This day is full</EmptyTitle>
+                <EmptyDescription>Every time on this date is booked. Choose another day.</EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           ) : isLoading ? (
             <div className="space-y-4">
               {["morning", "afternoon", "evening"].map((period) => (
