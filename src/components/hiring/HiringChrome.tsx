@@ -87,6 +87,7 @@ export function HiringFooter() {
           </p>
           <p className="mt-2 flex flex-wrap justify-center gap-4 sm:justify-end">
             <a href="https://novaracleaning.com/privacy" className="hover:text-foreground">Privacy notice</a>
+            <a href="mailto:privacy@novaracleaning.com" className="hover:text-foreground">privacy@novaracleaning.com</a>
             <a href="/text-message-terms" className="hover:text-foreground">Text message terms</a>
             <Link href="/hiring" className="hover:text-foreground">Careers</Link>
           </p>

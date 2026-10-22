@@ -24,13 +24,11 @@ export const EMAILS = {
   cancellations: "cancellations@novaracleaning.com",
   membership: "membership@novaracleaning.com",
   operations: "operations@novaracleaning.com",
+  privacy: "privacy@novaracleaning.com",
 } as const;
 
-/**
- * Privacy requests use support@ until the owner confirms a privacy@ mailbox.
- * That choice is an owner decision. It is not shown as a guess of privacy@.
- */
-export const PRIVACY_REQUESTS_EMAIL = EMAILS.support;
+/** Confirmed mailbox for access, correction, and deletion requests. */
+export const PRIVACY_REQUESTS_EMAIL = EMAILS.privacy;
 
 /** Must stay equal to SHORT_NOTICE_WINDOW_HOURS. */
 export const NOTICE_WINDOW_HOURS = 24;
@@ -86,7 +84,6 @@ export const ADMIN_GAPS = [
   "brand-config.ts still contains an unused 50% new-customer calculator. Live checkout uses src/lib/pricing.ts, which does not apply that 50%.",
   "A separate video-testimonial email still offers 50% off the second clean. That is not the booking discount. It stays blocked in email compliance until the owner approves it.",
   "Failed payment fee, membership cancellation notice, membership minimum visits, pause rules, and support response time are not in the booking or billing code. They were not copied from the old policy pages.",
-  "Privacy requests use support@novaracleaning.com. Confirm whether privacy@novaracleaning.com exists before switching.",
   "Legal name is stored as Novara Cleaning LLC until the owner confirms the Maryland registration.",
   "Identity verification is not shown as a public claim. Confirm it is required for every cleaner who enters a home before any verification line is added.",
   "Testimonials on the app home page had no source link, so that section is hidden.",

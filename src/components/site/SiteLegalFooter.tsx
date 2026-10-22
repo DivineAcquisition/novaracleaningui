@@ -19,6 +19,8 @@ export function SiteLegalFooter() {
           <a href={site.phoneTel} className={linkClass}>{site.phoneDisplay}</a>
           <span className="mx-2 text-zinc-400">·</span>
           <a href={`mailto:${site.emails.support}`} className={linkClass}>{site.emails.support}</a>
+          <span className="mx-2 text-zinc-400">·</span>
+          <a href={`mailto:${site.privacyRequestsEmail}`} className={linkClass}>Privacy requests: {site.privacyRequestsEmail}</a>
         </p>
         <nav aria-label="Policies" className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
           {site.policyLinks.map((link) => (
