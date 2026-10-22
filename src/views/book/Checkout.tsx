@@ -63,7 +63,6 @@ import {
 import { PageTransition } from "@/components/booking/PageTransition";
 import { trackInitiateCheckout } from "@/lib/meta-pixel";
 import { SEO } from "@/components/SEO";
-import { GoogleGuaranteedBadge } from "@/components/GoogleGuaranteedBadge";
 import { getStoredTrackingData, getTrackingPayload } from "@/hooks/useUTMTracking";
 import { DeepCleanPrompt, type DeepCleanChoice } from "@/components/booking/DeepCleanPrompt";
 import {
@@ -950,16 +949,20 @@ export default function BookingCheckout() {
             <h1 className="font-jakarta text-2xl md:text-3xl font-extrabold">
               Review &amp; Reserve
             </h1>
-            <p className="text-base md:text-lg text-muted-foreground max-w-xl mx-auto">
+            <p className="mx-auto max-w-xl text-sm leading-relaxed text-muted-foreground md:text-base">
+              <span className="font-semibold text-foreground">
+                {isNewMembershipSignup
+                  ? "Pay the first month of Glow here."
+                  : isFocused
+                  ? "Focused cleans are paid in full."
+                  : "Most bookings take a 50% deposit today."}
+              </span>{" "}
               {isNewMembershipSignup
-                ? "Pay the first month of Glow here — same card form as a one-time booking. Recurring monthly after that. You'll add your address and sign the membership agreement on the next step."
+                ? "It renews monthly. You will add your address and sign on the next step."
                 : isFocused
-                ? "Focused cleans are paid in full at booking — we schedule and dispatch only after payment succeeds."
-                : "Lock in your cleaning with a 50% deposit today. Your card is securely saved on file — the remaining 50% is automatically charged after your cleaning is complete."}
+                ? "We schedule the visit after payment succeeds."
+                : "The rest is charged after the cleaning. Your card is saved for that balance."}
             </p>
-            <div className="flex justify-center pt-1">
-              <GoogleGuaranteedBadge variant="compact" />
-            </div>
           </div>
 
           {/* Booking Summary card — single card replaces the old
@@ -1564,15 +1567,12 @@ export default function BookingCheckout() {
                 </div>
                 <div>
                   <RiLockLine className="h-6 w-6 mx-auto mb-2 text-primary" />
-                  <p className="font-medium">No contracts</p>
+                  <p className="font-medium">24 hours' notice to cancel at no fee</p>
                 </div>
                 <div className="col-span-2 md:col-span-1">
                   <RiCheckboxCircleLine className="h-6 w-6 mx-auto mb-2 text-primary" />
                   <p className="font-medium">Insured</p>
                 </div>
-              </div>
-              <div className="pt-4 border-t flex justify-center">
-                <GoogleGuaranteedBadge variant="compact" />
               </div>
             </CardContent>
           </Card>

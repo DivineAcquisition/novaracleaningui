@@ -22,6 +22,7 @@ import { useBooking } from "@/contexts/BookingContext";
 import { AddressAutocomplete } from "@/components/booking/AddressAutocomplete";
 import { SignaturePad } from "@/components/booking/SignaturePad";
 import { SEO } from "@/components/SEO";
+import { BookingFooter } from "@/components/booking/BookingFooter";
 import { US_STATES, parseAddressString } from "@/lib/address-formatter";
 import { lookupZip, stateFromZip } from "@/lib/zip-lookup";
 import { buildSignedAgreementBase64 } from "@/lib/service-agreement";
@@ -635,7 +636,8 @@ export default function PropertyDetails() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-hero px-3 md:px-4 py-8 md:py-12 flex items-center justify-center">
+    <div className="min-h-screen bg-gradient-hero flex flex-col">
+      <div className="flex flex-1 items-center justify-center px-3 md:px-4 py-8 md:py-12">
       <SEO title="Property Details" description="Provide details about your home for a customized cleaning experience." noindex />
       <Card ref={agreementCaptureRef} className="max-w-lg w-full animate-fade-in overflow-visible">
         {/* Brand gradient strip — visually ties the details step to the
@@ -1045,6 +1047,8 @@ export default function PropertyDetails() {
           </form>
         </CardContent>
       </Card>
+      </div>
+      <BookingFooter />
     </div>
   );
 }

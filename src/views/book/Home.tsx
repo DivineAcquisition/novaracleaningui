@@ -73,17 +73,14 @@ export default function BookingHome() {
             <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2">
               How big is your home?
             </h1>
-            <p className="text-sm md:text-base text-muted-foreground">
-              {bookingData.membershipPlan && bookingData.membershipPlan !== "none"
-                ? "Confirm your home size — Glow monthly price depends on square footage"
-                : "Select your home size to see instant pricing for a professional deep clean"}
+            <p className="mx-auto max-w-xl text-sm leading-relaxed text-muted-foreground md:text-base">
+              <span className="font-semibold text-foreground">
+                {bookingData.membershipPlan && bookingData.membershipPlan !== "none"
+                  ? "Glow pricing uses this home size."
+                  : "The price on the next step uses this home size."}
+              </span>{" "}
+              Choose the range that matches your home.
             </p>
-            
-            {/* Google Guaranteed Badge */}
-            <div className="inline-flex items-center gap-2 mt-4 px-4 py-2 border-2 border-green-500 rounded-full bg-green-50 dark:bg-green-950/30">
-              <RiCheckboxCircleLine className="w-4 h-4 text-green-600 dark:text-green-400" />
-              <span className="text-sm font-medium text-green-700 dark:text-green-300">Google Guaranteed</span>
-            </div>
           </div>
           
           {/* Size Selection Grid */}

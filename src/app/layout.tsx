@@ -90,22 +90,18 @@ export default function RootLayout({
             __html: JSON.stringify({
               "@context": "https://schema.org",
               "@type": "LocalBusiness",
-              name: "Novara Cleaning",
-              description:
-                "Professional home cleaning service in the DMV area. Google Guaranteed with transparent pricing and 100% satisfaction guarantee.",
+              name: "Novara Cleaning LLC",
+              description: "Home cleaning in the DMV. Insured.",
               url: "https://novaracleaning.com",
               telephone: "+18447352070",
-              email: "hello@novaracleaning.com",
+              email: "support@novaracleaning.com",
               address: {
                 "@type": "PostalAddress",
+                streetAddress: "7404 Executive Place",
+                addressLocality: "Lanham",
                 addressRegion: "MD",
+                postalCode: "20706",
                 addressCountry: "US",
-              },
-              priceRange: "$99-$450",
-              aggregateRating: {
-                "@type": "AggregateRating",
-                ratingValue: "4.9",
-                reviewCount: "500",
               },
               sameAs: [
                 "https://www.instagram.com/novaracleaning",

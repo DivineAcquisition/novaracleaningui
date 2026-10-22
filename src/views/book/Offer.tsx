@@ -23,7 +23,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { cn } from "@/lib/utils";
 import { BookingHeader } from "@/components/booking/BookingHeader";
 import { PageTransition } from "@/components/booking/PageTransition";
-import { GoogleGuaranteedBadge } from "@/components/GoogleGuaranteedBadge";
+import { BookingFooter } from "@/components/booking/BookingFooter";
 import { SchedulePicker } from "@/components/booking/SchedulePicker";
 import { CleanComparisonDialog } from "@/components/booking/CleanComparisonDialog";
 import {
@@ -314,6 +314,7 @@ export default function BookingOffer() {
               </CardContent>
             </Card>
           </div>
+          <BookingFooter />
         </div>
       </PageTransition>
     );
@@ -339,17 +340,10 @@ export default function BookingOffer() {
               Choose a clean
             </h1>
 
-            <p className="text-xs md:text-sm uppercase tracking-[0.22em] text-primary font-semibold">
-              Discounts below are the published pricing rules, not a typed promotion
+            <p className="mx-auto max-w-xl text-sm leading-relaxed text-muted-foreground md:text-base">
+              <span className="font-semibold text-foreground">Prices below are for this home.</span>{" "}
+              Standard is 15% off, deep is 25% off, and a bundle takes half off the standard visit only.
             </p>
-
-            <p className="text-muted-foreground text-base md:text-lg max-w-xl mx-auto">
-              Standard, deep, and combo prices are calculated for this home. The discount is not limited to first-time customers.
-            </p>
-
-            <div className="flex justify-center pt-1">
-              <GoogleGuaranteedBadge variant="compact" />
-            </div>
             <LiveUrgency />
           </div>
 
@@ -1142,6 +1136,7 @@ export default function BookingOffer() {
             </div>
           </DialogContent>
         </Dialog>
+        <BookingFooter />
       </div>
     </PageTransition>
   );

@@ -17,7 +17,6 @@ import { useBooking } from "@/contexts/BookingContext";
 import { BookingHeader } from "@/components/booking/BookingHeader";
 import { BookingFooter } from "@/components/booking/BookingFooter";
 import { ZipGallery } from "@/components/booking/ZipGallery";
-import { RotatingSubheadline } from "@/components/booking/RotatingSubheadline";
 import { supabase } from "@/integrations/supabase/client";
 import { formatPhoneNumber } from "@/lib/input-formatters";
 import { trackLead } from "@/lib/meta-pixel";
@@ -341,27 +340,14 @@ export default function BookingZip() {
                 the page headline, in our primary brand color. Hidden on
                 the waitlist-success state. */}
             {formMode !== 'waitlist-success' && (
-              <p className="text-lg md:text-2xl font-bold font-jakarta">
-                <span className="bg-gradient-primary bg-clip-text text-transparent">
-                  25% Off
+              <p className="mx-auto max-w-xl text-sm leading-relaxed text-[#2c2c2c] md:text-base">
+                <span className="font-jakarta text-lg font-bold text-foreground md:text-2xl">
+                  <span className="bg-gradient-primary bg-clip-text text-transparent">Standard 15% off. Deep 25% off.</span>
                 </span>{" "}
-                Your First Cleaning
-              </p>
-            )}
-
-            {formMode !== 'waitlist-success' && (
-              <p className="text-[#2c2c2c] font-normal md:text-sm text-sm">
                 {formMode === 'waitlist'
-                  ? "We're not in your area yet, but we're expanding soon!"
-                  : "Premium cleaning service at transparent prices. Enter your ZIP code to get started."}
+                  ? "We are not in your area yet, and we are expanding soon."
+                  : "Enter your ZIP code and we will show the price for your home. Most bookings take a 50% deposit."}
               </p>
-            )}
-
-            {/* Rotating value-prop carousel under the headline. Three
-                messages cycle every 3s: no-call, instant pricing,
-                next-day availability. */}
-            {formMode !== 'waitlist-success' && (
-              <RotatingSubheadline className="pt-1" />
             )}
           </div>
 
@@ -416,7 +402,7 @@ export default function BookingZip() {
                         Great news! We service {cityState}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        Enter your details to claim 25% off your first cleaning
+                        Enter your details and we will show the price for your home.
                       </p>
                     </div>
                   </div>

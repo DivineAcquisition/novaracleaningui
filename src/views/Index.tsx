@@ -27,8 +27,7 @@ import { useBooking } from "@/contexts/BookingContext";
 
 import { supabase } from "@/integrations/supabase/client";
 import { formatPhoneNumber } from "@/lib/input-formatters";
-import { RotatingSubheadline } from "@/components/booking/RotatingSubheadline";
-import { AnimatedShinyText } from "@/components/magicui/animated-shiny-text";
+import { BookingFooter } from "@/components/booking/BookingFooter";import { AnimatedShinyText } from "@/components/magicui/animated-shiny-text";
 import { BlurFade } from "@/components/magicui/blur-fade";
 import { BorderBeam } from "@/components/magicui/border-beam";
 import { MagicCard } from "@/components/magicui/magic-card";
@@ -255,21 +254,12 @@ const Index = () => {
               </h1>
             </BlurFade>
 
-            <p className="text-xl md:text-2xl lg:text-3xl font-bold font-heading">
-              <span className="text-gradient">
-                25% Off
+            <p className="mx-auto max-w-2xl text-base leading-relaxed text-muted-foreground md:text-lg">
+              <span className="font-heading text-xl font-bold text-foreground md:text-2xl">
+                <span className="text-gradient">Standard 15% off. Deep 25% off.</span>
               </span>{" "}
-              Your First Cleaning
+              Enter your ZIP code and we will show the price for your home. Most bookings take a 50% deposit.
             </p>
-
-            <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-              Premium residential cleaning by vetted professionals. We show up
-              on time, every time — so you can enjoy your weekends again.
-            </p>
-
-            {/* Rotating value-prop carousel: no call required / instant
-                pricing / next-day availability. */}
-            <RotatingSubheadline />
 
             {/* Booking Card */}
             <Card className="relative max-w-md mx-auto overflow-hidden panel">
@@ -683,38 +673,7 @@ const Index = () => {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="border-t border-border/40 bg-muted/20">
-        <div className="container mx-auto max-w-4xl px-4 py-8">
-          <div className="flex flex-col items-center gap-3 text-center">
-            <div className="flex items-center gap-3">
-              <img src={logo} alt="Novara Cleaning" className="w-8 h-8 rounded-lg" />
-              <span className="text-base font-bold font-heading">
-                Novara<span className="text-primary">Cleaning</span>
-              </span>
-            </div>
-            <p className="max-w-md text-sm text-muted-foreground">
-              Premium residential cleaning service. Insured. Cleaners we send are background-checked.
-            </p>
-            <p className="text-sm text-muted-foreground">
-              <a href="tel:+18447352070" className="hover:text-foreground">(844) 735-2070</a>
-              <span className="mx-2">·</span>
-              <a href="mailto:support@novaracleaning.com" className="hover:text-foreground">support@novaracleaning.com</a>
-            </p>
-          </div>
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 border-t border-border/40 pt-4 text-sm text-muted-foreground">
-            <span>© {new Date().getFullYear()} Novara Cleaning LLC</span>
-            <a href="https://novaracleaning.com/privacy" target="_blank" rel="noopener noreferrer" className="hover:text-foreground">Privacy Policy</a>
-            <a href="https://novaracleaning.com/terms" target="_blank" rel="noopener noreferrer" className="hover:text-foreground">Terms</a>
-            <a href="https://novaracleaning.com/refund-policy" target="_blank" rel="noopener noreferrer" className="hover:text-foreground">Refund Policy</a>
-            <a href="https://novaracleaning.com/cancellation-policy" target="_blank" rel="noopener noreferrer" className="hover:text-foreground">Cancellation Policy</a>
-            <a href="/privacy-request" className="hover:text-foreground">Privacy request</a>
-            <button type="button" onClick={() => window.dispatchEvent(new CustomEvent("novara:cookie-settings"))} className="hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded">
-              Cookie settings
-            </button>
-          </div>
-        </div>
-      </footer>
+      <BookingFooter />
     </div>
   );
 };

@@ -32,6 +32,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { ReferralSection } from "@/components/ReferralSection";
 import { trackPurchase } from "@/lib/meta-pixel";
 import { SEO } from "@/components/SEO";
+import { BookingFooter } from "@/components/booking/BookingFooter";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -946,6 +947,7 @@ export default function BookingSuccess() {
           </CardContent>
         </Card>
       </div>
+      <BookingFooter />
 
       {/* Mobile Bottom Button */}
       <div className="fixed bottom-0 left-0 right-0 md:hidden bg-background border-t border-border shadow-xl z-50 p-4 animate-slide-up">
