@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { BookingFooter } from "@/components/booking/BookingFooter";
+import { PRIVACY_REQUESTS_EMAIL } from "@/lib/public-site";
 
 export default function PrivacyRequestPage() {
   const [kind, setKind] = useState<"access" | "correct" | "delete">("access");
@@ -41,7 +42,9 @@ export default function PrivacyRequestPage() {
       <main className="mx-auto w-full max-w-lg flex-1 px-4 py-10">
         <h1 className="text-2xl font-semibold text-foreground">See, correct, or delete your information</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Tell us what you want done. We will reply by the due date. Records required for taxes, a claim, or a payment dispute are kept, and we will say why.
+          Tell us what you want done, or email{" "}
+          <a className="underline" href={`mailto:${PRIVACY_REQUESTS_EMAIL}`}>{PRIVACY_REQUESTS_EMAIL}</a>.
+          We will reply by the due date. Records required for taxes, a claim, or a payment dispute are kept, and we will say why.
         </p>
         {done ? (
           <p className="mt-6 rounded-md border border-border p-4 text-sm" role="status">

@@ -282,11 +282,11 @@ export default function PlanDetail() {
               onClick={handleContinue}
               className="w-full h-13 text-base bg-gradient-primary shadow-lg rounded-xl"
             >
-              Continue — ${selectedPrice}/mo
+              Continue, ${selectedPrice}/mo
               <RiArrowRightLine className="w-5 h-5 ml-2" />
             </Button>
             <p className="text-[11px] text-center text-muted-foreground">
-              First month is billed at checkout. Recurring monthly after that. Cancel anytime with 14 days&apos; notice.
+              This is a recurring subscription. The first month is billed at checkout and it renews automatically until you cancel. Email membership@novaracleaning.com to cancel. A minimum number of visits and a notice period are not set in billing, so this page does not state one.
             </p>
           </CardContent>
         </Card>

@@ -63,7 +63,6 @@ import {
 import { PageTransition } from "@/components/booking/PageTransition";
 import { trackInitiateCheckout } from "@/lib/meta-pixel";
 import { SEO } from "@/components/SEO";
-import { GoogleGuaranteedBadge } from "@/components/GoogleGuaranteedBadge";
 import { getStoredTrackingData, getTrackingPayload } from "@/hooks/useUTMTracking";
 import { DeepCleanPrompt, type DeepCleanChoice } from "@/components/booking/DeepCleanPrompt";
 import {
@@ -935,7 +934,7 @@ export default function BookingCheckout() {
             ? "Start Glow on this site — pay the first month with the same checkout as a one-time booking."
             : isFocused
             ? "Pay in full to lock in your focused clean."
-            : "Complete your booking with a secure 50% deposit. Balance auto-charged after service."}
+            : "Most bookings take a 50% deposit today. The rest is charged after the cleaning."}
           noindex
         />
         <BookingHeader currentStep={currentStep} totalSteps={6} stepLabel="Checkout" />
@@ -955,11 +954,8 @@ export default function BookingCheckout() {
                 ? "Pay the first month of Glow here — same card form as a one-time booking. Recurring monthly after that. You'll add your address and sign the membership agreement on the next step."
                 : isFocused
                 ? "Focused cleans are paid in full at booking — we schedule and dispatch only after payment succeeds."
-                : "Lock in your cleaning with a 50% deposit today. Your card is securely saved on file — the remaining 50% is automatically charged after your cleaning is complete."}
+                : "Most bookings take a 50% deposit today. Your card is saved for the rest, which is charged after the cleaning. Focused cleans are paid in full."}
             </p>
-            <div className="flex justify-center pt-1">
-              <GoogleGuaranteedBadge variant="compact" />
-            </div>
           </div>
 
           {/* Booking Summary card — single card replaces the old
@@ -1564,15 +1560,12 @@ export default function BookingCheckout() {
                 </div>
                 <div>
                   <RiLockLine className="h-6 w-6 mx-auto mb-2 text-primary" />
-                  <p className="font-medium">No contracts</p>
+                  <p className="font-medium">24 hours' notice to cancel at no fee</p>
                 </div>
                 <div className="col-span-2 md:col-span-1">
                   <RiCheckboxCircleLine className="h-6 w-6 mx-auto mb-2 text-primary" />
                   <p className="font-medium">Insured</p>
                 </div>
-              </div>
-              <div className="pt-4 border-t flex justify-center">
-                <GoogleGuaranteedBadge variant="compact" />
               </div>
             </CardContent>
           </Card>

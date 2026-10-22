@@ -267,7 +267,7 @@ export default function Membership() {
                   </Button>
 
                   <p className="text-[11px] text-center text-muted-foreground">
-                    +$75 first-month deep clean &middot; Cancel anytime
+                    Recurring subscription. It renews until you cancel.
                   </p>
                 </CardContent>
               </Card>
