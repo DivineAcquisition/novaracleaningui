@@ -32,7 +32,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { ReferralSection } from "@/components/ReferralSection";
 import { trackPurchase } from "@/lib/meta-pixel";
 import { SEO } from "@/components/SEO";
-import { BookingStepRail } from "@/components/booking/BookingStepRail";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -630,9 +629,6 @@ export default function BookingSuccess() {
     <div className="min-h-screen bg-gradient-hero px-2 md:px-4 py-4 md:py-12 pb-24 md:pb-12">
       <SEO title="Booking Confirmed" description="Your cleaning is confirmed! Check your email for details." noindex />
       <div className="container max-w-3xl mx-auto">
-        <div className="mb-4 rounded-xl border border-[color:var(--hairline)] bg-background/80 px-3 py-3">
-          <BookingStepRail currentStep={6} />
-        </div>
         {/* Show verification error if payment failed */}
         {verificationError && (
           <Card className="mb-6 border-destructive/50 bg-destructive/5">

@@ -20,7 +20,6 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useBooking } from "@/contexts/BookingContext";
 import { AddressAutocomplete } from "@/components/booking/AddressAutocomplete";
-import { BookingStepRail } from "@/components/booking/BookingStepRail";
 import { SignaturePad } from "@/components/booking/SignaturePad";
 import { SEO } from "@/components/SEO";
 import { US_STATES, parseAddressString } from "@/lib/address-formatter";
@@ -643,9 +642,36 @@ export default function PropertyDetails() {
             rest of the funnel (zip → offer → checkout → THIS → confirm). */}
         <div className="h-1.5 w-full" style={{ background: 'var(--gradient-primary)' }} />
 
+        {/* 5-step funnel progress indicator — gives the customer a clear
+            sense of "almost done" and reduces drop-off on this screen. */}
         <div className="px-5 md:px-6 pt-5">
-          <BookingStepRail currentStep={5} />
-          <p className="text-[10px] text-muted-foreground text-center mt-2">Step 5 of 6. Home details, then you are done.</p>
+          <div className="flex items-center justify-between gap-2 mb-1">
+            {[
+              { id: 'zip', label: 'ZIP' },
+              { id: 'offer', label: 'Offer' },
+              { id: 'pay', label: 'Pay' },
+              { id: 'details', label: 'Details' },
+              { id: 'done', label: 'Confirm' },
+            ].map((step, idx) => {
+              const isCurrent = step.id === 'details';
+              const isComplete = idx < 3; // zip / offer / pay already done by definition
+              return (
+                <div key={step.id} className="flex-1 flex flex-col items-center gap-1">
+                  <div className={`w-full h-1 rounded-full ${
+                    isComplete ? 'bg-primary' :
+                    isCurrent ? 'bg-gradient-to-r from-primary to-primary/40' :
+                    'bg-muted'
+                  }`} />
+                  <span className={`text-[10px] uppercase tracking-wider ${
+                    isCurrent ? 'text-primary font-semibold' :
+                    isComplete ? 'text-foreground/70' :
+                    'text-muted-foreground'
+                  }`}>{step.label}</span>
+                </div>
+              );
+            })}
+          </div>
+          <p className="text-[10px] text-muted-foreground text-center mt-1">Step 4 of 5 — almost done</p>
         </div>
 
         <CardHeader className="text-center space-y-3 pb-4 pt-4">
@@ -893,27 +919,16 @@ export default function PropertyDetails() {
                       <Label htmlFor="secondVisitSlot">
                         Arrival window <span className="text-destructive">*</span>
                       </Label>
-                      <div id="secondVisitSlot" role="radiogroup" aria-label="Arrival window" className="grid gap-2">
-                        {ARRIVAL_WINDOWS.map((w) => {
-                          const selected = secondVisitSlot === w.id;
-                          return (
-                            <button
-                              key={w.id}
-                              type="button"
-                              role="radio"
-                              aria-checked={selected}
-                              onClick={() => setSecondVisitSlot(w.id)}
-                              className={`h-12 rounded-lg border px-3 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${
-                                selected
-                                  ? "border-primary bg-primary text-primary-foreground shadow-md"
-                                  : "border-border bg-background hover:border-primary/50 hover:bg-muted/50"
-                              }`}
-                            >
-                              {w.label}
-                            </button>
-                          );
-                        })}
-                      </div>
+                      <Select value={secondVisitSlot} onValueChange={setSecondVisitSlot}>
+                        <SelectTrigger id="secondVisitSlot" className="h-12">
+                          <SelectValue placeholder="Select an arrival window" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ARRIVAL_WINDOWS.map((w) => (
+                            <SelectItem key={w.id} value={w.id}>{w.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                 </div>

@@ -7,7 +7,6 @@ import {
 } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { BookingStepRail } from "@/components/booking/BookingStepRail";
 
 interface BookingHeaderProps {
   currentStep: number;
@@ -57,13 +56,18 @@ export function BookingHeader({ currentStep, totalSteps, stepLabel }: BookingHea
           </div>
         </div>
 
-        <div className="mb-3">
-          <BookingStepRail currentStep={currentStep} />
-          {stepLabel ? (
-            <p className="mt-2 text-center text-xs text-muted-foreground">
-              Step {currentStep} of {totalSteps}: {stepLabel}
-            </p>
-          ) : null}
+        {/* Step Indicator Row */}
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-sm font-medium text-foreground">
+            <span className="font-semibold">Step {currentStep}</span>
+            <span className="text-muted-foreground"> of {totalSteps}</span>
+            {stepLabel && (
+              <span className="text-muted-foreground ml-2">— {stepLabel}</span>
+            )}
+          </div>
+          <div className="text-sm font-semibold text-primary">
+            {progressPercent}%
+          </div>
         </div>
 
         {/* Progress Bar */}
