@@ -20,7 +20,7 @@ import { ADMIN_AUTH_URL, isStaffCustomerEmail, looksLikeNovaraStaffEmail, STAFF_
 
 // (accent color references below use #5C0FFE to match the brand scheme)
 const CUSTOMER_FEATURES = [
-  { icon: RiShieldCheckLine, label: "Google Guaranteed", desc: "Fully insured and background-checked crews." },
+  { icon: RiShieldCheckLine, label: "Insured", desc: "General liability insurance." },
   { icon: RiStarLine, label: "Loved by clients", desc: "4.9 average rating across 500+ cleans." },
   { icon: RiCheckboxCircleLine, label: "Reclean guarantee", desc: "Not happy? We come back and reclean free." },
 ];

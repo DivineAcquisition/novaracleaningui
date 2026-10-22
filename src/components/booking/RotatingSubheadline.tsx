@@ -14,11 +14,11 @@ import {
 const MESSAGES = [
   {
     Icon: RiPhoneFill,
-    text: "No call required — book 100% online.",
+    text: "No call required. Book on this page.",
   },
   {
     Icon: RiFlashlightLine,
-    text: "Instant pricing — see your quote in seconds.",
+    text: "See your quote before you pay.",
   },
   {
     Icon: RiCalendarCheckLine,

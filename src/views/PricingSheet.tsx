@@ -160,7 +160,7 @@ export default function PricingSheet() {
         <div className="relative container mx-auto px-4 pt-16 pb-8 md:pt-20 md:pb-10 max-w-3xl text-center space-y-5">
           <Badge className="bg-primary/10 text-primary border border-primary/40 px-3 py-1 text-xs font-bold uppercase tracking-wider">
             <RiSparklingLine className="w-3.5 h-3.5 mr-1.5" />
-            New Customer Special — 25% Off
+            Rates from the price card
           </Badge>
           <h1 className="text-3xl md:text-4xl lg:text-5xl font-extrabold tracking-tight font-jakarta leading-[1.1]">
             See your{" "}
@@ -170,7 +170,7 @@ export default function PricingSheet() {
             in seconds
           </h1>
           <p className="text-base md:text-lg text-muted-foreground max-w-2xl mx-auto">
-            Pick your home size and service — we'll show you the total, the 50% deposit due today, and what gets auto-charged after the cleaning is complete. No call required.
+            Pick your home size and service. The total and the 50% deposit due today come from the price card. The rest is charged after the cleaning. Focused cleans are paid in full.
           </p>
         </div>
       </section>
@@ -423,7 +423,7 @@ export default function PricingSheet() {
             {/* Trust strip */}
             <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-muted-foreground pt-1">
               <span className="flex items-center gap-1.5">
-                <RiShieldLine className="w-3.5 h-3.5 text-primary" /> Google Guaranteed
+                <RiShieldLine className="w-3.5 h-3.5 text-primary" /> Insured
               </span>
               <span className="flex items-center gap-1.5">
                 <RiFlashlightLine className="w-3.5 h-3.5 text-primary" /> 50% deposit · no balance invoice
@@ -441,7 +441,7 @@ export default function PricingSheet() {
         <div className="text-center mb-6">
           <h2 className="text-2xl md:text-3xl font-bold font-jakarta">Available offers</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Everything below applies automatically at checkout — no codes to remember.
+            Standard and deep rates apply from the price card. Membership prices are a separate plan.
           </p>
         </div>
         <div className="grid md:grid-cols-3 gap-4">
@@ -451,9 +451,9 @@ export default function PricingSheet() {
                 <RiGiftLine className="w-3 h-3 mr-1" />
                 New Customer
               </Badge>
-              <h3 className="font-bold font-jakarta text-lg">25% Off First Clean</h3>
+              <h3 className="font-bold font-jakarta text-lg">Standard 15%, deep 25%</h3>
               <p className="text-sm text-muted-foreground">
-                Auto-applied on Standard and Deep cleans. Stacks with no other promo needed.
+                Standard is 15% off the regular price. Deep is 25% off. A bundle takes half off the standard visit only. Not a first-visit coupon.
               </p>
             </CardContent>
           </Card>
@@ -475,9 +475,9 @@ export default function PricingSheet() {
                 <RiPercentLine className="w-3 h-3 mr-1" />
                 Referral
               </Badge>
-              <h3 className="font-bold font-jakarta text-lg">25% Off When You Refer</h3>
+              <h3 className="font-bold font-jakarta text-lg">Referral</h3>
               <p className="text-sm text-muted-foreground">
-                Your friends get 25% off their first clean, you earn a 25%-off credit when they complete it.
+                A referral is noted on the booking. It does not change the rate card by itself.
               </p>
             </CardContent>
           </Card>

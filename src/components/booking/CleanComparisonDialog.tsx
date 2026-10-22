@@ -74,7 +74,7 @@ const COMPARISON: Group[] = [
     rows: [
       { label: "Trash removal",                             standard: true,  deep: true  },
       { label: "General tidy + put-away",                   standard: true,  deep: true  },
-      { label: "Eco-friendly products & HEPA vacuums",      standard: true,  deep: true  },
+      { label: "Supplies and equipment included",      standard: true,  deep: true  },
       { label: "Detailed switch plates + door handles",     standard: false, deep: true  },
       { label: "Vent cover dusting + AC return wipe",       standard: false, deep: true  },
       { label: "48-hour re-clean guarantee",                standard: true,  deep: true  },
@@ -100,7 +100,7 @@ export function CleanComparisonDialog({ open, onOpenChange }: CleanComparisonDia
           </DialogTitle>
           <DialogDescription>
             Both services use the same trusted, insured 2-person team and the
-            same eco-friendly products. Deep adds a thorough top-to-bottom
+            the same supplies. Deep adds a thorough top-to-bottom
             reset on the things Standard only surface-cleans.
           </DialogDescription>
         </DialogHeader>

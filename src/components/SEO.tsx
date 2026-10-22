@@ -10,7 +10,7 @@ interface SEOProps {
 }
 
 const BRAND = "Novara Cleaning";
-const DEFAULT_DESCRIPTION = "Book top-rated home cleaning in the DMV area. Google Guaranteed cleaners, transparent pricing, flexible scheduling, and a 100% satisfaction guarantee.";
+const DEFAULT_DESCRIPTION = "Book home cleaning in the DMV. Standard cleans are 15% off the regular price and deep cleans are 25% off. Insured. Most bookings take a 50% deposit.";
 
 export function SEO({ title, description, canonical, noindex }: SEOProps) {
   const fullTitle = title ? `${title} | ${BRAND}` : `${BRAND} | Professional Home Cleaning in Maryland & DMV`;

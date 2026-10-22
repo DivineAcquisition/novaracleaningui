@@ -25,7 +25,7 @@ const jetbrains = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "Novara Cleaning | Professional Home Cleaning in Maryland & DMV",
   description:
-    "Book top-rated home cleaning in the DMV area. Google Guaranteed cleaners, transparent pricing, flexible scheduling, and a 100% satisfaction guarantee. Book online in 60 seconds.",
+    "Book home cleaning in the DMV. Standard cleans are 15% off the regular price and deep cleans are 25% off. Insured. Most bookings take a 50% deposit.",
   authors: [{ name: "Novara Cleaning" }],
   metadataBase: new URL("https://novaracleaning.com"),
   openGraph: {
@@ -33,7 +33,7 @@ export const metadata: Metadata = {
     siteName: "Novara Cleaning",
     title: "Novara Cleaning | Professional Home Cleaning in Maryland & DMV",
     description:
-      "Book top-rated home cleaning in the DMV area. Google Guaranteed cleaners, transparent pricing, flexible scheduling, and a 100% satisfaction guarantee.",
+      "Book home cleaning in the DMV. Standard cleans are 15% off the regular price and deep cleans are 25% off. Insured.",
     url: "https://novaracleaning.com",
     images: [
       {
@@ -49,7 +49,7 @@ export const metadata: Metadata = {
     site: "@NovaraCleaning",
     title: "Novara Cleaning | Professional Home Cleaning in Maryland & DMV",
     description:
-      "Book top-rated home cleaning in the DMV area. Google Guaranteed, transparent pricing, and 100% satisfaction guarantee.",
+      "Book home cleaning in the DMV. Insured. Most bookings take a 50% deposit.",
     images: [
       "https://sxdraeptzuamsgjcvfeg.supabase.co/storage/v1/object/public/assets/novara-og-image.png",
     ],
@@ -92,7 +92,7 @@ export default function RootLayout({
               "@type": "LocalBusiness",
               name: "Novara Cleaning",
               description:
-                "Professional home cleaning service in the DMV area. Google Guaranteed with transparent pricing and 100% satisfaction guarantee.",
+                "Home cleaning in the DMV. Insured. Most bookings take a 50% deposit.",
               url: "https://novaracleaning.com",
               telephone: "+18447352070",
               email: "hello@novaracleaning.com",

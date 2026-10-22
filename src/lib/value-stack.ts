@@ -12,35 +12,30 @@ export type ValueStackItem = {
 
 /** Headlines only — append to service checkmark lists. */
 export const VALUE_STACK_HEADLINES = [
-  "Before & After Photo Report",
-  "$15 Off Your Next Clean",
-  "Customer Portal Access",
-  "Cleaners we send are background-checked",
+  "Before and after photo report",
+  "Customer portal access",
+  "Insured",
 ] as const;
 
 export const VALUE_STACK_ITEMS: ValueStackItem[] = [
   {
-    headline: "Before & After Photo Report",
+    headline: "Before and after photo report",
     tagline: "Photo proof of every clean, sent to you",
   },
   {
-    headline: "$15 Off Your Next Clean",
-    tagline: "Loyalty credit after your first clean (once)",
-  },
-  {
-    headline: "Customer Portal Access",
+    headline: "Customer portal access",
     tagline: "Your own dashboard",
   },
   {
-    headline: "Cleaners we send are background-checked",
-    tagline: "The people who come to the home are background-checked",
+    headline: "Insured",
+    tagline: "General liability insurance",
   },
 ];
 
 /** Existing premium / trust lines that already appear on checkout. */
 export const CHECKOUT_PREMIUM_FEATURES = [
   "Insured 2-person team",
-  "Eco-friendly products & HEPA vacuums",
+  "Supplies and equipment included",
   "All supplies and equipment included",
   "48-hour re-clean guarantee",
   ...VALUE_STACK_HEADLINES,
