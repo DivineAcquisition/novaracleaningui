@@ -7,7 +7,7 @@
 // settings the owner can change. Defaults are the starting values from the
 // agreements. Clearing the postal address blocks marketing.
 
-import { operationsFooter } from "./operations-footer";
+import { operationsFooter } from "./operations-footer.ts";
 
 export const EMAIL_TYPES = [
   "customer_service",
