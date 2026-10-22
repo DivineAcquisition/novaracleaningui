@@ -116,9 +116,28 @@ interface ListedMessage {
 }
 
 async function listViaEdge(supabase: SupabaseClient): Promise<{ configured: boolean; error: string; messages: ListedMessage[] }> {
-  const { data, error } = await supabase.functions.invoke("indeed-gmail-list", { body: {} });
-  const body = data as { configured?: boolean; error?: string; messages?: ListedMessage[] } | null;
-  if (error || !body || body.configured !== true) {
+  const { data: rows } = await supabase.from("app_secrets").select("key, value").in("key", [
+    "SUPABASE_URL",
+    "SUPABASE_ANON_KEY",
+    "CRON_SECRET",
+  ]);
+  const secrets = new Map((rows || []).map((row) => [String(row.key), String(row.value || "").trim()]));
+  const base = (secrets.get("SUPABASE_URL") || process.env.SUPABASE_URL || "").replace(/\/$/, "");
+  const anon = secrets.get("SUPABASE_ANON_KEY") || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+  const cron = secrets.get("CRON_SECRET") || "";
+  if (!base || !anon || !cron) return { configured: false, error: "gmail_unavailable", messages: [] };
+  const res = await fetch(`${base}/functions/v1/indeed-gmail-list`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${anon}`,
+      apikey: anon,
+      "x-cron-secret": cron,
+    },
+    body: "{}",
+  });
+  const body = await res.json().catch(() => null) as { configured?: boolean; error?: string; messages?: ListedMessage[] } | null;
+  if (!res.ok || !body || body.configured !== true) {
     return { configured: false, error: body?.error || "gmail_unavailable", messages: [] };
   }
   return { configured: true, error: "", messages: Array.isArray(body.messages) ? body.messages : [] };
