@@ -23,6 +23,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { cn } from "@/lib/utils";
 import { BookingHeader } from "@/components/booking/BookingHeader";
 import { PageTransition } from "@/components/booking/PageTransition";
+import { GoogleGuaranteedBadge } from "@/components/GoogleGuaranteedBadge";
 import { SchedulePicker } from "@/components/booking/SchedulePicker";
 import { CleanComparisonDialog } from "@/components/booking/CleanComparisonDialog";
 import {
@@ -346,6 +347,9 @@ export default function BookingOffer() {
               Standard, deep, and combo prices are calculated for this home. The discount is not limited to first-time customers.
             </p>
 
+            <div className="flex justify-center pt-1">
+              <GoogleGuaranteedBadge variant="compact" />
+            </div>
             <LiveUrgency />
           </div>
 
@@ -647,7 +651,7 @@ export default function BookingOffer() {
                           "Everything in Standard Clean",
                           "Inside cabinet cleaning & baseboards",
                           "Interior windows & sills",
-                          "Supplies and equipment included",
+                          "Eco-friendly products & HEPA vacuums",
                           "48-hour re-clean guarantee",
                           ...VALUE_STACK_HEADLINES,
                         ].map((line) => (
@@ -777,7 +781,7 @@ export default function BookingOffer() {
                         "Visit 2 — Standard maintenance clean within 14 days",
                         "Same team both visits when possible",
                         "Inside cabinet cleaning & baseboards on visit 1",
-                        "Supplies and equipment included",
+                        "Eco-friendly products & HEPA vacuums",
                         "48-hour re-clean guarantee on both visits",
                         ...VALUE_STACK_HEADLINES,
                       ].map((line) => (

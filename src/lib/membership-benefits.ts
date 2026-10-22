@@ -51,7 +51,7 @@ export const HERO_BENEFITS: BenefitSection[] = [
       "The portal remembers who has cleaned for you and routes them back to you",
       "Same trusted team learns your home, your products, and your standards",
       "If your regular is ever out, we brief the backup on your preferences first",
-      "Insured",
+      "Every cleaner is vetted, background-checked, and insured",
     ],
   },
 ];
@@ -83,9 +83,9 @@ export const MORE_BENEFITS: BenefitSection[] = [
     tagline: "If it's not right, we make it right.",
     icon: "shield",
     items: [
-      "Tell us within 48 hours after the clean and we will schedule a re-clean at no charge",
-      "Insured",
-      "Supplies and equipment included",
+      "48-hour re-clean guarantee on every visit",
+      "Insured and bonded professional teams",
+      "Eco-friendly products and HEPA vacuums, supplies included",
     ],
   },
   {

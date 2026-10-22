@@ -18,7 +18,6 @@ import {
   type Surface,
 } from "@/lib/compliance";
 import { getProcessStore } from "@/lib/compliance/store";
-import { ADMIN_GAPS, DRAFT_REVIEW_LABEL, PUBLIC_SITE } from "@/lib/public-site";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -198,19 +197,6 @@ export async function GET(req: Request) {
       licenseLine: settings.licenseLine,
       urgency: settings.urgency,
       accessRetentionDays: settings.accessRetentionDays,
-    });
-  }
-  if (view === "site_facts") {
-    try {
-      await requireAdmin(req);
-    } catch (err) {
-      const status = err instanceof AdminAuthError ? err.status : 401;
-      return NextResponse.json({ error: err instanceof Error ? err.message : "Not signed in." }, { status });
-    }
-    return NextResponse.json({
-      review: DRAFT_REVIEW_LABEL,
-      facts: PUBLIC_SITE,
-      gaps: ADMIN_GAPS,
     });
   }
   try {

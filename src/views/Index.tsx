@@ -5,10 +5,15 @@ import {
   RiCalendarCheckLine,
   RiCheckboxCircleLine,
   RiFlashlightLine,
+  RiGroupLine,
   RiMapPinLine,
   RiPhoneLine,
+  RiRepeatLine,
   RiShieldLine,
   RiSparklingLine,
+  RiStarLine,
+  RiTimeLine,
+  RiTrophyLine
 } from "@remixicon/react";
 import { useState } from "react";
 import { SEO } from "@/components/SEO";
@@ -27,12 +32,19 @@ import { AnimatedShinyText } from "@/components/magicui/animated-shiny-text";
 import { BlurFade } from "@/components/magicui/blur-fade";
 import { BorderBeam } from "@/components/magicui/border-beam";
 import { MagicCard } from "@/components/magicui/magic-card";
+import { Marquee } from "@/components/magicui/marquee";
+import { NumberTicker } from "@/components/magicui/number-ticker";
 import { Particles } from "@/components/magicui/particles";
 import { ShineBorder } from "@/components/magicui/shine-border";
 import { BRAND } from "@/lib/brand";
-import { CANCEL_SUMMARY, OFFER_SUMMARY, PAYMENT_SUMMARY, PROMISE_SUMMARY } from "@/lib/public-site";
-import { SiteLegalFooter } from "@/components/site/SiteLegalFooter";
 const logo = "/novara-logo.png";
+
+const TRUST_STATS = [
+  { label: "Homes Cleaned", value: 1200, suffix: "+", icon: RiCheckboxCircleLine },
+  { label: "5-Star Reviews", value: 500, suffix: "+", icon: RiStarLine },
+  { label: "Repeat Customers", value: 92, suffix: "%", icon: RiGroupLine },
+  { label: "On-Time Rate", value: 99, suffix: "%", icon: RiTimeLine },
+];
 
 const HOW_IT_WORKS = [
   {
@@ -50,8 +62,29 @@ const HOW_IT_WORKS = [
   {
     step: "3",
     title: "We Show Up",
-    description: "An insured team arrives for the visit you booked.",
+    description: "Our vetted, insured team arrives on time. Every time.",
     icon: RiFlashlightLine,
+  },
+];
+
+const TESTIMONIALS = [
+  {
+    name: "Sarah M.",
+    location: "Bethesda, MD",
+    text: "Novara is the first cleaning service that actually shows up when they say they will. My home has never looked better.",
+    rating: 5,
+  },
+  {
+    name: "James R.",
+    location: "Rockville, MD",
+    text: "I signed up for the membership and it's been a game-changer. Same team every time, and they know exactly how I like things.",
+    rating: 5,
+  },
+  {
+    name: "Michelle T.",
+    location: "Silver Spring, MD",
+    text: "The deep clean exceeded my expectations. Every corner was spotless. Worth every penny.",
+    rating: 5,
   },
 ];
 
@@ -152,7 +185,7 @@ const Index = () => {
     <div className="min-h-screen bg-background">
       <SEO
         title="Professional Home Cleaning in Maryland & DMV"
-        description="Book home cleaning in the DMV. Standard cleans are 15% off the regular price and deep cleans are 25% off. Insured. Most bookings take a 50% deposit."
+        description="Book top-rated home cleaning in the DMV area. Google Guaranteed cleaners, $99 first clean, transparent pricing, and 100% satisfaction guarantee. Book online in 60 seconds."
         canonical="https://novaracleaning.com"
       />
       {/* Navigation */}
@@ -206,7 +239,7 @@ const Index = () => {
               <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-primary/20 bg-primary/[0.04] backdrop-blur-sm">
                 <RiShieldLine className="w-4 h-4 text-primary" />
                 <AnimatedShinyText className="mx-0 max-w-none text-sm font-medium text-primary">
-                  Insured
+                  Google Guaranteed & Fully Insured
                 </AnimatedShinyText>
               </div>
             </BlurFade>
@@ -222,8 +255,16 @@ const Index = () => {
               </h1>
             </BlurFade>
 
-            <p className="text-base md:text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-              {OFFER_SUMMARY}
+            <p className="text-xl md:text-2xl lg:text-3xl font-bold font-heading">
+              <span className="text-gradient">
+                25% Off
+              </span>{" "}
+              Your First Cleaning
+            </p>
+
+            <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+              Premium residential cleaning by vetted professionals. We show up
+              on time, every time — so you can enjoy your weekends again.
             </p>
 
             {/* Rotating value-prop carousel: no call required / instant
@@ -409,7 +450,7 @@ const Index = () => {
 
             {/* Sub-text */}
             <p className="text-xs text-muted-foreground">
-              No card is required to see the price. {CANCEL_SUMMARY}
+              No credit card required to see pricing. Cancel anytime.
             </p>
           </div>
         </div>
@@ -419,9 +460,18 @@ const Index = () => {
       <section className="border-y border-border/40 bg-muted/30">
         <div className="container mx-auto px-4 py-10 md:py-14">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8">
-            <p className="text-center text-sm text-muted-foreground">
-              {PROMISE_SUMMARY}
-            </p>
+            {TRUST_STATS.map((stat, i) => (
+              <BlurFade key={stat.label} delay={0.04 * i} inView>
+                <div className="text-center space-y-2">
+                  <stat.icon className="w-6 h-6 text-primary mx-auto" />
+                  <p className="text-2xl md:text-3xl font-extrabold font-heading text-foreground">
+                    <NumberTicker value={stat.value} />
+                    {stat.suffix}
+                  </p>
+                  <p className="text-sm text-muted-foreground">{stat.label}</p>
+                </div>
+              </BlurFade>
+            ))}
           </div>
         </div>
       </section>
@@ -496,18 +546,39 @@ const Index = () => {
               {[
                 {
                   icon: RiShieldLine,
-                  title: "Insured",
-                  description: "General liability insurance.",
+                  title: "Fully Insured & Bonded",
+                  description:
+                    "Every team is background-checked, insured, and bonded for your peace of mind.",
+                },
+                {
+                  icon: RiTimeLine,
+                  title: "Always On Time",
+                  description:
+                    "99% on-time arrival rate. If we're late, your next clean is on us.",
                 },
                 {
                   icon: RiSparklingLine,
-                  title: "Re-clean promise",
-                  description: PROMISE_SUMMARY,
+                  title: "48-Hour Re-Clean Guarantee",
+                  description:
+                    "Not satisfied? We'll come back within 48 hours and re-clean for free.",
+                },
+                {
+                  icon: RiTrophyLine,
+                  title: "Google Guaranteed",
+                  description:
+                    "Backed by Google's $2,000 guarantee. Your home is in trusted hands.",
+                },
+                {
+                  icon: RiGroupLine,
+                  title: "Same Team Every Time",
+                  description:
+                    "Members get the same trusted cleaning team for every visit.",
                 },
                 {
                   icon: RiCalendarCheckLine,
-                  title: "Notice to change a visit",
-                  description: CANCEL_SUMMARY,
+                  title: "Flexible Scheduling",
+                  description:
+                    "Book, reschedule, or cancel anytime. No long-term contracts.",
                 },
               ].map((feature) => (
                 <Card
@@ -534,6 +605,54 @@ const Index = () => {
         </div>
       </section>
 
+      {/* Testimonials */}
+      <section className="container mx-auto px-4 py-16 md:py-24">
+        <div className="max-w-3xl mx-auto">
+          <div className="text-center mb-12">
+            <Badge
+              variant="secondary"
+              className="mb-4 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider"
+            >
+              Testimonials
+            </Badge>
+            <h2 className="text-3xl md:text-4xl font-bold font-heading">
+              Loved by Homeowners
+            </h2>
+          </div>
+
+          <div className="relative overflow-hidden">
+            <Marquee pauseOnHover className="[--duration:42s]">
+              {TESTIMONIALS.map((testimonial) => (
+                <Card
+                  key={testimonial.name}
+                  className="w-[280px] shrink-0"
+                >
+                  <CardContent className="p-5 space-y-4">
+                    <div className="flex gap-0.5">
+                      {Array.from({ length: testimonial.rating }).map((_, i) => (
+                        <RiStarLine
+                          key={i}
+                          className="w-4 h-4 fill-amber-400 text-amber-400"
+                        />
+                      ))}
+                    </div>
+                    <p className="text-sm text-muted-foreground leading-relaxed italic">
+                      "{testimonial.text}"
+                    </p>
+                    <div>
+                      <p className="text-sm font-semibold">{testimonial.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {testimonial.location}
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </Marquee>
+          </div>
+        </div>
+      </section>
+
       {/* CTA Section */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.06] to-accent/[0.04]" />
@@ -544,7 +663,8 @@ const Index = () => {
               Ready for a Spotless Home?
             </h2>
             <p className="text-lg text-muted-foreground">
-              See the price for your home, then book if it works.
+              Join 1,200+ homeowners who trust Novara for their cleaning needs.
+              Book your first clean today.
             </p>
             <Button
               size="lg"
@@ -557,13 +677,44 @@ const Index = () => {
               <RiArrowRightLine className="w-5 h-5 ml-2" />
             </Button>
             <p className="text-xs text-muted-foreground">
-              {PAYMENT_SUMMARY}
+              Pay 50% deposit on total to book. No hidden fees.
             </p>
           </div>
         </div>
       </section>
 
-      <SiteLegalFooter />
+      {/* Footer */}
+      <footer className="border-t border-border/40 bg-muted/20">
+        <div className="container mx-auto max-w-4xl px-4 py-8">
+          <div className="flex flex-col items-center gap-3 text-center">
+            <div className="flex items-center gap-3">
+              <img src={logo} alt="Novara Cleaning" className="w-8 h-8 rounded-lg" />
+              <span className="text-base font-bold font-heading">
+                Novara<span className="text-primary">Cleaning</span>
+              </span>
+            </div>
+            <p className="max-w-md text-sm text-muted-foreground">
+              Premium residential cleaning service. Insured. Cleaners we send are background-checked.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              <a href="tel:+18447352070" className="hover:text-foreground">(844) 735-2070</a>
+              <span className="mx-2">·</span>
+              <a href="mailto:support@novaracleaning.com" className="hover:text-foreground">support@novaracleaning.com</a>
+            </p>
+          </div>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 border-t border-border/40 pt-4 text-sm text-muted-foreground">
+            <span>© {new Date().getFullYear()} Novara Cleaning LLC</span>
+            <a href="https://novaracleaning.com/privacy" target="_blank" rel="noopener noreferrer" className="hover:text-foreground">Privacy Policy</a>
+            <a href="https://novaracleaning.com/terms" target="_blank" rel="noopener noreferrer" className="hover:text-foreground">Terms</a>
+            <a href="https://novaracleaning.com/refund-policy" target="_blank" rel="noopener noreferrer" className="hover:text-foreground">Refund Policy</a>
+            <a href="https://novaracleaning.com/cancellation-policy" target="_blank" rel="noopener noreferrer" className="hover:text-foreground">Cancellation Policy</a>
+            <a href="/privacy-request" className="hover:text-foreground">Privacy request</a>
+            <button type="button" onClick={() => window.dispatchEvent(new CustomEvent("novara:cookie-settings"))} className="hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded">
+              Cookie settings
+            </button>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 };

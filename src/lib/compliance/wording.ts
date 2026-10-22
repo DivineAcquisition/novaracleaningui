@@ -127,7 +127,7 @@ export const SEEDED_WORDING: WordingVersion[] = [
   seed(
     "privacy_summary",
     "Privacy summary (draft for counsel)",
-    "Novara Cleaning collects the contact details, home details, booking details, and payment references needed to schedule and perform cleaning, to charge the card you authorize, and to send booking messages. Payment card numbers are handled by Stripe. Texts are sent through the messaging provider on the account. If you accept advertising cookies, Meta and Google Ads receive the booking event only (started or completed), not your name, full address, or access details. Access codes are kept for the crew for a limited time and then removed. You can ask to see, correct, or delete your information at privacy@novaracleaning.com or from the privacy request page. Some records are kept when the law, taxes, a claim, or a payment dispute requires it, and that reason is written on the request.",
+    "Novara Cleaning collects the contact details, home details, booking details, and payment references needed to schedule and perform cleaning, to charge the card you authorize, and to send booking messages. Payment card numbers are handled by Stripe. Texts are sent through the messaging provider on the account. If you accept advertising cookies, Meta and Google Ads receive the booking event only (started or completed), not your name, full address, or access details. Access codes are kept for the crew for a limited time and then removed. You can ask to see, correct, or delete your information from the privacy request page. Some records are kept when the law, taxes, a claim, or a payment dispute requires it, and that reason is written on the request.",
   ),
 ];
 

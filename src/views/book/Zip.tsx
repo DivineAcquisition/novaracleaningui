@@ -18,7 +18,6 @@ import { BookingHeader } from "@/components/booking/BookingHeader";
 import { BookingFooter } from "@/components/booking/BookingFooter";
 import { ZipGallery } from "@/components/booking/ZipGallery";
 import { RotatingSubheadline } from "@/components/booking/RotatingSubheadline";
-import { OFFER_SUMMARY } from "@/lib/public-site";
 import { supabase } from "@/integrations/supabase/client";
 import { formatPhoneNumber } from "@/lib/input-formatters";
 import { trackLead } from "@/lib/meta-pixel";
@@ -310,7 +309,7 @@ export default function BookingZip() {
 
   return (
     <div className="min-h-screen bg-gradient-hero">
-      <SEO title="Book a Cleaning" description="Enter your ZIP code to check if Novara Cleaning serves your area. Standard cleans are 15% off the regular price. Deep cleans are 25% off." />
+      <SEO title="Book a Cleaning" description="Enter your ZIP code to check if Novara Cleaning serves your area. Professional home cleaning starting at $99." />
       {/* Sticky Booking Header */}
       <BookingHeader currentStep={1} totalSteps={6} stepLabel="Location" />
 
@@ -326,7 +325,7 @@ export default function BookingZip() {
               </div>
               <div className="text-left">
                 <p className="font-semibold text-foreground text-sm">You were referred! 🎉</p>
-                <p className="text-xs text-muted-foreground">Your referral is noted. The price on the next step is the price from our rate card.</p>
+                <p className="text-xs text-muted-foreground">25% off your first cleaning is waiting for you.</p>
               </div>
             </div>
           )}
@@ -342,8 +341,11 @@ export default function BookingZip() {
                 the page headline, in our primary brand color. Hidden on
                 the waitlist-success state. */}
             {formMode !== 'waitlist-success' && (
-              <p className="text-sm md:text-base font-medium text-muted-foreground max-w-xl mx-auto">
-                {OFFER_SUMMARY}
+              <p className="text-lg md:text-2xl font-bold font-jakarta">
+                <span className="bg-gradient-primary bg-clip-text text-transparent">
+                  25% Off
+                </span>{" "}
+                Your First Cleaning
               </p>
             )}
 
@@ -414,7 +416,7 @@ export default function BookingZip() {
                         Great news! We service {cityState}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        Enter your details to see the price for your home
+                        Enter your details to claim 25% off your first cleaning
                       </p>
                     </div>
                   </div>

@@ -39,7 +39,7 @@ export function IncludedValueStack({ serviceType, className, compact }: Props) {
             All that&apos;s included
           </p>
           <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
-            Photo proof, your dashboard, and an insured visit.
+            More than a clean — photo proof, loyalty credit, your dashboard, and vetted pros.
           </p>
         </div>
       </div>
