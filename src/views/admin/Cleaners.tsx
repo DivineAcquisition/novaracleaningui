@@ -87,6 +87,7 @@ import AdminCrews from "@/views/admin/Crews";
 import ApplicantsPipeline from "@/components/admin/ApplicantsPipeline";
 import CleanerAccountability from "@/components/admin/CleanerAccountability";
 import AccountabilityWatchlist from "@/components/admin/AccountabilityWatchlist";
+import { cleanerMatchesDirectory, isTerminatedCleaner, terminationOnlyView } from "@/lib/cleaners/directory-view";
 import UnsignedAgreements from "@/components/admin/UnsignedAgreements";
 import PulseCheckQueue from "@/components/admin/PulseCheckQueue";
 import PulseCheckHistory from "@/components/admin/PulseCheckHistory";
@@ -231,7 +232,7 @@ const STATUS_FILTERS = [
   { id: "pending", label: "Pending" },
   { id: "suspended", label: "Suspended" },
   { id: "inactive", label: "Inactive" },
-  { id: "terminated", label: "Terminated" },
+  { id: "terminated", label: "Termination" },
   { id: "resigned", label: "Resigned" },
 ] as const;
 
@@ -324,39 +325,23 @@ export default function AdminCleaners() {
     if (!opts.silent) setLoading(false);
   };
 
+  const showingTerminations = terminationOnlyView(statusFilter, endFilter);
+
   const visible = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return cleaners.filter((c) => {
-      if (statusFilter !== "all" && (c.status || "pending").toLowerCase() !== statusFilter) {
-        return false;
-      }
-      if (endFilter === "terminated" || endFilter === "resigned") {
-        if ((c.engagement_end_action || "") !== endFilter) return false;
-      } else if (endFilter !== "all" && (c.termination_basis || "") !== endFilter) {
-        return false;
-      }
-      if (!q) return true;
-      const blob = [
-        c.first_name,
-        c.last_name,
-        c.email,
-        c.phone,
-        c.home_zip,
-        c.state,
-        c.pay_tier,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return blob.includes(q);
-    });
+    return cleaners.filter((c) =>
+      cleanerMatchesDirectory(c, { statusFilter, endFilter, search }),
+    );
   }, [cleaners, statusFilter, endFilter, search]);
 
   const counts = useMemo(() => {
     const c = { active: 0, pending: 0, suspended: 0, inactive: 0, terminated: 0 };
     cleaners.forEach((r) => {
+      if (isTerminatedCleaner(r)) {
+        c.terminated += 1;
+        return;
+      }
       const s = (r.status || "pending").toLowerCase();
-      if (s in c) (c as any)[s] += 1;
+      if (s in c) (c as Record<string, number>)[s] += 1;
     });
     return c;
   }, [cleaners]);
@@ -679,7 +664,9 @@ export default function AdminCleaners() {
                 <tr>
                   <td colSpan={7} className="text-center py-12 text-slate-500">
                     <RiAlertLine className="w-7 h-7 mx-auto text-slate-300 mb-2" />
-                    No cleaners match this filter.
+                    {showingTerminations
+                      ? "No terminated contractors in this view."
+                      : "No cleaners match this filter."}
                   </td>
                 </tr>
               ) : (
