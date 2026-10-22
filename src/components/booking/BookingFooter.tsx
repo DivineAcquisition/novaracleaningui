@@ -1,6 +1,6 @@
 "use client";
 
-import { RiFacebookCircleFill, RiInstagramLine } from "@remixicon/react";
+import { RiFacebookFill, RiInstagramLine } from "@remixicon/react";
 import { openCookieSettings } from "@/components/compliance/CookieNotice";
 
 const linkClass =
@@ -49,7 +49,7 @@ export function BookingFooter({ licenseLine = "" }: { licenseLine?: string }) {
         </nav>
         <div className="flex items-center gap-3">
           <a href="https://www.facebook.com/novaracleaning" aria-label="Novara Cleaning on Facebook" className="text-zinc-600 hover:text-foreground">
-            <RiFacebookCircleFill className="h-5 w-5" />
+            <RiFacebookFill className="h-5 w-5" />
           </a>
           <a href="https://www.instagram.com/novaracleaning" aria-label="Novara Cleaning on Instagram" className="text-zinc-600 hover:text-foreground">
             <RiInstagramLine className="h-5 w-5" />
