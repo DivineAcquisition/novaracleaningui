@@ -5,6 +5,7 @@ import { Button } from './components/Button.tsx';
 import { DetailRow } from './components/DetailRow.tsx';
 import { Highlight } from './components/Highlight.tsx';
 import { BRAND } from './brand.ts';
+import { HOME_SIZE_RANGES } from '../pricing.ts';
 
 interface BookingConfirmationProps {
   firstName?: string;
@@ -79,6 +80,7 @@ const formatFrequency = (value?: string) => {
   const labels: Record<string, string> = {
     once: "One-time",
     "one-time": "One-time",
+    "One-Time": "One-time",
     onetime: "One-time",
     weekly: "Weekly",
     biweekly: "Every 2 weeks",
@@ -89,12 +91,30 @@ const formatFrequency = (value?: string) => {
   return labels[value] || value;
 };
 
+const shownCount = (value?: number | string) => {
+  if (value === undefined || value === null || value === "") return "";
+  const n = Number(value);
+  if (!Number.isFinite(n)) return String(value);
+  return String(n);
+};
+
+const homeSizeLabel = (value?: string) => {
+  if (!value) return "";
+  const known = HOME_SIZE_RANGES.find((range) => range.id === value)?.label;
+  if (known) return known;
+  // Stored ids such as 0_999 are not a size a customer can read.
+  if (value.includes("_")) return "";
+  return value;
+};
+
 const homeLine = (props: BookingConfirmationProps) => {
+  const beds = shownCount(props.bedrooms);
+  const baths = shownCount(props.bathrooms);
   const parts = [
-    props.bedrooms ? `${props.bedrooms} bed` : "",
-    props.bathrooms ? `${props.bathrooms} bath` : "",
+    beds ? `${beds} bed` : "",
+    baths ? `${baths} bath` : "",
     props.sqft ? `${props.sqft} sq ft` : "",
-    props.homeSize || "",
+    homeSizeLabel(props.homeSize),
   ].filter(Boolean);
   return parts.join(" · ");
 };
