@@ -343,24 +343,25 @@ const BASE_STEPS: ApplicationStep[] = [
   "name",
   "email",
   "phone",
-  "comms",
   "address",
-  "days",
-  "windows",
-  "requirements",
+  "contractorType",
+  "car",
   "authorized",
+  "age",
+  "experience",
+  "availability",
+  "days",
+  "consent1099",
   "consentBg",
   "consentPay",
-  "suppliesOnHand",
-  "reliability",
-  "reason",
-  "experience",
-  "cleaningTypes",
-  "review",
+  "supplies",
 ];
 
-export function visibleSteps(_willingToGetSupplies?: string): ApplicationStep[] {
-  return [...BASE_STEPS];
+export function visibleSteps(willingToGetSupplies?: string): ApplicationStep[] {
+  const steps = [...BASE_STEPS];
+  if (willingToGetSupplies === "Yes") steps.push("suppliesOnHand");
+  steps.push("reliability", "reason", "review");
+  return steps;
 }
 
 export function applicationMissingQualification(steps: readonly string[] = BASE_STEPS): boolean {
@@ -631,7 +632,7 @@ export function gateCopy(code: string): { title: string; body: string } {
     case "no_car":
       return {
         title: "A car is required",
-        body: "A car is the only transportation we can accept. You need to drive yourself to each job — rideshare, transit, and borrowing a car don’t qualify. If that changes, you’re welcome to apply again.",
+        body: "It has to be a vehicle you own. Sharing a car, catching a bus, and Uber do not count. If that changes, you’re welcome to apply again.",
       };
     case "no_license":
       return {
@@ -783,7 +784,7 @@ export function issuesForStep(
       if (draft.rolePaySet === false) {
         return issue(400, "role_pay_unset", "This role is not open until a pay rate is set.");
       }
-      if (draft.roleInterests) {
+      if (draft.roleInterests && draft.roleInterests.additional.length > 0) {
         const { catalog, access } = roleOptions(draft, options);
         const found = roleInterestIssue(draft.roleInterests, catalog, access, "application");
         if (found) return issue(400, found.code, found.error);
@@ -809,7 +810,10 @@ export function issuesForStep(
     }
     case "phone":
       if (!toE164Us(draft.phone)) {
-        return issue(400, "invalid_phone", "Enter a 10-digit US mobile number.");
+        return issue(400, "invalid_phone", "Enter a 10-digit US phone number.");
+      }
+      if (!draft.smsConsent) {
+        return issue(400, "missing_sms", "Agree to texts and calls about your application to continue.");
       }
       return null;
     case "comms":
@@ -825,7 +829,7 @@ export function issuesForStep(
     case "address": {
       const address = oneLine(draft.address);
       const city = oneLine(draft.city);
-      if (address.length < 5) return issue(400, "missing_address", "Enter your street address.");
+      if (address.length < 5) return issue(400, "missing_address", "Search for your address so we can fill this in.");
       if (address.length > 200) return issue(400, "missing_address", "Keep the street address under 200 characters.");
       if (city.length < 2) return issue(400, "missing_city", "Enter your city.");
       if (city.length > 80) return issue(400, "missing_city", "Keep the city under 80 characters.");
@@ -837,6 +841,46 @@ export function issuesForStep(
       }
       return null;
     }
+    case "contractorType":
+      if (!includesValue(CONTRACTOR_TYPES, draft.contractorType)) {
+        return issue(400, "invalid_contractor_type", "Tell us if you’re applying as yourself or as a company.");
+      }
+      return null;
+    case "car":
+      if (!draft.transportation) return issue(400, "missing_car", "Tell us whether you have a car.");
+      if (draft.transportation !== TRANSPORTATION_CAR) {
+        return issue(422, "no_car", gateCopy("no_car").body, true);
+      }
+      if (!draft.validDriversLicense) {
+        return issue(422, "no_license", gateCopy("no_license").body, true);
+      }
+      if (!draft.autoInsured) {
+        return issue(422, "no_auto_insurance", gateCopy("no_auto_insurance").body, true);
+      }
+      return null;
+    case "age":
+      if (!draft.age18) {
+        return issue(422, "under_18", gateCopy("under_18").body, true);
+      }
+      return null;
+    case "availability":
+      if (!includesValue(AVAILABILITY_OPTIONS, draft.availability)) {
+        return issue(400, "invalid_availability", "Choose the availability that fits you.");
+      }
+      return null;
+    case "consent1099":
+      if (!draft.consent1099) {
+        return issue(422, "missing_consent", gateCopy("missing_consent").body, true);
+      }
+      return null;
+    case "supplies":
+      if (!draft.willingToGetSupplies) {
+        return issue(400, "missing_supplies", "Tell us whether you’re willing to get supplies.");
+      }
+      if (draft.willingToGetSupplies !== "Yes") {
+        return issue(422, "not_willing_supplies", gateCopy("not_willing_supplies").body, true);
+      }
+      return null;
     case "days": {
       const days = (draft.preferredDays || []).filter((d) =>
         (PREFERRED_DAYS as readonly string[]).includes(d),
@@ -880,15 +924,14 @@ export function issuesForStep(
         return issue(400, "missing_pay_consent", "Tick “I have read the pay terms for this role” before you submit. This is not a decision on your application.");
       }
       return null;
-    case "suppliesOnHand":
-      if (!draft.suppliesHonest) {
-        return issue(
-          400,
-          "missing_supplies_honesty",
-          "Confirm this list is honest. Every job requires you to show up prepared with the proper equipment.",
-        );
+    case "suppliesOnHand": {
+      const supplies = multiLine(draft.suppliesOnHand);
+      const marked = (draft.suppliesOwned || []).length > 0;
+      if (!draft.suppliesHonest && supplies.length < 2 && !marked) {
+        return issue(400, "missing_supplies_list", "List what you already have. If you’re starting from scratch, write “none yet.”");
       }
       return null;
+    }
     case "reliability": {
       const note = oneLine(draft.reliabilityNote);
       if (note.length < 2) return issue(400, "missing_reliability", "Tell us a bit about your reliability.");
@@ -915,9 +958,6 @@ export function issuesForStep(
       return null;
     }
     case "review":
-      if (!draft.privacyAccepted) {
-        return issue(400, "missing_privacy", "Tick “I have read the application privacy notice” to submit.");
-      }
       if (!draft.answersAccurate) {
         return issue(400, "missing_truthfulness", "Tick “My answers on this application are true and complete” to submit.");
       }
@@ -931,7 +971,7 @@ export function validateHiringApplication(
   draft: HiringApplicationDraft,
   options?: ApplicationValidationOptions,
 ): ApplicationResult {
-  const steps = visibleSteps();
+  const steps = visibleSteps(draft.willingToGetSupplies);
   for (const step of steps) {
     const found = issuesForStep(step, draft, options);
     if (found) return found;
@@ -943,16 +983,17 @@ export function validateHiringApplication(
     || EXPERIENCE_YEARS.find((row) => row.airtable === draft.experience)?.value
     || "";
   const age = (answered(draft.ageAnswer) || (draft.age18 === true ? "yes" : null)) === "yes";
-  const smartphone = answered(draft.hasSmartphone) === "yes";
-  const vehicle = answered(draft.hasVehicle) === "yes";
-  const kit = answered(draft.willHaveKit) === "yes";
-  const contractor = answered(draft.understandsContractor) === "yes";
-  const verification = answered(draft.understandsVerification) === "yes";
+  const ownsCar = draft.transportation === TRANSPORTATION_CAR && Boolean(draft.validDriversLicense) && Boolean(draft.autoInsured);
+  const smartphone = answered(draft.hasSmartphone) === "yes" || Boolean(toE164Us(draft.phone));
+  const vehicle = answered(draft.hasVehicle) === "yes" || ownsCar;
+  const kit = answered(draft.willHaveKit) === "yes" || draft.willingToGetSupplies === "Yes";
+  const contractor = answered(draft.understandsContractor) === "yes" || draft.consent1099 === true;
+  const verification = answered(draft.understandsVerification) === "yes" || draft.backgroundCheckConsent === true;
   const days = PREFERRED_DAYS.filter((d) => (draft.preferredDays || []).includes(d));
   const jobs = Math.round(Number(draft.jobsPerWeek) || 0);
   const state = draft.state as ApplicantState;
   let roleApplications: SavedRoleSection[] = [];
-  if (draft.roleInterests) {
+  if (draft.roleInterests && draft.roleInterests.additional.length > 0) {
     const { catalog, access } = roleOptions(draft, options);
     const built = buildRoleSections(draft.roleInterests, catalog, access, new Date().toISOString());
     if (built.ok === false) return issue(400, built.code, built.error);
@@ -972,12 +1013,14 @@ export function validateHiringApplication(
       zipCode: draft.zipCode.trim(),
       state,
       role: draft.role as ApplicantRole,
-      contractorType: "Individual",
-      transportation: vehicle ? TRANSPORTATION_CAR : TRANSPORTATION_NONE,
+      contractorType: includesValue(CONTRACTOR_TYPES, draft.contractorType)
+        ? (draft.contractorType as ContractorType)
+        : "Individual",
+      transportation: draft.transportation || (vehicle ? TRANSPORTATION_CAR : TRANSPORTATION_NONE),
       authorizedToWork: draft.authorizedToWork === "No" ? "No" : "Yes",
       experience: airtableExperience(years || draft.experience || ""),
       experienceYears: years || draft.experience || "",
-      availability: airtableAvailability(days, jobs),
+      availability: includesValue(AVAILABILITY_OPTIONS, draft.availability) ? draft.availability : airtableAvailability(days, jobs),
       preferredDays: days,
       timeWindows: (draft.timeWindows || []).filter((w) => TIME_WINDOWS.some((row) => row.value === w)),
       jobsPerWeek: jobs,
@@ -991,8 +1034,8 @@ export function validateHiringApplication(
       willHaveKit: kit,
       understandsContractorWork: contractor,
       understandsVerification: verification,
-      validDriversLicense: vehicle,
-      autoInsured: false,
+      validDriversLicense: Boolean(draft.validDriversLicense) || vehicle,
+      autoInsured: Boolean(draft.autoInsured),
       smsConsent: Boolean(draft.smsConsent),
       emailConsent: Boolean(draft.emailConsent),
       privacyAccepted: Boolean(draft.privacyAccepted),

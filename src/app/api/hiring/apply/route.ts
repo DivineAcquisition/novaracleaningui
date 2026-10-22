@@ -231,8 +231,8 @@ function draftFromForm(form: FormData, file: File | null): HiringApplicationDraf
     cleaningTypes: jsonList(str(form, "cleaningTypes")),
     experienceYears: str(form, "experienceYears"),
     privacyAccepted: flag(form, "privacyAccepted"),
-    leadRoleOpen: flag(form, "leadRoleOpen"),
-    roleInterests: parseRoleInterest(jsonValue(str(form, "roleInterests"))),
+    leadRoleOpen: form.has("leadRoleOpen") ? flag(form, "leadRoleOpen") : undefined,
+    roleInterests: str(form, "roleInterests").trim() ? parseRoleInterest(jsonValue(str(form, "roleInterests"))) : undefined,
   };
 }
 
@@ -408,7 +408,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     zip: app.zipCode,
     zipInServiceArea: Boolean(coverage),
     daysAvailable: app.preferredDays.length,
-    jobsPerWeek: app.jobsPerWeek,
+    jobsPerWeek: app.jobsPerWeek > 0 ? app.jobsPerWeek : undefined,
     age18: app.age18,
     hasSmartphone: app.hasSmartphone,
     hasVehicle: app.hasVehicle,

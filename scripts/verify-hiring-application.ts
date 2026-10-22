@@ -115,6 +115,8 @@ if (good.ok) {
   check("experience value is unchanged", good.value.experience, "Yes 1yr+");
   check("consent version is stored", good.value.consentVersion, CONSENT_VERSION);
 }
+const company = validateHiringApplication(draft({ contractorType: "Company" }));
+check("company applications stay a company", company.ok ? company.value.contractorType : company.code, "Company");
 
 const somewhat = validateHiringApplication(draft({ experience: EXPERIENCE_SOMEWHAT, experienceYears: "" }));
 check("Somewhat experience is accepted", somewhat.ok, true);
@@ -125,10 +127,10 @@ function codeOf(overrides: Partial<HiringApplicationDraft>) {
   return result.ok ? "ok" : result.code;
 }
 
-check("a no on the vehicle is still a complete application", codeOf({ hasVehicle: "no" }), "ok");
-check("a no on age is still a complete application", codeOf({ ageAnswer: "no", age18: false }), "ok");
-check("texts are not required when email is accepted", codeOf({ smsConsent: false, emailConsent: true }), "ok");
-check("one contact channel is required", codeOf({ smsConsent: false, emailConsent: false }), "missing_channel");
+check("no car stops the application", codeOf({ transportation: TRANSPORTATION_NONE, validDriversLicense: false, autoInsured: false, hasVehicle: "no" }), "no_car");
+check("under 18 stops the application", codeOf({ ageAnswer: "no", age18: false }), "under_18");
+check("texts about the application are required", codeOf({ smsConsent: false, emailConsent: true }), "missing_sms");
+check("texts are still required when email is also declined", codeOf({ smsConsent: false, emailConsent: false }), "missing_sms");
 check("a no on work authorization is still a complete answer", codeOf({ authorizedToWork: "No" }), "ok");
 check("work authorization has to be answered", codeOf({ authorizedToWork: "" }), "missing_authorization");
 check("background consent is required to qualify", codeOf({ backgroundCheckConsent: false }), "missing_background_consent");
@@ -136,7 +138,7 @@ check("pay consent is required to qualify", codeOf({ payConsent: false }), "miss
 check("a missing photo ID does not block the application", codeOf({ idFile: null, idConfirmed: false }), "ok");
 check("the street address is required", codeOf({ address: "" }), "missing_address");
 check("the city is required", codeOf({ city: "" }), "missing_city");
-check("an unmarked supply list needs an honest confirmation", codeOf({ suppliesOnHand: "", suppliesHonest: false }), "missing_supplies_honesty");
+check("an empty supply list asks for what they have", codeOf({ suppliesOnHand: "", suppliesOwned: [], suppliesHonest: false }), "missing_supplies_list");
 check("an honest empty supply list is none yet", codeOf({ suppliesOnHand: "", suppliesOwned: [], suppliesHonest: true }), "ok");
 check("pay terms include surge and mileage past 35 miles", /35 miles/.test(PAY_TRAVEL_SENTENCE) && /surge pay and mileage pay/.test(PAY_TRAVEL_SENTENCE), true);
 const supplyChoices = applicationSupplyChoices();
@@ -144,24 +146,31 @@ check("vacuum is the first supply", supplyChoices[0]?.id, "vacuum");
 check("mop is the second supply", supplyChoices[1]?.id, "mop_bucket");
 check("reliability is required", codeOf({ reliabilityNote: "" }), "missing_reliability");
 check("why Novara is required", codeOf({ reasonNote: "" }), "missing_reason");
-check("the privacy notice is acknowledged before submit", codeOf({ privacyAccepted: false }), "missing_privacy");
+check("truthfulness is acknowledged before submit", codeOf({ answersAccurate: false }), "missing_truthfulness");
 check("role outside the open choices", codeOf({ role: "Field Tech" }), "invalid_role");
-check("every qualification step is on the form", applicationMissingQualification(), false);
+check("every qualification step is on the form", applicationMissingQualification(visibleSteps("Yes")), false);
 
 const steps = visibleSteps();
 check("address collects the street, city, state, and ZIP", steps.includes("address") && !steps.includes("zip") && !steps.includes("state"), true);
-check("requirements come before the qualification packet", steps.indexOf("requirements") < steps.indexOf("authorized"), true);
-check("qualification comes before experience", steps.indexOf("reason") < steps.indexOf("experience"), true);
+check("the car question comes before work authorization", steps.indexOf("car") < steps.indexOf("authorized"), true);
+check("experience comes before why Novara", steps.indexOf("experience") < steps.indexOf("reason"), true);
 check("photo ID is not an application step", steps.includes("id"), false);
 check("work authorization is a step", steps.includes("authorized"), true);
 check("background consent is a step", steps.includes("consentBg"), true);
 check("pay consent is a step", steps.includes("consentPay"), true);
-check("the supply list is a step", steps.includes("suppliesOnHand"), true);
+check("the supply list follows a yes on supplies", visibleSteps("Yes").includes("suppliesOnHand"), true);
+check("jobs per week is not a question", steps.includes("windows"), false);
+check("leaving jobs per week blank does not block", codeOf({ jobsPerWeek: 0, timeWindows: [] }), "ok");
 check("reliability is a step", steps.includes("reliability"), true);
 check("why Novara is a step", steps.includes("reason"), true);
-const vehicleNo = validateHiringApplication(draft({ hasVehicle: "no" }));
-check("a vehicle no is stored as no", vehicleNo.ok && vehicleNo.value.hasVehicle === false, true);
-check("a vehicle no does not require a photo ID", vehicleNo.ok && vehicleNo.value.idContentType === null, true);
+const vehicleNo = validateHiringApplication(draft({
+  hasVehicle: "no",
+  transportation: TRANSPORTATION_NONE,
+  validDriversLicense: false,
+  autoInsured: false,
+}));
+check("a vehicle no stops on the car question", vehicleNo.ok === false && vehicleNo.code === "no_car", true);
+check("a vehicle no is not blocked for a missing photo ID", vehicleNo.ok === false && vehicleNo.code !== "missing_id", true);
 const record = buildHiringConsentRecord({
   acceptedAt: "2026-10-15T12:00:00.000Z",
   ip: " 203.0.113.4 ",
@@ -192,9 +201,9 @@ check(
 check("specialty pages still start on Field Cleaner", presetRoleForHiringPage("specialized-contractors"), OPEN_APPLICANT_ROLE);
 check("every hiring link starts on Field Cleaner", presetRoleForHiringPage("lead-cleaner"), OPEN_APPLICANT_ROLE);
 check(
-  "confirming the Field Cleaner description is required",
+  "an application without extra roles does not ask for a role confirmation",
   codeOf({ roleInterests: { additional: [], confirmed: {}, answers: {} } }),
-  "missing_role_confirmation",
+  "ok",
 );
 check(
   "Field Cleaner confirmation is enough on its own",
