@@ -914,7 +914,7 @@ export default function BookingCheckout() {
   if (!resumeReady) {
     return (
       <PageTransition direction="forward">
-        <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8">
+        <div className="min-h-screen bg-gradient-hero md:pb-8">
           <SEO title="Checkout" noindex />
           <BookingHeader currentStep={4} totalSteps={6} stepLabel="Checkout" />
           <div className="container max-w-2xl mx-auto px-4 py-16 flex flex-col items-center gap-3 text-muted-foreground">
@@ -927,7 +927,7 @@ export default function BookingCheckout() {
   }
 
   return <PageTransition direction="forward">
-      <div className="min-h-screen bg-gradient-hero pb-32 md:pb-8">
+      <div className="min-h-screen bg-gradient-hero md:pb-8">
         <SEO
           title="Checkout"
           description={isNewMembershipSignup
@@ -1591,7 +1591,7 @@ export default function BookingCheckout() {
 
         <BottomNavigation currentStep={currentStep} totalSteps={6} steps={BOOKING_STEPS} onBack={handleBack} showPrice={true} price={currentAmount} continueDisabled={true} />
 
-        <BookingFooter />
+        <BookingFooter clearMobileBar />
       </div>
     </PageTransition>;
 }

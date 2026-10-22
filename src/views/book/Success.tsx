@@ -627,7 +627,7 @@ export default function BookingSuccess() {
     : 'Your payment cleared and your home details are in. We\'re assigning your team and writing your confirmation email right now — usually under a minute.';
 
   return (
-    <div className="min-h-screen bg-gradient-hero px-2 md:px-4 py-4 md:py-12 pb-24 md:pb-12">
+    <div className="min-h-screen bg-gradient-hero px-2 md:px-4 py-4 md:py-12 md:pb-12">
       <SEO title="Booking Confirmed" description="Your cleaning is confirmed! Check your email for details." noindex />
       <div className="container max-w-3xl mx-auto">
         {/* Show verification error if payment failed */}
@@ -947,7 +947,7 @@ export default function BookingSuccess() {
           </CardContent>
         </Card>
       </div>
-      <BookingFooter />
+      <BookingFooter clearMobileBar />
 
       {/* Mobile Bottom Button */}
       <div className="fixed bottom-0 left-0 right-0 md:hidden bg-background border-t border-border shadow-xl z-50 p-4 animate-slide-up">

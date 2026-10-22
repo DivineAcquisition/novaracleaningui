@@ -373,7 +373,7 @@ export default function BookingOffer() {
                     "relative border-2 transition-all duration-200 cursor-pointer hover:shadow-xl",
                     isSelected
                       ? "border-primary shadow-lg ring-2 ring-primary/20"
-                      : "border-primary/20 hover:border-primary/50",
+                      : "border-border hover:border-primary/40",
                   )}
                   onClick={handleSelectFocused}
                 >
@@ -476,7 +476,7 @@ export default function BookingOffer() {
                     "relative border-2 transition-all duration-200 cursor-pointer hover:shadow-xl",
                     isSelected
                       ? "border-primary shadow-lg ring-2 ring-primary/20"
-                      : "border-primary/20 hover:border-primary/50",
+                      : "border-border hover:border-primary/40",
                   )}
                   onClick={handleSelectStandard}
                 >
@@ -586,7 +586,7 @@ export default function BookingOffer() {
                       "relative border-2 transition-all duration-200 cursor-pointer hover:shadow-xl",
                       isSelected
                         ? "border-primary shadow-lg ring-2 ring-primary/20"
-                        : "border-primary/30 hover:border-primary/60",
+                        : "border-border hover:border-primary/40",
                     )}
                     onClick={handleSelectDeepClean}
                   >
@@ -696,7 +696,7 @@ export default function BookingOffer() {
                     "relative border-2 transition-all duration-200 cursor-pointer hover:shadow-xl",
                     isSelected
                       ? "border-primary shadow-lg ring-2 ring-primary/20"
-                      : "border-primary/20 hover:border-primary/50",
+                      : "border-border hover:border-primary/40",
                   )}
                   onClick={handleSelectCombo}
                 >
@@ -811,7 +811,7 @@ export default function BookingOffer() {
                 "relative border-2 transition-all duration-200 cursor-pointer hover:shadow-xl",
                 selectedService === "membership"
                   ? "border-primary shadow-lg ring-2 ring-primary/20"
-                  : "border-primary/20 hover:border-primary/50",
+                  : "border-border hover:border-primary/40",
               )}
               onClick={() => handleSelectMembership()}
             >

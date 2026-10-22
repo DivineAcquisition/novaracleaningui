@@ -2,6 +2,7 @@
 
 import { RiFacebookFill, RiInstagramLine } from "@remixicon/react";
 import { openCookieSettings } from "@/components/compliance/CookieNotice";
+import { cn } from "@/lib/utils";
 
 const linkClass =
   "text-xs text-zinc-700 underline underline-offset-2 hover:text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded";
@@ -16,9 +17,21 @@ const LEGAL_LINKS = [
   { label: "Privacy requests", href: "/privacy-request" },
 ];
 
-export function BookingFooter({ licenseLine = "" }: { licenseLine?: string }) {
+export function BookingFooter({
+  licenseLine = "",
+  clearMobileBar = false,
+}: {
+  licenseLine?: string;
+  /** Extra space so a fixed mobile action bar does not cover the last lines. */
+  clearMobileBar?: boolean;
+}) {
   return (
-    <footer className="mt-auto border-t border-[color:var(--hairline)] bg-background px-4 py-8">
+    <footer
+      className={cn(
+        "mt-auto border-t border-[color:var(--hairline)] bg-background px-4 pt-8 pb-8",
+        clearMobileBar && "max-md:pb-36",
+      )}
+    >
       <div className="mx-auto flex max-w-4xl flex-col items-center gap-4 text-center">
         <div className="flex items-center gap-3">
           <img src="/novara-logo.png" alt="Novara Cleaning" className="h-10 w-10 rounded-lg object-contain" />

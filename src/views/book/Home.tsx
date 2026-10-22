@@ -60,7 +60,7 @@ export default function BookingHome() {
 
   return (
     <PageTransition direction="forward">
-      <div className="min-h-screen bg-muted/30 pb-32 md:pb-8" {...swipeHandlers}>
+      <div className="min-h-screen bg-muted/30 md:pb-8" {...swipeHandlers}>
         <SEO title="Select Home Size" description="Choose your home size to see instant pricing for professional deep cleaning." />
         <BookingHeader currentStep={currentStep} totalSteps={6} stepLabel="Home Size" />
       
@@ -85,8 +85,10 @@ export default function BookingHome() {
           
           {/* Size Selection Grid */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-5 mb-6">
-            {HOME_SIZE_RANGES.filter(size => size.id !== '5000_plus').map((size) => {
+            {HOME_SIZE_RANGES.filter(size => size.id !== '5000_plus').map((size, index, sizes) => {
               const isSelected = bookingData.homeSizeId === size.id;
+              const span = sizes.length <= 1 ? 1 : index / (sizes.length - 1);
+              const mark = Math.round(16 + span * 36);
               return (
                 <Card
                   key={size.id}
@@ -101,7 +103,16 @@ export default function BookingHome() {
                       <RiCheckboxCircleLine className="w-4 h-4 text-primary-foreground" />
                     </div>
                   )}
-                  <CardContent className="p-6 md:p-8 text-center">
+                  <CardContent className="p-5 md:p-6 text-center">
+                    <div className="mx-auto mb-3 flex h-14 w-14 items-end justify-center" aria-hidden>
+                      <span
+                        className={cn(
+                          "block rounded-[3px] border",
+                          isSelected ? "border-primary bg-primary/25" : "border-primary/30 bg-primary/10",
+                        )}
+                        style={{ width: mark, height: mark }}
+                      />
+                    </div>
                     <h3 className="text-lg md:text-xl font-bold text-foreground mb-1">
                       {size.label}
                     </h3>
@@ -142,7 +153,7 @@ export default function BookingHome() {
           continueText="Continue"
         />
 
-        <BookingFooter />
+        <BookingFooter clearMobileBar />
       </div>
     </PageTransition>
   );

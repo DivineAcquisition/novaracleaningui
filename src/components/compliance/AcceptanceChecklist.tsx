@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import {
   acceptanceGate,
   acceptancesForSurface,
@@ -58,12 +58,15 @@ export function AcceptanceChecklist({
   context,
   versions,
   showErrors = false,
+  presentation = "each",
   onChange,
 }: {
   surface: Surface;
   context: AcceptanceContext;
   versions?: WordingVersion[];
   showErrors?: boolean;
+  /** "grouped" puts every required agreement on one check. Optional messages stay their own boxes. */
+  presentation?: "each" | "grouped";
   onChange: (state: AcceptanceGateState) => void;
 }) {
   const contextKey = JSON.stringify(context);
@@ -88,6 +91,19 @@ export function AcceptanceChecklist({
       legacy: legacyAgreementFlags(checked),
     });
   }, [items, checked]);
+
+  if (presentation === "grouped") {
+    return (
+      <GroupedAcceptances
+        items={items}
+        checked={checked}
+        open={open}
+        showErrors={showErrors}
+        setChecked={setChecked}
+        setOpen={setOpen}
+      />
+    );
+  }
 
   return (
     <fieldset className="space-y-3">
@@ -151,6 +167,131 @@ export function AcceptanceChecklist({
           </div>
         );
       })}
+    </fieldset>
+  );
+}
+
+const boxClass =
+  "mt-0.5 h-5 w-5 shrink-0 accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
+
+function GroupedAcceptances({
+  items,
+  checked,
+  open,
+  showErrors,
+  setChecked,
+  setOpen,
+}: {
+  items: RenderedAcceptance[];
+  checked: Partial<Record<AcceptanceKind, boolean>>;
+  open: Partial<Record<AcceptanceKind, boolean>>;
+  showErrors: boolean;
+  setChecked: Dispatch<SetStateAction<Partial<Record<AcceptanceKind, boolean>>>>;
+  setOpen: Dispatch<SetStateAction<Partial<Record<AcceptanceKind, boolean>>>>;
+}) {
+  const required = items.filter((item) => item.required);
+  const optional = items.filter((item) => !item.required);
+  const requiredOn = required.length > 0 && required.every((item) => checked[item.kind] === true);
+  const requiredError = showErrors && required.some((item) => checked[item.kind] !== true);
+
+  const setKinds = (kinds: AcceptanceKind[], on: boolean) => {
+    setChecked((prev) => {
+      const next = { ...prev };
+      for (const kind of kinds) next[kind] = on;
+      return next;
+    });
+  };
+
+  return (
+    <fieldset className="space-y-3">
+      <legend className="text-sm font-semibold text-foreground">Agreements</legend>
+      <p className="text-xs text-muted-foreground">
+        The agreements required to book are one check. Message choices stay optional and start unchecked.
+      </p>
+
+      <div className="rounded-lg border border-border bg-background p-3">
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            name="booking-agreements"
+            checked={requiredOn}
+            onChange={(event) => setKinds(required.map((item) => item.kind), event.target.checked)}
+            aria-invalid={requiredError || undefined}
+            aria-describedby={requiredError ? "acceptance-error-required" : "acceptance-required-list"}
+            className={boxClass}
+          />
+          <span className="text-sm leading-snug text-foreground">
+            <span className="block font-medium">I agree to the booking agreements</span>
+            <span id="acceptance-required-list" className="mt-1 block text-xs text-muted-foreground">
+              This check covers each agreement below. Open any title to read the full text.
+            </span>
+          </span>
+        </label>
+        <ul className="mt-3 ml-8 flex flex-wrap gap-x-3 gap-y-1">
+          {required.map((item) => (
+            <li key={item.kind}>
+              <button
+                type="button"
+                className="text-xs font-medium text-primary underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                aria-expanded={open[item.kind] === true}
+                onClick={() => setOpen((prev) => ({ ...prev, [item.kind]: prev[item.kind] !== true }))}
+              >
+                {item.title}
+              </button>
+            </li>
+          ))}
+        </ul>
+        {required.filter((item) => open[item.kind] === true).map((item) => (
+          <p key={`${item.kind}-text`} className="mt-2 ml-8 text-sm leading-snug text-foreground">
+            <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{item.title}</span>
+            <WordingText text={item.wordingShown} />
+          </p>
+        ))}
+        {requiredError ? (
+          <p id="acceptance-error-required" role="alert" className="mt-2 ml-8 text-xs text-destructive">
+            Check the booking agreements to continue.
+          </p>
+        ) : null}
+      </div>
+
+      {optional.length > 0 ? (
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-muted-foreground">Optional messages</p>
+          {optional.map((item) => {
+            const expanded = open[item.kind] === true;
+            return (
+              <div key={item.kind} className="rounded-lg border border-border bg-background p-3">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    name={item.kind}
+                    checked={checked[item.kind] === true}
+                    onChange={(event) => setKinds([item.kind], event.target.checked)}
+                    className={boxClass}
+                  />
+                  <span className="text-sm leading-snug text-foreground">
+                    {item.title}
+                    <span className="text-muted-foreground"> · optional</span>
+                  </span>
+                </label>
+                {expanded ? (
+                  <p className="mt-2 ml-8 text-sm leading-snug text-foreground">
+                    <WordingText text={item.wordingShown} />
+                  </p>
+                ) : null}
+                <button
+                  type="button"
+                  className="mt-2 ml-8 text-xs font-medium text-primary underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                  aria-expanded={expanded}
+                  onClick={() => setOpen((prev) => ({ ...prev, [item.kind]: !expanded }))}
+                >
+                  {expanded ? "Show less" : "Read the full text"}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
     </fieldset>
   );
 }

@@ -1010,6 +1010,7 @@ export default function PropertyDetails() {
               </div>
               <AcceptanceChecklist
                 surface="residential_signature"
+                presentation="grouped"
                 showErrors={showAcceptanceErrors}
                 onChange={setAcceptanceGate}
                 context={{
