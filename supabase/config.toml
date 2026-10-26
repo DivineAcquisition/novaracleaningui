@@ -132,6 +132,9 @@ verify_jwt = false
 [functions.ai-call-context]
 verify_jwt = false
 
+[functions.quote-turn]
+verify_jwt = false
+
 [functions.zip-coverage]
 verify_jwt = false
 
