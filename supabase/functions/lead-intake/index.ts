@@ -515,6 +515,25 @@ async function ingestLead(supabase: any, payload: LeadPayload) {
     }
   }
 
+  const adSource = source.includes("fb") || source.includes("facebook") || source.includes("meta")
+    || source.includes("instagram") || source.includes("lsa") || source.includes("local_service");
+  if (isNew && adSource && payload.phone && leadId) {
+    try {
+      const cronSecret = await resolveSecret(supabase, "CRON_SECRET");
+      await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/dial-ad-leads`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
+          "x-cron-secret": cronSecret,
+        },
+        body: JSON.stringify({ leadId }),
+      });
+    } catch (dialErr) {
+      logStep("outbound AI dial failed (non-blocking)", dialErr);
+    }
+  }
+
   // Facebook: email every admin + VA, and ping the assigned VA's private
   // Discord webhook. Team-channel Discord is the events → discord_routes
   // bus (lead.facebook.created), fired by the insert trigger above.
