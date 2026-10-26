@@ -30,7 +30,8 @@ const log = (step: string, details?: unknown) => {
 };
 
 // ─── Pricing (delegates to _shared/pricing.ts — v4 single SOT) ────────────
-import { calculatePriceCents } from "../_shared/pricing.ts";
+// Bundled beside this function so a hosted deploy ships the same price table.
+import { calculatePriceCents } from "./pricing.ts";
 
 const ACCOUNT_PORTAL_URL = "https://app.novaracleaning.com/account";
 

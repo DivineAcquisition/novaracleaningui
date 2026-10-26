@@ -8,6 +8,8 @@
 // If you change anything here, change `src/lib/pricing.ts` to match — and
 // vice-versa. Drift between the two is what produced the v3.x "the offer
 // said $216 but the server charged $432" bug.
+// Also copy this file to `supabase/functions/ai-tool-router/pricing.ts`.
+// That deploy copy is what the voice agent prices from.
 
 export type ServiceType = "standard" | "deep" | "combo" | "moveInOut" | "focused";
 export type ZoneId = "A" | "B" | "C";
