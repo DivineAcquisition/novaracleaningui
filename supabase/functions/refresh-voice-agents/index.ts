@@ -215,7 +215,8 @@ serve(async (req) => {
   }
 
   const price = await telnyx(apiKey, `/ai/tools/${PRICE_TOOL_ID}`, "GET");
-  const currentWebhook = price.assistant?.webhook || price.payload?.webhook;
+  const toolObj = price.assistant || {};
+  const currentWebhook = toolObj.webhook || toolObj.tool?.webhook || price.payload?.webhook || price.payload?.data?.webhook;
   const zipped = withZip(currentWebhook);
   let priceStatus = price.status;
   if (currentWebhook) {
@@ -228,6 +229,8 @@ serve(async (req) => {
     ok: !failed && priceStatus < 300,
     agents,
     price_tool_status: priceStatus,
+    price_webhook_found: Boolean(currentWebhook),
+    price_tool_keys: Object.keys(toolObj).slice(0, 12),
     price_tool_changed: zipped.changed,
   }, failed ? 502 : 200);
 });
