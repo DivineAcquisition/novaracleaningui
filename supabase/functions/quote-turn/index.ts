@@ -305,10 +305,10 @@ serve(async (req) => {
 
 function nextGap(row: Row): string | null {
   if (!text(row.first_name)) return "name";
+  if (!text(row.service_type)) return "service";
   if (!text(row.zip_code)) return "zip";
   if (row.zip_serviced === "unknown") return "zip_check";
   if (row.zip_serviced === "no") return "waitlist";
-  if (!text(row.service_type)) return "service";
   if (!text(row.dwelling_type)) return "dwelling";
   if (!row.bedrooms || !row.bathrooms) return "rooms";
   if (!row.sqft && !row.sqft_unknown) return "sqft";
@@ -325,17 +325,17 @@ function gapSay(gap: string, row: Row): string {
   const city = text(row.coverage_city);
   switch (gap) {
     case "name":
-      return "Next is their name. One short reason, under seven words.";
+      return "Next is their name. One short reason, under seven words. The kind of clean comes right after the name.";
+    case "service":
+      return "Ask the kind of clean now, before the ZIP and long before the street: standard, deep, or move-in/out. If they describe a kept-up home and ask for deep, a standard clean may fit.";
     case "zip":
       return "Next is the ZIP. One short reason, under seven words.";
     case "zip_check":
       return "The ZIP check failed. Say you are still checking. Do not say it is outside the area.";
-    case "service":
-      return city
-        ? `ZIP ${row.zip_code} is served in ${city}. Next ask standard, deep, or move-in/out. If they describe a kept-up home and ask for deep, say a standard clean may fit.`
-        : "Next ask standard, deep, or move-in/out.";
     case "dwelling":
-      return "Next is house, apartment, townhouse, or condo. One short reason.";
+      return city
+        ? `ZIP ${row.zip_code} is served in ${city}. Say that, then ask house, apartment, townhouse, or condo.`
+        : "Next is house, apartment, townhouse, or condo. One short reason.";
     case "rooms":
       return "Next is bedrooms and bathrooms. One short reason.";
     case "sqft":

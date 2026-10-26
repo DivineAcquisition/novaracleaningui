@@ -344,7 +344,7 @@ serve(async (req) => {
       address ? `Street already on file: ${address}.` : "Do not ask for the street until name, ZIP, home type, beds, baths, size, pets, email, and phone are done.",
       upcoming ? `A visit is already saved for ${when || "an open date"}.` : "No visit is saved.",
     ].join(" ");
-    nextStep = "Collect in order, skipping what you have: name, ZIP, home type, beds and baths, square footage, pets, email, confirm the phone, street last. Then call get_price_estimate and say the total and the deposit. After they accept, book the day so the deposit text, quote email, and checklist go out.";
+    nextStep = "Call get_price_estimate after every answer before you ask anything else. Right after their name, ask standard, deep, or move-in/out. Do not ask for the street until that tool says the street is next. Say a price only when its say field includes a total.";
   }
 
   const nextBooking = upcoming
