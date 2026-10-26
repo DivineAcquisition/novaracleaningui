@@ -129,6 +129,12 @@ verify_jwt = false
 [functions.dial-ad-leads]
 verify_jwt = false
 
+[functions.ai-call-context]
+verify_jwt = false
+
+[functions.zip-coverage]
+verify_jwt = false
+
 [functions.google-calendar-health]
 verify_jwt = false
 

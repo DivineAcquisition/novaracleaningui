@@ -157,16 +157,51 @@ async function toolLookupCustomer(supabase: any, body: any): Promise<unknown> {
 }
 
 async function toolCheckServiceArea(supabase: any, body: any): Promise<unknown> {
-  const zip = String(body.zip_code || "").replace(/\D/g, "").slice(0, 5);
-  if (!zip) return { serviced: false, zip_code: "" };
-  const { data } = await supabase
+  const zip = String(body.zip_code || body.zip || "").replace(/\D/g, "").slice(0, 5);
+  if (!zip) return { serviced: false, zip_code: "", lookup_failed: false, say: "Ask for a 5-digit ZIP before deciding coverage." };
+  const { data: coverage, error } = await supabase
     .from("service_coverage_zones")
-    .select("city, state, zone")
+    .select("city, state, county, tier, tier_label, is_active, pricing_multiplier")
     .eq("zip_code", zip)
-    .eq("is_active", true)
     .maybeSingle();
-  if (!data) return { serviced: false, zip_code: zip };
-  return { serviced: true, zip_code: zip, city: data.city, state: data.state, zone: data.zone };
+  if (error) {
+    return {
+      serviced: false,
+      lookup_failed: true,
+      zip_code: zip,
+      say: "The coverage lookup failed. Do not tell the caller this ZIP is outside the service area.",
+    };
+  }
+  const { data: zoneZip } = await supabase
+    .from("pricing_zone_zips")
+    .select("zone_id")
+    .eq("zip", zip)
+    .maybeSingle();
+  let zone: { name?: string; code?: string; status?: string; multiplier?: number } | null = null;
+  if (zoneZip?.zone_id) {
+    const { data: zoneRow } = await supabase
+      .from("pricing_zones")
+      .select("name, code, status, multiplier")
+      .eq("id", zoneZip.zone_id)
+      .maybeSingle();
+    zone = zoneRow;
+  }
+  const explicitlyClosed = zone?.status === "not_served";
+  const serviced = coverage?.is_active === true && !explicitlyClosed;
+  return {
+    serviced,
+    lookup_failed: false,
+    zip_code: zip,
+    city: coverage?.city || null,
+    state: coverage?.state || null,
+    county: coverage?.county || null,
+    tier: coverage?.tier || null,
+    tier_label: coverage?.tier_label || null,
+    zone: zone?.name || zone?.code || null,
+    say: serviced
+      ? `Yes, we clean in ${coverage?.city || "that ZIP"}, ${coverage?.state || ""}.`
+      : "That ZIP is not in the active service area. Offer the waitlist and do not quote a price.",
+  };
 }
 
 function toolGetPriceEstimate(body: any): unknown {
