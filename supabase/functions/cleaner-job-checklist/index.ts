@@ -262,14 +262,14 @@ serve(async (req) => {
 
     const { data: job } = await supabase
       .from("jobs")
-      .select("id, service_type, address, city, state, zip, start_datetime, duration_est_hours, status, min_cleaners_required, check_in_time")
+      .select("id, service_type, address, city, state, zip, start_datetime, duration_est_hours, status, min_cleaners_required, check_in_time, check_out_time")
       .eq("id", jobId)
       .maybeSingle();
     if (!job) return json({ ok: false, reason: "not_found", error: "Job not found." }, 404);
 
     const { data: booking } = await supabase
       .from("bookings")
-      .select("id, booking_number, first_name, phone, email, service_date, time_slot, arrival_window, add_ons, access_notes, team_notes, dispatch_notes, service_type, status, focused_areas, is_recurring, membership_plan, booking_channel, scope_level, photo_zones, facility_type, square_footage, hard_deadline, business_site_id, check_in_time")
+      .select("id, booking_number, first_name, phone, email, service_date, time_slot, arrival_window, add_ons, access_notes, team_notes, dispatch_notes, service_type, status, focused_areas, is_recurring, membership_plan, booking_channel, scope_level, photo_zones, facility_type, square_footage, hard_deadline, business_site_id, check_in_time, check_out_time")
       .eq("job_id", jobId)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -1033,6 +1033,9 @@ serve(async (req) => {
         at: job.check_in_time || booking?.check_in_time || null,
         assignmentId: assignment?.id || null,
         bookingId: booking?.id || null,
+      },
+      checkOut: {
+        at: job.check_out_time || booking?.check_out_time || null,
       },
       checklist: {
         key: spec.key,

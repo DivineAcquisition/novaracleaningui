@@ -149,7 +149,7 @@ serve(async (req) => {
           const msg =
             `Novara reminder: your clean for ${customerName} starts in about 30 minutes ` +
             `(${whenLabel}). ${booking.address || ""}${booking.city ? `, ${booking.city}` : ""}. ` +
-            `When you arrive, CHECK IN on your job checklist (start the Apploye timer, then check in). Your before-photos link texts you right after:\n${checklistLink}`;
+            `When you arrive, open your job checklist. CHECK IN and CHECK OUT are buttons on that page. Start the Apploye timer, then check in. Your before-photos link texts you right after:\n${checklistLink}`;
           const ok = await sendSms(supabase, { toPhone: cleaner.phone, message: msg, type: "reminder" });
           anySent = anySent || ok;
           if (!ok) logStep("Cleaner SMS failed", { bookingId: booking.id });

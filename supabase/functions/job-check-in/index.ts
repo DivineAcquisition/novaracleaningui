@@ -143,6 +143,32 @@ serve(async (req) => {
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
+    if (!jobAssignmentId && bookingId && action === "check_out") {
+      const { data: booking } = await supabase
+        .from("bookings")
+        .select("id, cleaner_id, check_in_time, check_out_time")
+        .eq("id", bookingId)
+        .maybeSingle();
+      if (!booking) throw new Error("Booking not found");
+      if (booking.cleaner_id !== cleanerId) throw new Error("Booking not assigned to this cleaner");
+      if (!booking.check_in_time) throw new Error("Cannot check out before checking in");
+      if (booking.check_out_time) {
+        return new Response(
+          JSON.stringify({ success: true, message: "Job already checked out", alreadyCheckedOut: true, checkOutTime: booking.check_out_time }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      const nowIso = new Date().toISOString();
+      const { error: bookErr } = await supabase
+        .from("bookings")
+        .update({ check_out_time: nowIso })
+        .eq("id", bookingId);
+      if (bookErr) throw new Error(`Failed to update booking: ${bookErr.message}`);
+      return new Response(
+        JSON.stringify({ success: true, message: "Checked out successfully", checkOutTime: nowIso, viaBooking: true }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
     if (!jobAssignmentId) throw new Error("jobAssignmentId required for this action");
 
     // Fetch job assignment with job details

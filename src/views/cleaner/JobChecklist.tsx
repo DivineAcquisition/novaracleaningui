@@ -48,6 +48,14 @@ function arrivalItemKey(sections: ChecklistSection[]): string | null {
   return `${index}:0`;
 }
 
+function clockInNewYork(iso: string): string {
+  return new Date(iso).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "America/New_York",
+  });
+}
+
 // ─── Types (mirror cleaner-job-checklist edge fn payload) ────────────────
 interface ChecklistSection {
   title: string;
@@ -147,6 +155,9 @@ interface ChecklistState {
     assignmentId: string | null;
     bookingId: string | null;
   };
+  checkOut?: {
+    at: string | null;
+  };
   checklist: {
     key?: string;
     name: string;
@@ -230,6 +241,7 @@ export default function CleanerJobChecklistPage() {
   const [error, setError] = useState<string | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [checkingIn, setCheckingIn] = useState(false);
+  const [checkingOut, setCheckingOut] = useState(false);
   const [finishing, setFinishing] = useState(false);
   const [addonNote, setAddonNote] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -343,6 +355,41 @@ export default function CleanerJobChecklistPage() {
     } finally {
       setCheckingIn(false);
       setBusyKey(null);
+    }
+  };
+
+  const checkOut = async () => {
+    if (!state?.canWrite || !state.cleaner?.id || checkingOut) return;
+    const checkInState = state.checkIn;
+    if (!state.checkIn?.at) {
+      toast.error("Check in first, then check out when the visit is finished.");
+      return;
+    }
+    if (!checkInState?.assignmentId && !checkInState?.bookingId) {
+      toast.error("This checklist isn't tied to your assignment yet. Ask the office to resend the link.");
+      return;
+    }
+    setCheckingOut(true);
+    try {
+      const response = await supabase.functions.invoke("job-check-in", {
+        body: checkInState.assignmentId
+          ? { jobAssignmentId: checkInState.assignmentId, action: "check_out", cleanerId: state.cleaner.id }
+          : { bookingId: checkInState.bookingId, action: "check_out", cleanerId: state.cleaner.id },
+      });
+      if (response.error) throw response.error;
+      if ((response.data as { error?: string })?.error) {
+        throw new Error((response.data as { error: string }).error);
+      }
+      const at = (response.data as { checkOutTime?: string })?.checkOutTime || new Date().toISOString();
+      setState({
+        ...state,
+        checkOut: { at },
+      });
+      toast.success("Checked out. The office has your departure time.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't check out");
+    } finally {
+      setCheckingOut(false);
     }
   };
 
@@ -590,7 +637,12 @@ export default function CleanerJobChecklistPage() {
     }
   };
 
-  const progress = state?.checklist.progress_pct ?? 0;
+  const arrivalKey = state ? arrivalItemKey(state.checklist.sections) : null;
+  const arrivalEntry = arrivalKey ? state?.checklist.items[arrivalKey] : undefined;
+  const arrivalCounted = Boolean(arrivalEntry?.done || (arrivalEntry?.skipped && arrivalEntry?.skipReason));
+  const visibleTotal = Math.max(0, (state?.checklist.total_items ?? 0) - (arrivalKey ? 1 : 0));
+  const visibleDone = Math.max(0, (state?.checklist.completed_items ?? 0) - (arrivalCounted ? 1 : 0));
+  const progress = visibleTotal > 0 ? Math.round((visibleDone / visibleTotal) * 100) : 0;
   const isFocused = Boolean(state?.focused?.enabled);
   const hasZones = Boolean(state?.zones?.enabled);
   const zoneNames = state?.zones?.names || [];
@@ -613,8 +665,9 @@ export default function CleanerJobChecklistPage() {
       && completeZonePhotosOk
     : false;
   const allDone = state
-    ? state.checklist.completed_items >= state.checklist.total_items
-      && state.checklist.total_items > 0
+    ? visibleDone >= visibleTotal
+      && visibleTotal > 0
+      && Boolean(state.checkIn?.at)
       && sectionPhotosComplete
       && zonesMarked
       && isCrewLead
@@ -677,7 +730,7 @@ export default function CleanerJobChecklistPage() {
           )}
           {state.cleaner?.first_name && (
             <p className="text-sm text-white/80 mt-0.5">
-              Hi {state.cleaner.first_name} — check in when you arrive, then work through every line.
+              Hi {state.cleaner.first_name} — use Check in and Check out below, then work through every line.
             </p>
           )}
         </div>
@@ -726,7 +779,7 @@ export default function CleanerJobChecklistPage() {
         <div className="px-5 pb-4" {...tourAnchor(TOUR.checklistProgress)}>
           <div className="flex items-center justify-between text-xs font-semibold mb-1.5">
             <span className={cn(progress === 100 ? "text-emerald-600" : "text-violet-700")}>
-              {checklist.completed_items}/{checklist.total_items} tasks · {progress}%
+              {visibleDone}/{visibleTotal} tasks · {progress}%
             </span>
             {checklist.completed_at && (
               <span className="text-emerald-600 flex items-center gap-1">
@@ -743,22 +796,32 @@ export default function CleanerJobChecklistPage() {
         </div>
       </div>
 
-      {state.canWrite && arrivalItemKey(checklist.sections) == null && (
-        <div className="rounded-2xl border border-emerald-300 bg-emerald-50 px-5 py-4 space-y-2">
-          <p className="text-sm font-semibold text-emerald-950">When you arrive</p>
-          <p className="text-xs leading-snug text-emerald-900">
-            Start the Apploye timer, then check in here before you clean. Your before-photos link texts you right after.
+      <div className="rounded-2xl border border-emerald-300 bg-emerald-50 px-5 py-4 space-y-3">
+        <div>
+          <p className="text-sm font-semibold text-emerald-950">Check in and check out</p>
+          <p className="text-xs leading-snug text-emerald-900 mt-1">
+            Start the Apploye timer, then check in when you arrive. Check out when the visit is finished. Checking in texts you the before-photos link.
           </p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <Button
-            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
-            disabled={checkingIn || Boolean(state.checkIn?.at)}
+            className="h-12 text-base bg-emerald-600 hover:bg-emerald-700 text-white"
+            disabled={!state.canWrite || checkingIn || Boolean(state.checkIn?.at)}
             onClick={() => void checkIn()}
           >
             {checkingIn ? <RiLoader4Line className="w-4 h-4 animate-spin mr-1.5" /> : null}
-            {state.checkIn?.at ? "Checked in" : "Check in"}
+            {state.checkIn?.at ? `Checked in ${clockInNewYork(state.checkIn.at)}` : "Check in"}
+          </Button>
+          <Button
+            className="h-12 text-base bg-[#5C0FFE] hover:bg-[#4b0ad4] text-white"
+            disabled={!state.canWrite || checkingOut || !state.checkIn?.at || Boolean(state.checkOut?.at)}
+            onClick={() => void checkOut()}
+          >
+            {checkingOut ? <RiLoader4Line className="w-4 h-4 animate-spin mr-1.5" /> : null}
+            {state.checkOut?.at ? `Checked out ${clockInNewYork(state.checkOut.at)}` : "Check out"}
           </Button>
         </div>
-      )}
+      </div>
 
       {!state.canWrite && (
         <div className="rounded-xl border border-slate-200 bg-slate-100 px-4 py-3 text-sm text-slate-600 flex items-center gap-2">
@@ -916,6 +979,7 @@ export default function CleanerJobChecklistPage() {
 
       {/* ─── Checklist sections ──────────────────────────────────────── */}
       {checklist.sections.map((section, sIdx) => {
+        if (section.title === ARRIVAL_SECTION_TITLE) return null;
         const sectionDone = section.items.every((_, iIdx) => {
           const e = checklist.items[`${sIdx}:${iIdx}`];
           return Boolean(e?.done || (e?.skipped && e?.skipReason));

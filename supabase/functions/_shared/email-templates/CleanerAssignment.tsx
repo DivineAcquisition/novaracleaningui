@@ -125,7 +125,7 @@ export const CleanerAssignment = ({
         </Section>
 
         <Text style={styles.paragraph}>
-          When you arrive, open the checklist and check in before you start. Start the Apploye timer, then check in on that page. Your payout is processed after the booking is marked complete.
+          When you arrive, open the checklist. Check in and Check out are buttons on that page. Start the Apploye timer, then check in before you start, and check out when the visit is finished. Your payout is processed after the booking is marked complete.
         </Text>
 
         <Text style={styles.footer}>

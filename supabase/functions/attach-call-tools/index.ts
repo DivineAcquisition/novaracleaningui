@@ -34,7 +34,7 @@ function unwrap(payload: any): any {
 const TOOLS = [
   {
     name: "lookup_address",
-    description: "After the ZIP, look up the street address. Returns the city and state. Do not ask the caller for the city.",
+    description: "Live address search. Uses Google geocoding on the street and ZIP the caller just said, and returns the matched street, city, and state. Call this as soon as you have both. Do not ask the caller for the city.",
     url: `${BASE}/voice-address`,
     timeout_ms: 15000,
     required: ["street", "zip_code"],
@@ -114,7 +114,22 @@ serve(async (req) => {
   for (const tool of TOOLS) {
     const existing = byName.get(tool.name);
     if (existing) {
-      created.push({ name: tool.name, id: existing, status: 200 });
+      const refreshed = await telnyx(`/ai/tools/${existing}`, "PATCH", {
+        webhook: {
+          name: tool.name,
+          description: tool.description,
+          url: tool.url,
+          method: "POST",
+          headers: [{ name: "Content-Type", value: "application/json" }],
+          timeout_ms: tool.timeout_ms,
+          body_parameters: {
+            type: "object",
+            properties: tool.properties,
+            required: tool.required,
+          },
+        },
+      });
+      created.push({ name: tool.name, id: existing, status: refreshed.status });
       continue;
     }
     const made = await telnyx("/ai/tools", "POST", {
