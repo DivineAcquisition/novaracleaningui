@@ -141,16 +141,20 @@ serve(async (req) => {
   const otherLine = alternate
     ? ` If they still want the ${serviceType} clean, that total is ${fmt(priced.totalCents)} and the deposit is ${fmt(priced.depositCents)}.`
     : "";
-  const delivery = await deliverQuote(supabase, body, spoken, spokenService);
+  const deliveryPromise = deliverQuote(supabase, body, spoken, spokenService);
+  const edge = globalThis as { EdgeRuntime?: { waitUntil: (task: Promise<unknown>) => void } };
+  if (edge.EdgeRuntime) edge.EdgeRuntime.waitUntil(deliveryPromise);
+  else deliveryPromise.catch(() => undefined);
+  const canSpeak = Boolean(homeSizeId && zip && serviceType);
   const priceLine = `${labelService(spokenService)} total ${fmt(spoken.totalCents)}. Half due now is ${fmt(spoken.depositCents)}. The other half, ${fmt(spoken.remainingCents)}, is charged when the clean is done.`;
   const petLine = petHairAdded ? " Heavy pet hair is included at $35." : "";
-  const humanSummary = delivery.ready
+  const humanSummary = canSpeak
     ? `${advice.comparison ? `${advice.comparison} ` : ""}Say this price out loud now. ${priceLine}${petLine}${otherLine} This price holds for 48 hours. Do not add another discount.`
-    : `Do not say a price yet. Still need ${delivery.missing.join(", ")}. Size used: ${sized.source}.`;
+    : `Do not say a price yet. Still need a ZIP, a service, and a size.`;
   return new Response(JSON.stringify({
-    total_cents: delivery.ready ? spoken.totalCents : 0,
-    deposit_cents: delivery.ready ? spoken.depositCents : 0,
-    remaining_cents: delivery.ready ? spoken.remainingCents : 0,
+    total_cents: canSpeak ? spoken.totalCents : 0,
+    deposit_cents: canSpeak ? spoken.depositCents : 0,
+    remaining_cents: canSpeak ? spoken.remainingCents : 0,
     quoted_service: spokenService,
     empty_move_out_discount: spoken.empty_move_out_discount,
     recommended_service: advice.recommended_service,
@@ -159,23 +163,23 @@ serve(async (req) => {
     alternate_deposit_cents: alternate?.depositCents ?? null,
     zone,
     zip_code: zip || null,
-    price_ready: delivery.ready,
+    price_ready: canSpeak,
     resolved_home_size_id: homeSizeId,
     size_source: sized.source,
     pet_hair_added: petHairAdded,
-    other_total_cents: delivery.ready && alternate ? alternate.totalCents : 0,
-    other_deposit_cents: delivery.ready && alternate ? alternate.depositCents : 0,
-    act_now: delivery.ready
+    other_total_cents: canSpeak && alternate ? alternate.totalCents : 0,
+    other_deposit_cents: canSpeak && alternate ? alternate.depositCents : 0,
+    act_now: canSpeak
       ? (alternate
         ? `Say both prices. Recommend ${spokenService}. The other clean is also priced if they insist.`
         : "Say the total and the deposit now.")
-      : `Do not say a price yet. Still need ${delivery.missing.join(", ")}.`,
+      : "Do not say a price yet.",
     human_summary: humanSummary,
-    quote_email_sent: delivery.email_sent,
-    checklist_sent: delivery.checklist_sent,
-    say: delivery.ready
-      ? `Say the total ${fmt(spoken.totalCents)} and the deposit ${fmt(spoken.depositCents)} out loud. Quote email ${delivery.email_sent ? "sent" : "did not send"}. Checklist ${delivery.checklist_sent ? "sent" : "did not send"}. Tell them which ones arrived. The deposit text goes out when they pick a day and you book it.`
-      : `Do not say a dollar amount yet. Still need ${delivery.missing.join(", ")}.`,
+    quote_email_sent: false,
+    checklist_sent: false,
+    say: canSpeak
+      ? `Say the total ${fmt(spoken.totalCents)} and the deposit ${fmt(spoken.depositCents)} out loud now. The quote email and checklist send as you say it.`
+      : "Do not say a dollar amount yet. Still need a ZIP, a service, and a size.",
   }), { headers });
 });
 

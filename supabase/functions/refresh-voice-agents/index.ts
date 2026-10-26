@@ -103,7 +103,8 @@ Aim: {{result_target}}
 
 ${SHARED_RULES}
 
-Call get_price_estimate before you ask the next question. Pass phone as the caller phone and only the fact they just said. Ask only what the say field names. The kind of clean is the question right after their name. Do not ask for the street, or anything else, before you know standard, deep, or move-in/out. Each reason stays under seven words.
+You cannot invent a price. The only price is the total in get_price_estimate. Call it the moment you have the kind of clean, the ZIP, the size, and the street. Pass phone, service_type, zip_code, sqft or bedrooms, and address together. Then say that total and that deposit before you say anything else. If the call fails, call it again. Never say you cannot pull the quote.
+The kind of clean is the question right after their name, before the ZIP and long before the street. Pass each new fact as they say it. Ask only what say says is next. Each reason stays under seven words.
 Pass sqft when they know it. Pass sqft_unknown true when they do not. Pass pet_hair true only when the hair is heavy. Pass phone_confirmed true when they agree this phone can take a text, or text_phone when they give a different number.
 Speak a dollar amount only when say includes a total. If it names two prices, recommend one and tell them the other.
 When they want a day, call get_available_slots, then call get_price_estimate again with service_date and time_slot. That sends the deposit text. Say what actually sent. Do not read a link aloud.

@@ -143,22 +143,14 @@ serve(async (req) => {
     row.state = null;
   }
   if (row.address && row.zip_code && !row.city) {
-    const looked = await supabase.functions.invoke("voice-address", {
-      body: { street: row.address, zip_code: row.zip_code },
-    });
-    const found = looked.data as { ok?: boolean; street?: string; city?: string; state?: string; say?: string } | null;
-    if (!looked.error && found?.ok && found.city && found.state) {
-      row.address = found.street || row.address;
-      row.city = found.city;
-      row.state = found.state;
+    const looked = await lookupStreet(String(row.address), String(row.zip_code));
+    if (looked.ok && looked.city && looked.state) {
+      row.address = looked.street || row.address;
+      row.city = looked.city;
+      row.state = looked.state;
     } else {
-      await save(supabase, key, row);
-      return json({
-        price_ready: false,
-        missing: "street",
-        say: found?.say || "The street did not match this ZIP. Ask for the street number and name again.",
-        known: known(row),
-      });
+      row.city = text(row.coverage_city) || "Unknown";
+      row.state = text(row.coverage_state) || "MD";
     }
   }
 
@@ -303,22 +295,46 @@ serve(async (req) => {
   });
 });
 
+function readyToPrice(row: Row): boolean {
+  const sized = Boolean(row.sqft) || Boolean(row.sqft_unknown && row.bedrooms) || Boolean(row.bedrooms);
+  return Boolean(text(row.service_type) && text(row.zip_code) && row.zip_serviced === "yes" && sized && text(row.address));
+}
+
 function nextGap(row: Row): string | null {
+  if (readyToPrice(row)) return null;
   if (!text(row.first_name)) return "name";
   if (!text(row.service_type)) return "service";
   if (!text(row.zip_code)) return "zip";
   if (row.zip_serviced === "unknown") return "zip_check";
   if (row.zip_serviced === "no") return "waitlist";
+  if (!row.sqft && !row.bedrooms && !row.sqft_unknown) return "sqft";
+  if (!text(row.address)) return "street";
   if (!text(row.dwelling_type)) return "dwelling";
   if (!row.bedrooms || !row.bathrooms) return "rooms";
-  if (!row.sqft && !row.sqft_unknown) return "sqft";
-  if (!row.home_size_id && row.sqft_unknown && !row.bedrooms) return "rooms";
   if (!text(row.pets)) return "pets";
   if (!text(row.email).includes("@")) return "email";
   if (!row.phone_confirmed) return "phone";
-  if (!text(row.address)) return "street";
-  if (!text(row.city)) return "street";
   return null;
+}
+
+async function lookupStreet(street: string, zip: string): Promise<{ ok: boolean; street?: string; city?: string; state?: string }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 2500);
+  try {
+    const response = await fetch("https://sxdraeptzuamsgjcvfeg.supabase.co/functions/v1/voice-address", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ street, zip_code: zip }),
+      signal: controller.signal,
+    });
+    const found = await response.json();
+    if (found?.ok && found.city && found.state) return found;
+    return { ok: false };
+  } catch {
+    return { ok: false };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function gapSay(gap: string, row: Row): string {
