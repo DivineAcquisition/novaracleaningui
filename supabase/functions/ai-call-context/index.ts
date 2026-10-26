@@ -151,7 +151,7 @@ serve(async (req) => {
         .limit(8),
       supabase
         .from("leads")
-        .select("first_name, last_name, email, phone, source, zip_code, city, state, service_type, bedrooms, bathrooms, sqft, preferred_date, do_not_call, created_at")
+        .select("first_name, last_name, email, phone, source, zip_code, service_type, bedrooms, bathrooms, sqft, preferred_date, do_not_call, created_at")
         .ilike("phone", `%${ten}%`)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -162,7 +162,13 @@ serve(async (req) => {
   }
 
   const newest = bookings[0];
-  const zip = text(payload.zip_code || hinted.zip_code || newest?.zip_code || lead?.zip_code).replace(/\D/g, "").slice(0, 5);
+  const addressOnBooking = text(newest?.address);
+  // A ZIP on a lead form, or passed in from an old test, is not the home.
+  // Ask on this call unless a booking already has a street address.
+  const zip = (addressOnBooking
+    ? text(newest?.zip_code || payload.zip_code || hinted.zip_code || lead?.zip_code)
+    : ""
+  ).replace(/\D/g, "").slice(0, 5);
   let coverage: Record<string, unknown> | null = null;
   let zoneName = "";
   let lookupFailed = false;
@@ -191,7 +197,7 @@ serve(async (req) => {
   const lastName = realName(text(newest?.last_name || lead?.last_name || hinted.last_name));
   const fullName = `${firstName} ${lastName}`.trim();
   const email = text(newest?.email || lead?.email);
-  const address = text(newest?.address);
+  const address = addressOnBooking;
   const city = text(newest?.city || lead?.city || coverage?.city);
   const state = text(newest?.state || lead?.state || coverage?.state);
   const serviced = lookupFailed ? "unknown" : coverage ? (coverage.is_active ? "yes" : "no") : (zip ? "no" : "unknown");

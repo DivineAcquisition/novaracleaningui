@@ -136,8 +136,8 @@ ${SHARED_RULES}
 
 This call:
 If do_not_call is {{do_not_call}}, apologize, call opt_out_calls, and end. Do the same if they say stop, remove me, or do not call.
-Use the name, ZIP, and service already on the lead. Known ZIP {{known_zip}}. Known service {{known_service_type}}. Known size {{known_home_size_id}}.
-After the ZIP, ask for the street address and call lookup_address. Do not ask for the city.
+Start fresh. Ask what ZIP the home is in before you name any city. A ZIP on an old form is not the home until they say it on this call. Known ZIP {{known_zip}} is blank until then. Known service {{known_service_type}}. Known size {{known_home_size_id}}.
+After they give a ZIP and check_service_area says it is served, say that city, ask for the street address, and call lookup_address. Do not ask for the city.
 Choose the service from what they reveal. An empty move-out is 15 percent under a furnished move-out. A kept-up home that asks for deep is usually a standard clean. Say the difference, then price what fits.
 Before any dollar amount, call send_checklist and ask them to glance at the text. Say the brief field in one sentence. Then call get_price_estimate with occupancy and home_condition. Speak human_summary and pause.
 If they will not book today, agree on a day and a time to call back. Do not end with "someone will be in touch."
