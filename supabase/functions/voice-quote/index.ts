@@ -73,14 +73,35 @@ serve(async (req) => {
   let body: any = {};
   try { body = await req.json(); } catch { body = {}; }
   const headers = { ...corsHeaders, "Content-Type": "application/json" };
-  const homeSizeId = String(body.home_size_id || "");
   const serviceType = String(body.service_type || "standard");
   const occupancy = String(body.occupancy || "");
-  const condition = String(body.home_condition || "");
+  const condition = String(body.home_condition || body.condition || "");
   const addOns = Array.isArray(body.add_ons) ? body.add_ons.map(String) : [];
   const membershipPlan = String(body.membership_plan || "none");
   const zip = String(body.zip_code || body.zip || "").replace(/\D/g, "").slice(0, 5);
+  const sqft = Number(String(body.sqft || body.square_feet || "").replace(/[^\d.]/g, "")) || 0;
+  const bedrooms = Number(body.bedrooms || 0);
+  const sized = resolveHomeSize(String(body.home_size_id || ""), sqft, bedrooms, String(body.dwelling_type || ""));
+  const homeSizeId = sized.id;
+  const petHairAdded = heavyPetHair(body) && !addOns.includes("petHair");
+  if (petHairAdded) addOns.push("petHair");
   const advice = serviceAdvice(serviceType, condition, occupancy);
+  if (!homeSizeId) {
+    return new Response(JSON.stringify({
+      price_ready: false,
+      total_cents: 0,
+      resolved_home_size_id: "",
+      size_source: sized.source,
+      pet_hair_added: petHairAdded,
+      act_now: zip
+        ? "Size is still missing. Ask for square footage, or bedrooms and bathrooms. Do not invent a size and do not say a price."
+        : "Ask for the ZIP and check it before you name a city. Do not say a price.",
+      say: zip
+        ? "No price yet. Ask how big the home is."
+        : "No price yet. Get the ZIP first.",
+      human_summary: "Do not say a dollar amount.",
+    }), { headers });
+  }
   if (homeSizeId === "5000_plus") {
     return new Response(JSON.stringify({
       total_cents: 0,
@@ -122,9 +143,10 @@ serve(async (req) => {
     : "";
   const delivery = await deliverQuote(supabase, body, spoken, spokenService);
   const priceLine = `${labelService(spokenService)} total ${fmt(spoken.totalCents)}. Half due now is ${fmt(spoken.depositCents)}. The other half, ${fmt(spoken.remainingCents)}, is charged when the clean is done.`;
+  const petLine = petHairAdded ? " Heavy pet hair is included at $35." : "";
   const humanSummary = delivery.ready
-    ? `${advice.comparison ? `${advice.comparison} ` : ""}Say this price out loud now. ${priceLine}${otherLine} This price holds for 48 hours. Do not add another discount.`
-    : `Do not say a price yet. Still need ${delivery.missing.join(", ")}. The street address comes last, after the name, ZIP, home type, beds, baths, size, pets, email, and a confirmed phone.`;
+    ? `${advice.comparison ? `${advice.comparison} ` : ""}Say this price out loud now. ${priceLine}${petLine}${otherLine} This price holds for 48 hours. Do not add another discount.`
+    : `Do not say a price yet. Still need ${delivery.missing.join(", ")}. Size used: ${sized.source}.`;
   return new Response(JSON.stringify({
     total_cents: delivery.ready ? spoken.totalCents : 0,
     deposit_cents: delivery.ready ? spoken.depositCents : 0,
@@ -138,6 +160,16 @@ serve(async (req) => {
     zone,
     zip_code: zip || null,
     price_ready: delivery.ready,
+    resolved_home_size_id: homeSizeId,
+    size_source: sized.source,
+    pet_hair_added: petHairAdded,
+    other_total_cents: delivery.ready && alternate ? alternate.totalCents : 0,
+    other_deposit_cents: delivery.ready && alternate ? alternate.depositCents : 0,
+    act_now: delivery.ready
+      ? (alternate
+        ? `Say both prices. Recommend ${spokenService}. The other clean is also priced if they insist.`
+        : "Say the total and the deposit now.")
+      : `Do not say a price yet. Still need ${delivery.missing.join(", ")}.`,
     human_summary: humanSummary,
     quote_email_sent: delivery.email_sent,
     checklist_sent: delivery.checklist_sent,
@@ -146,6 +178,33 @@ serve(async (req) => {
       : `Do not say a dollar amount yet. Still need ${delivery.missing.join(", ")}.`,
   }), { headers });
 });
+
+function resolveHomeSize(given: string, sqft: number, bedrooms: number, dwelling: string): { id: string; source: string } {
+  if (HOME_SIZE_RANGES.some((band) => band.id === given)) return { id: given, source: "given" };
+  if (sqft > 5000) return { id: "5000_plus", source: "sqft" };
+  if (sqft > 0) {
+    const band = HOME_SIZE_RANGES.find((item) => sqft >= item.minSqft && sqft <= item.maxSqft);
+    if (band) return { id: band.id, source: "sqft" };
+  }
+  if (bedrooms > 0) {
+    const apartment = /apt|condo|apartment/i.test(dwelling);
+    if (bedrooms >= 6) return { id: "5000_plus", source: "bedrooms" };
+    if (bedrooms === 1) return { id: apartment ? "0_999" : "1000_1500", source: "bedrooms" };
+    if (bedrooms === 2) return { id: apartment ? "1000_1500" : "1501_2000", source: "bedrooms" };
+    if (bedrooms === 3) return { id: apartment ? "1501_2000" : "2001_2500", source: "bedrooms" };
+    if (bedrooms === 4) return { id: "2501_3000", source: "bedrooms" };
+    return { id: "3501_4000", source: "bedrooms" };
+  }
+  return { id: "", source: "missing" };
+}
+
+function heavyPetHair(body: Record<string, unknown>): boolean {
+  const flag = String(body.pet_hair || "").toLowerCase();
+  if (flag === "true" || flag === "heavy" || flag === "yes") return true;
+  const pets = String(body.pets || "").toLowerCase();
+  if (!pets || /^(no|none|n\/a)$/.test(pets)) return false;
+  return /heavy|shed|hair|everywhere|a lot|lots|multiple|several/.test(pets);
+}
 
 function labelService(serviceType: string): string {
   if (serviceType === "moveInOut") return "Move-in/out";
