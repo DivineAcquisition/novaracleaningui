@@ -64,7 +64,7 @@ const HIGHLIGHTS = [
 ];
 
 const EXPECTATIONS = [
-  "Show up on time and check in through the app when you arrive.",
+  "Show up on time, start the Apploye timer, and check in through the app when you arrive.",
   "Follow the job's cleaning checklist and our quality standards.",
   "Bring your own supplies (see the checklist below).",
   "Treat every home and customer with care and professionalism.",

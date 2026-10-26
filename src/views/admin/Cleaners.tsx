@@ -184,6 +184,8 @@ interface CleanerRow {
   constraints: { no_work_after?: string; no_work_before?: string; notes?: string } | null;
   jobs_assigned_last_7d: number | null;
   onboarding_complete: boolean | null;
+  apploye_member_id?: string | null;
+  apploye_link_status?: string | null;
   phone_verified: boolean | null;
   ob_payouts_setup: boolean | null;
   ob_agreement_signed?: boolean | null;
@@ -313,7 +315,7 @@ export default function AdminCleaners() {
     const { data, error } = await supabase
       .from("cleaners")
       .select(
-        "id,user_id,first_name,last_name,email,phone,status,approved,available_for_bookings,walkthrough_eligible,home_zip,state,pay_tier,pay_percentage,completed_bookings,total_bookings,acceptance_rate,on_time_rate,average_rating,weighted_score,workload_score,novara_score,quality_score,overall_score,scores_computed_at,constraints,jobs_assigned_last_7d,onboarding_complete,phone_verified,ob_payouts_setup,payout_method_code,payout_method_status,ob_agreement_signed,ob_agreement_signed_at,supply_checklist_submitted_at,ob_supplies_checklist_viewed,ob_job_day_guides_ack,ob_job_day_guides_ack_at,ob_dress_code_ack,ob_dress_code_ack_at,ob_training_complete,payouts_enabled,stripe_account_id,home_address,home_city,home_zip,service_zip_codes,max_travel_miles,preferred_work_days,skillset,ghl_synced_at,ghl_sync_error,created_at,activated_at,rehire_status,termination_reason,terminated_at,engagement_end_action,engagement_ended_at,termination_basis,termination_ground,termination_section,ytd_earnings_cents_locked,ytd_earnings_year,ytd_earnings_source,nec_1099_include,nec_1099_batch_year,w9_status,w9_followup_required",
+        "id,user_id,first_name,last_name,email,phone,status,approved,available_for_bookings,walkthrough_eligible,home_zip,state,pay_tier,pay_percentage,completed_bookings,total_bookings,acceptance_rate,on_time_rate,average_rating,weighted_score,workload_score,novara_score,quality_score,overall_score,scores_computed_at,constraints,jobs_assigned_last_7d,onboarding_complete,apploye_member_id,apploye_link_status,phone_verified,ob_payouts_setup,payout_method_code,payout_method_status,ob_agreement_signed,ob_agreement_signed_at,supply_checklist_submitted_at,ob_supplies_checklist_viewed,ob_job_day_guides_ack,ob_job_day_guides_ack_at,ob_dress_code_ack,ob_dress_code_ack_at,ob_training_complete,payouts_enabled,stripe_account_id,home_address,home_city,home_zip,service_zip_codes,max_travel_miles,preferred_work_days,skillset,ghl_synced_at,ghl_sync_error,created_at,activated_at,rehire_status,termination_reason,terminated_at,engagement_end_action,engagement_ended_at,termination_basis,termination_ground,termination_section,ytd_earnings_cents_locked,ytd_earnings_year,ytd_earnings_source,nec_1099_include,nec_1099_batch_year,w9_status,w9_followup_required",
       )
       .order("created_at", { ascending: false })
       .limit(500);
@@ -2185,11 +2187,11 @@ function ActionsBlock({
                 body: { cleanerId: cleaner.id },
               });
               if (error) throw error;
-              if (data?.error) throw new Error(data.details || data.error);
-              if (data?.alreadyInvited) {
-                toast.success("Cleaner already has an Apploye seat.");
+              if (data?.error) throw new Error(data.details || data.message || data.error);
+              if (data?.linked) {
+                toast.success(data.alreadyLinked ? "Already linked to Apploye." : "Linked to their Apploye account.");
               } else {
-                toast.success("Apploye invite sent — they'll get an email from Apploye.");
+                toast.warning(data?.message || "Not in Apploye yet. Invite them from the Apploye dashboard, then try again.");
               }
             } catch (err) {
               toast.error("Apploye invite failed: " + (err as Error).message);
@@ -2198,8 +2200,13 @@ function ActionsBlock({
           className="border-sky-200 text-sky-800 bg-sky-50 hover:bg-sky-100"
         >
           <RiTimeLine className="w-4 h-4 mr-1.5" />
-          Invite to Apploye
+          {cleaner.apploye_member_id ? "Apploye linked" : "Link Apploye"}
         </Button>
+        {cleaner.apploye_link_status === "invite_needed" && !cleaner.apploye_member_id ? (
+          <p className="basis-full text-[11px] text-sky-900">
+            Not in Apploye yet. Invite them from the Apploye dashboard, then press Link Apploye again.
+          </p>
+        ) : null}
         {/* Hard delete is admin-only (cleaner-admin-action rejects VAs). */}
         {isAdmin && (
           <Button

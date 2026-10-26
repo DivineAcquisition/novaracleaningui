@@ -31,6 +31,8 @@ import {
   getAgreementPreviewUrl,
   buildContractorValues,
 } from "@/lib/docuseal";
+import { matchMemberByEmail } from "@/lib/apploye/attendance";
+import { ensureApployeMcpKey, listMcpMembers } from "@/lib/apploye/mcp";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -300,6 +302,26 @@ export async function POST(req: Request): Promise<NextResponse> {
         .select("*")
         .single();
       if (error) throw error;
+
+      // Connect this email to Apploye for shift time. Missing members are
+      // flagged for an invite; the office sends that from the Apploye
+      // dashboard. A failure here does not block onboarding — the database
+      // trigger retries the same link.
+      try {
+        if (await ensureApployeMcpKey(supabase)) {
+          const match = matchMemberByEmail(await listMcpMembers(), String(updated.email || ""));
+          await supabase
+            .from("va_onboarding")
+            .update({
+              ...(match ? { apploye_member_id: match.id } : {}),
+              apploye_link_status: match ? "linked" : "invite_needed",
+              apploye_link_checked_at: new Date().toISOString(),
+            })
+            .eq("id", updated.id);
+        }
+      } catch (linkErr) {
+        console.warn("[va-onboarding] apploye link failed (non-blocking)", linkErr instanceof Error ? linkErr.message : String(linkErr));
+      }
 
       // Zapier: VA lifecycle event for any external workflow (sheets, Slack…).
       void sendVaZapier(supabase, "va.submitted", updated as Row);

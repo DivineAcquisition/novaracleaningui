@@ -161,6 +161,11 @@ export function UpcomingJobs({ jobs, onCheckIn, onComplete, actionLoading, getEn
               </Button>
 
               {onCheckIn && !checkedIn && (
+                <p className="basis-full text-[11px] leading-snug text-muted-foreground">
+                  Start the Apploye timer when you arrive, then check in. Apploye is the clock for this visit.
+                </p>
+              )}
+              {onCheckIn && !checkedIn && (
                 <Button
                   size="sm"
                   className="flex-1 min-w-[120px] bg-emerald-600 hover:bg-emerald-700 text-white"

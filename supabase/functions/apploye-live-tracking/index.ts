@@ -1,35 +1,13 @@
-// ─── apploye-live-tracking ───────────────────────────────────────────────
+// Who is tracking time in Apploye right now, joined to Novara cleaners.
 //
-// Apploye's PUBLIC API does NOT expose live GPS pings (that lives in
-// the dashboard only). What we CAN derive is "who is currently
-// tracking time" by looking at today's timesheets and flagging rows
-// that have a `started_at` within the last 12 hours and no `ended_at`.
-//
-// We then join those active timesheets back to our `cleaners` table
-// via the apploye_member_id link so the admin Map can colour-code
-// pins for "currently clocked in" vs "off the clock".
-//
-// Response:
-// {
-//   ok: true,
-//   updatedAt,
-//   activeCount,
-//   members: Array<{
-//     memberId, memberEmail, cleanerId, cleanerName,
-//     status: 'clocked_in' | 'clocked_out',
-//     startedAt, endedAt, durationSec,
-//     lat: null, lng: null,                  // GPS not exposed publicly
-//     activeBookingId?, activeBookingNumber?
-//   }>
-// }
+// The MCP does not expose live GPS. This returns clocked-in people so the
+// admin map can list them. Coordinates stay null unless a future source
+// actually has a position — a home address is not plotted as a live ping.
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-import {
-  getApployeConfig,
-  listMembers,
-  listTimesheets,
-} from "../_shared/apploye-client.ts";
+import { projectLiveSessions } from "../_shared/apploye-attendance.ts";
+import { callApployeTool, getMcpConfig } from "../_shared/apploye-mcp.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -50,86 +28,76 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     );
-    const cfg = await getApployeConfig(supabase);
+    const cfg = await getMcpConfig(supabase);
     if (!cfg) {
       return json({
         ok: false,
         error: "Apploye not configured",
-        details: "Set APPLOYE_API_KEY in app_secrets.",
+        details: "Set APPLOYE_MCP_API_KEY in app_secrets.",
       }, 503);
     }
 
-    const now = new Date();
-    const startIso = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
-    const endIso = new Date(now.getTime() + 60 * 60 * 1000).toISOString();
-    const [members, timesheets] = await Promise.all([
-      listMembers(cfg),
-      listTimesheets(cfg, startIso, endIso),
-    ]);
+    const sessions: ReturnType<typeof projectLiveSessions> = [];
+    for (let page = 1; page <= 10; page++) {
+      const payload = await callApployeTool(cfg, "list_live_tracking_members", { page, limit: 100 }) as {
+        results?: unknown[];
+        has_more?: boolean;
+      };
+      sessions.push(...projectLiveSessions(payload));
+      if (!payload.has_more) break;
+    }
 
-    const memberById: Record<string, typeof members[0]> = {};
-    for (const m of members) memberById[m.id] = m;
-
-    // Resolve cleaners linked to these Apploye members.
-    const linkedMemberIds = members.map((m) => m.id);
+    const memberIds = sessions.map((session) => session.memberId);
     const cleanersByMember: Record<string, { id: string; first_name: string | null; last_name: string | null }> = {};
-    if (linkedMemberIds.length > 0) {
-      const { data: cs } = await supabase
+    if (memberIds.length) {
+      const { data: cleaners } = await supabase
         .from("cleaners")
         .select("id, first_name, last_name, apploye_member_id")
-        .in("apploye_member_id", linkedMemberIds);
-      for (const c of cs || []) {
-        if (c.apploye_member_id) {
-          cleansersByMember(cleanersByMember, c);
-        }
+        .in("apploye_member_id", memberIds);
+      for (const cleaner of cleaners || []) {
+        if (cleaner.apploye_member_id) cleanersByMember[cleaner.apploye_member_id] = cleaner;
       }
     }
 
-    const today = new Date().toISOString().slice(0, 10);
-    const cleanerIds = Object.values(cleanersByMember).map((c) => c.id);
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+    const cleanerIds = Object.values(cleanersByMember).map((cleaner) => cleaner.id);
     const activeByCleaner: Record<string, { bookingId: string; bookingNumber: number | null }> = {};
-    if (cleanerIds.length > 0) {
-      const { data: bks } = await supabase
+    if (cleanerIds.length) {
+      const { data: bookings } = await supabase
         .from("bookings")
         .select("id, booking_number, cleaner_id, service_date, status")
         .in("cleaner_id", cleanerIds)
         .eq("service_date", today)
         .in("status", ["assigned", "in_progress", "confirmed"]);
-      for (const b of bks || []) {
-        if (b.cleaner_id) {
-          activeByCleaner[b.cleaner_id] = {
-            bookingId: b.id,
-            bookingNumber: b.booking_number,
+      for (const booking of bookings || []) {
+        if (booking.cleaner_id && !activeByCleaner[booking.cleaner_id]) {
+          activeByCleaner[booking.cleaner_id] = {
+            bookingId: booking.id,
+            bookingNumber: booking.booking_number,
           };
         }
       }
     }
 
-    // Map every linked Apploye member to a tracking row (active or not).
-    const result = members.map((m) => {
-      const cleaner = cleanersByMember[m.id];
+    const members = sessions.map((session) => {
+      const cleaner = cleanersByMember[session.memberId];
       const active = cleaner ? activeByCleaner[cleaner.id] : undefined;
-      const latestSheet = timesheets
-        .filter((t) => t.userId === m.id)
-        .sort((a, b) => new Date(b.startedAt || 0).getTime() - new Date(a.startedAt || 0).getTime())[0];
-      const isActive = latestSheet?.isActive || false;
+      const cleanerName = cleaner
+        ? `${cleaner.first_name || ""} ${cleaner.last_name || ""}`.trim() || session.name
+        : null;
       return {
-        memberId: m.id,
-        memberEmail: m.email,
-        memberName: m.email,
+        memberId: session.memberId,
+        memberEmail: session.email,
+        memberName: session.name,
         cleanerId: cleaner?.id || null,
-        cleanerName: cleaner
-          ? `${cleaner.first_name || ""} ${cleaner.last_name || ""}`.trim() || m.email
-          : null,
-        status: isActive ? "clocked_in" : "clocked_out",
-        startedAt: latestSheet?.startedAt || null,
-        endedAt: latestSheet?.endedAt || null,
-        durationSec: latestSheet?.durationSec || null,
-        // Public API doesn't expose live coords — leave nullable so the
-        // admin Map plots cleaners at their home_lat/lng when active.
+        cleanerName,
+        status: "clocked_in",
+        startedAt: session.startedAt,
+        endedAt: null,
+        durationSec: null,
         lat: null,
         lng: null,
-        pingedAt: latestSheet?.startedAt || null,
+        pingedAt: session.startedAt,
         activeBookingId: active?.bookingId || null,
         activeBookingNumber: active?.bookingNumber || null,
       };
@@ -137,24 +105,12 @@ serve(async (req) => {
 
     return json({
       ok: true,
+      source: "mcp",
       updatedAt: new Date().toISOString(),
-      activeCount: result.filter((r) => r.status === "clocked_in").length,
-      members: result,
+      activeCount: members.length,
+      members,
     });
   } catch (err) {
     return json({ ok: false, error: (err as Error).message }, 500);
   }
 });
-
-function cleansersByMember(
-  map: Record<string, { id: string; first_name: string | null; last_name: string | null }>,
-  c: { id: string; first_name: string | null; last_name: string | null; apploye_member_id: string | null },
-) {
-  if (c.apploye_member_id) {
-    map[c.apploye_member_id] = {
-      id: c.id,
-      first_name: c.first_name,
-      last_name: c.last_name,
-    };
-  }
-}

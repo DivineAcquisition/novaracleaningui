@@ -606,7 +606,7 @@ export default function CleanerDashboard() {
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      toast.success("Checked in successfully!");
+      toast.success("Checked in. Apploye should be running — that's the clock for this visit.");
       await fetchJobs(profile.id, profile.pay_percentage);
     } catch (err: any) {
       toast.error(err?.message || "Failed to check in");
@@ -990,6 +990,11 @@ export default function CleanerDashboard() {
                           <RiCalendarLine className="w-3.5 h-3.5 mr-1.5" />
                           Add to Calendar
                         </Button>
+                        {job.assignmentId && !isCheckedIn && (
+                          <p className="basis-full text-[11px] leading-snug text-muted-foreground">
+                            Start the Apploye timer when you arrive, then check in. Apploye is the clock for this visit.
+                          </p>
+                        )}
                         {job.assignmentId && (
                           <Button
                             size="sm"

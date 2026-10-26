@@ -315,7 +315,7 @@ export default function MobileDashboard() {
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
-      toast.success("Checked in. Have a great clean!");
+      toast.success("Checked in. Apploye should be running — that's the clock for this visit.");
       await fetchData();
     } catch (err: any) {
       toast.error(err?.message || "Couldn't check in");

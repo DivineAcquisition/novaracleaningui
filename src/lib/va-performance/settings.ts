@@ -112,6 +112,8 @@ export async function getDiscrepancyThresholds(): Promise<DiscrepancyThresholds>
 const PRIMED_KEYS = [
   "APPLOYE_API_KEY",
   "APPLOYE_API_BASE",
+  "APPLOYE_MCP_API_KEY",
+  "APPLOYE_MCP_URL",
   "AIRTABLE_TEAM_PERF_BASE_ID",
   "AIRTABLE_WORKSPACE_ID",
   // The edge functions get these as Supabase function secrets, which the

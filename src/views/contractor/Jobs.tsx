@@ -651,7 +651,7 @@ export default function ContractorJobs() {
           : { bookingId: job.bookingId, action: "check_in", cleanerId },
       });
       if (response.error) throw response.error;
-      toast.success("Checked in successfully!");
+      toast.success("Checked in. Apploye should be running — that's the clock for this visit.");
       setJobs((prev) =>
         prev.map((j) => (j.id === job.id ? { ...j, checkInTime: new Date().toISOString(), status: "in_progress" } : j)),
       );
@@ -1089,10 +1089,15 @@ export default function ContractorJobs() {
                               Mark job complete
                             </Button>
                           ) : (
-                            <Button className="w-full h-11 font-semibold" onClick={() => handleCheckIn(job)} disabled={loading}>
-                              {loading ? <RiLoader4Line className="w-4 h-4 animate-spin mr-1.5" /> : <RiPlayCircleLine className="w-4 h-4 mr-1.5" />}
-                              Check in
-                            </Button>
+                            <div className="space-y-1.5">
+                              <Button className="w-full h-11 font-semibold" onClick={() => handleCheckIn(job)} disabled={loading}>
+                                {loading ? <RiLoader4Line className="w-4 h-4 animate-spin mr-1.5" /> : <RiPlayCircleLine className="w-4 h-4 mr-1.5" />}
+                                Check in
+                              </Button>
+                              <p className="text-[11px] leading-snug text-muted-foreground text-center">
+                                Start the Apploye timer when you arrive. Apploye is the clock for this visit.
+                              </p>
+                            </div>
                           )
                         )}
 

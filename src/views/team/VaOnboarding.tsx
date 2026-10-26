@@ -402,6 +402,9 @@ export default function VaOnboarding() {
               <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional" />
             </div>
 
+            <p className="text-xs leading-relaxed text-slate-600">
+              Shift time is tracked in Apploye on this email. When you&apos;re approved, clock in there at the start of your shift. If you aren&apos;t in Apploye yet, the office sends the invite.
+            </p>
             <Button
               className="w-full h-12 bg-violet-600 hover:bg-violet-700 text-white font-semibold"
               disabled={busy || !timezone.trim() || !workingHours.trim()}

@@ -14,6 +14,7 @@ import { NextResponse } from "next/server";
 import { AdminAuthError, requireAdmin } from "@/lib/admin-auth";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
 import { isApployeConfigured, listMembers as listApployeMembers } from "@/lib/apploye/client";
+import { ensureApployeMcpKey, listMcpMembers } from "@/lib/apploye/mcp";
 import { syncTeamPerformanceBase } from "@/lib/va-performance/airtable";
 import {
   generatePeriod,
@@ -282,12 +283,13 @@ export async function POST(req: Request): Promise<NextResponse> {
       // does it (supabase/functions/apploye-invite-cleaner). Nobody should have
       // to copy UUIDs out of a dashboard by hand.
       case "link_apploye": {
-        if (!isApployeConfigured()) {
-          return fail("Apploye isn't connected — set APPLOYE_API_KEY in app_secrets.", 503);
+        const mcpReady = await ensureApployeMcpKey(supabase);
+        if (!mcpReady && !isApployeConfigured()) {
+          return fail("Apploye isn't connected — set APPLOYE_MCP_API_KEY in app_secrets.", 503);
         }
-        let members;
+        let members: { email: string | null; id: string }[];
         try {
-          members = await listApployeMembers();
+          members = mcpReady ? await listMcpMembers() : await listApployeMembers();
         } catch (err) {
           return fail(`Couldn't reach Apploye: ${(err as Error).message}`, 502);
         }
@@ -306,15 +308,26 @@ export async function POST(req: Request): Promise<NextResponse> {
           const memberId = byEmail.get(va.email.trim().toLowerCase());
           if (!memberId) {
             unmatched.push(va.email);
+            await supabase
+              .from("va_onboarding")
+              .update({
+                apploye_link_status: "invite_needed",
+                apploye_link_checked_at: new Date().toISOString(),
+              })
+              .eq("id", va.id)
+              .is("apploye_member_id", null);
             continue;
           }
           await supabase
             .from("va_onboarding")
-            .update({ apploye_member_id: memberId })
+            .update({
+              apploye_member_id: memberId,
+              apploye_link_status: "linked",
+              apploye_link_checked_at: new Date().toISOString(),
+            })
             .eq("id", va.id);
           linked.push({ name: va.name, memberId });
         }
-
         return NextResponse.json({
           ok: true,
           linked,

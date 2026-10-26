@@ -47,7 +47,7 @@ export const HIRING_ROLES: HiringRole[] = [
       "Stripe payouts after completed work",
     ],
     expectations: [
-      "Show up on time and check in through the app when you arrive",
+      "Show up on time, start the Apploye timer, and check in through the app when you arrive",
       "Follow the job checklist and Novara quality standards",
       "Bring your own supplies (we share a starter checklist)",
       "Treat every home and customer with care",

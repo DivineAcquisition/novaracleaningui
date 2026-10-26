@@ -614,6 +614,9 @@ verify_jwt = false
 [functions.apploye-live-tracking]
 verify_jwt = false
 
+[functions.apploye-record-arrival]
+verify_jwt = false
+
 [functions.book-as-va]
 verify_jwt = false
 

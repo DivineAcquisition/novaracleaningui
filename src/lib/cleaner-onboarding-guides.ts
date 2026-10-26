@@ -77,7 +77,7 @@ export const ONBOARDING_GUIDES: OnboardingGuide[] = [
     alt: "Day To Day Job Operations: before you go, when you arrive, while you work, before you leave, then job complete",
     points: [
       "Before you go: open the job and read the FULL checklist, access details and property notes, phone charged, supplies loaded",
-      "When you arrive: inside your window (late? call first), greet the client, ask about pets, take BEFORE photos of every area",
+      "When you arrive: inside your window (late? call first), start the Apploye timer, check in here, greet the client, ask about pets, take BEFORE photos of every area",
       "While you work: checklist in order, tick as you finish, one area at a time, ask before moving furniture and put it back",
       "Before you leave: walk every area one final time, AFTER photos of every area, report ANY issue, mark complete in the dashboard",
       "Job complete: photos in, checklist done, nothing left for the client to fix",
@@ -85,7 +85,7 @@ export const ONBOARDING_GUIDES: OnboardingGuide[] = [
       "Unsure? Call the office — you are never in trouble for asking",
     ],
     footnote:
-      "The walkthroughs on your Training page cover each of these steps in the real app.",
+      "When you arrive, start the timer in the Apploye app, then check in here. Apploye is the clock for the visit. The walkthroughs on your Training page cover the rest of these steps.",
     actionLabel: "I've read Day To Day Job Operations",
   },
 ];
