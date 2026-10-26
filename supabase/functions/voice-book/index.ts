@@ -89,7 +89,13 @@ serve(async (req) => {
   if (!(coverage?.is_active === true && !closed)) {
     return json({ error: "zip_not_served", say: "That ZIP is not served. Offer the waitlist instead of a booking." });
   }
-  const priced = calculatePriceCents(String(body.home_size_id), String(body.service_type), Array.isArray(body.add_ons) ? body.add_ons : [], String(body.membership_plan || "none"), false, zone);
+  const raw = calculatePriceCents(String(body.home_size_id), String(body.service_type), Array.isArray(body.add_ons) ? body.add_ons : [], String(body.membership_plan || "none"), false, zone);
+  const occupancy = String(body.occupancy || "");
+  const moveOut = String(body.service_type) === "moveInOut";
+  const empty = /empty|vacant|unoccupied|unfurnished/i.test(occupancy);
+  const totalCents = moveOut && empty ? Math.round(raw.totalCents * 0.85) : raw.totalCents;
+  const depositCents = Math.round(totalCents / 2);
+  const priced = { totalCents, depositCents, subtotalCents: raw.subtotalCents, emptyDiscount: moveOut && empty };
   if (!priced.totalCents) return json({ error: "could_not_price", say: "The price did not calculate. Do not invent one." });
 
   const phone = toE164(body.phone);
@@ -157,13 +163,14 @@ serve(async (req) => {
   }
   await supabase.from("bookings").update({ hosted_invoice_url: paymentLinkUrl }).eq("id", booking.id);
   const fmt = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+  const emptyNote = priced.emptyDiscount ? " Empty move-out is 15 percent under a furnished move-out." : "";
   let smsSent = false;
   try {
     const sms = await supabase.functions.invoke("send-sms-notification", {
       body: {
         toPhone: phone,
         type: "confirmation",
-        message: `Novara Cleaning: your clean on ${body.service_date} at ${body.time_slot} is saved. Total ${fmt(priced.totalCents)}. Deposit ${fmt(priced.depositCents)} confirms it: ${paymentLinkUrl} This price holds 48 hours.`,
+        message: `Novara Cleaning: your clean on ${body.service_date} at ${body.time_slot} is saved. Total ${fmt(priced.totalCents)}. Deposit ${fmt(priced.depositCents)} confirms it: ${paymentLinkUrl} This price holds 48 hours.${emptyNote}`,
       },
     });
     smsSent = !sms.error && (sms.data as { success?: boolean } | null)?.success !== false;
@@ -177,7 +184,7 @@ serve(async (req) => {
     zone,
     sms_sent: smsSent,
     say: smsSent
-      ? `I texted the deposit link for ${fmt(priced.depositCents)}. The visit is confirmed once that deposit is paid. The total is ${fmt(priced.totalCents)}, and this price holds for 48 hours.`
-      : `The visit is saved and the deposit is ${fmt(priced.depositCents)}. The text did not go through. Tell them the office will text the payment link. Do not read a URL aloud.`,
+      ? `I texted the deposit link for ${fmt(priced.depositCents)}. The visit is confirmed once that deposit is paid. The total is ${fmt(priced.totalCents)}, and this price holds for 48 hours.${emptyNote}`
+      : `The visit is saved and the deposit is ${fmt(priced.depositCents)}. The text did not go through. Tell them the office will text the payment link. Do not read a URL aloud.${emptyNote}`,
   });
 });

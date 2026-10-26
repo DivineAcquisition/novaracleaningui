@@ -150,6 +150,15 @@ verify_jwt = false
 [functions.voice-book]
 verify_jwt = false
 
+[functions.voice-address]
+verify_jwt = false
+
+[functions.voice-checklist]
+verify_jwt = false
+
+[functions.attach-call-tools]
+verify_jwt = false
+
 [functions.google-calendar-health]
 verify_jwt = false
 

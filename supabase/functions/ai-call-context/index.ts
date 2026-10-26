@@ -231,7 +231,7 @@ serve(async (req) => {
   const brandNew = bookings.length === 0 && !lead;
   let sayFirst = "What ZIP code is the home in?";
   let nextStep = brandNew
-    ? "This person is new to Novara and may want to book a first clean. Do not apologize for a missing account. When they give a ZIP, call check_service_area. If it is served, say the city and ask if they want a standard clean, a deep clean, or a move-in/out."
+    ? "This person is new to Novara and may want to book a first clean. Do not apologize for a missing account. When they give a ZIP, call check_service_area. If it is served, say the city and ask for the street address. Do not ask for the city."
     : "When they answer, call check_service_area with that ZIP. If serviced is true, say the city and ask if they want a standard clean, a deep clean, or a move-in/out.";
   let resultTarget = "One visit saved after a spoken read-back and a yes, with the deposit text sent.";
 
@@ -271,8 +271,8 @@ serve(async (req) => {
   } else if (serviced === "unknown" && !zip) {
     sayFirst = fullName ? `${fullName}, what ZIP code is the home in?` : "What ZIP code is the home in?";
     nextStep = brandNew
-      ? "They are new and may want to book. Call check_service_area before you talk about price. If the ZIP is served, say the city and ask standard, deep, or move-in/out."
-      : "Call check_service_area before you talk about price or availability.";
+      ? "They are new and may want to book. Call check_service_area before anything else. If the ZIP is served, say the city and ask for the street address. Do not ask for the city."
+      : "Call check_service_area before you talk about price or availability. After a served ZIP, ask for the street address, not the city.";
     if (role === "outbound") resultTarget = "A booked visit on this call, a callback with a day and a time, or a clear no.";
   } else if (lookupFailed) {
     sayFirst = "I'm checking that ZIP now. I don't want to guess on coverage.";
@@ -280,7 +280,10 @@ serve(async (req) => {
   } else {
     const place = city ? `We clean in ${city}.` : "That ZIP is in our service area.";
     const who = fullName ? `${fullName}, ` : "";
-    if (knownSize && knownService) {
+    if (!address && role !== "service") {
+      sayFirst = `${who}${place} What's the street address?`;
+      nextStep = "Do not ask for the city. Call lookup_address with the street and this ZIP. Confirm the address it returns. Then ask if they are moving, if the home is empty, and how kept up it is. Text the checklist for the service you recommend before any price.";
+    } else if (knownSize && knownService) {
       sayFirst = `${who}${place} I can price the ${serviceLabel(knownService)} for a home that's ${sizeLabel}.`;
       nextStep = `Call get_price_estimate with home_size_id ${knownSize}, service_type ${knownService}, and zip_code ${zip}. Speak only human_summary, then pause.`;
     } else if (knownService && sizeLabel) {
@@ -362,7 +365,7 @@ serve(async (req) => {
     missing_to_book: upcoming?.status === "pending_payment"
       ? "Do not start a second booking unless they want a different home."
       : brandNew
-        ? "New caller. Ask one thing at a time: ZIP, kind of clean, home size, then the price. After they want the visit, collect name, email, address, date, and arrival time. Read it back and wait for a yes."
+        ? "New caller. Ask one thing at a time: ZIP, then the street address. Use the address lookup for city and state. Learn if they are moving, if the home is empty, and how kept up it is. Text the checklist before any price."
         : (missing.length ? missing.join(", ") : "Nothing else. Read the visit back and ask for a yes."),
     result_target: resultTarget,
     context_brief: brief,
