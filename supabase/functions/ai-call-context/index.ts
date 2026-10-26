@@ -237,10 +237,10 @@ serve(async (req) => {
   if (!slot) missing.push("arrival time");
 
   const brandNew = bookings.length === 0 && !lead;
-  let sayFirst = "What ZIP code is the home in?";
+  let sayFirst = "I can get you a price. What ZIP is the home in?";
   let nextStep = brandNew
-    ? "This person is new to Novara and may want to book a first clean. Do not apologize for a missing account. When they give a ZIP, call check_service_area. If it is served, say the city and ask for the street address. Do not ask for the city."
-    : "When they answer, call check_service_area with that ZIP. If serviced is true, say the city and ask if they want a standard clean, a deep clean, or a move-in/out.";
+    ? "They may want a first clean. Answer whatever they already said. When you have a ZIP, call check_service_area. If it is served, say the city and ask for the street. Do not ask for the city."
+    : "Answer what they just said. When you have a ZIP, call check_service_area. If it is served, say the city, then learn the home before you price it.";
   let resultTarget = "One visit saved after a spoken read-back and a yes, with the deposit text sent.";
 
   if (role === "service") {
@@ -252,14 +252,14 @@ serve(async (req) => {
       nextStep = "If they want a new clean, ask for the ZIP next. If they have a visit, call list_customer_bookings with that number.";
     } else if (!upcoming) {
       sayFirst = fullName
-        ? `${fullName}, I can book a first clean for you, or look up a visit under another number. Which would you like?`
-        : "I can book a first clean for you, or look up a visit under another number. Which would you like?";
+        ? `${fullName}, I don't see a visit on this number. Want me to book one, or is it under another phone?`
+        : "I don't see a visit on this number. Want me to book one, or is it under another phone?";
       nextStep = "If they want to book, ask for the ZIP and continue one question at a time. If they have another number, call list_customer_bookings with that number.";
     } else if (upcoming.status === "pending_payment" && !upcoming.payment_received_at) {
-      sayFirst = `Your ${svc} on ${when} is saved and still needs the ${money(dueNow)} deposit. You can pay at app.novaracleaning.com/account. Do you want to pay that, or change the visit?`;
+      sayFirst = `Your ${svc} on ${when} is saved, and it's waiting on the ${money(dueNow)} deposit. Want me to resend that link, or move the day?`;
       nextStep = "If they want to cancel or move it, call preview_change and say the fee before anything is changed.";
     } else {
-      sayFirst = `I have your ${svc} on ${when}${slot ? `, arriving ${slot}` : ""}. What would you like to do?`;
+      sayFirst = `You've got a ${svc} on ${when}${slot ? `, arriving ${slot}` : ""}. What do you need?`;
       nextStep = "For a cancel or a new time, call preview_change first and wait for a yes. For damage, a billing dispute, or a refund that is not a normal cancel, call submit_request and do not promise an amount.";
     }
   } else if (role === "outbound" && doNotCall) {
@@ -268,8 +268,8 @@ serve(async (req) => {
     resultTarget = "This number is opted out and the call is over.";
   } else if (upcoming && !upcoming.payment_received_at && upcoming.status === "pending_payment") {
     sayFirst = fullName
-      ? `${fullName}, your ${svc} on ${when} is already saved and waiting on the ${money(dueNow)} deposit. Want me to point you back to that text?`
-      : `Your ${svc} on ${when} is already saved and waiting on the ${money(dueNow)} deposit. Want me to point you back to that text?`;
+      ? `${fullName}, your ${svc} on ${when} is saved and waiting on the ${money(dueNow)} deposit. Want me to resend that link, or move the day?`
+      : `Your ${svc} on ${when} is saved and waiting on the ${money(dueNow)} deposit. Want me to resend that link, or move the day?`;
     nextStep = "Do not create a second booking. If they want a different day, preview the change or escalate. If they are ready to pay, send them to the account page and the text that already went out.";
     resultTarget = "They pay the existing deposit, or a person handles a change. No second booking.";
   } else if (serviced === "no") {
@@ -277,10 +277,10 @@ serve(async (req) => {
     nextStep = "Collect a real first name and a real email, then call add_to_waitlist. Do not quote a price.";
     resultTarget = "A waitlist entry with a real name and email, or a polite end if they decline.";
   } else if (serviced === "unknown" && !zip) {
-    sayFirst = fullName ? `${fullName}, what ZIP code is the home in?` : "What ZIP code is the home in?";
+    sayFirst = "I can get you a price. What ZIP is the home in?";
     nextStep = brandNew
-      ? "They are new and may want to book. Call check_service_area before anything else. If the ZIP is served, say the city and ask for the street address. Do not ask for the city."
-      : "Call check_service_area before you talk about price or availability. After a served ZIP, ask for the street address, not the city.";
+      ? "Answer what they already said. Call check_service_area before you name a city. If the ZIP is served, say the city and ask for the street."
+      : "Answer what they already said. Call check_service_area before you name a city or talk price. After a served ZIP, ask for the street, then beds, baths, and whether they are moving.";
     if (role === "outbound") resultTarget = "A booked visit on this call, a callback with a day and a time, or a clear no.";
   } else if (lookupFailed) {
     sayFirst = "I'm checking that ZIP now. I don't want to guess on coverage.";
@@ -326,6 +326,7 @@ serve(async (req) => {
     : "No active booking.";
   const brief = brandNew
     ? [
+      "Facts for you. Do not read this aloud as a list.",
       "This is a new caller. Nothing is saved for this number yet.",
       "They may be calling to book a first clean. Start the booking.",
       "Do not apologize for a missing account and do not read a list of missing fields.",
@@ -333,6 +334,7 @@ serve(async (req) => {
       zip ? `ZIP ${zip} is ${serviced === "yes" ? "served" : serviced === "no" ? "not served" : "unconfirmed"}. ${text(coverage?.city)} ${text(coverage?.state)} ${zoneName}.` : "No ZIP yet. Ask for it first.",
     ].filter(Boolean).join(" ")
     : [
+      "Facts for you. Do not read this aloud as a list.",
       fullName ? `Name on file: ${fullName}.` : "No name is on file yet.",
       phone ? `Caller phone: ${phone}.` : "",
       email.includes("@") ? `Email on file: ${email}.` : "",
