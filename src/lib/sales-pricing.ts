@@ -1,4 +1,4 @@
-import { HOME_SIZES, SERVICE_TIERS, ADD_ONS } from "@/config/brand-config";
+import { HOME_SIZES, SERVICE_TIERS, ADD_ONS, INBOUND_PHONE } from "@/config/brand-config";
 
 export interface QuoteCalculation {
   basePriceCents: number;
@@ -137,6 +137,6 @@ export function formatQuoteText(quote: QuoteCalculation, params: {
   }
   lines.push(``);
   lines.push(`Book online: try.novaracleaning.com`);
-  lines.push(`Call: (844) 735-2070`);
+  lines.push(`Call: ${INBOUND_PHONE.display}`);
   return lines.join("\n");
 }

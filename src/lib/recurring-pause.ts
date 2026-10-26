@@ -4,7 +4,9 @@
 // Admin picks a reason on /admin/recurring; that wording is what we SMS
 // and email the customer.
 
-export const RECURRING_PAUSE_PHONE = "(844) 735-2070";
+import { SUPPORT_PHONE } from "@/config/brand-config";
+
+export const RECURRING_PAUSE_PHONE = SUPPORT_PHONE.display;
 
 export const RECURRING_PAUSE_REASON_IDS = [
   "cleaner_unavailable",

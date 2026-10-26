@@ -11,6 +11,7 @@
 // complete-booking, and the inbound SMS handler can all import it.
 
 /** Support number rendered on the booking funnel — single source of truth. */
+// Customer support only. Inbound booking calls use +1 (833) 700-2611.
 export const SUPPORT_PHONE_DISPLAY = "(844) 735-2070";
 export const SUPPORT_PHONE_E164 = "+18447352070";
 

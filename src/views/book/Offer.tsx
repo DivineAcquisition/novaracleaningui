@@ -15,6 +15,7 @@ import { useRouter } from "next/navigation";
 import { trackViewContent } from "@/lib/meta-pixel";
 import { useBooking } from "@/contexts/BookingContext";
 import { Button } from "@/components/ui/button";
+import { INBOUND_PHONE } from "@/config/brand-config";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -296,12 +297,12 @@ export default function BookingOffer() {
                 
                 <div className="flex items-center justify-center gap-2 text-lg font-semibold text-primary">
                   <RiPhoneLine className="w-5 h-5" />
-                  <a href="tel:+18447352070">(844) 735-2070</a>
+                  <a href={INBOUND_PHONE.tel}>{INBOUND_PHONE.display}</a>
                 </div>
                 
                 <div className="flex flex-col sm:flex-row gap-3 justify-center">
                   <Button asChild size="lg">
-                    <a href="tel:+18447352070">
+                    <a href={INBOUND_PHONE.tel}>
                       <RiPhoneLine className="w-4 h-4 mr-2" />
                       Call Now
                     </a>

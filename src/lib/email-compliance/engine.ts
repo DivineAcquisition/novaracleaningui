@@ -8,6 +8,7 @@
 // agreements. Clearing the postal address blocks marketing.
 
 import { operationsFooter } from "./operations-footer";
+import { SUPPORT_PHONE } from "@/config/brand-config";
 
 export const EMAIL_TYPES = [
   "customer_service",
@@ -265,7 +266,7 @@ export const DEFAULT_BUSINESS_IDENTITY: BusinessIdentity = {
     country: "US",
   },
   supportEmail: "support@novaracleaning.com",
-  phone: "(844) 735-2070",
+  phone: SUPPORT_PHONE.display,
   website: "https://novaracleaning.com",
   privacyUrl: "https://novaracleaning.com/privacy",
   termsUrl: "https://novaracleaning.com/terms",

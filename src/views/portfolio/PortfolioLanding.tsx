@@ -26,6 +26,7 @@ import {
 import { SEO } from "@/components/SEO";
 import { BrandAtmosphere } from "@/components/brand/atmosphere";
 import { Button } from "@/components/ui/button";
+import { INBOUND_PHONE } from "@/config/brand-config";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -342,11 +343,11 @@ export default function PortfolioLanding() {
           </div>
           <div className="flex items-center gap-3">
             <a
-              href="tel:+18447352070"
+              href={INBOUND_PHONE.tel}
               className="hidden items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground sm:flex"
             >
               <RiPhoneLine className="h-4 w-4" />
-              (844) 735-2070
+              {INBOUND_PHONE.display}
             </a>
             <Button size="sm" className="h-9" onClick={() => document.getElementById("estimate")?.scrollIntoView({ behavior: "smooth" })}>
               Instant estimate

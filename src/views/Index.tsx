@@ -18,6 +18,7 @@ import {
 import { useState } from "react";
 import { SEO } from "@/components/SEO";
 import { Button } from "@/components/ui/button";
+import { INBOUND_PHONE } from "@/config/brand-config";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -203,11 +204,11 @@ const Index = () => {
           </div>
           <div className="flex items-center gap-3">
             <a
-              href="tel:+18447352070"
+              href={INBOUND_PHONE.tel}
               className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               <RiPhoneLine className="w-4 h-4" />
-              (844) 735-2070
+              {INBOUND_PHONE.display}
             </a>
             <Button
               variant="outline"

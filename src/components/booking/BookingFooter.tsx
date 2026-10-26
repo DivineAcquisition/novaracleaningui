@@ -2,6 +2,7 @@
 
 import { RiFacebookFill, RiInstagramLine } from "@remixicon/react";
 import { openCookieSettings } from "@/components/compliance/CookieNotice";
+import { INBOUND_PHONE, SUPPORT_PHONE } from "@/config/brand-config";
 import { cn } from "@/lib/utils";
 
 const linkClass =
@@ -44,7 +45,9 @@ export function BookingFooter({
         <p className="text-xs leading-5 text-zinc-700">
           7404 Executive Place, Lanham, MD 20706
           <br />
-          <a href="tel:+18447352070" className={linkClass}>(844) 735-2070</a>
+          <a href={INBOUND_PHONE.tel} className={linkClass}>{INBOUND_PHONE.display}</a>
+          <span className="mx-2 text-zinc-400">·</span>
+          <a href={SUPPORT_PHONE.tel} className={linkClass}>Support {SUPPORT_PHONE.display}</a>
           <span className="mx-2 text-zinc-400">·</span>
           <a href="mailto:support@novaracleaning.com" className={linkClass}>support@novaracleaning.com</a>
           <span className="mx-2 text-zinc-400">·</span>

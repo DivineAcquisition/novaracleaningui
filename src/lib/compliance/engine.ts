@@ -8,6 +8,7 @@ import {
   type WordingStatus,
   type WordingVersion,
 } from "./wording";
+import { SUPPORT_PHONE } from "@/config/brand-config";
 
 export type AcceptanceKind = Exclude<WordingKind, "cookie_banner" | "privacy_summary">;
 
@@ -406,10 +407,10 @@ export function smsKeyword(message: string | null | undefined): "stop" | "help" 
 }
 
 export const SMS_HELP_REPLY =
-  "Novara Cleaning: Help is available at hello@novaracleaning.com or (844) 735-2070. Reply STOP to opt out of texts.";
+  `Novara Cleaning: Help is available at hello@novaracleaning.com or ${SUPPORT_PHONE.display}. Reply STOP to opt out of texts.`;
 
 export const SMS_STOP_REPLY =
-  "Novara Cleaning: You have been opted out of texts. Reply START to opt back in. Help? Call (844) 735-2070.";
+  `Novara Cleaning: You have been opted out of texts. Reply START to opt back in. Help? Call ${SUPPORT_PHONE.display}.`;
 
 export interface PriceLine {
   label: string;

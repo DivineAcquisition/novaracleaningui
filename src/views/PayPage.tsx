@@ -44,6 +44,7 @@ import { submitAcceptances, submitSignedCopy } from "@/lib/compliance/record-cli
 import { plainWording } from "@/lib/compliance";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SEO } from "@/components/SEO";
+import { SUPPORT_PHONE } from "@/config/brand-config";
 import { IncludedValueStack } from "@/components/booking/IncludedValueStack";
 import { BrandAtmosphere } from "@/components/brand/atmosphere";
 
@@ -393,7 +394,7 @@ export default function PayPage() {
           </p>
           <p className="text-xs mt-1">
             If you believe this is a mistake, call us at{" "}
-            <a href="tel:+18447352070" className="underline">(844) 735-2070</a> and we&apos;ll sort it out.
+            <a href={SUPPORT_PHONE.tel} className="underline">{SUPPORT_PHONE.display}</a> and we&apos;ll sort it out.
           </p>
         </div>
       </div>
@@ -658,7 +659,7 @@ export default function PayPage() {
         )}
 
         <p className="text-center text-[11px] text-muted-foreground">
-          Questions? Call <a href="tel:+18447352070" className="underline">(844) 735-2070</a> — Novara Cleaning
+          Questions? Call <a href={SUPPORT_PHONE.tel} className="underline">{SUPPORT_PHONE.display}</a> — Novara Cleaning
         </p>
       </div>
     </div>

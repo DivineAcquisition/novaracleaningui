@@ -9,6 +9,7 @@ import Link from "next/link";
 import { RiArrowRightLine } from "@remixicon/react";
 import { BRAND } from "@/lib/brand";
 import { DEFAULT_INTAKE_SETTINGS } from "@/lib/contractor-intake/settings";
+import { SUPPORT_PHONE } from "@/config/brand-config";
 import { cn } from "@/lib/utils";
 
 export const HIRING_GRADIENT = BRAND.gradient;
@@ -81,7 +82,7 @@ export function HiringFooter() {
           <p>{DEFAULT_INTAKE_SETTINGS.legalName}</p>
           <p>{DEFAULT_INTAKE_SETTINGS.legalAddress}</p>
           <p>
-            <a href="tel:+18447352070" className="hover:text-foreground">{DEFAULT_INTAKE_SETTINGS.applicantPhone}</a>
+            <a href={SUPPORT_PHONE.tel} className="hover:text-foreground">{DEFAULT_INTAKE_SETTINGS.applicantPhone}</a>
             {" · "}
             <a href={`mailto:${DEFAULT_INTAKE_SETTINGS.applicantEmail}`} className="hover:text-foreground">{DEFAULT_INTAKE_SETTINGS.applicantEmail}</a>
           </p>

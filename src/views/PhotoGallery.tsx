@@ -11,6 +11,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import { SUPPORT_PHONE } from "@/config/brand-config";
 import {
   RiArrowLeftSLine,
   RiArrowRightSLine,
@@ -111,10 +112,10 @@ export default function PhotoGalleryPage() {
             mistake, reply to the text you received or reach our team.
           </p>
           <a
-            href="tel:+18447352070"
+            href={SUPPORT_PHONE.tel}
             className="mt-4 inline-block text-sm font-medium text-primary hover:underline"
           >
-            Call (844) 735-2070
+            Call {SUPPORT_PHONE.display}
           </a>
         </div>
       </div>
@@ -183,8 +184,8 @@ export default function PhotoGalleryPage() {
 
         <p className="text-center text-xs text-muted-foreground">
           Questions about your clean?{" "}
-          <a href="tel:+18447352070" className="text-primary hover:underline">
-            Call (844) 735-2070
+          <a href={SUPPORT_PHONE.tel} className="text-primary hover:underline">
+            Call {SUPPORT_PHONE.display}
           </a>
         </p>
       </div>

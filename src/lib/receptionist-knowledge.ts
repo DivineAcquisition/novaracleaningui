@@ -1,3 +1,5 @@
+import { INBOUND_PHONE, SUPPORT_PHONE } from "@/config/brand-config";
+
 // Knowledge the AI receptionist and outbound dialer may quote.
 //
 // Pull it at GET /api/receptionist/knowledge.
@@ -17,7 +19,8 @@ export const RECEPTIONIST_KNOWLEDGE = {
   business: {
     legalName: "Novara Cleaning LLC",
     brandName: "NovaraCleaning",
-    phone: "(844) 735-2070",
+    phone: INBOUND_PHONE.display,
+    supportPhone: SUPPORT_PHONE.display,
     mailingAddress: "7404 Executive Place, Lanham, MD 20706",
     emails: {
       bookingsAndAccount: "support@novaracleaning.com",
@@ -327,7 +330,7 @@ export const RECEPTIONIST_KNOWLEDGE = {
       },
       {
         theySay: "I need to ask my spouse.",
-        say: "Of course. I can text a short summary to this number: the address, the service, the total, and the deposit. They can call (844) 735-2070 with questions.",
+        say: `Of course. I can text a short summary to this number: the address, the service, the total, and the deposit. They can call ${SUPPORT_PHONE.display} with questions.`,
       },
       {
         theySay: "Can you do a discount?",

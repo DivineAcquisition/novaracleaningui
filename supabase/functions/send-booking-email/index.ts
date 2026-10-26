@@ -244,7 +244,7 @@ serve(async (req: Request) => {
 
           const calendarEvent = {
             title: `Novara Cleaning - ${serviceTypeLabels[data.serviceType || 'standard'] || 'Cleaning Service'}`,
-            description: `${serviceTypeLabels[data.serviceType || 'standard'] || 'Cleaning'} for ${data.homeSize || 'your home'}.\n\nBooking ID: ${data.bookingId}\nContact: Novara Cleaning\nPhone: +1 (844) 735-2070`,
+            description: `${serviceTypeLabels[data.serviceType || 'standard'] || 'Cleaning'} for ${data.homeSize || 'your home'}.\n\nBooking ID: ${data.bookingId}\nContact: Novara Cleaning\nPhone: +1 (833) 700-2611`,
             location: `${data.address}, ${data.city}, ${data.state} ${data.zipCode}`,
             startDate,
             endDate,

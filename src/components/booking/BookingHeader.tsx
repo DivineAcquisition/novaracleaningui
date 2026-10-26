@@ -6,6 +6,7 @@ import {
   RiPhoneLine
 } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
+import { INBOUND_PHONE } from "@/config/brand-config";
 import { cn } from "@/lib/utils";
 
 interface BookingHeaderProps {
@@ -48,7 +49,7 @@ export function BookingHeader({ currentStep, totalSteps, stepLabel }: BookingHea
               className="rounded-full gap-1 sm:gap-2 h-8 sm:h-9 px-2 sm:px-3 text-xs sm:text-sm"
               asChild
             >
-              <a href="tel:+18447352070">
+              <a href={INBOUND_PHONE.tel} aria-label={`Call ${INBOUND_PHONE.display}`}>
                 <RiPhoneLine className="w-3 h-3 sm:w-4 sm:h-4" />
                 <span className="hidden xs:inline">Call</span>
               </a>

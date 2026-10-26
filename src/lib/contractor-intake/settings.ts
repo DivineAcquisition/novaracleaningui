@@ -1,3 +1,5 @@
+import { SUPPORT_PHONE } from "@/config/brand-config";
+
 // Thresholds for contractor intake and the Lead Cleaner role.
 // Starting values only. Admin can replace them. Nothing here is a legal constant.
 
@@ -83,7 +85,7 @@ export const DEFAULT_INTAKE_SETTINGS: IntakeSettings = {
   workAuthorizationRejectOnNo: false,
   legalName: "Novara Cleaning LLC",
   legalAddress: "7404 Executive Place, Lanham, MD 20706",
-  applicantPhone: "(844) 735-2070",
+  applicantPhone: SUPPORT_PHONE.display,
   applicantEmail: "operations@novaracleaning.com",
   beforeStartMinutes: {
     identity: 8,

@@ -6,13 +6,34 @@
  */
 
 // =============================================================================
+// PHONE NUMBERS
+// =============================================================================
+
+/** Inbound calls. Assigned to the booking voice agent, so this number rings Nova. */
+export const INBOUND_PHONE = {
+  display: "(833) 700-2611",
+  international: "+1 (833) 700-2611",
+  e164: "+18337002611",
+  tel: "tel:+18337002611",
+} as const;
+
+/** Customer support for a visit already booked, billing questions, and help texts. */
+export const SUPPORT_PHONE = {
+  display: "(844) 735-2070",
+  international: "+1 (844) 735-2070",
+  e164: "+18447352070",
+  tel: "tel:+18447352070",
+} as const;
+
+// =============================================================================
 // COMPANY INFORMATION
 // =============================================================================
 
 export const COMPANY = {
   name: "NovaraCleaning",
   tagline: "Professional House Cleaning Services",
-  phone: "+1 (844) 735-2070",
+  phone: INBOUND_PHONE.international,
+  supportPhone: SUPPORT_PHONE.international,
   email: "hello@novaracleaning.com",
   website: "https://novaracleaning.com",
   logoUrl: "/novara-logo.png",

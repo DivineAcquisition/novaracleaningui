@@ -16,6 +16,7 @@ import {
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { INBOUND_PHONE } from "@/config/brand-config";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -140,11 +141,11 @@ export default function PricingSheet() {
           </div>
           <div className="flex items-center gap-3">
             <a
-              href="tel:+18447352070"
+              href={INBOUND_PHONE.tel}
               className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               <RiPhoneLine className="w-4 h-4" />
-              (844) 735-2070
+              {INBOUND_PHONE.display}
             </a>
             <Button onClick={handleBookNow} className="h-10 px-6 font-semibold bg-gradient-primary hover:opacity-90 text-white">
               Book Now <RiArrowRightLine className="w-4 h-4 ml-2" />
@@ -270,9 +271,9 @@ export default function PricingSheet() {
                 </p>
                 <div className="flex flex-col sm:flex-row gap-3 justify-center pt-1">
                   <Button asChild size="lg" className="bg-gradient-primary hover:opacity-90 text-white font-semibold">
-                    <a href="tel:+18447352070">
+                    <a href={INBOUND_PHONE.tel}>
                       <RiPhoneLine className="w-4 h-4 mr-2" />
-                      Call (844) 735-2070
+                      Call {INBOUND_PHONE.display}
                     </a>
                   </Button>
                 </div>
@@ -519,10 +520,10 @@ export default function PricingSheet() {
           >
             Book Your Clean Now <RiArrowRightLine className="w-4 h-4 ml-2" />
           </Button>
-          <a href="tel:+18447352070">
+          <a href={INBOUND_PHONE.tel}>
             <Button variant="outline" size="lg" className="h-12 px-8 text-base font-semibold border-primary/30 text-primary">
               <RiPhoneLine className="w-4 h-4 mr-2" />
-              Call (844) 735-2070
+              Call {INBOUND_PHONE.display}
             </Button>
           </a>
         </div>

@@ -3,6 +3,7 @@ import { Inter, JetBrains_Mono, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import { UTMTracker } from "@/components/UTMTracker";
+import { INBOUND_PHONE } from "@/config/brand-config";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -93,7 +94,7 @@ export default function RootLayout({
               name: "Novara Cleaning LLC",
               description: "Home cleaning in the DMV. Insured.",
               url: "https://novaracleaning.com",
-              telephone: "+18447352070",
+              telephone: INBOUND_PHONE.e164,
               email: "support@novaracleaning.com",
               address: {
                 "@type": "PostalAddress",
