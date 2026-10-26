@@ -184,6 +184,21 @@ serve(async (req) => {
   const apiKey = Deno.env.get("TELNYX_API_KEY") || "";
   if (!apiKey) return json({ ok: false, reason: "telnyx_key_missing" }, 500);
 
+  let incoming: any = {};
+  try { incoming = await req.json(); } catch { incoming = {}; }
+  if (incoming.inspectTools === true) {
+    const price = await telnyx(apiKey, `/ai/tools/${PRICE_TOOL_ID}`, "GET");
+    const toolObj = price.assistant || {};
+    const definition = toolObj.tool_definition || {};
+    return json({
+      ok: price.status < 300,
+      status: price.status,
+      keys: Object.keys(toolObj),
+      definition_keys: definition && typeof definition === "object" ? Object.keys(definition) : [],
+      definition_preview: JSON.stringify(definition).slice(0, 1800),
+    });
+  }
+
   const agents = [];
   for (const agent of AGENTS) {
     const before = await telnyx(apiKey, `/ai/assistants/${agent.id}`, "GET");
