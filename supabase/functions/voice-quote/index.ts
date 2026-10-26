@@ -4,7 +4,7 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-import { calculatePriceCents } from "./pricing.ts";
+import { calculatePriceCents, HOME_SIZE_RANGES } from "./pricing.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -120,10 +120,15 @@ serve(async (req) => {
   const otherLine = alternate
     ? ` If they still want the ${serviceType} clean, that total is ${fmt(priced.totalCents)} and the deposit is ${fmt(priced.depositCents)}.`
     : "";
+  const delivery = await deliverQuote(supabase, body, spoken, spokenService);
+  const priceLine = `${labelService(spokenService)} total ${fmt(spoken.totalCents)}. Half due now is ${fmt(spoken.depositCents)}. The other half, ${fmt(spoken.remainingCents)}, is charged when the clean is done.`;
+  const humanSummary = delivery.ready
+    ? `${advice.comparison ? `${advice.comparison} ` : ""}Say this price out loud now. ${priceLine}${otherLine} This price holds for 48 hours. Do not add another discount.`
+    : `Do not say a price yet. Still need ${delivery.missing.join(", ")}. The street address comes last, after the name, ZIP, home type, beds, baths, size, pets, email, and a confirmed phone.`;
   return new Response(JSON.stringify({
-    total_cents: spoken.totalCents,
-    deposit_cents: spoken.depositCents,
-    remaining_cents: spoken.remainingCents,
+    total_cents: delivery.ready ? spoken.totalCents : 0,
+    deposit_cents: delivery.ready ? spoken.depositCents : 0,
+    remaining_cents: delivery.ready ? spoken.remainingCents : 0,
     quoted_service: spokenService,
     empty_move_out_discount: spoken.empty_move_out_discount,
     recommended_service: advice.recommended_service,
@@ -132,6 +137,84 @@ serve(async (req) => {
     alternate_deposit_cents: alternate?.depositCents ?? null,
     zone,
     zip_code: zip || null,
-    human_summary: `${advice.comparison ? `${advice.comparison} ` : ""}Quote the ${spokenService} clean unless they choose otherwise. Total ${fmt(spoken.totalCents)}. Deposit today ${fmt(spoken.depositCents)}. Balance ${fmt(spoken.remainingCents)} after the clean.${otherLine} This price holds for 48 hours. Say these amounts only. Do not add another discount.`,
+    price_ready: delivery.ready,
+    human_summary: humanSummary,
+    quote_email_sent: delivery.email_sent,
+    checklist_sent: delivery.checklist_sent,
+    say: delivery.ready
+      ? `Say the total ${fmt(spoken.totalCents)} and the deposit ${fmt(spoken.depositCents)} out loud. Quote email ${delivery.email_sent ? "sent" : "did not send"}. Checklist ${delivery.checklist_sent ? "sent" : "did not send"}. Tell them which ones arrived. The deposit text goes out when they pick a day and you book it.`
+      : `Do not say a dollar amount yet. Still need ${delivery.missing.join(", ")}.`,
   }), { headers });
 });
+
+function labelService(serviceType: string): string {
+  if (serviceType === "moveInOut") return "Move-in/out";
+  if (serviceType === "deep") return "Deep clean";
+  if (serviceType === "combo") return "Deep and standard";
+  return "Standard clean";
+}
+
+function sizeLabel(id: string): string {
+  return HOME_SIZE_RANGES.find((band) => band.id === id)?.label || id;
+}
+
+async function deliverQuote(
+  supabase: ReturnType<typeof createClient>,
+  body: Record<string, unknown>,
+  priced: { totalCents: number; depositCents: number; remainingCents: number },
+  serviceType: string,
+): Promise<{ ready: boolean; missing: string[]; email_sent: boolean; checklist_sent: boolean }> {
+  const email = String(body.email || "").trim();
+  const phone = String(body.phone || "").trim();
+  const first = String(body.first_name || "").trim();
+  const address = String(body.address || "").trim();
+  const missing: string[] = [];
+  if (first.length < 2) missing.push("name");
+  if (!email.includes("@")) missing.push("email");
+  if (phone.replace(/\D/g, "").length < 10) missing.push("phone");
+  if (address.length < 4) missing.push("street address");
+  const ready = missing.length === 0;
+  if (!ready) return { ready: false, missing, email_sent: false, checklist_sent: false };
+  let emailSent = false;
+  let checklistSent = false;
+  try {
+    const mail = await supabase.functions.invoke("send-sales-quote-email", {
+      body: {
+        email,
+        firstName: first,
+        serviceName: labelService(serviceType),
+        homeSizeLabel: sizeLabel(String(body.home_size_id || "")),
+        frequency: "One-Time",
+        bedrooms: Number(body.bedrooms || 0),
+        bathrooms: Number(body.bathrooms || 0),
+        basePriceCents: priced.totalCents,
+        serviceTierCost: 0,
+        addOnsCents: 0,
+        discountPct: 0,
+        discountCents: 0,
+        finalPriceCents: priced.totalCents,
+        depositCents: priced.depositCents,
+        balanceDueCents: priced.remainingCents,
+        monthlyTotalCents: priced.totalCents,
+        isNewCustomer: false,
+        addOns: Array.isArray(body.add_ons) ? body.add_ons.map(String) : [],
+      },
+    });
+    emailSent = !mail.error;
+  } catch { /* the spoken price still stands */ }
+  try {
+    const list = await supabase.functions.invoke("send-cleaning-checklist", {
+      body: {
+        email,
+        phone,
+        firstName: first,
+        serviceType,
+        sendEmail: true,
+        sendSms: true,
+      },
+    });
+    const data = list.data as { smsSent?: boolean; emailed?: boolean } | null;
+    checklistSent = !list.error && Boolean(data?.smsSent || data?.emailed);
+  } catch { /* the spoken price still stands */ }
+  return { ready: true, missing, email_sent: emailSent, checklist_sent: checklistSent };
+}

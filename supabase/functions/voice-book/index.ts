@@ -3,7 +3,6 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-import Stripe from "https://esm.sh/stripe@18.5.0";
 import { calculatePriceCents } from "./pricing.ts";
 
 const corsHeaders = {
@@ -57,16 +56,17 @@ serve(async (req) => {
   let body: any = {};
   try { body = await req.json(); } catch { body = {}; }
   const required = [
-    "first_name", "last_name", "email", "phone", "address", "city", "state",
+    "first_name", "email", "phone", "address", "city", "state",
     "zip_code", "bedrooms", "bathrooms", "dwelling_type", "home_size_id",
     "service_type", "service_date", "time_slot",
   ];
   for (const key of required) {
     if (!body[key] && body[key] !== 0) return json({ error: `missing_field: ${key}` });
   }
-  if (!realPersonName(body.first_name) || !realPersonName(body.last_name) || !realEmail(body.email)) {
-    return json({ error: "real_contact_required", say: "Ask for their real first name, last name, and email before creating the booking." });
+  if (!realPersonName(body.first_name) || !realEmail(body.email)) {
+    return json({ error: "real_contact_required", say: "Ask for their real first name and email before creating the booking." });
   }
+  if (!body.last_name) body.last_name = body.first_name;
   const zip = String(body.zip_code || "").replace(/\D/g, "").slice(0, 5);
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
@@ -154,25 +154,17 @@ serve(async (req) => {
   }).select("id").single();
   if (insErr || !booking) return json({ error: `booking_insert_failed: ${insErr?.message || "unknown"}` });
 
-  let paymentLinkUrl = "";
-  try {
-    const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", { apiVersion: "2025-08-27.basil" as any });
-    const price: any = await stripe.prices.create({
-      currency: "usd",
-      unit_amount: priced.depositCents,
-      product_data: { name: `NVC-${String(bookingNumber).padStart(4, "0")} deposit` },
-    });
-    const link: any = await stripe.paymentLinks.create({
-      line_items: [{ price: price.id, quantity: 1 }],
-      metadata: { booking_id: booking.id, kind: "deposit", source: "ai_assistant" },
-      after_completion: { type: "redirect", redirect: { url: "https://app.novaracleaning.com/account?payment=success" } },
-    });
-    paymentLinkUrl = link.url;
-  } catch (e) {
-    return json({ error: `payment_link_failed: ${e instanceof Error ? e.message : String(e)}` });
-  }
-  await supabase.from("bookings").update({ hosted_invoice_url: paymentLinkUrl }).eq("id", booking.id);
+  const bytes = new Uint8Array(20);
+  crypto.getRandomValues(bytes);
+  const payToken = Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+  const payUrl = `https://try.novaracleaning.com/pay/${payToken}`;
+  await supabase.from("bookings").update({
+    pay_page_token: payToken,
+    hosted_invoice_url: payUrl,
+    pets: body.pets || null,
+  }).eq("id", booking.id);
   const fmt = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+  const remainingCents = priced.totalCents - priced.depositCents;
   const emptyNote = priced.emptyDiscount ? " Empty move-out is 15 percent under a furnished move-out." : "";
   let smsSent = false;
   try {
@@ -180,21 +172,65 @@ serve(async (req) => {
       body: {
         toPhone: phone,
         type: "confirmation",
-        message: `Novara Cleaning: your clean on ${body.service_date} at ${body.time_slot} is saved. Total ${fmt(priced.totalCents)}. Deposit ${fmt(priced.depositCents)} confirms it: ${paymentLinkUrl} This price holds 48 hours.${emptyNote}`,
+        message: `Novara Cleaning: Hi ${body.first_name}! Your ${body.service_type} clean is pending for ${body.service_date} ${body.time_slot} at ${body.address}. Total ${fmt(priced.totalCents)}. Your booking stays pending until your deposit is received. Review and pay your ${fmt(priced.depositCents)} deposit here: ${payUrl} — we won't charge the remaining ${fmt(remainingCents)} until after we complete the clean.`,
       },
     });
     smsSent = !sms.error && (sms.data as { success?: boolean } | null)?.success !== false;
   } catch { /* the booking still exists */ }
+  let emailSent = false;
+  try {
+    const mail = await supabase.functions.invoke("send-sales-quote-email", {
+      body: {
+        email: body.email,
+        firstName: body.first_name,
+        serviceName: String(body.service_type),
+        homeSizeLabel: String(body.home_size_id),
+        frequency: "One-Time",
+        bedrooms: Number(body.bedrooms),
+        bathrooms: Number(body.bathrooms),
+        basePriceCents: priced.totalCents,
+        serviceTierCost: 0,
+        addOnsCents: 0,
+        discountPct: 0,
+        discountCents: 0,
+        finalPriceCents: priced.totalCents,
+        depositCents: priced.depositCents,
+        balanceDueCents: remainingCents,
+        monthlyTotalCents: priced.totalCents,
+        isNewCustomer: false,
+        addOns: Array.isArray(body.add_ons) ? body.add_ons : [],
+      },
+    });
+    emailSent = !mail.error;
+  } catch { /* booking still exists */ }
+  let checklistSent = false;
+  try {
+    const list = await supabase.functions.invoke("send-cleaning-checklist", {
+      body: { bookingId: booking.id, sendEmail: true, sendSms: true, force: true },
+    });
+    const data = list.data as { smsSent?: boolean; emailed?: boolean } | null;
+    checklistSent = !list.error && Boolean(data?.smsSent || data?.emailed);
+  } catch { /* booking still exists */ }
+  const sent = [
+    smsSent ? "the deposit text" : "",
+    emailSent ? "the quote email" : "",
+    checklistSent ? "the checklist" : "",
+  ].filter(Boolean);
+  const missed = [
+    smsSent ? "" : "the deposit text",
+    emailSent ? "" : "the quote email",
+    checklistSent ? "" : "the checklist",
+  ].filter(Boolean);
   return json({
     booking_id: booking.id,
     booking_number: bookingNumber,
-    payment_link: paymentLinkUrl,
+    payment_link: payUrl,
     deposit_cents: priced.depositCents,
     total_cents: priced.totalCents,
     zone,
     sms_sent: smsSent,
-    say: smsSent
-      ? `I texted the deposit link for ${fmt(priced.depositCents)}. The visit is confirmed once that deposit is paid. The total is ${fmt(priced.totalCents)}, and this price holds for 48 hours.${emptyNote}`
-      : `The visit is saved and the deposit is ${fmt(priced.depositCents)}. The text did not go through. Tell them the office will text the payment link. Do not read a URL aloud.${emptyNote}`,
+    quote_email_sent: emailSent,
+    checklist_sent: checklistSent,
+    say: `Total ${fmt(priced.totalCents)}. Deposit ${fmt(priced.depositCents)}.${emptyNote} Sent: ${sent.join(", ") || "nothing"}. ${missed.length ? `Did not send: ${missed.join(", ")}. Say that plainly.` : "Tell them those are on the way. Do not read the link aloud."}`,
   });
 });

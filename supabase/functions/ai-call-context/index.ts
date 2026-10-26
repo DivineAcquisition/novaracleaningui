@@ -335,15 +335,16 @@ serve(async (req) => {
   if (role === "booking") {
     const fromGoogle = /google|lsa|local service/.test(text(lead?.source || hinted.lead_source).toLowerCase());
     sayFirst = [
-      "Private note. Not a line to speak.",
-      fromGoogle ? "They may have inquired from Google. Use that only if it helps. Do not recite it." : "No Google inquiry is on file.",
+      "Private note. Not a line to speak. You are Nova, the AI assistant.",
+      fromGoogle ? "They may have inquired from Google." : "No Google inquiry is on file.",
+      firstName ? `Name: ${firstName}.` : "Name not collected yet. Ask for it first.",
       zip ? `ZIP ${zip} is ${serviced}${city ? `, ${city}` : ""}.` : "No ZIP yet.",
       knownService ? `Service mentioned: ${serviceLabel(knownService)}.` : "No service chosen yet.",
       knownSize ? `Size on file: ${sizeLabel || knownSize}.` : "No size yet.",
-      address ? `Street on file: ${address}.` : "No street yet.",
+      address ? `Street already on file: ${address}.` : "Do not ask for the street until name, ZIP, home type, beds, baths, size, pets, email, and phone are done.",
       upcoming ? `A visit is already saved for ${when || "an open date"}.` : "No visit is saved.",
     ].join(" ");
-    nextStep = "Choose your own words from what they just said. Check the ZIP before you name a city. Have an opinion when they ask for a deep clean. Price only what the tool returns. Half is due now and half when the clean is done.";
+    nextStep = "Collect in order, skipping what you have: name, ZIP, home type, beds and baths, square footage, pets, email, confirm the phone, street last. Then call get_price_estimate and say the total and the deposit. After they accept, book the day so the deposit text, quote email, and checklist go out.";
   }
 
   const nextBooking = upcoming
