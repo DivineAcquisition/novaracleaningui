@@ -9,6 +9,8 @@ const PRICE_TOOL_ID = "tool-a5972a1e-2ada-49e4-9e1f-14e7f0c34d14";
 const WAITLIST_TOOL_ID = "tool-cbf1b88b-24d7-4424-84e8-fc0098e88ccc";
 const QUOTE_URL = "https://sxdraeptzuamsgjcvfeg.supabase.co/functions/v1/voice-quote";
 const WAITLIST_URL = "https://sxdraeptzuamsgjcvfeg.supabase.co/functions/v1/voice-waitlist";
+const BOOK_TOOL_ID = "tool-264d2494-0c0a-4d97-ab81-b5d514e8e397";
+const BOOK_URL = "https://sxdraeptzuamsgjcvfeg.supabase.co/functions/v1/voice-book";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
@@ -85,6 +87,17 @@ serve(async (req) => {
     body: JSON.stringify({ webhook: waitDef }),
   });
 
+  const bookRes = await fetch(`https://api.telnyx.com/v2/ai/tools/${BOOK_TOOL_ID}`, { headers });
+  const bookCurrent = unwrap(await bookRes.json());
+  const bookDef = { ...(bookCurrent.tool_definition || bookCurrent.webhook || {}) };
+  bookDef.url = BOOK_URL;
+  bookDef.description = "Create the visit only after a spoken read-back and a yes. The deposit text uses the same total as get_price_estimate. Do not read the payment link aloud.";
+  const bookPatch = await fetch(`https://api.telnyx.com/v2/ai/tools/${BOOK_TOOL_ID}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ webhook: bookDef }),
+  });
+
   const afterRes = await fetch(`https://api.telnyx.com/v2/ai/tools/${PRICE_TOOL_ID}`, { headers });
   const afterJson = await afterRes.json();
   const after = unwrap(afterJson);
@@ -93,8 +106,10 @@ serve(async (req) => {
   const waitAfterRes = await fetch(`https://api.telnyx.com/v2/ai/tools/${WAITLIST_TOOL_ID}`, { headers });
   const waitAfter = unwrap(await waitAfterRes.json());
   const waitUrl = (waitAfter.tool_definition || waitAfter.webhook || {}).url || "";
+  const bookAfter = unwrap(await (await fetch(`https://api.telnyx.com/v2/ai/tools/${BOOK_TOOL_ID}`, { headers })).json());
+  const bookUrl = (bookAfter.tool_definition || bookAfter.webhook || {}).url || "";
   return json({
-    ok: patchStatus < 300 && afterProps.includes("zip_code") && waitPatch.status < 300 && String(afterDef.url || "").includes("voice-quote") && String(waitUrl).includes("voice-waitlist"),
+    ok: patchStatus < 300 && afterProps.includes("zip_code") && waitPatch.status < 300 && bookPatch.status < 300 && String(afterDef.url || "").includes("voice-quote") && String(waitUrl).includes("voice-waitlist") && String(bookUrl).includes("voice-book"),
     patch_status: patchStatus,
     patch_mode: patchMode,
     price_url: afterDef.url || "",
@@ -102,5 +117,7 @@ serve(async (req) => {
     required: afterDef.body_parameters?.required || [],
     waitlist_status: waitPatch.status,
     waitlist_url: waitUrl,
-  }, patchStatus >= 300 || waitPatch.status >= 300 ? 502 : 200);
+    book_status: bookPatch.status,
+    book_url: bookUrl,
+  }, patchStatus >= 300 || waitPatch.status >= 300 || bookPatch.status >= 300 ? 502 : 200);
 });
