@@ -60,7 +60,7 @@ serve(async (req) => {
     tier_label: coverage?.tier_label || null,
     zone: zoneName,
     say: serviced
-      ? `Yes, we clean in ${coverage?.city || "that ZIP"}, ${coverage?.state || ""}.`
+      ? `Yes, we clean in ${coverage?.city || "that ZIP"}, ${coverage?.state || ""}. Continue the booking. Do not add a waitlist.`
       : "That ZIP is not in the active service area. Offer the waitlist and do not quote a price.",
   }), { headers });
 });

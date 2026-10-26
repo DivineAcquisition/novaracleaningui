@@ -1,8 +1,9 @@
 // Live caller context for Telnyx assistants.
 //
-// Telnyx POSTs assistant.initialization at the start of a call or text.
-// The response is the caller's current Supabase record: name, address,
-// bookings, lead details, and whether their ZIP is served.
+// Telnyx POSTs assistant.initialization when a call or text starts.
+// The response is { dynamic_variables: { string: string } }. Those values
+// are already substituted into the assistant prompt, so the first thing
+// the agent says can use the real booking, lead, and ZIP on file.
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
@@ -11,6 +12,26 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, telnyx-signature-ed25519, telnyx-timestamp",
 };
+
+const ASSISTANT_ROLES: Record<string, "booking" | "service" | "outbound"> = {
+  "assistant-0ed80104-610b-4bc1-bdfe-fa41d760cf8d": "booking",
+  "assistant-c6b6cf63-63c3-4a20-a827-6daadc96562f": "service",
+  "assistant-689983fe-f3bb-4207-8d2c-1013debefb4e": "outbound",
+};
+
+const SIZE_BANDS: Array<[number, number, string, string]> = [
+  [0, 999, "0_999", "under 1,000 square feet"],
+  [1000, 1500, "1000_1500", "about 1,000 to 1,500 square feet"],
+  [1501, 2000, "1501_2000", "about 1,500 to 2,000 square feet"],
+  [2001, 2500, "2001_2500", "about 2,000 to 2,500 square feet"],
+  [2501, 3000, "2501_3000", "about 2,500 to 3,000 square feet"],
+  [3001, 3500, "3001_3500", "about 3,000 to 3,500 square feet"],
+  [3501, 4000, "3501_4000", "about 3,500 to 4,000 square feet"],
+  [4001, 4500, "4001_4500", "about 4,000 to 4,500 square feet"],
+  [4501, 5000, "4501_5000", "about 4,500 to 5,000 square feet"],
+];
+
+const PLACEHOLDER_NAMES = new Set(["there", "unknown", "customer", "lead", "friend", "test", "user", "caller", "guest", "na", "n/a", "none"]);
 
 function toE164(raw: string | null | undefined): string {
   const digits = String(raw || "").replace(/\D/g, "");
@@ -24,20 +45,93 @@ function last10(phone: string): string {
   return phone.replace(/\D/g, "").slice(-10);
 }
 
-function money(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
+function text(value: unknown): string {
+  return value == null ? "" : String(value).trim();
 }
 
-function text(value: unknown): string {
-  return value == null || value === "" ? "" : String(value);
+function clip(value: string, max = 700): string {
+  const clean = value.replace(/\s+/g, " ").trim();
+  return clean.length <= max ? clean : `${clean.slice(0, max - 1)}…`;
+}
+
+function money(cents: number): string {
+  return `$${(Math.max(0, cents) / 100).toFixed(2)}`;
+}
+
+function realName(value: string): string {
+  const clean = value.trim();
+  if (clean.length < 2) return "";
+  if (PLACEHOLDER_NAMES.has(clean.toLowerCase())) return "";
+  return clean;
+}
+
+function todayEastern(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+function spokenDate(iso: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
+  const dt = new Date(`${iso}T12:00:00Z`);
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  }).format(dt);
+}
+
+function serviceId(raw: string): string {
+  const s = raw.toLowerCase();
+  if (!s) return "";
+  if (s.includes("move")) return "moveInOut";
+  if (s.includes("combo") || (s.includes("deep") && s.includes("standard"))) return "combo";
+  if (s.includes("deep")) return "deep";
+  if (s.includes("standard") || s.includes("regular") || s.includes("basic") || s.includes("maintenance")) return "standard";
+  return "";
+}
+
+function serviceLabel(raw: string): string {
+  const id = serviceId(raw);
+  if (id === "moveInOut") return "move-in/out clean";
+  if (id === "combo") return "deep and standard combo";
+  if (id === "deep") return "deep clean";
+  if (id === "standard") return "standard clean";
+  return raw.trim();
+}
+
+function sizeFromSqft(sqft: number): { id: string; label: string } {
+  if (!Number.isFinite(sqft) || sqft <= 0) return { id: "", label: "" };
+  if (sqft > 5000) return { id: "5000_plus", label: "over 5,000 square feet" };
+  for (const [min, max, id, label] of SIZE_BANDS) {
+    if (sqft >= min && sqft <= max) return { id, label };
+  }
+  return { id: "", label: "" };
+}
+
+function roleFor(req: Request, payload: Record<string, unknown>): "booking" | "service" | "outbound" {
+  const requested = new URL(req.url).searchParams.get("role") || text(payload.role);
+  if (requested === "booking" || requested === "service" || requested === "outbound") return requested;
+  const assistantId = text(payload.assistant_id || payload.telnyx_assistant_id);
+  return ASSISTANT_ROLES[assistantId] || "booking";
 }
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-  let body: any = {};
-  try { body = await req.json(); } catch { /* allow a manual test */ }
-  const payload = body?.data?.payload || body?.payload || body || {};
-  const phone = toE164(payload.telnyx_end_user_target || payload.phone || "");
+  let body: Record<string, unknown> = {};
+  try { body = await req.json(); } catch { /* manual test */ }
+  const data = (body.data || {}) as Record<string, unknown>;
+  const payload = (data.payload || body.payload || body || {}) as Record<string, unknown>;
+  const hinted = {
+    ...((payload.dynamic_variables || {}) as Record<string, unknown>),
+    ...((payload.ai_assistant_dynamic_variables || {}) as Record<string, unknown>),
+  };
+  const role = roleFor(req, payload);
+  const phone = toE164(text(payload.telnyx_end_user_target || payload.phone || hinted.phone));
   const ten = last10(phone);
 
   const supabase = createClient(
@@ -45,85 +139,218 @@ serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
   );
 
-  let bookings: any[] = [];
-  let lead: any = null;
+  let bookings: Record<string, unknown>[] = [];
+  let lead: Record<string, unknown> | null = null;
   if (ten.length === 10) {
-    const { data } = await supabase
-      .from("bookings")
-      .select("id, booking_number, status, first_name, last_name, email, phone, address, city, state, zip_code, service_date, time_slot, service_type, total_estimate_cents, final_charge_cents, deposit_cents, payment_received_at")
-      .ilike("phone", `%${ten}%`)
-      .order("created_at", { ascending: false })
-      .limit(8);
-    bookings = (data || []).filter((row: any) => last10(String(row.phone || "")) === ten);
-    const { data: leadRow } = await supabase
-      .from("leads")
-      .select("first_name, last_name, email, phone, source, zip_code, city, state, service_type, bedrooms, bathrooms, sqft, preferred_date, do_not_call, created_at")
-      .ilike("phone", `%${ten}%`)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (leadRow && last10(String(leadRow.phone || "")) === ten) lead = leadRow;
+    const [bookingRes, leadRes] = await Promise.all([
+      supabase
+        .from("bookings")
+        .select("id, booking_number, status, first_name, last_name, email, phone, address, city, state, zip_code, service_date, time_slot, service_type, bedrooms, bathrooms, home_size_id, dwelling_type, total_estimate_cents, final_charge_cents, deposit_cents, payment_received_at, hosted_invoice_url, created_at")
+        .ilike("phone", `%${ten}%`)
+        .order("created_at", { ascending: false })
+        .limit(8),
+      supabase
+        .from("leads")
+        .select("first_name, last_name, email, phone, source, zip_code, city, state, service_type, bedrooms, bathrooms, sqft, preferred_date, do_not_call, created_at")
+        .ilike("phone", `%${ten}%`)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+    bookings = ((bookingRes.data || []) as Record<string, unknown>[]).filter((row) => last10(String(row.phone || "")) === ten);
+    if (leadRes.data && last10(String(leadRes.data.phone || "")) === ten) lead = leadRes.data as Record<string, unknown>;
   }
 
   const newest = bookings[0];
-  const zip = String(payload.zip_code || newest?.zip_code || lead?.zip_code || "").replace(/\D/g, "").slice(0, 5);
-  let coverage: any = null;
+  const zip = text(payload.zip_code || hinted.zip_code || newest?.zip_code || lead?.zip_code).replace(/\D/g, "").slice(0, 5);
+  let coverage: Record<string, unknown> | null = null;
   let zoneName = "";
   let lookupFailed = false;
   if (zip) {
-    const { data, error } = await supabase
-      .from("service_coverage_zones")
-      .select("city, state, county, tier, tier_label, is_active")
-      .eq("zip_code", zip)
-      .maybeSingle();
-    if (error) lookupFailed = true;
-    coverage = data;
-    const { data: zoneZip } = await supabase.from("pricing_zone_zips").select("zone_id").eq("zip", zip).maybeSingle();
-    if (zoneZip?.zone_id) {
-      const { data: zone } = await supabase.from("pricing_zones").select("name, status").eq("id", zoneZip.zone_id).maybeSingle();
-      if (zone?.status === "not_served") coverage = coverage ? { ...coverage, is_active: false } : coverage;
-      zoneName = zone?.name || "";
+    const [coverageRes, zoneZipRes] = await Promise.all([
+      supabase.from("service_coverage_zones").select("city, state, county, tier, tier_label, is_active").eq("zip_code", zip).maybeSingle(),
+      supabase.from("pricing_zone_zips").select("zone_id").eq("zip", zip).maybeSingle(),
+    ]);
+    if (coverageRes.error) lookupFailed = true;
+    coverage = (coverageRes.data || null) as Record<string, unknown> | null;
+    const zoneId = zoneZipRes.data?.zone_id;
+    if (zoneId) {
+      const { data: zone } = await supabase.from("pricing_zones").select("name, status").eq("id", zoneId).maybeSingle();
+      if (zone?.status === "not_served" && coverage) coverage = { ...coverage, is_active: false };
+      zoneName = text(zone?.name);
     }
   }
 
-  const active = bookings.filter((row) => ["pending_payment", "confirmed", "assigned"].includes(row.status));
-  const next = active.find((row) => row.service_date) || active[0];
-  const outstanding = active.reduce((sum, row) => {
-    if (row.payment_received_at) return sum;
-    return sum + Math.max(0, (row.final_charge_cents || row.total_estimate_cents || 0) - (row.deposit_cents || 0));
-  }, 0);
-  const firstName = text(newest?.first_name || lead?.first_name);
+  const active = bookings.filter((row) => ["pending_payment", "confirmed", "assigned"].includes(String(row.status || "")));
+  const today = todayEastern();
+  const upcoming = active
+    .filter((row) => text(row.service_date) >= today)
+    .sort((a, b) => text(a.service_date).localeCompare(text(b.service_date)))[0] || active[0];
+  const completedCount = bookings.filter((row) => row.status === "completed").length;
+  const firstName = realName(text(newest?.first_name || lead?.first_name || hinted.first_name));
+  const lastName = realName(text(newest?.last_name || lead?.last_name || hinted.last_name));
+  const fullName = `${firstName} ${lastName}`.trim();
+  const email = text(newest?.email || lead?.email);
+  const address = text(newest?.address);
+  const city = text(newest?.city || lead?.city || coverage?.city);
+  const state = text(newest?.state || lead?.state || coverage?.state);
   const serviced = lookupFailed ? "unknown" : coverage ? (coverage.is_active ? "yes" : "no") : (zip ? "no" : "unknown");
-  const nextBooking = next
-    ? `Booking ${next.booking_number || ""} is ${next.status} on ${next.service_date || "an open date"} at ${next.time_slot || "a time still to be set"}, ${next.address || ""} ${next.city || ""}.`
+  const serviceRaw = text(upcoming?.service_type || lead?.service_type || hinted.service_type);
+  const knownService = serviceId(serviceRaw);
+  const sqft = Number(lead?.sqft || 0);
+  const sized = sizeFromSqft(sqft);
+  const knownSize = text(upcoming?.home_size_id) || sized.id;
+  const sizeLabel = SIZE_BANDS.find((band) => band[2] === knownSize)?.[3] || sized.label;
+  const bedrooms = text(upcoming?.bedrooms || lead?.bedrooms || hinted.bedrooms);
+  const bathrooms = text(upcoming?.bathrooms || lead?.bathrooms);
+  const preferredDate = text(lead?.preferred_date || upcoming?.service_date);
+  const depositCents = Number(upcoming?.deposit_cents || 0);
+  const unpaid = Boolean(upcoming && !upcoming.payment_received_at && ["pending_payment", "confirmed", "assigned"].includes(String(upcoming.status || "")));
+  const dueNow = unpaid ? (depositCents || Math.round(Number(upcoming?.total_estimate_cents || 0) / 2)) : 0;
+  const when = upcoming?.service_date ? spokenDate(text(upcoming.service_date)) : "";
+  const slot = text(upcoming?.time_slot);
+  const svc = serviceLabel(text(upcoming?.service_type)) || "clean";
+  const doNotCall = Boolean(lead?.do_not_call);
+
+  const missing: string[] = [];
+  if (!firstName) missing.push("first name");
+  if (!lastName) missing.push("last name");
+  if (!email.includes("@")) missing.push("email");
+  if (!address) missing.push("street address");
+  if (!city) missing.push("city");
+  if (!state) missing.push("state");
+  if (!zip) missing.push("ZIP code");
+  if (!bedrooms) missing.push("bedrooms");
+  if (!bathrooms) missing.push("bathrooms");
+  if (!text(upcoming?.dwelling_type)) missing.push("home type");
+  if (!knownSize) missing.push("home size");
+  if (!knownService) missing.push("service");
+  if (!preferredDate) missing.push("date");
+  if (!slot) missing.push("arrival time");
+
+  let sayFirst = "What ZIP code is the home in?";
+  let nextStep = "When they answer, call check_service_area with that ZIP. If serviced is true, say the city and ask if they want a standard clean, a deep clean, or a move-in/out.";
+  let resultTarget = "One visit saved after a spoken read-back and a yes, with the deposit text sent.";
+
+  if (role === "service") {
+    resultTarget = "Finish what they called about on this call, or put a person on it and say that plainly.";
+    if (ten.length < 10) {
+      sayFirst = "What's the mobile number on the booking?";
+      nextStep = "Call list_customer_bookings with that number before you guess.";
+    } else if (!upcoming) {
+      sayFirst = fullName
+        ? `${fullName}, I don't have an active visit on this number. What do you need?`
+        : "I don't have an active visit on this number. What do you need?";
+      nextStep = "If they have another number, look that up. If they want a new clean, ask for the ZIP and book it one question at a time.";
+    } else if (upcoming.status === "pending_payment" && !upcoming.payment_received_at) {
+      sayFirst = `Your ${svc} on ${when} is saved and still needs the ${money(dueNow)} deposit. You can pay at app.novaracleaning.com/account. Do you want to pay that, or change the visit?`;
+      nextStep = "If they want to cancel or move it, call preview_change and say the fee before anything is changed.";
+    } else {
+      sayFirst = `I have your ${svc} on ${when}${slot ? `, arriving ${slot}` : ""}. What would you like to do?`;
+      nextStep = "For a cancel or a new time, call preview_change first and wait for a yes. For damage, a billing dispute, or a refund that is not a normal cancel, call submit_request and do not promise an amount.";
+    }
+  } else if (role === "outbound" && doNotCall) {
+    sayFirst = "Sorry to catch you. I'll mark this number so we don't call again.";
+    nextStep = "Call opt_out_calls with the caller's phone, confirm that, and end the call.";
+    resultTarget = "This number is opted out and the call is over.";
+  } else if (upcoming && !upcoming.payment_received_at && upcoming.status === "pending_payment") {
+    sayFirst = fullName
+      ? `${fullName}, your ${svc} on ${when} is already saved and waiting on the ${money(dueNow)} deposit. Want me to point you back to that text?`
+      : `Your ${svc} on ${when} is already saved and waiting on the ${money(dueNow)} deposit. Want me to point you back to that text?`;
+    nextStep = "Do not create a second booking. If they want a different day, preview the change or escalate. If they are ready to pay, send them to the account page and the text that already went out.";
+    resultTarget = "They pay the existing deposit, or a person handles a change. No second booking.";
+  } else if (serviced === "no") {
+    sayFirst = `I checked ${zip}. We don't clean there yet. I can put you on the waitlist and reach out when that ZIP opens.`;
+    nextStep = "Collect a real first name and a real email, then call add_to_waitlist. Do not quote a price.";
+    resultTarget = "A waitlist entry with a real name and email, or a polite end if they decline.";
+  } else if (serviced === "unknown" && !zip) {
+    sayFirst = fullName ? `${fullName}, what ZIP code is the home in?` : "What ZIP code is the home in?";
+    nextStep = "Call check_service_area before you talk about price or availability.";
+  } else if (lookupFailed) {
+    sayFirst = "I'm checking that ZIP now. I don't want to guess on coverage.";
+    nextStep = "Call check_service_area. If it returns lookup_failed, do not say the ZIP is outside the area. Offer a person via escalate_to_human.";
+  } else {
+    const place = city ? `We clean in ${city}.` : "That ZIP is in our service area.";
+    const who = fullName ? `${fullName}, ` : "";
+    if (knownSize && knownService) {
+      sayFirst = `${who}${place} I can price the ${serviceLabel(knownService)} for a home that's ${sizeLabel}.`;
+      nextStep = `Call get_price_estimate with home_size_id ${knownSize}, service_type ${knownService}, and zip_code ${zip}. Speak only human_summary, then pause.`;
+    } else if (knownService && sizeLabel) {
+      sayFirst = `${who}${place} You asked about a ${serviceLabel(knownService)}, and the home looks ${sizeLabel}. Is that the size?`;
+      nextStep = "If they confirm, call get_price_estimate with that size, service, and ZIP. Speak only human_summary, then pause.";
+    } else if (!knownService) {
+      sayFirst = `${who}${place} Are you looking for a standard clean, a deep clean, or a move-in/out?`;
+      nextStep = "One answer, then ask the home size if you don't already have it. Deep clean if it has been a long time. Fridge and oven are included on a move-in/out.";
+    } else {
+      sayFirst = `${who}${place} About how big is the home, in square feet or bedrooms?`;
+      nextStep = "Map the answer to a home_size_id, then call get_price_estimate with the ZIP. Speak only human_summary, then pause.";
+    }
+    if (role === "outbound") {
+      resultTarget = "A booked visit on this call, a callback with a day and a time, or a clear no.";
+      if (firstName) {
+        const leadIn = fullName ? `${fullName}, ` : `${firstName}, `;
+        const rest = sayFirst.startsWith(leadIn) ? sayFirst.slice(leadIn.length) : sayFirst;
+        sayFirst = `Thanks ${firstName}. ${rest}`;
+      }
+    }
+  }
+
+  if (preferredDate && role !== "service" && serviced === "yes" && knownSize && knownService && !slot) {
+    nextStep = `${nextStep} They asked for ${spokenDate(preferredDate)}. After the price, call get_available_slots for that date and offer only those times.`;
+  }
+
+  const nextBooking = upcoming
+    ? `Booking ${text(upcoming.booking_number)} is ${text(upcoming.status)} on ${when || "an open date"}${slot ? ` at ${slot}` : ""}${address ? `, ${address}` : ""}${city ? `, ${city}` : ""}.`
     : "No active booking.";
   const brief = [
-    firstName ? `The caller's name on file is ${firstName} ${text(newest?.last_name || lead?.last_name)}.` : "No name is on file yet.",
-    newest?.address ? `Address on file: ${newest.address}, ${newest.city || ""} ${newest.state || ""} ${newest.zip_code || ""}.` : "",
-    zip ? `ZIP ${zip} serviced: ${serviced}. ${coverage?.city || ""} ${coverage?.state || ""} ${zoneName}.` : "No ZIP is on file yet.",
+    fullName ? `Name on file: ${fullName}.` : "No name is on file yet.",
+    phone ? `Caller phone: ${phone}.` : "",
+    email.includes("@") ? `Email on file: ${email}.` : "",
+    address ? `Address on file: ${address}, ${city} ${state} ${zip}.` : "",
+    zip ? `ZIP ${zip} is ${serviced === "yes" ? "served" : serviced === "no" ? "not served" : "unconfirmed"}. ${text(coverage?.city)} ${text(coverage?.state)} ${zoneName}.` : "No ZIP is on file yet.",
+    knownService ? `Service interest: ${serviceLabel(knownService)}.` : "",
+    sizeLabel ? `Home size on file: ${sizeLabel}.` : "",
+    bedrooms ? `Bedrooms on file: ${bedrooms}.` : "",
     nextBooking,
-    outstanding > 0 ? `Unpaid balance on file: ${money(outstanding)}.` : "No unpaid balance is on file.",
-    lead?.source ? `Latest lead source: ${lead.source}.` : "",
-    lead?.do_not_call ? "This lead is marked do not call." : "",
+    dueNow > 0 ? `Deposit still due to confirm the visit: ${money(dueNow)}.` : "No deposit is waiting on an active visit.",
+    completedCount > 0 ? `Completed cleans on this number: ${completedCount}.` : "",
+    lead?.source ? `Lead source: ${text(lead.source)}.` : "",
+    doNotCall ? "This lead is marked do not call." : "",
   ].filter(Boolean).join(" ");
 
-  return new Response(JSON.stringify({
-    dynamic_variables: {
-      customer_found: bookings.length ? "yes" : "no",
-      first_name: firstName || "there",
-      customer_name: `${firstName} ${text(newest?.last_name || lead?.last_name)}`.trim(),
-      customer_email: text(newest?.email || lead?.email),
-      customer_address: text(newest?.address || ""),
-      known_zip: zip,
-      zip_serviced: serviced,
-      coverage_city: text(coverage?.city),
-      coverage_state: text(coverage?.state),
-      pricing_zone: zoneName,
-      next_booking: nextBooking,
-      outstanding_balance: outstanding > 0 ? money(outstanding) : "none",
-      lead_source: text(lead?.source || payload.lead_source),
-      do_not_call: lead?.do_not_call ? "yes" : "no",
-      context_brief: brief,
-    },
-  }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  const variables = {
+    customer_found: bookings.length ? "yes" : "no",
+    first_name: firstName,
+    customer_name: fullName,
+    customer_email: email.includes("@") ? email : "",
+    customer_address: address,
+    caller_phone: phone,
+    known_zip: zip,
+    zip_serviced: serviced,
+    coverage_city: text(coverage?.city),
+    coverage_state: text(coverage?.state),
+    pricing_zone: zoneName,
+    known_service_type: knownService,
+    known_home_size_id: knownSize,
+    next_booking: nextBooking,
+    outstanding_balance: dueNow > 0 ? money(dueNow) : "none",
+    payment_link_on_file: upcoming?.hosted_invoice_url ? "yes" : "no",
+    lead_source: text(lead?.source || hinted.lead_source),
+    do_not_call: doNotCall ? "yes" : "no",
+    say_first: sayFirst,
+    next_step: nextStep,
+    missing_to_book: upcoming?.status === "pending_payment"
+      ? "Do not start a second booking unless they want a different home."
+      : (missing.length ? missing.join(", ") : "Nothing else. Read the visit back and ask for a yes."),
+    result_target: resultTarget,
+    context_brief: brief,
+    agent_role: role,
+  };
+
+  const dynamic_variables: Record<string, string> = {};
+  for (const [key, value] of Object.entries(variables)) dynamic_variables[key] = clip(text(value));
+
+  return new Response(JSON.stringify({ dynamic_variables }), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 });

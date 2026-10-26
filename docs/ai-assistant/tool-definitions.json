@@ -58,7 +58,7 @@
     },
     {
       "name": "get_price_estimate",
-      "description": "Calculate the price for a cleaning. Uses the live pricing-system (50% NEW promo applied automatically for first-time customers).",
+      "description": "Price a clean from the live price table for this ZIP. Speak human_summary only. Do not add a promo, a courtesy, or call it 50% NEW.",
       "url_query": "?tool=get_price_estimate",
       "method": "POST",
       "parameters": {
@@ -85,14 +85,18 @@
           },
           "is_new_customer": {
             "type": "boolean",
-            "description": "True if no prior completed bookings on file. From lookup_customer."
+            "description": "Ignored. The price does not add a new-customer promo."
+          },
+          "zip_code": {
+            "type": "string",
+            "description": "5-digit ZIP. Pass the ZIP already on the call so the zone matches the payment link."
           }
         },
-        "required": ["home_size_id","service_type"]
+        "required": ["home_size_id","service_type","zip_code"]
       },
       "returns": {
         "subtotal_cents": "number",
-        "promo_discount_cents": "number (50% NEW if applicable)",
+        "promo_discount_cents": "number (service-tier difference, not a 50% new-customer promo)",
         "total_cents": "number",
         "deposit_cents": "number (50% of total)",
         "remaining_cents": "number (after deposit)",

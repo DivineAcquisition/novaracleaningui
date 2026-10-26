@@ -34,12 +34,15 @@ import { calculatePriceCents } from "../_shared/pricing.ts";
 
 const ACCOUNT_PORTAL_URL = "https://app.novaracleaning.com/account";
 
+type ZoneLetter = "A" | "B" | "C";
+
 function calcPrice(args: {
   homeSizeId: string;
   serviceType: string;
   addOns: string[];
   membershipPlan: string;
   isNewCustomer: boolean;
+  zone?: ZoneLetter;
 }): { subtotalCents: number; promoCents: number; totalCents: number; depositCents: number } {
   // isNewCustomer is intentionally ignored — v4 discounts depend on
   // service tier only (15% std, 25% deep, 50% off std portion of combo).
@@ -50,7 +53,7 @@ function calcPrice(args: {
     args.addOns || [],
     args.membershipPlan || "none",
     false,
-    "B",
+    args.zone || "B",
   );
   return {
     subtotalCents: c.subtotalCents,
@@ -58,6 +61,46 @@ function calcPrice(args: {
     totalCents: c.totalCents,
     depositCents: c.depositCents,
   };
+}
+
+function priceSummary(totalCents: number, depositCents: number): string {
+  const fmt = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+  const balance = Math.max(0, totalCents - depositCents);
+  return `Total ${fmt(totalCents)}. Deposit today ${fmt(depositCents)}. Balance ${fmt(balance)} after the clean. This price holds for 48 hours. Say these amounts only. Do not add a discount, a courtesy, or a 50 percent new-customer promo.`;
+}
+
+function zoneLetterFrom(zone: { code?: string; name?: string; multiplier?: number | string } | null): ZoneLetter {
+  const code = String(zone?.code || "").trim().toUpperCase();
+  if (code === "A" || code === "B" || code === "C") return code;
+  const name = String(zone?.name || "").toUpperCase();
+  if (name.includes("ZONE A")) return "A";
+  if (name.includes("ZONE C")) return "C";
+  const multiplier = Number(zone?.multiplier);
+  if (multiplier >= 1.1) return "A";
+  if (multiplier > 0 && multiplier < 1) return "C";
+  return "B";
+}
+
+async function pricingZoneForZip(supabase: any, zip: string): Promise<ZoneLetter> {
+  if (!/^\d{5}$/.test(zip)) return "B";
+  const { data: zoneZip } = await supabase.from("pricing_zone_zips").select("zone_id").eq("zip", zip).maybeSingle();
+  if (!zoneZip?.zone_id) return "B";
+  const { data: zone } = await supabase.from("pricing_zones").select("code, name, multiplier").eq("id", zoneZip.zone_id).maybeSingle();
+  return zoneLetterFrom(zone);
+}
+
+const PLACEHOLDER_NAMES = new Set(["there", "unknown", "customer", "lead", "friend", "test", "user", "caller", "guest", "na", "n/a", "none"]);
+
+function realPersonName(value: unknown): boolean {
+  const name = String(value || "").trim().toLowerCase();
+  return name.length >= 2 && !PLACEHOLDER_NAMES.has(name);
+}
+
+function realEmail(value: unknown): boolean {
+  const email = String(value || "").trim().toLowerCase();
+  if (!email.includes("@") || !email.includes(".")) return false;
+  if (email.startsWith("unknown@") || email.endsWith("@unknown.com") || email === "unknown") return false;
+  return true;
 }
 
 // ─── E.164 helper ─────────────────────────────────────────────────────────
@@ -80,7 +123,7 @@ async function toolLookupCustomer(supabase: any, body: any): Promise<unknown> {
   // Most recent booking on this phone (fuzzy match across stored formats)
   const { data: rows } = await supabase
     .from("bookings")
-    .select("id, status, first_name, last_name, email, phone, address, city, state, zip_code, service_date, time_slot, service_type, total_estimate_cents, final_charge_cents, deposit_cents, cancel_fee_cents, reschedule_fee_cents, membership_plan, ghl_synced_at, booking_number")
+    .select("id, status, first_name, last_name, email, phone, address, city, state, zip_code, service_date, time_slot, service_type, total_estimate_cents, final_charge_cents, deposit_cents, cancel_fee_cents, reschedule_fee_cents, membership_plan, ghl_synced_at, booking_number, hosted_invoice_url")
     .ilike("phone", `%${lastTen}%`)
     .order("created_at", { ascending: false })
     .limit(20);
@@ -105,24 +148,9 @@ async function toolLookupCustomer(supabase: any, body: any): Promise<unknown> {
     return s + remaining + (r.cancel_fee_cents || 0) + (r.reschedule_fee_cents || 0);
   }, 0);
 
-  // Payment Link for outstanding balance (Stripe)
-  let paymentLinkForBalance: string | null = null;
-  if (outstandingCents > 0) {
-    try {
-      const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", { apiVersion: "2025-08-27.basil" as any });
-      const price: any = await stripe.prices.create({
-        currency: "usd",
-        unit_amount: outstandingCents,
-        product_data: { name: `Outstanding balance — ${newest.first_name || ""} ${newest.last_name || ""}`.trim() },
-      });
-      const link: any = await stripe.paymentLinks.create({
-        line_items: [{ price: price.id, quantity: 1 }],
-        metadata: { phone, kind: "outstanding_balance" },
-        after_completion: { type: "redirect", redirect: { url: `${ACCOUNT_PORTAL_URL}?payment=success` } },
-      });
-      paymentLinkForBalance = link.url;
-    } catch (e) { log("paymentLink create failed", e); }
-  }
+  // Use the link already stored on the booking. Lookup must not mint a
+  // new Stripe payment link on every call.
+  const paymentLinkForBalance: string | null = newest.hosted_invoice_url || null;
 
   const isMember = !!(newest.membership_plan && newest.membership_plan !== "none");
   const paymentStatus = outstandingCents > 0
@@ -153,6 +181,10 @@ async function toolLookupCustomer(supabase: any, body: any): Promise<unknown> {
       status: next.status,
     } : null,
     payment_link_for_balance: paymentLinkForBalance,
+    account_url: ACCOUNT_PORTAL_URL,
+    say: outstandingCents > 0
+      ? "Money is still due on this account. Point them to the account page. Do not read a payment link aloud, and do not create another booking from this lookup."
+      : "No balance is due right now.",
   };
 }
 
@@ -199,17 +231,17 @@ async function toolCheckServiceArea(supabase: any, body: any): Promise<unknown> 
     tier_label: coverage?.tier_label || null,
     zone: zone?.name || zone?.code || null,
     say: serviced
-      ? `Yes, we clean in ${coverage?.city || "that ZIP"}, ${coverage?.state || ""}.`
+      ? `Yes, we clean in ${coverage?.city || "that ZIP"}, ${coverage?.state || ""}. Continue the booking. Do not add a waitlist.`
       : "That ZIP is not in the active service area. Offer the waitlist and do not quote a price.",
   };
 }
 
-function toolGetPriceEstimate(body: any): unknown {
+async function toolGetPriceEstimate(supabase: any, body: any): Promise<unknown> {
   const homeSizeId = String(body.home_size_id || "");
   const serviceType = String(body.service_type || "standard");
   const addOns = Array.isArray(body.add_ons) ? body.add_ons.map(String) : [];
   const membershipPlan = String(body.membership_plan || "none");
-  const isNewCustomer = body.is_new_customer !== false; // default true
+  const zip = String(body.zip_code || body.zip || "").replace(/\D/g, "").slice(0, 5);
   if (homeSizeId === "5000_plus") {
     return {
       subtotal_cents: 0,
@@ -217,20 +249,27 @@ function toolGetPriceEstimate(body: any): unknown {
       total_cents: 0,
       deposit_cents: 0,
       remaining_cents: 0,
-      human_summary: "5,000+ sqft homes need a custom quote — escalating to a human.",
+      human_summary: "Homes over 5,000 square feet need a person to quote. Call escalate_to_human with reason custom_quote.",
       requires_custom_quote: true,
     };
   }
-  const p = calcPrice({ homeSizeId, serviceType, addOns, membershipPlan, isNewCustomer });
-  const fmt = (c: number) => `$${(c / 100).toFixed(2)}`;
-  const summary = `Total ${fmt(p.totalCents)} (${fmt(p.promoCents)} off thanks to the 50% NEW promo). Deposit today ${fmt(p.depositCents)}, balance ${fmt(p.totalCents - p.depositCents)} after we finish.`;
+  const zone = await pricingZoneForZip(supabase, zip);
+  const p = calcPrice({ homeSizeId, serviceType, addOns, membershipPlan, isNewCustomer: false, zone });
+  if (!p.totalCents) {
+    return {
+      error: "could_not_price",
+      human_summary: "I could not price that home from the size given. Ask for the square footage again.",
+    };
+  }
   return {
     subtotal_cents: p.subtotalCents,
     promo_discount_cents: p.promoCents,
     total_cents: p.totalCents,
     deposit_cents: p.depositCents,
     remaining_cents: p.totalCents - p.depositCents,
-    human_summary: summary,
+    zone,
+    zip_code: zip || null,
+    human_summary: priceSummary(p.totalCents, p.depositCents),
   };
 }
 
@@ -281,11 +320,45 @@ async function toolCreateBooking(supabase: any, body: any): Promise<unknown> {
   for (const k of required) {
     if (!body[k] && body[k] !== 0) return { error: `missing_field: ${k}` };
   }
+  if (!realPersonName(body.first_name) || !realPersonName(body.last_name) || !realEmail(body.email)) {
+    return {
+      error: "real_contact_required",
+      say: "Ask for their real first name, last name, and email before creating the booking.",
+    };
+  }
+  const coverage = await toolCheckServiceArea(supabase, body) as { serviced?: boolean; lookup_failed?: boolean; say?: string };
+  if (coverage.lookup_failed) {
+    return { error: "coverage_lookup_failed", say: "The coverage lookup failed. Do not create the booking and do not say the ZIP is outside the area." };
+  }
+  if (!coverage.serviced) {
+    return { error: "zip_not_served", say: coverage.say || "That ZIP is not served. Offer the waitlist instead of a booking." };
+  }
   const homeSizeId = String(body.home_size_id);
   const serviceType = String(body.service_type);
   const addOns: string[] = Array.isArray(body.add_ons) ? body.add_ons : [];
   const membershipPlan = String(body.membership_plan || "none");
-  const p = calcPrice({ homeSizeId, serviceType, addOns, membershipPlan, isNewCustomer: true });
+  const zip = String(body.zip_code || "").replace(/\D/g, "").slice(0, 5);
+  const zone = await pricingZoneForZip(supabase, zip);
+  const p = calcPrice({ homeSizeId, serviceType, addOns, membershipPlan, isNewCustomer: false, zone });
+  if (!p.totalCents) return { error: "could_not_price", say: "The price did not calculate. Do not invent one." };
+
+  const phone = toE164(body.phone);
+  const ten = phone.replace(/\D/g, "").slice(-10);
+  const { data: sameDay } = await supabase
+    .from("bookings")
+    .select("id, booking_number, status, phone")
+    .eq("service_date", body.service_date)
+    .in("status", ["pending_payment", "confirmed", "assigned"])
+    .ilike("phone", `%${ten}%`);
+  const duplicate = (sameDay || []).find((row: any) => String(row.phone || "").replace(/\D/g, "").slice(-10) === ten);
+  if (duplicate) {
+    return {
+      error: "already_booked_that_day",
+      booking_id: duplicate.id,
+      booking_number: duplicate.booking_number,
+      say: "They already have a visit that day. Do not create another one. Help with the existing visit.",
+    };
+  }
 
   // Next booking number
   const { count } = await supabase.from("bookings").select("id", { count: "exact", head: true });
@@ -347,14 +420,36 @@ async function toolCreateBooking(supabase: any, body: any): Promise<unknown> {
     return { error: `payment_link_failed: ${e instanceof Error ? e.message : String(e)}` };
   }
 
+  await supabase.from("bookings").update({ hosted_invoice_url: paymentLinkUrl }).eq("id", booking.id);
+
+  const fmt = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+  let smsSent = false;
+  try {
+    const sms = await supabase.functions.invoke("send-sms-notification", {
+      body: {
+        toPhone: phone,
+        type: "confirmation",
+        message: `Novara Cleaning: your clean on ${body.service_date} at ${body.time_slot} is saved. Total ${fmt(p.totalCents)}. Deposit ${fmt(p.depositCents)} confirms it: ${paymentLinkUrl} This price holds 48 hours.`,
+      },
+    });
+    smsSent = !sms.error && (sms.data as { success?: boolean } | null)?.success !== false;
+  } catch (e) {
+    log("deposit sms failed", e);
+  }
+
   return {
     booking_id: booking.id,
     booking_number: bookingNumber,
     payment_link: paymentLinkUrl,
     deposit_cents: p.depositCents,
     total_cents: p.totalCents,
+    zone,
     service_date: body.service_date,
     time_slot: body.time_slot,
+    sms_sent: smsSent,
+    say: smsSent
+      ? `I texted the deposit link for ${fmt(p.depositCents)}. The visit is confirmed once that deposit is paid. The total is ${fmt(p.totalCents)}, and this price holds for 48 hours.`
+      : `The visit is saved and the deposit is ${fmt(p.depositCents)}. The text did not go through. Tell them the office will text the payment link. Do not read a URL aloud.`,
   };
 }
 
@@ -385,8 +480,28 @@ async function toolHandleKeyword(supabase: any, body: any): Promise<unknown> {
 }
 
 async function toolAddToWaitlist(supabase: any, body: any): Promise<unknown> {
+  const coverage = await toolCheckServiceArea(supabase, body) as {
+    serviced?: boolean;
+    lookup_failed?: boolean;
+    city?: string | null;
+    say?: string;
+  };
+  if (coverage.lookup_failed) {
+    return { ok: false, reason: "coverage_lookup_failed", say: "Coverage did not load. Do not add a waitlist and do not say the ZIP is outside the area." };
+  }
+  if (coverage.serviced) {
+    const city = coverage.city ? ` in ${coverage.city}` : "";
+    return { ok: false, reason: "zip_is_served", say: `This ZIP is served${city}. Continue the booking. Do not add a waitlist.` };
+  }
+  if (!realPersonName(body.first_name) || !realEmail(body.email) || toE164(body.phone).replace(/\D/g, "").length < 10) {
+    return {
+      ok: false,
+      reason: "real_contact_required",
+      say: "Ask for a real first name, a real email, and the mobile they are calling from before adding the waitlist.",
+    };
+  }
   try {
-    const { data } = await supabase.functions.invoke("add-to-waitlist", {
+    const { data, error } = await supabase.functions.invoke("add-to-waitlist", {
       body: {
         email: body.email,
         firstName: body.first_name,
@@ -396,9 +511,14 @@ async function toolAddToWaitlist(supabase: any, body: any): Promise<unknown> {
         source: "AI Assistant",
       },
     });
-    return { ok: true, waitlist_id: (data as any)?.id || null };
-  } catch (e) {
-    return { ok: false, waitlist_id: null };
+    if (error) return { ok: false, waitlist_id: null, say: "The waitlist did not save. Offer a person instead of pretending it did." };
+    return {
+      ok: true,
+      waitlist_id: (data as any)?.id || null,
+      say: "You're on the waitlist. We'll reach out when we start cleaning that ZIP.",
+    };
+  } catch (_e) {
+    return { ok: false, waitlist_id: null, say: "The waitlist did not save. Offer a person instead of pretending it did." };
   }
 }
 
@@ -488,7 +608,7 @@ serve(async (req) => {
     switch (tool) {
       case "lookup_customer":    result = await toolLookupCustomer(supabase, body); break;
       case "check_service_area": result = await toolCheckServiceArea(supabase, body); break;
-      case "get_price_estimate": result = toolGetPriceEstimate(body); break;
+      case "get_price_estimate": result = await toolGetPriceEstimate(supabase, body); break;
       case "get_available_slots": result = await toolGetAvailableSlots(supabase, body); break;
       case "create_booking":     result = await toolCreateBooking(supabase, body); break;
       case "handle_keyword":     result = await toolHandleKeyword(supabase, body); break;

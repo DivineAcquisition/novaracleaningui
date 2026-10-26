@@ -475,8 +475,8 @@ export const RECEPTIONIST_KNOWLEDGE = {
       "The confirmation email, with booking number, date, window, service, address, total, deposit, and balance, is sent by the payment path.",
     ],
     cannotDoYet: [
-      "The $10 or $15 courtesy is not a field on create_booking. The function recalculates the price and ignores a discount you say out loud. Do not promise $10 or $15 until a function saves that exact total on the payment link.",
-      "get_price_estimate uses the older price rules and its summary can say 50% NEW. The booking screen uses the Training Guide price, then condition, then zone. If the two totals disagree, do not quote. Escalate.",
+      "The $10 or $15 courtesy is not a field on create_booking. The function recalculates the price and ignores a discount you say out loud. Do not promise $10 or $15. The payment link will not include it.",
+      "get_price_estimate and create_booking use the same price table and the ZIP's zone. Speak human_summary. That is the deposit-link amount. Do not call it a 50 percent new-customer promo. If the caller says a person already quoted a different number, do not argue. Escalate.",
       "There is no function that only saves a quote. create_booking is the save, and it also creates the pay link.",
       "Commercial, short-term rental host booking, and hiring are not these functions. Escalate those.",
     ],
