@@ -30,10 +30,10 @@ export function isApployeMcpConfigured(): boolean {
 }
 
 /** Load the MCP key from app_secrets when the process env doesn't have it. */
-export async function ensureApployeMcpKey(supabase: SecretReader): Promise<boolean> {
+export async function ensureApployeMcpKey(supabase: unknown): Promise<boolean> {
   if (isApployeMcpConfigured()) return true;
   try {
-    const { data } = await supabase
+    const { data } = await (supabase as SecretReader)
       .from("app_secrets")
       .select("value")
       .eq("key", "APPLOYE_MCP_API_KEY")
