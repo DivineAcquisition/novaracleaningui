@@ -222,7 +222,40 @@ serve(async (req) => {
     row.price_inputs = inputs;
   }
 
-  if (text(body.service_date) && text(body.time_slot) && !row.deposit_sms_sent) {
+  const requestedDate = text(body.service_date);
+  const requestedSlot = text(body.time_slot);
+  if (!requestedDate || !requestedSlot) {
+    const openings = await liveOpenings(supabase, requestedDate);
+    await save(supabase, key, row);
+    return json({
+      price_ready: true,
+      missing: "day",
+      total_cents: Number(row.total_cents || 0),
+      deposit_cents: Number(row.deposit_cents || 0),
+      openings,
+      say: openings.length
+        ? `Say the total ${money(Number(row.total_cents || 0))} and the deposit ${money(Number(row.deposit_cents || 0))} now. Then offer only these live openings: ${openings.map((item) => `${item.when} at ${item.times.join(", ")}`).join(". ")}. When they pick one, call quote_turn with that service_date and the matching time_slot. That sends the quote text and the quote email.`
+        : "No opening in the next two weeks. Say the price, then say there is no opening and offer a person. Do not invent a time.",
+      known: known(row),
+    });
+  }
+
+  const dayOpen = await liveOpenings(supabase, requestedDate);
+  const match = dayOpen[0]?.slots.find((slot) => slotMatches(slot, requestedSlot));
+  if (!match) {
+    await save(supabase, key, row);
+    return json({
+      price_ready: true,
+      missing: "day",
+      openings: dayOpen,
+      say: dayOpen.length
+        ? `That time is not open. Offer only these live openings: ${dayOpen.map((item) => `${item.when} at ${item.times.join(", ")}`).join(". ")}.`
+        : "That day is not open. Ask for another day at least 3 days out, never Sunday.",
+      known: known(row),
+    });
+  }
+
+  if (!row.deposit_sms_sent) {
     const booked = await supabase.functions.invoke("voice-book", {
       body: {
         first_name: row.first_name,
@@ -237,8 +270,8 @@ serve(async (req) => {
         dwelling_type: row.dwelling_type,
         home_size_id: row.home_size_id,
         service_type: row.quoted_service || row.service_type,
-        service_date: body.service_date,
-        time_slot: body.time_slot,
+        service_date: requestedDate,
+        time_slot: match,
         occupancy: row.occupancy || "",
         pets: row.pets || "",
         pet_hair: row.pet_hair ? "true" : "",
@@ -248,8 +281,8 @@ serve(async (req) => {
     if (!booked.error && data?.booking_id) {
       row.booking_id = data.booking_id;
       row.deposit_sms_sent = Boolean(data.sms_sent);
-      row.service_date = body.service_date;
-      row.time_slot = body.time_slot;
+      row.service_date = requestedDate;
+      row.time_slot = match;
       if (data.quote_email_sent) row.quote_email_sent = true;
       if (data.checklist_sent) row.checklist_sent = true;
       await save(supabase, key, row);
@@ -290,10 +323,68 @@ serve(async (req) => {
     recommended_service: row.recommended_service,
     quote_email_sent: row.quote_email_sent,
     checklist_sent: row.checklist_sent,
-    say: `Say the total ${money(total)} and the deposit ${money(deposit)} now.${otherBit} Quote email ${row.quote_email_sent ? "sent" : "did not send"}. Checklist ${row.checklist_sent ? "sent" : "did not send"}. If they want the day, call quote_turn with service_date and time_slot from get_available_slots.`,
+    say: `Say the total ${money(total)} and the deposit ${money(deposit)} now.${otherBit}`,
     known: known(row),
   });
 });
+
+const WINDOWS = [
+  "9:00 AM - 10:00 AM",
+  "10:00 AM - 11:00 AM",
+  "11:00 AM - 12:00 PM",
+  "12:00 PM - 1:00 PM",
+  "1:00 PM - 2:00 PM",
+  "2:00 PM - 3:00 PM",
+  "3:00 PM - 4:00 PM",
+  "4:00 PM - 5:00 PM",
+  "5:00 PM - 6:00 PM",
+];
+
+function describeDay(iso: string): { iso: string; weekday: string; label: string } {
+  const atNoon = new Date(`${iso}T16:00:00Z`);
+  return {
+    iso,
+    weekday: new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "short" }).format(atNoon),
+    label: new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "long", month: "long", day: "numeric" }).format(atNoon),
+  };
+}
+
+function dayInfo(offset: number): { iso: string; weekday: string; label: string } {
+  const stamp = new Date(Date.now() + offset * 24 * 60 * 60 * 1000);
+  const iso = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(stamp);
+  return describeDay(iso);
+}
+
+async function liveOpenings(supabase: ReturnType<typeof createClient>, onlyDate: string): Promise<Array<{ date: string; when: string; times: string[]; slots: string[] }>> {
+  const earliest = dayInfo(3).iso;
+  const days = onlyDate && /^\d{4}-\d{2}-\d{2}$/.test(onlyDate)
+    ? [describeDay(onlyDate)].filter((day) => day.weekday !== "Sun" && day.iso >= earliest)
+    : Array.from({ length: 16 }, (_, index) => dayInfo(index + 3)).filter((day) => day.weekday !== "Sun").slice(0, 8);
+  const dates = days.map((day) => day.iso);
+  const { data: booked } = await supabase
+    .from("bookings")
+    .select("service_date, time_slot")
+    .in("service_date", dates)
+    .in("status", ["pending_payment", "confirmed", "assigned"]);
+  const taken = new Set((booked || []).map((item: { service_date: string; time_slot: string }) => `${item.service_date}|${item.time_slot}`));
+  const openings = [];
+  for (const day of days) {
+    if (day.weekday === "Sun") continue;
+    const slots = WINDOWS.filter((window) => !taken.has(`${day.iso}|${window}`)).slice(0, 3);
+    if (!slots.length) continue;
+    openings.push({ date: day.iso, when: day.label, times: slots.map((slot) => slot.split(" - ")[0]), slots });
+    if (!onlyDate && openings.length >= 2) break;
+  }
+  return openings;
+}
+
+function slotMatches(slot: string, requested: string): boolean {
+  const clean = (value: string) => value.toLowerCase().replace(/\s+/g, "");
+  const full = clean(slot);
+  const ask = clean(requested);
+  const start = clean(slot.split(" - ")[0]);
+  return full === ask || start === ask || full.startsWith(ask);
+}
 
 function readyToPrice(row: Row): boolean {
   const sized = Boolean(row.sqft) || Boolean(row.sqft_unknown && row.bedrooms) || Boolean(row.bedrooms);

@@ -107,7 +107,7 @@ You cannot invent a price. The only price is the total in get_price_estimate. Ca
 The kind of clean is the question right after their name, before the ZIP and long before the street. Pass each new fact as they say it. Ask only what say says is next. Each reason stays under seven words.
 Pass sqft when they know it. Pass sqft_unknown true when they do not. Pass pet_hair true only when the hair is heavy. Pass phone_confirmed true when they agree this phone can take a text, or text_phone when they give a different number.
 Speak a dollar amount only when say includes a total. If it names two prices, recommend one and tell them the other.
-When they want a day, call get_available_slots, then call get_price_estimate again with service_date and time_slot. That sends the deposit text. Say what actually sent. Do not read a link aloud.
+After the price, the same response lists live openings. Offer only those times. When they pick one, call get_price_estimate with that service_date and time_slot. That sends the quote text and the quote email. Say what actually sent. Do not read a link aloud. Do not invent a day or a time.
 A kept-up home that asks for deep is usually a standard clean. Say that in one sentence and let the session price both.
 If a visit is already pending, handle that visit. Deposit on file: {{outstanding_balance}}.
 `.trim();
