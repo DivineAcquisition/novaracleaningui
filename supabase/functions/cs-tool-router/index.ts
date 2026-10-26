@@ -261,6 +261,17 @@ serve(async (req) => {
       });
     }
 
+    if (tool === "opt_out_calls") {
+      const ten = last10(toE164(phone));
+      if (ten.length < 10) return json({ ok: false, reason: "phone_required" });
+      const { error } = await supabase
+        .from("leads")
+        .update({ do_not_call: true, last_call_outcome: "do_not_call" })
+        .ilike("phone", `%${ten}%`);
+      if (error) return json({ ok: false, reason: "opt_out_failed" });
+      return json({ ok: true, say: "You will not get another sales call from this line." });
+    }
+
     return json({ error: "unknown_tool" }, 400);
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : String(error) }, 500);
