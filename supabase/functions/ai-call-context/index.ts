@@ -332,6 +332,20 @@ serve(async (req) => {
     nextStep = `${nextStep} They asked for ${spokenDate(preferredDate)}. After the price, call get_available_slots for that date and offer only those times.`;
   }
 
+  if (role === "booking") {
+    const fromGoogle = /google|lsa|local service/.test(text(lead?.source || hinted.lead_source).toLowerCase());
+    sayFirst = [
+      "Private note. Not a line to speak.",
+      fromGoogle ? "They may have inquired from Google. Use that only if it helps. Do not recite it." : "No Google inquiry is on file.",
+      zip ? `ZIP ${zip} is ${serviced}${city ? `, ${city}` : ""}.` : "No ZIP yet.",
+      knownService ? `Service mentioned: ${serviceLabel(knownService)}.` : "No service chosen yet.",
+      knownSize ? `Size on file: ${sizeLabel || knownSize}.` : "No size yet.",
+      address ? `Street on file: ${address}.` : "No street yet.",
+      upcoming ? `A visit is already saved for ${when || "an open date"}.` : "No visit is saved.",
+    ].join(" ");
+    nextStep = "Choose your own words from what they just said. Check the ZIP before you name a city. Have an opinion when they ask for a deep clean. Price only what the tool returns. Half is due now and half when the clean is done.";
+  }
+
   const nextBooking = upcoming
     ? `Booking ${text(upcoming.booking_number)} is ${text(upcoming.status)} on ${when || "an open date"}${slot ? ` at ${slot}` : ""}${address ? `, ${address}` : ""}${city ? `, ${city}` : ""}.`
     : "No active booking.";
