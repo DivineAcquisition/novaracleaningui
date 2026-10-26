@@ -277,10 +277,21 @@ serve(async (req) => {
     nextStep = "Collect a real first name and a real email, then call add_to_waitlist. Do not quote a price.";
     resultTarget = "A waitlist entry with a real name and email, or a polite end if they decline.";
   } else if (serviced === "unknown" && !zip) {
-    sayFirst = "I can get you a price. What ZIP is the home in?";
-    nextStep = brandNew
-      ? "Answer what they already said. Call check_service_area before you name a city. If the ZIP is served, say the city and ask for the street."
-      : "Answer what they already said. Call check_service_area before you name a city or talk price. After a served ZIP, ask for the street, then beds, baths, and whether they are moving.";
+    const source = text(lead?.source || hinted.lead_source).toLowerCase();
+    const fromGoogle = source.includes("google") || source.includes("lsa") || source.includes("local service");
+    if (role === "booking") {
+      sayFirst = fromGoogle
+        ? "I saw you just inquired about a cleaning from Google. Do you recall?"
+        : "What's the ZIP for the home?";
+      nextStep = fromGoogle
+        ? "You already introduced yourself as Malik. If they recall the Google inquiry, ask the ZIP. Call check_service_area before you name a city. If it is served, say we service that area, then ask standard, deep, move-in/out, or something special. If they pick deep, tell them deep is the most detailed clean and is for a home that needs more care. If they keep the home up, a standard clean is usually enough. Offer the checklist so they can see the difference, and let them choose."
+        : "You already introduced yourself as Malik. Ask the ZIP, call check_service_area, and only then say the city. Then ask standard, deep, move-in/out, or something special. If they pick deep, explain it is the most detailed clean and let them choose after they see the difference.";
+    } else {
+      sayFirst = "I can get you a price. What ZIP is the home in?";
+      nextStep = brandNew
+        ? "Answer what they already said. Call check_service_area before you name a city. If the ZIP is served, say the city and ask for the street."
+        : "Answer what they already said. Call check_service_area before you name a city or talk price. After a served ZIP, ask for the street, then beds, baths, and whether they are moving.";
+    }
     if (role === "outbound") resultTarget = "A booked visit on this call, a callback with a day and a time, or a clear no.";
   } else if (lookupFailed) {
     sayFirst = "I'm checking that ZIP now. I don't want to guess on coverage.";
