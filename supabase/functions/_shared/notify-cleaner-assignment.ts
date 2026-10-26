@@ -112,7 +112,7 @@ export async function notifyCleanerOfAssignment(
         `Novara job assigned${opts?.role === "Support" ? " (support)" : ""}: ` +
         `${customerName} · ${whenLabel}. ` +
         `${booking.address || ""}, ${booking.city || ""}. ` +
-        `Your job checklist: ${checklistLink} ` +
+        `Check in on your job checklist when you arrive: ${checklistLink} ` +
         `Portal: https://contractor.novaracleaning.com/cleaner/mobile-dashboard`;
       const { error } = await supabase.functions.invoke("send-ghl-sms", {
         body: {

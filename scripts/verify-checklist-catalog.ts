@@ -182,9 +182,18 @@ console.log("\nResidential contractor lists (Standard ⊂ Deep ⊂ Move-In/Out b
   const deepCount = countChecklistItems(deep);
   const moveCount = countChecklistItems(move);
 
-  check("Standard has kitchen / bathrooms / all rooms", standard.sections.length === 3);
-  check("Deep has kitchen / bathrooms / all rooms", deep.sections.length === 3);
-  check("Move-In/Out has kitchen / bathrooms / all rooms", move.sections.length === 3);
+  const cleaningTitles = (list: { sections: { title: string }[] }) =>
+    list.sections.filter((section) => section.title !== "When you arrive").map((section) => section.title);
+  check(
+    "every crew list starts with check-in",
+    [standard, deep, move].every((list) =>
+      list.sections[0]?.title === "When you arrive"
+      && /check in/i.test(list.sections[0].items[0] || ""),
+    ),
+  );
+  check("Standard cleaning sections are kitchen / bathrooms / all rooms", cleaningTitles(standard).join("|") === "Kitchen|Bathrooms|All rooms");
+  check("Deep cleaning sections are kitchen / bathrooms / all rooms", cleaningTitles(deep).join("|") === "Kitchen|Bathrooms|All rooms");
+  check("Move-In/Out cleaning sections are kitchen / bathrooms / all rooms", cleaningTitles(move).join("|") === "Kitchen|Bathrooms|All rooms");
   check(
     "Deep has more crew items than Standard",
     deepCount > standardCount,
@@ -216,8 +225,10 @@ console.log("\nResidential contractor lists (Standard ⊂ Deep ⊂ Move-In/Out b
     normalizeServiceType("Move In/Out") === "move_in_out",
   );
 
+  const crewCleaningItems = (list: { sections: { title: string; items: string[] }[] }) =>
+    list.sections.filter((section) => section.title !== "When you arrive").flatMap((section) => section.items);
   const customerMove = CHECKLISTS["move-in-out"].sections.flatMap((s) => s.items);
-  const crewMove = move.sections.flatMap((s) => s.items);
+  const crewMove = crewCleaningItems(move);
   check(
     "customer Move-In/Out list matches the contractor list",
     customerMove.length === crewMove.length && customerMove.every((item, i) => item === crewMove[i]),
@@ -225,14 +236,14 @@ console.log("\nResidential contractor lists (Standard ⊂ Deep ⊂ Move-In/Out b
   );
 
   const customerStandard = CHECKLISTS["standard-clean"].sections.flatMap((s) => s.items);
-  const crewStandard = standard.sections.flatMap((s) => s.items);
+  const crewStandard = crewCleaningItems(standard);
   check(
     "customer Standard list matches the contractor list",
     customerStandard.length === crewStandard.length && customerStandard.every((item, i) => item === crewStandard[i]),
   );
 
   const customerDeep = CHECKLISTS["deep-clean"].sections.flatMap((s) => s.items);
-  const crewDeep = deep.sections.flatMap((s) => s.items);
+  const crewDeep = crewCleaningItems(deep);
   check(
     "customer Deep list matches the contractor list",
     customerDeep.length === crewDeep.length && customerDeep.every((item, i) => item === crewDeep[i]),
@@ -242,9 +253,10 @@ console.log("\nResidential contractor lists (Standard ⊂ Deep ⊂ Move-In/Out b
     bookedAddOns: ["windows", "fridge"],
   });
   check(
-    "booked add-ons append a fourth contractor section without shifting Standard items",
-    standardWithAddon.sections.length === 4
-      && standardWithAddon.sections[3].title === "Booked add-ons"
+    "booked add-ons stay after check-in and the Standard rooms",
+    standardWithAddon.sections.length === 5
+      && standardWithAddon.sections[0].title === "When you arrive"
+      && standardWithAddon.sections[4].title === "Booked add-ons"
       && countChecklistItems(standardWithAddon) === standardCount + 2
       && standardWithAddon.sections[0].items[0] === standard.sections[0].items[0],
   );

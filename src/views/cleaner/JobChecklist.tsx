@@ -40,6 +40,14 @@ import { QcIssueMediaPicker } from "@/components/qc/QcIssueMedia";
 import type { QcIssueMediaFile } from "@/lib/qc-issue-media";
 import { TOUR, tourAnchor } from "@/lib/tours/anchors";
 
+const ARRIVAL_SECTION_TITLE = "When you arrive";
+
+function arrivalItemKey(sections: ChecklistSection[]): string | null {
+  const index = sections.findIndex((section) => section.title === ARRIVAL_SECTION_TITLE);
+  if (index < 0 || !sections[index]?.items.length) return null;
+  return `${index}:0`;
+}
+
 // ─── Types (mirror cleaner-job-checklist edge fn payload) ────────────────
 interface ChecklistSection {
   title: string;
@@ -134,6 +142,11 @@ interface ChecklistState {
     focused_areas?: Array<{ areaId: string; quantity: number; label?: string }>;
   } | null;
   cleaner: { id: string; first_name: string | null } | null;
+  checkIn?: {
+    at: string | null;
+    assignmentId: string | null;
+    bookingId: string | null;
+  };
   checklist: {
     key?: string;
     name: string;
@@ -216,6 +229,7 @@ export default function CleanerJobChecklistPage() {
   const [state, setState] = useState<ChecklistState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [checkingIn, setCheckingIn] = useState(false);
   const [finishing, setFinishing] = useState(false);
   const [addonNote, setAddonNote] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -292,8 +306,52 @@ export default function CleanerJobChecklistPage() {
     });
   }, [state?.zones?.names, state?.zone_completion, state?.zones?.completion]);
 
+  const markArrivalItem = async (current: ChecklistState) => {
+    const key = arrivalItemKey(current.checklist.sections);
+    if (!key || current.checklist.items[key]?.done) return current;
+    return call({ action: "toggle", itemKey: key, done: true });
+  };
+
+  const checkIn = async () => {
+    if (!state?.canWrite || !state.cleaner?.id || checkingIn) return;
+    const checkInState = state.checkIn;
+    if (!checkInState?.assignmentId && !checkInState?.bookingId) {
+      toast.error("This checklist isn't tied to your assignment yet. Ask the office to resend the link.");
+      return;
+    }
+    setCheckingIn(true);
+    const arrivalKey = arrivalItemKey(state.checklist.sections);
+    if (arrivalKey) setBusyKey(arrivalKey);
+    try {
+      const response = await supabase.functions.invoke("job-check-in", {
+        body: checkInState.assignmentId
+          ? { jobAssignmentId: checkInState.assignmentId, action: "check_in", cleanerId: state.cleaner.id }
+          : { bookingId: checkInState.bookingId, action: "check_in", cleanerId: state.cleaner.id },
+      });
+      if (response.error) throw response.error;
+      if ((response.data as { error?: string })?.error) {
+        throw new Error((response.data as { error: string }).error);
+      }
+      const next = await markArrivalItem(state);
+      setState({
+        ...next,
+        checkIn: { ...checkInState, at: checkInState.at || new Date().toISOString() },
+      });
+      toast.success("Checked in. Apploye should be running — that's the clock for this visit.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't check in");
+    } finally {
+      setCheckingIn(false);
+      setBusyKey(null);
+    }
+  };
+
   const toggleItem = async (itemKey: string, done: boolean) => {
     if (!state?.canWrite) return;
+    if (done && itemKey === arrivalItemKey(state.checklist.sections)) {
+      await checkIn();
+      return;
+    }
     setBusyKey(itemKey);
     try {
       setState(await call({ action: "toggle", itemKey, done }));
@@ -619,7 +677,7 @@ export default function CleanerJobChecklistPage() {
           )}
           {state.cleaner?.first_name && (
             <p className="text-sm text-white/80 mt-0.5">
-              Hi {state.cleaner.first_name} — work through every line as you clean.
+              Hi {state.cleaner.first_name} — check in when you arrive, then work through every line.
             </p>
           )}
         </div>
@@ -684,6 +742,23 @@ export default function CleanerJobChecklistPage() {
           </div>
         </div>
       </div>
+
+      {state.canWrite && arrivalItemKey(checklist.sections) == null && (
+        <div className="rounded-2xl border border-emerald-300 bg-emerald-50 px-5 py-4 space-y-2">
+          <p className="text-sm font-semibold text-emerald-950">When you arrive</p>
+          <p className="text-xs leading-snug text-emerald-900">
+            Start the Apploye timer, then check in here before you clean. Your before-photos link texts you right after.
+          </p>
+          <Button
+            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+            disabled={checkingIn || Boolean(state.checkIn?.at)}
+            onClick={() => void checkIn()}
+          >
+            {checkingIn ? <RiLoader4Line className="w-4 h-4 animate-spin mr-1.5" /> : null}
+            {state.checkIn?.at ? "Checked in" : "Check in"}
+          </Button>
+        </div>
+      )}
 
       {!state.canWrite && (
         <div className="rounded-xl border border-slate-200 bg-slate-100 px-4 py-3 text-sm text-slate-600 flex items-center gap-2">
@@ -878,7 +953,13 @@ export default function CleanerJobChecklistPage() {
                       <button
                         type="button"
                         disabled={!state.canWrite || busyKey === key}
-                        onClick={() => void toggleItem(key, !done)}
+                        onClick={() => {
+                          if (key === arrivalItemKey(checklist.sections) && !done) {
+                            void checkIn();
+                            return;
+                          }
+                          void toggleItem(key, !done);
+                        }}
                         className="mt-0.5 shrink-0"
                         aria-label={done ? "Uncheck" : "Check off"}
                       >

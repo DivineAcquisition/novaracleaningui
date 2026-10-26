@@ -18,6 +18,7 @@ interface CleanerAssignmentProps {
   zipCode: string;
   estimatedEarnings: number;
   dashboardUrl: string;
+  checklistUrl?: string;
 }
 
 export const CleanerAssignment = ({
@@ -33,6 +34,7 @@ export const CleanerAssignment = ({
   zipCode,
   estimatedEarnings,
   dashboardUrl,
+  checklistUrl,
 }: CleanerAssignmentProps) => {
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -112,13 +114,18 @@ export const CleanerAssignment = ({
         </Text>
 
         <Section style={styles.buttonSection}>
-          <Button href={dashboardUrl} className="novara-btn" style={styles.button}>
+          {checklistUrl ? (
+            <Button href={checklistUrl} className="novara-btn" style={styles.button}>
+              Open your checklist and check in
+            </Button>
+          ) : null}
+          <Button href={dashboardUrl} className="novara-btn" style={{ ...styles.button, marginLeft: checklistUrl ? "12px" : "0" }}>
             View in Dashboard
           </Button>
         </Section>
 
         <Text style={styles.paragraph}>
-          Please arrive on time and complete the service to our high standards. Your payout will be processed automatically after the booking is marked complete.
+          When you arrive, open the checklist and check in before you start. Start the Apploye timer, then check in on that page. Your payout is processed after the booking is marked complete.
         </Text>
 
         <Text style={styles.footer}>

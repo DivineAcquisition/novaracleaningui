@@ -91,6 +91,7 @@ serve(async (req) => {
             zipCode: data.zipCode,
             estimatedEarnings: data.estimatedEarnings,
             dashboardUrl: data.dashboardUrl,
+            checklistUrl: data.checklistUrl,
           })
         );
         break;

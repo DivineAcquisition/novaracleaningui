@@ -56,6 +56,26 @@ export interface ContractorChecklist {
   sections: ContractorChecklistSection[];
 }
 
+/** First section on every tokenized crew checklist. Not a customer-facing task. */
+export const ARRIVAL_SECTION_TITLE = "When you arrive";
+export const ARRIVAL_CHECK_IN_ITEM =
+  "Check in before you start: start the Apploye timer, then check in on this page";
+
+const ARRIVAL_SECTION: ContractorChecklistSection = {
+  title: ARRIVAL_SECTION_TITLE,
+  items: [ARRIVAL_CHECK_IN_ITEM],
+};
+
+function withArrivalCheckIn(checklist: ContractorChecklist): ContractorChecklist {
+  if (checklist.sections.some((section) => section.title === ARRIVAL_SECTION_TITLE)) {
+    return checklist;
+  }
+  return {
+    ...checklist,
+    sections: [ARRIVAL_SECTION, ...checklist.sections],
+  };
+}
+
 const STANDARD_SECTIONS: ContractorChecklistSection[] = [
   {
     title: "Kitchen",
@@ -676,7 +696,7 @@ export function getContractorChecklist(
   } else {
     resolved = CHECKLISTS[key] || CHECKLISTS.standard;
   }
-  return withBookedAddonSection(resolved, commercial?.bookedAddOns);
+  return withArrivalCheckIn(withBookedAddonSection(resolved, commercial?.bookedAddOns));
 }
 
 /**

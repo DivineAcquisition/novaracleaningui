@@ -14,6 +14,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { sendSms, formatTimeSlot, parseTimeSlotToClock } from "../_shared/sms.ts";
+import { ensureAssignmentChecklistAccess } from "../_shared/job-checklist.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -78,7 +79,7 @@ serve(async (req) => {
     const { data: bookings, error: fetchError } = await supabase
       .from("bookings")
       .select(
-        "id, booking_number, phone, first_name, last_name, address, city, service_type, service_date, time_slot, arrival_window, status, cleaner_id, day_of_reminder_sent_at, photo_upload_token, before_photo_link_sent_at",
+        "id, job_id, booking_number, phone, first_name, last_name, address, city, service_type, service_date, time_slot, arrival_window, status, cleaner_id, day_of_reminder_sent_at, photo_upload_token, before_photo_link_sent_at",
       )
       .in("status", ELIGIBLE_STATUSES)
       .eq("service_date", targetDate)
@@ -133,11 +134,22 @@ serve(async (req) => {
           .eq("id", booking.cleaner_id)
           .maybeSingle();
         if (cleaner?.phone) {
-          const portalLink = "https://contractor.novaracleaning.com/cleaner/mobile-dashboard";
+          let checklistLink = "https://contractor.novaracleaning.com/cleaner/mobile-dashboard";
+          if (booking.job_id) {
+            try {
+              const access = await ensureAssignmentChecklistAccess(supabase, {
+                jobId: String(booking.job_id),
+                cleanerId: String(booking.cleaner_id),
+                bookingId: booking.id,
+                serviceType: booking.service_type || null,
+              });
+              if (access?.url) checklistLink = access.url;
+            } catch (_) { /* portal fallback */ }
+          }
           const msg =
             `Novara reminder: your clean for ${customerName} starts in about 30 minutes ` +
             `(${whenLabel}). ${booking.address || ""}${booking.city ? `, ${booking.city}` : ""}. ` +
-            `Head over and CHECK IN from your portal when you arrive — your before-photos link will text you right after:\n${portalLink}`;
+            `When you arrive, CHECK IN on your job checklist (start the Apploye timer, then check in). Your before-photos link texts you right after:\n${checklistLink}`;
           const ok = await sendSms(supabase, { toPhone: cleaner.phone, message: msg, type: "reminder" });
           anySent = anySent || ok;
           if (!ok) logStep("Cleaner SMS failed", { bookingId: booking.id });
