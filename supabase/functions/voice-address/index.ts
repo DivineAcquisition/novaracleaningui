@@ -104,9 +104,18 @@ serve(async (req) => {
 
   if (googleKey) {
     const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(`${street}, ${zip}`)}&components=${encodeURIComponent(`postal_code:${zip}|country:US`)}&key=${googleKey}`;
-    const response = await fetch(url);
-    const payload = await response.json();
-    googleNotes.push(`geocode:${payload?.status || response.status}`);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 2000);
+    let payload: any = {};
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      payload = await response.json();
+    } catch {
+      payload = { status: "TIMEOUT" };
+    } finally {
+      clearTimeout(timer);
+    }
+    googleNotes.push(`geocode:${payload?.status || "error"}`);
     const top = payload?.results?.[0];
     if (payload?.status === "OK" && top) {
       const parsed = fromParts(top.address_components || [], street, zip);
@@ -122,83 +131,27 @@ serve(async (req) => {
     googleNotes.push("geocode:missing_key");
   }
 
-  if (!provider && placesKey) {
-    const found = await placesSearch(placesKey, `${street}, ${zip}, USA`);
-    googleNotes.push(found.status);
-    if (found.status === "OK" && found.parts.length) {
-      const parsed = fromParts(found.parts, street, zip);
-      if (parsed.city && parsed.state) {
-        foundStreet = parsed.street;
-        city = parsed.city;
-        state = parsed.state;
-        foundZip = parsed.zip;
-        provider = "google_places";
-      }
+  if (!provider) {
+    const { data: coverage } = await supabase
+      .from("service_coverage_zones")
+      .select("city, state")
+      .eq("zip_code", zip)
+      .maybeSingle();
+    if (coverage?.city && coverage?.state) {
+      city = String(coverage.city);
+      state = String(coverage.state);
+      provider = "coverage";
+      googleNotes.push("coverage");
     }
-  } else if (!provider) {
-    googleNotes.push("places:missing_key");
   }
   const googleStatus = googleNotes.join(" ");
-
-  if (!provider) {
-    const censusUrl = `https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?address=${encodeURIComponent(`${street}, ${zip}`)}&benchmark=Public_AR_Current&format=json`;
-    const censusResponse = await fetch(censusUrl);
-    if (censusResponse.ok) {
-      const census = await censusResponse.json();
-      const match = census?.result?.addressMatches?.[0];
-      const parts = match?.addressComponents;
-      if (parts?.city && parts?.state) {
-        const matched = String(match.matchedAddress || "");
-        foundStreet = matched.split(",")[0]?.trim().toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase()) || street;
-        city = String(parts.city).toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase());
-        state = String(parts.state).trim();
-        foundZip = String(parts.zip || zip).replace(/\D/g, "").slice(0, 5);
-        provider = "census";
-      }
-    }
-  }
-
-  if (!provider) {
-    const query = encodeURIComponent(`${street}, ${zip}, USA`);
-    const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=1&countrycodes=us&q=${query}`, {
-      headers: { "User-Agent": "NovaraCleaning/1.0 (voice address lookup)" },
-    });
-    if (response.ok) {
-      const rows = await response.json();
-      const top = Array.isArray(rows) ? rows[0] : null;
-      if (top?.address) {
-        const number = String(top.address.house_number || "").trim();
-        const road = String(top.address.road || "").trim();
-        foundStreet = [number, road].filter(Boolean).join(" ") || street;
-        city = String(top.address.city || top.address.town || top.address.village || "").trim();
-        state = String(top.address.state || "").trim();
-        if (state.toLowerCase() === "maryland") state = "MD";
-        if (state.toLowerCase() === "virginia") state = "VA";
-        if (state.toLowerCase() === "district of columbia") state = "DC";
-        foundZip = String(top.address.postcode || zip).replace(/\D/g, "").slice(0, 5);
-        provider = "nominatim";
-      }
-    }
-  }
 
   if (!provider || !city) {
     return json({
       ok: false,
       reason: "address_not_found",
       lookup_status: googleStatus,
-      say: "I could not match that street in this ZIP. Ask them to say the street number and name once more. Do not guess the city.",
-    });
-  }
-  if (foundZip && foundZip !== zip) {
-    return json({
-      ok: false,
-      reason: "zip_mismatch",
-      street: foundStreet,
-      city,
-      state,
-      zip_code: foundZip,
-      provider,
-      say: `That street came back in ${foundZip}, not ${zip}. Ask them to confirm the street number.`,
+      say: "Ask them to repeat the street number and name. Do not guess the city.",
     });
   }
   const line = [foundStreet, city, state, zip].filter(Boolean).join(", ");
