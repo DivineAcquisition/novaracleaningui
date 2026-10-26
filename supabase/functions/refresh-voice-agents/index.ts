@@ -14,6 +14,49 @@ const corsHeaders = {
 
 const CONTEXT = "https://sxdraeptzuamsgjcvfeg.supabase.co/functions/v1/ai-call-context";
 const PRICE_TOOL_ID = "tool-a5972a1e-2ada-49e4-9e1f-14e7f0c34d14";
+const BOOK_TOOL_ID = "tool-264d2494-0c0a-4d97-ab81-b5d514e8e397";
+const LOOKUP_TOOL_ID = "tool-13153730-07a5-4d7b-9651-b175d79eda21";
+const CHECKLIST_TOOL_ID = "tool-7c44bd0f-18b0-450f-bc52-c7f945cd204e";
+const KEPT_TOOLS: Record<string, string[]> = {
+  "assistant-0ed80104-610b-4bc1-bdfe-fa41d760cf8d": [
+    "tool-cfba008b-0ca1-4891-bb50-2ff2b298643e",
+    "tool-b667831f-fad2-48b4-9223-2b718f5c62c3",
+    "tool-a5972a1e-2ada-49e4-9e1f-14e7f0c34d14",
+    "tool-da313af6-c059-4db3-a646-4e9b27d6eacd",
+    "tool-264d2494-0c0a-4d97-ab81-b5d514e8e397",
+    "tool-cbf1b88b-24d7-4424-84e8-fc0098e88ccc",
+    "tool-e16c8e3a-ce01-4590-913b-33c8729b87b8",
+    "tool-115de5e8-a1a5-481d-b032-32b22d91daad",
+    "tool-c197145f-507c-4aae-81af-e27119417232",
+    LOOKUP_TOOL_ID,
+    CHECKLIST_TOOL_ID,
+  ],
+  "assistant-c6b6cf63-63c3-4a20-a827-6daadc96562f": [
+    "tool-a9bf876a-f8e6-4422-8b66-d7aa637727cb",
+    "tool-2f3ad7bf-d7cc-4ba3-b14a-e17425918a28",
+    "tool-f54a2e42-49d9-4092-9341-20b6d8e4bd7b",
+    "tool-5bf9de71-be58-428a-9ef8-f4fce684d666",
+    "tool-3486f80d-f39f-457e-8d9d-befc10cbf3e1",
+    "tool-da313af6-c059-4db3-a646-4e9b27d6eacd",
+    "tool-c197145f-507c-4aae-81af-e27119417232",
+    LOOKUP_TOOL_ID,
+    CHECKLIST_TOOL_ID,
+  ],
+  "assistant-689983fe-f3bb-4207-8d2c-1013debefb4e": [
+    "tool-cfba008b-0ca1-4891-bb50-2ff2b298643e",
+    "tool-b667831f-fad2-48b4-9223-2b718f5c62c3",
+    "tool-a5972a1e-2ada-49e4-9e1f-14e7f0c34d14",
+    "tool-da313af6-c059-4db3-a646-4e9b27d6eacd",
+    "tool-264d2494-0c0a-4d97-ab81-b5d514e8e397",
+    "tool-cbf1b88b-24d7-4424-84e8-fc0098e88ccc",
+    "tool-e16c8e3a-ce01-4590-913b-33c8729b87b8",
+    "tool-115de5e8-a1a5-481d-b032-32b22d91daad",
+    "tool-c197145f-507c-4aae-81af-e27119417232",
+    "tool-e75a28e5-d995-4960-8f05-8da8b7aee7c4",
+    LOOKUP_TOOL_ID,
+    CHECKLIST_TOOL_ID,
+  ],
+};
 
 const SHARED_RULES = `
 How you sound:
@@ -23,7 +66,7 @@ New callers:
 If caller_status is new, or the live account says nothing is saved yet, they are new to Novara and may want to book a first clean. Welcome that. Start the booking with the ZIP. Do not apologize for a missing account, do not ask them to sign in, and do not read the list of fields you still need.
 
 Money:
-Call get_price_estimate before you say any dollar amount. Pass home_size_id, service_type, add_ons, and zip_code. Speak human_summary and then pause. Do not add $10 off, $15 off, or a 50 percent new-customer promo. If a knowledge article mentions those, ignore it. The payment link will not include them. The quote holds 48 hours. The deposit is half. The visit stays pending until they pay.
+On a new clean, call send_checklist before you say any dollar amount. Tell them you texted what is included and to glance at it. Say the brief field in one sentence. Then call get_price_estimate. Pass home_size_id, service_type, add_ons, zip_code, occupancy, and home_condition. Speak human_summary and then pause. An empty move-out is 15 percent under a furnished move-out, and only when occupancy is empty and the service is moveInOut. A kept-up home that asks for deep is usually a standard clean. Use the comparison and both totals the tool returns. Do not invent a second price. Do not add $10 off, $15 off, or a 50 percent new-customer promo. If a knowledge article mentions those, ignore it. The payment link will not include them. The quote holds 48 hours. The deposit is half. The visit stays pending until they pay.
 
 Coverage:
 If zip_serviced is yes, say the city and keep going. Never say that ZIP is outside the area. If a coverage tool returns lookup_failed, say you are still checking and do not claim they are outside the area. Offer the waitlist only when serviced is false, and only with a real first name, a real email, and the mobile on the call.
@@ -76,7 +119,7 @@ If caller_status is new, offer to book a first clean and also ask if a visit mig
 To cancel or move a visit, call preview_change first and say the fee. Call cancel_booking or reschedule_booking only after they agree and confirmed is true. The phone on the call has to match the booking.
 More than 24 hours out, a normal home cancel is a full refund in 5 to 10 business days, and moving the visit has no fee. Inside 24 hours, a cancel keeps a $50 fee and a move adds $25. A membership credit is restored with no cash fee.
 A refund that is not that normal cancel, plus damage or a billing dispute, goes to submit_request. You do not move money and you do not promise a refund amount.
-If they want a new clean, collect the ZIP, then the street address, then book it one question at a time. If they ask what is included, call send_checklist and say the brief field. On a new booking, send that checklist before any price. Do not create a second visit for a day they already have.
+If they want a new clean, collect the ZIP, then the street address, then book it one question at a time. Call lookup_address and do not ask for the city. An empty move-out is 15 percent under a furnished move-out. A kept-up home that asks for deep is usually a standard clean. Say that difference in one sentence. If they ask what is included, or before any price on that new booking, call send_checklist, ask them to glance at the text, and say the brief field. Do not create a second visit for a day they already have.
 Before you end, say what you did: moved, cancelled, pointed them to the account, or a person has the request.
 `.trim();
 
@@ -155,7 +198,11 @@ async function telnyx(apiKey: string, path: string, method: string, body?: unkno
   const text = await res.text();
   let payload: any = {};
   try { payload = text ? JSON.parse(text) : {}; } catch { payload = { raw: text.slice(0, 300) }; }
-  return { status: res.status, payload, assistant: unwrap(payload) };
+  return { status: res.status, payload, assistant: unwrap(payload), text };
+}
+
+function presentTools(text: string, ids: string[]): number {
+  return ids.filter((id) => text.includes(id)).length;
 }
 
 function withZip(webhook: any): { webhook: any; changed: boolean } {
@@ -170,6 +217,20 @@ function withZip(webhook: any): { webhook: any; changed: boolean } {
       properties.zip_code = {
         type: "string",
         description: "5-digit ZIP of the home. Pass the ZIP already on the call so the zone matches the payment link.",
+      };
+      changed = true;
+    }
+    if (!properties.occupancy) {
+      properties.occupancy = {
+        type: "string",
+        description: "empty when the home is vacant for a move-out. Otherwise occupied.",
+      };
+      changed = true;
+    }
+    if (!properties.home_condition) {
+      properties.home_condition = {
+        type: "string",
+        description: "light when the home is kept up. typical when lived in. heavy when neglected or a first professional clean.",
       };
       changed = true;
     }
@@ -215,8 +276,8 @@ serve(async (req) => {
 
   const agents = [];
   for (const agent of AGENTS) {
+    const kept = KEPT_TOOLS[agent.id] || [];
     const before = await telnyx(apiKey, `/ai/assistants/${agent.id}`, "GET");
-    const beforeIds = Array.isArray(before.assistant?.tool_ids) ? before.assistant.tool_ids : [];
     const patched = await telnyx(apiKey, `/ai/assistants/${agent.id}`, "PATCH", {
       instructions: agent.instructions,
       greeting: agent.greeting,
@@ -225,19 +286,23 @@ serve(async (req) => {
     });
     let after = await telnyx(apiKey, `/ai/assistants/${agent.id}`, "GET");
     let restored = false;
-    if (beforeIds.length > 0 && toolCount(after.assistant) === 0) {
-      await telnyx(apiKey, `/ai/assistants/${agent.id}`, "PATCH", { tool_ids: beforeIds });
+    if (presentTools(after.text, kept) < kept.length) {
+      await telnyx(apiKey, `/ai/assistants/${agent.id}`, "PATCH", { tool_ids: kept });
       after = await telnyx(apiKey, `/ai/assistants/${agent.id}`, "GET");
       restored = true;
     }
+    const instructions = String(after.assistant?.instructions || "");
     agents.push({
       id: agent.id,
       role: agent.role,
       patch_status: patched.status,
-      before_tools: toolCount(before.assistant),
-      after_tools: toolCount(after.assistant),
+      before_tools: presentTools(before.text, kept),
+      after_tools: presentTools(after.text, kept),
+      expected_tools: kept.length,
       restored,
-      instruction_length: String(after.assistant?.instructions || "").length,
+      asks_for_street: instructions.includes("lookup_address"),
+      checklist_before_price: instructions.includes("send_checklist"),
+      instruction_length: instructions.length,
       greeting: after.assistant?.greeting || "",
       context_url: after.assistant?.dynamic_variables_webhook_url || "",
     });
@@ -245,7 +310,7 @@ serve(async (req) => {
 
   const price = await telnyx(apiKey, `/ai/tools/${PRICE_TOOL_ID}`, "GET");
   const toolObj = price.assistant || {};
-  const currentWebhook = toolObj.webhook || toolObj.tool?.webhook || price.payload?.webhook || price.payload?.data?.webhook;
+  const currentWebhook = toolObj.tool_definition || toolObj.webhook || toolObj.tool?.webhook || price.payload?.webhook || price.payload?.data?.webhook;
   const zipped = withZip(currentWebhook);
   let priceStatus = price.status;
   if (currentWebhook) {
@@ -253,13 +318,31 @@ serve(async (req) => {
     priceStatus = pricePatch.status;
   }
 
-  const failed = agents.some((agent) => agent.patch_status >= 300 || agent.after_tools === 0);
+  const book = await telnyx(apiKey, `/ai/tools/${BOOK_TOOL_ID}`, "GET");
+  const bookObj = book.assistant || {};
+  const bookDef = { ...(bookObj.tool_definition || bookObj.webhook || {}) };
+  let bookStatus = book.status;
+  if (bookDef.body_parameters) {
+    const schema = { ...(bookDef.body_parameters || {}) };
+    const properties = { ...(schema.properties || {}) };
+    properties.occupancy = {
+      type: "string",
+      description: "empty for a vacant move-out. Otherwise occupied. An empty move-out is 15 percent under a furnished move-out.",
+    };
+    bookDef.body_parameters = { ...schema, type: "object", properties, required: schema.required || [] };
+    bookDef.description = "Create the visit only after a spoken read-back and a yes. Pass occupancy empty for a vacant move-out so the deposit matches the 15 percent discount. Do not read the payment link aloud.";
+    const bookPatch = await telnyx(apiKey, `/ai/tools/${BOOK_TOOL_ID}`, "PATCH", { webhook: bookDef });
+    bookStatus = bookPatch.status;
+  }
+
+  const failed = agents.some((agent) => agent.patch_status >= 300 || agent.after_tools < agent.expected_tools);
   return json({
-    ok: !failed && priceStatus < 300,
+    ok: !failed && priceStatus < 300 && bookStatus < 300,
     agents,
     price_tool_status: priceStatus,
     price_webhook_found: Boolean(currentWebhook),
     price_tool_keys: Object.keys(toolObj).slice(0, 12),
     price_tool_changed: zipped.changed,
+    book_tool_status: bookStatus,
   }, failed ? 502 : 200);
 });

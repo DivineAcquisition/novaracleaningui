@@ -29,7 +29,7 @@ function applyOccupancy(totalCents: number, serviceType: string, occupancy: stri
   return { totalCents: total, depositCents: deposit, remainingCents: total - deposit, empty_move_out_discount: true };
 }
 
-function serviceAdvice(serviceType: string, condition: string): { recommended_service: string; comparison: string } {
+function serviceAdvice(serviceType: string, condition: string, occupancy: string): { recommended_service: string; comparison: string } {
   const c = condition.toLowerCase();
   const light = /light|kept|tidy|good|maintained|well|regular/.test(c);
   const heavy = /heavy|messy|dirty|neglected|build|first|long time|awhile|a while/.test(c);
@@ -48,7 +48,9 @@ function serviceAdvice(serviceType: string, condition: string): { recommended_se
   if (serviceType === "moveInOut") {
     return {
       recommended_service: "moveInOut",
-      comparison: "A move-in or move-out includes the fridge and oven. An empty home is 15 percent under the price of a furnished move-out.",
+      comparison: emptyMoveOut(serviceType, occupancy)
+        ? "This empty move-out includes the fridge and oven. The price is already 15 percent under a furnished move-out."
+        : "A move-in or move-out includes the fridge and oven. If the home is empty, pass occupancy empty. That price is 15 percent under a furnished move-out.",
     };
   }
   return { recommended_service: serviceType || "standard", comparison: "" };
@@ -78,7 +80,7 @@ serve(async (req) => {
   const addOns = Array.isArray(body.add_ons) ? body.add_ons.map(String) : [];
   const membershipPlan = String(body.membership_plan || "none");
   const zip = String(body.zip_code || body.zip || "").replace(/\D/g, "").slice(0, 5);
-  const advice = serviceAdvice(serviceType, condition);
+  const advice = serviceAdvice(serviceType, condition, occupancy);
   if (homeSizeId === "5000_plus") {
     return new Response(JSON.stringify({
       total_cents: 0,
@@ -115,9 +117,6 @@ serve(async (req) => {
   const fmt = (cents: number) => `$${(cents / 100).toFixed(2)}`;
   const spoken = alternate || priced;
   const spokenService = alternate ? advice.recommended_service : serviceType;
-  const discountLine = spoken.empty_move_out_discount
-    ? "Empty move-out is 15 percent under a furnished move-out. "
-    : "";
   const otherLine = alternate
     ? ` If they still want the ${serviceType} clean, that total is ${fmt(priced.totalCents)} and the deposit is ${fmt(priced.depositCents)}.`
     : "";
@@ -133,6 +132,6 @@ serve(async (req) => {
     alternate_deposit_cents: alternate?.depositCents ?? null,
     zone,
     zip_code: zip || null,
-    human_summary: `${advice.comparison ? `${advice.comparison} ` : ""}${discountLine}Quote the ${spokenService} clean unless they choose otherwise. Total ${fmt(spoken.totalCents)}. Deposit today ${fmt(spoken.depositCents)}. Balance ${fmt(spoken.remainingCents)} after the clean.${otherLine} This price holds for 48 hours. Say these amounts only. Do not add another discount.`,
+    human_summary: `${advice.comparison ? `${advice.comparison} ` : ""}Quote the ${spokenService} clean unless they choose otherwise. Total ${fmt(spoken.totalCents)}. Deposit today ${fmt(spoken.depositCents)}. Balance ${fmt(spoken.remainingCents)} after the clean.${otherLine} This price holds for 48 hours. Say these amounts only. Do not add another discount.`,
   }), { headers });
 });

@@ -217,8 +217,10 @@ serve(async (req) => {
   if (!lastName) missing.push("last name");
   if (!email.includes("@")) missing.push("email");
   if (!address) missing.push("street address");
-  if (!city) missing.push("city");
-  if (!state) missing.push("state");
+  else {
+    if (!city) missing.push("city");
+    if (!state) missing.push("state");
+  }
   if (!zip) missing.push("ZIP code");
   if (!bedrooms) missing.push("bedrooms");
   if (!bathrooms) missing.push("bathrooms");
@@ -285,16 +287,16 @@ serve(async (req) => {
       nextStep = "Do not ask for the city. Call lookup_address with the street and this ZIP. Confirm the address it returns. Then ask if they are moving, if the home is empty, and how kept up it is. Text the checklist for the service you recommend before any price.";
     } else if (knownSize && knownService) {
       sayFirst = `${who}${place} I can price the ${serviceLabel(knownService)} for a home that's ${sizeLabel}.`;
-      nextStep = `Call get_price_estimate with home_size_id ${knownSize}, service_type ${knownService}, and zip_code ${zip}. Speak only human_summary, then pause.`;
+      nextStep = `Before any price, call send_checklist with service_type ${knownService} and ask them to glance at the text. Say the brief. Then call get_price_estimate with home_size_id ${knownSize}, service_type ${knownService}, zip_code ${zip}, occupancy, and home_condition. An empty move-out uses occupancy empty. A kept-up home that asked for deep uses home_condition light, and you speak both totals from the tool. Speak only human_summary, then pause.`;
     } else if (knownService && sizeLabel) {
       sayFirst = `${who}${place} You asked about a ${serviceLabel(knownService)}, and the home looks ${sizeLabel}. Is that the size?`;
-      nextStep = "If they confirm, call get_price_estimate with that size, service, and ZIP. Speak only human_summary, then pause.";
+      nextStep = "If they confirm, call send_checklist for that service and ask them to glance at it. Then call get_price_estimate with that size, service, ZIP, occupancy, and home_condition. Speak only human_summary, then pause.";
     } else if (!knownService) {
       sayFirst = `${who}${place} Are you looking for a standard clean, a deep clean, or a move-in/out?`;
-      nextStep = "One answer, then ask the home size if you don't already have it. Deep clean if it has been a long time. Fridge and oven are included on a move-in/out.";
+      nextStep = "One answer, then ask the home size if you don't already have it. Listen for an empty home, or a home that is already kept up, before you choose deep over standard. Fridge and oven are included on a move-in/out. Text the checklist and ask them to glance at it before any price.";
     } else {
       sayFirst = `${who}${place} About how big is the home, in square feet or bedrooms?`;
-      nextStep = "Map the answer to a home_size_id, then call get_price_estimate with the ZIP. Speak only human_summary, then pause.";
+      nextStep = "Map the answer to a home_size_id. Call send_checklist, ask them to glance at it, then call get_price_estimate with the ZIP, occupancy, and home_condition. Speak only human_summary, then pause.";
     }
     if (brandNew) {
       nextStep = `${nextStep} They are new to Novara. Keep going toward a first booking, one question at a time.`;

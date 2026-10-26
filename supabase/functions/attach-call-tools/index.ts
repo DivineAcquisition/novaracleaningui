@@ -70,6 +70,8 @@ serve(async (req) => {
   const apiKey = Deno.env.get("TELNYX_API_KEY") || "";
   if (!apiKey) return json({ ok: false, reason: "telnyx_key_missing" }, 500);
   const headers = { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" };
+  let incoming: any = {};
+  try { incoming = await req.json(); } catch { incoming = {}; }
 
   async function telnyx(path: string, method: string, body?: unknown) {
     const res = await fetch(`https://api.telnyx.com/v2${path}`, {
@@ -81,6 +83,23 @@ serve(async (req) => {
     let payload: any = {};
     try { payload = text ? JSON.parse(text) : {}; } catch { payload = { raw: text.slice(0, 300) }; }
     return { status: res.status, payload };
+  }
+
+  if (incoming.inspect === true) {
+    const assistants = [];
+    for (const id of ASSISTANTS) {
+      const got = await telnyx(`/ai/assistants/${id}`, "GET");
+      const raw = JSON.stringify(got.payload);
+      const obj = unwrap(got.payload);
+      assistants.push({
+        id,
+        status: got.status,
+        tool_ids: Array.isArray(obj?.tool_ids) ? obj.tool_ids.length : 0,
+        raw_has_lookup: raw.includes("lookup_address"),
+        raw_has_checklist: raw.includes("send_checklist"),
+      });
+    }
+    return json({ assistants });
   }
 
   const listed = await telnyx("/ai/tools", "GET");
@@ -99,6 +118,7 @@ serve(async (req) => {
       continue;
     }
     const made = await telnyx("/ai/tools", "POST", {
+      display_name: tool.name === "lookup_address" ? "Lookup address" : "Send checklist",
       type: "webhook",
       webhook: {
         name: tool.name,
@@ -124,6 +144,10 @@ serve(async (req) => {
   for (const id of ASSISTANTS) {
     const before = unwrap((await telnyx(`/ai/assistants/${id}`, "GET")).payload);
     const beforeIds: string[] = Array.isArray(before?.tool_ids) ? before.tool_ids : [];
+    if (beforeIds.length === 0) {
+      assistants.push({ id, patch_status: 0, before_tools: 0, after_tools: 0, skipped: "no_existing_tool_ids" });
+      continue;
+    }
     const merged = [...beforeIds];
     for (const toolId of newIds) if (!merged.includes(toolId)) merged.push(toolId);
     const patched = await telnyx(`/ai/assistants/${id}`, "PATCH", { tool_ids: merged });

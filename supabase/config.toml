@@ -159,6 +159,9 @@ verify_jwt = false
 [functions.attach-call-tools]
 verify_jwt = false
 
+[functions.voice-inspect]
+verify_jwt = false
+
 [functions.google-calendar-health]
 verify_jwt = false
 

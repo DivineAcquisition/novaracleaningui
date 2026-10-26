@@ -1,6 +1,6 @@
 // Street lookup for the voice agents.
-// The caller gives a street after the ZIP. Google, then OpenStreetMap,
-// fills in the city and state.
+// The caller gives a street after the ZIP. Google geocoding, then a Google
+// Places text search, then the US address file, fills in the city and state.
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
@@ -22,6 +22,58 @@ function component(parts: any[], type: string): string {
   return String(row?.short_name || row?.long_name || "").trim();
 }
 
+function fromParts(parts: any[], fallbackStreet: string, fallbackZip: string) {
+  const number = component(parts, "street_number");
+  const road = component(parts, "route");
+  return {
+    street: [number, road].filter(Boolean).join(" ") || fallbackStreet,
+    city: component(parts, "locality") || component(parts, "sublocality") || component(parts, "neighborhood"),
+    state: component(parts, "administrative_area_level_1"),
+    zip: component(parts, "postal_code").replace(/\D/g, "").slice(0, 5) || fallbackZip,
+  };
+}
+
+async function placesSearch(key: string, query: string): Promise<{ status: string; parts: any[] }> {
+  const headers = {
+    "Content-Type": "application/json",
+    "X-Goog-Api-Key": key,
+    "X-Goog-FieldMask": "places.addressComponents,places.formattedAddress",
+  };
+  const response = await fetch("https://places.googleapis.com/v1/places:searchText", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ textQuery: query, regionCode: "US", pageSize: 1 }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  const place = payload?.places?.[0];
+  if (Array.isArray(place?.addressComponents) && place.addressComponents.length) {
+    const parts = place.addressComponents.map((part: any) => ({
+      short_name: part.shortText,
+      long_name: part.longText,
+      types: part.types,
+    }));
+    return { status: "OK", parts };
+  }
+  const status = String(payload?.error?.status || (response.ok ? "EMPTY" : response.status));
+  if (status === "PERMISSION_DENIED" || status === "REQUEST_DENIED") return { status, parts: [] };
+  const legacy = await fetch(
+    `https://maps.googleapis.com/maps/api/place/findplacefromtext/json?input=${encodeURIComponent(query)}&inputtype=textquery&fields=place_id&key=${key}`,
+  );
+  const found = await legacy.json().catch(() => ({}));
+  const placeId = found?.candidates?.[0]?.place_id;
+  if (found?.status === "OK" && placeId) {
+    const details = await fetch(
+      `https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(placeId)}&fields=address_component&key=${key}`,
+    );
+    const detail = await details.json().catch(() => ({}));
+    if (detail?.status === "OK" && Array.isArray(detail?.result?.address_components)) {
+      return { status: "OK", parts: detail.result.address_components };
+    }
+    return { status: `findplace:${found.status}|details:${detail?.status || details.status}`, parts: [] };
+  }
+  return { status: `search:${status}|findplace:${found?.status || legacy.status}`, parts: [] };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   let body: any = {};
@@ -35,32 +87,58 @@ serve(async (req) => {
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
   );
-  const { data: secret } = await supabase.from("app_secrets").select("value").eq("key", "GOOGLE_GEOCODING_API_KEY").maybeSingle();
-  const googleKey = String(secret?.value || "").trim();
+  const { data: secrets } = await supabase.from("app_secrets").select("key, value").in("key", [
+    "GOOGLE_GEOCODING_API_KEY",
+    "GOOGLE_PLACES_API_KEY",
+    "GOOGLE_PLACES_REST_API_KEY",
+  ]);
+  const secretValue = (key: string) => String((secrets || []).find((row: { key: string; value: string }) => row.key === key)?.value || "").trim();
+  const googleKey = secretValue("GOOGLE_GEOCODING_API_KEY");
+  const placesKey = secretValue("GOOGLE_PLACES_API_KEY") || secretValue("GOOGLE_PLACES_REST_API_KEY");
   let foundStreet = street;
   let city = "";
   let state = "";
   let foundZip = zip;
   let provider = "";
-  let googleStatus = googleKey ? "" : "missing_key";
+  const googleNotes: string[] = [];
 
   if (googleKey) {
     const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(`${street}, ${zip}`)}&components=${encodeURIComponent(`postal_code:${zip}|country:US`)}&key=${googleKey}`;
     const response = await fetch(url);
     const payload = await response.json();
-    googleStatus = String(payload?.status || response.status);
+    googleNotes.push(`geocode:${payload?.status || response.status}`);
     const top = payload?.results?.[0];
     if (payload?.status === "OK" && top) {
-      const parts = top.address_components || [];
-      const number = component(parts, "street_number");
-      const road = component(parts, "route");
-      foundStreet = [number, road].filter(Boolean).join(" ") || street;
-      city = component(parts, "locality") || component(parts, "sublocality") || component(parts, "neighborhood");
-      state = component(parts, "administrative_area_level_1");
-      foundZip = component(parts, "postal_code").replace(/\D/g, "").slice(0, 5) || zip;
-      provider = "google";
+      const parsed = fromParts(top.address_components || [], street, zip);
+      if (parsed.city && parsed.state) {
+        foundStreet = parsed.street;
+        city = parsed.city;
+        state = parsed.state;
+        foundZip = parsed.zip;
+        provider = "google";
+      }
     }
+  } else {
+    googleNotes.push("geocode:missing_key");
   }
+
+  if (!provider && placesKey) {
+    const found = await placesSearch(placesKey, `${street}, ${zip}, USA`);
+    googleNotes.push(found.status);
+    if (found.status === "OK" && found.parts.length) {
+      const parsed = fromParts(found.parts, street, zip);
+      if (parsed.city && parsed.state) {
+        foundStreet = parsed.street;
+        city = parsed.city;
+        state = parsed.state;
+        foundZip = parsed.zip;
+        provider = "google_places";
+      }
+    }
+  } else if (!provider) {
+    googleNotes.push("places:missing_key");
+  }
+  const googleStatus = googleNotes.join(" ");
 
   if (!provider) {
     const censusUrl = `https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?address=${encodeURIComponent(`${street}, ${zip}`)}&benchmark=Public_AR_Current&format=json`;

@@ -97,6 +97,16 @@ serve(async (req) => {
   const depositCents = Math.round(totalCents / 2);
   const priced = { totalCents, depositCents, subtotalCents: raw.subtotalCents, emptyDiscount: moveOut && empty };
   if (!priced.totalCents) return json({ error: "could_not_price", say: "The price did not calculate. Do not invent one." });
+  if (req.headers.get("x-price-preview") === "1") {
+    return json({
+      preview: true,
+      total_cents: priced.totalCents,
+      deposit_cents: priced.depositCents,
+      zone,
+      empty_move_out_discount: priced.emptyDiscount,
+      say: "Preview only. No booking was created.",
+    });
+  }
 
   const phone = toE164(body.phone);
   const ten = phone.replace(/\D/g, "").slice(-10);
