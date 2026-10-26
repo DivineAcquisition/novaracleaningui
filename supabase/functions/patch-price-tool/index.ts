@@ -6,6 +6,9 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
 const PRICE_TOOL_ID = "tool-a5972a1e-2ada-49e4-9e1f-14e7f0c34d14";
+const WAITLIST_TOOL_ID = "tool-cbf1b88b-24d7-4424-84e8-fc0098e88ccc";
+const QUOTE_URL = "https://sxdraeptzuamsgjcvfeg.supabase.co/functions/v1/voice-quote";
+const WAITLIST_URL = "https://sxdraeptzuamsgjcvfeg.supabase.co/functions/v1/voice-waitlist";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
@@ -51,6 +54,7 @@ serve(async (req) => {
   if (!required.includes("zip_code")) required.push("zip_code");
   definition.body_parameters = { ...schema, type: "object", properties, required };
   definition.description = "Price a clean for this ZIP from the live price table. Speak human_summary only. Do not add a promo, a courtesy, or the words 50 percent new. Pass zip_code.";
+  definition.url = QUOTE_URL;
 
   const webhookPatch = await fetch(`https://api.telnyx.com/v2/ai/tools/${PRICE_TOOL_ID}`, {
     method: "PATCH",
@@ -69,17 +73,34 @@ serve(async (req) => {
     patchMode = "tool_definition";
   }
 
+  const waitRes = await fetch(`https://api.telnyx.com/v2/ai/tools/${WAITLIST_TOOL_ID}`, { headers });
+  const waitJson = await waitRes.json();
+  const waitCurrent = unwrap(waitJson);
+  const waitDef = { ...(waitCurrent.tool_definition || waitCurrent.webhook || {}) };
+  waitDef.url = WAITLIST_URL;
+  waitDef.description = "Add someone to the waitlist only when the ZIP is not served. Requires a real first name, a real email, and their mobile. Refuse a served ZIP.";
+  const waitPatch = await fetch(`https://api.telnyx.com/v2/ai/tools/${WAITLIST_TOOL_ID}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ webhook: waitDef }),
+  });
+
   const afterRes = await fetch(`https://api.telnyx.com/v2/ai/tools/${PRICE_TOOL_ID}`, { headers });
   const afterJson = await afterRes.json();
   const after = unwrap(afterJson);
   const afterDef = after.tool_definition || after.webhook || {};
   const afterProps = Object.keys(afterDef.body_parameters?.properties || {});
+  const waitAfterRes = await fetch(`https://api.telnyx.com/v2/ai/tools/${WAITLIST_TOOL_ID}`, { headers });
+  const waitAfter = unwrap(await waitAfterRes.json());
+  const waitUrl = (waitAfter.tool_definition || waitAfter.webhook || {}).url || "";
   return json({
-    ok: patchStatus < 300 && afterProps.includes("zip_code"),
+    ok: patchStatus < 300 && afterProps.includes("zip_code") && waitPatch.status < 300 && String(afterDef.url || "").includes("voice-quote") && String(waitUrl).includes("voice-waitlist"),
     patch_status: patchStatus,
     patch_mode: patchMode,
+    price_url: afterDef.url || "",
     properties: afterProps,
     required: afterDef.body_parameters?.required || [],
-    description: afterDef.description || "",
-  }, patchStatus >= 300 ? 502 : 200);
+    waitlist_status: waitPatch.status,
+    waitlist_url: waitUrl,
+  }, patchStatus >= 300 || waitPatch.status >= 300 ? 502 : 200);
 });
