@@ -189,15 +189,23 @@ function ascii(value: string): string {
     .replace(/[^\x09\x0a\x0d\x20-\x7e]/g, "");
 }
 
-function wrap(value: string, width: number): string[] {
+const VIOLET = rgb(124 / 255, 106 / 255, 247 / 255);
+const INK = rgb(0.094, 0.094, 0.106);
+const MUTED = rgb(0.45, 0.45, 0.5);
+const WASH = rgb(0.965, 0.961, 1);
+const LINE = rgb(0.9, 0.9, 0.93);
+const WHITE = rgb(1, 1, 1);
+const LAVENDER = rgb(0.85, 0.82, 0.98);
+
+function wrapToWidth(value: string, face: { widthOfTextAtSize: (text: string, size: number) => number }, size: number, maxWidth: number): string[] {
   const words = ascii(value).split(/\s+/).filter(Boolean);
   const lines: string[] = [];
   let line = "";
   for (const word of words) {
     const next = line ? `${line} ${word}` : word;
-    if (next.length > width) {
-      if (line) lines.push(line);
-      line = word.slice(0, width);
+    if (face.widthOfTextAtSize(next, size) > maxWidth && line) {
+      lines.push(line);
+      line = word;
     } else {
       line = next;
     }
@@ -206,42 +214,158 @@ function wrap(value: string, width: number): string[] {
   return lines.length ? lines : [""];
 }
 
-async function buildPdf(input: {
-  title: string;
-  facts: string[];
-  quote: string[];
-  tools: string[];
-  transcript: string[];
-}): Promise<string> {
+async function loadLogo(doc: PDFDocument) {
+  try {
+    const res = await fetch("https://app.novaracleaning.com/novara-logo.png");
+    if (!res.ok) return null;
+    return await doc.embedPng(new Uint8Array(await res.arrayBuffer()));
+  } catch {
+    return null;
+  }
+}
+
+async function buildPdf(report: Report): Promise<string> {
   const doc = await PDFDocument.create();
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const logo = await loadLogo(doc);
+  const pages: ReturnType<PDFDocument["addPage"]>[] = [];
   let page = doc.addPage([612, 792]);
-  let y = 750;
-  const write = (text: string, size: number, heavy = false) => {
-    const face = heavy ? bold : font;
-    for (const line of wrap(text, heavy ? 70 : 90)) {
-      if (y < 54) {
-        page = doc.addPage([612, 792]);
-        y = 750;
-      }
-      page.drawText(line, { x: 48, y, size, font: face, color: rgb(0.1, 0.1, 0.12) });
+  pages.push(page);
+  let y = 0;
+
+  const footer = (target: typeof page, index: number, total: number) => {
+    target.drawRectangle({ x: 40, y: 36, width: 532, height: 0.6, color: LINE });
+    target.drawText(ascii(`Novara Cleaning  ·  Internal call report  ·  ${index} of ${total}`), {
+      x: 40,
+      y: 22,
+      size: 8,
+      font,
+      color: MUTED,
+    });
+  };
+
+  const openPage = (first: boolean) => {
+    if (!first) {
+      page = doc.addPage([612, 792]);
+      pages.push(page);
+    }
+    page.drawRectangle({ x: 0, y: 788, width: 612, height: 4, color: VIOLET });
+    if (!first) {
+      page.drawRectangle({ x: 0, y: 752, width: 612, height: 36, color: INK });
+      page.drawText("NovaraCleaning", { x: 40, y: 766, size: 11, font: bold, color: WHITE });
+      page.drawText("Call report", { x: 148, y: 766, size: 10, font, color: LAVENDER });
+      y = 728;
+      return;
+    }
+    page.drawRectangle({ x: 0, y: 688, width: 612, height: 100, color: INK });
+    if (logo) page.drawImage(logo, { x: 36, y: 716, width: 46, height: 46 });
+    page.drawText("NovaraCleaning", { x: 96, y: 740, size: 18, font: bold, color: WHITE });
+    page.drawText("Call report", { x: 96, y: 720, size: 11, font, color: LAVENDER });
+    const pill = ascii(report.outcome);
+    const pillW = bold.widthOfTextAtSize(pill, 11) + 24;
+    const pillX = 576 - pillW;
+    page.drawRectangle({ x: pillX, y: 724, width: pillW, height: 26, color: VIOLET });
+    page.drawText(pill, { x: pillX + 12, y: 732, size: 11, font: bold, color: WHITE });
+    y = 656;
+  };
+
+  const ensure = (height: number) => {
+    if (y - height < 52) openPage(false);
+  };
+
+  const section = (label: string) => {
+    ensure(28);
+    y -= 8;
+    page.drawText(ascii(label).toUpperCase(), { x: 40, y, size: 9, font: bold, color: VIOLET });
+    y -= 8;
+    page.drawRectangle({ x: 40, y, width: 36, height: 2, color: VIOLET });
+    y -= 16;
+  };
+
+  const paragraph = (text: string, size: number, face: typeof font, color: ReturnType<typeof rgb>, indent = 40, width = 532) => {
+    for (const line of wrapToWidth(text, face, size, width)) {
+      ensure(size + 6);
+      page.drawText(line, { x: indent, y, size, font: face, color });
       y -= size + 5;
     }
   };
-  write(input.title, 16, true);
-  y -= 6;
-  write("Call facts", 12, true);
-  for (const line of input.facts) write(line, 10);
+
+  openPage(true);
+
+  const cards = [
+    ["Agent", report.agentName],
+    ["Caller", displayPhone(report.caller)],
+    ["Length", durationLabel(report.duration)],
+  ];
+  const cardW = 170;
+  const cardGap = 11;
+  ensure(78);
+  cards.forEach((card, index) => {
+    const x = 40 + index * (cardW + cardGap);
+    page.drawRectangle({ x, y: y - 64, width: cardW, height: 64, color: WASH, borderColor: LINE, borderWidth: 1 });
+    page.drawRectangle({ x, y: y - 64, width: 3, height: 64, color: VIOLET });
+    page.drawText(card[0].toUpperCase(), { x: x + 14, y: y - 22, size: 8, font: bold, color: VIOLET });
+    const value = wrapToWidth(card[1], bold, 12, cardW - 28)[0];
+    page.drawText(value, { x: x + 14, y: y - 44, size: 12, font: bold, color: INK });
+  });
+  y -= 84;
+
+  section("Call details");
+  const details = [
+    ["Role", report.agentRole],
+    ["Direction", report.direction],
+    ["Started", when(report.startedAt) || "Unknown"],
+    ["Ended", when(report.endedAt) || "Unknown"],
+    ["From", displayPhone(report.from)],
+    ["To", displayPhone(report.to)],
+    ["How it ended", report.reason],
+  ];
+  for (let i = 0; i < details.length; i += 2) {
+    ensure(22);
+    const left = details[i];
+    const right = details[i + 1];
+    page.drawText(ascii(left[0]), { x: 40, y, size: 9, font, color: MUTED });
+    page.drawText(wrapToWidth(left[1], font, 10, 180)[0], { x: 120, y, size: 10, font: bold, color: INK });
+    if (right) {
+      page.drawText(ascii(right[0]), { x: 320, y, size: 9, font, color: MUTED });
+      page.drawText(wrapToWidth(right[1], font, 10, 160)[0], { x: 410, y, size: 10, font: bold, color: INK });
+    }
+    y -= 18;
+  }
+
+  section("Quote on file");
+  const quoteText = report.quote.join("\n");
+  const quoteLinesDrawn = quoteText.split("\n").flatMap((line) => wrapToWidth(line, font, 10, 500));
+  const quoteH = quoteLinesDrawn.length * 15 + 16;
+  ensure(quoteH + 4);
+  page.drawRectangle({ x: 40, y: y - quoteH + 12, width: 532, height: quoteH, color: WASH });
+  page.drawRectangle({ x: 40, y: y - quoteH + 12, width: 3, height: quoteH, color: VIOLET });
+  y -= 4;
+  for (const line of quoteLinesDrawn) {
+    page.drawText(line, { x: 56, y, size: 10, font, color: INK });
+    y -= 15;
+  }
   y -= 8;
-  write("Quote on file", 12, true);
-  for (const line of input.quote) write(line, 10);
-  y -= 8;
-  write("Tools used", 12, true);
-  write(input.tools.length ? input.tools.join(", ") : "None", 10);
-  y -= 8;
-  write("Transcript", 12, true);
-  for (const line of input.transcript) write(line, 10);
+
+  section("Tools used");
+  paragraph(report.tools.length ? report.tools.join(", ") : "None", 10, font, INK);
+
+  section("Transcript");
+  if (!report.transcript.length) paragraph("No transcript was saved.", 10, font, MUTED);
+  for (const line of report.transcript) {
+    const matched = /^(Caller|Agent|Tool)(?:: | used )(.*)$/.exec(line);
+    const label = matched ? matched[1] : "Note";
+    const body = matched ? matched[2] : line;
+    const labelColor = label === "Agent" ? VIOLET : label === "Caller" ? INK : MUTED;
+    ensure(24);
+    page.drawText(ascii(label).toUpperCase(), { x: 40, y, size: 8, font: bold, color: labelColor });
+    y -= 13;
+    paragraph(body, 10, font, INK, 40, 532);
+    y -= 4;
+  }
+
+  pages.forEach((target, index) => footer(target, index + 1, pages.length));
   const bytes = await doc.save();
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
@@ -434,24 +558,7 @@ async function sendReport(supabase: ReturnType<typeof createClient>, apiKey: str
   }
 
   const resendKey = await resolveSecret(supabase, "RESEND_API_KEY");
-  const pdf = await buildPdf({
-    title: `${report.agentName} call · ${report.outcome}`,
-    facts: [
-      `Agent: ${report.agentName} (${report.agentRole})`,
-      `Outcome: ${report.outcome}`,
-      `Caller: ${displayPhone(report.caller)}`,
-      `Direction: ${report.direction}`,
-      `From: ${displayPhone(report.from)}`,
-      `To: ${displayPhone(report.to)}`,
-      `Started: ${when(report.startedAt) || "Unknown"}`,
-      `Ended: ${when(report.endedAt) || "Unknown"}`,
-      `Duration: ${durationLabel(report.duration)}`,
-      `How it ended: ${report.reason}`,
-    ],
-    quote: report.quote,
-    tools: report.tools,
-    transcript: report.transcript,
-  });
+  const pdf = await buildPdf(report);
   const subject = `AI call ended · ${report.agentName} · ${report.outcome} · ${displayPhone(report.caller)}`;
   const html = emailHtml(report);
   const errors: string[] = [];
