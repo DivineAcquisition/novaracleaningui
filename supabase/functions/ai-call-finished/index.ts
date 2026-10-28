@@ -1,6 +1,7 @@
 // Emails a detailed report, with a PDF transcript, when an AI voice call ends.
-// Telnyx posts call.conversation.ended here. A two-minute sweep catches any
-// call whose webhook did not arrive.
+// The report goes only to contact@novaracleaning.com. Telnyx posts
+// call.conversation.ended here. A two-minute sweep catches any call whose
+// webhook did not arrive.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { PDFDocument, StandardFonts, rgb } from "https://esm.sh/pdf-lib@1.17.1";
@@ -8,11 +9,7 @@ import { resolveSecret } from "../_shared/app-secrets.ts";
 import { deliverCompliantEmail } from "../_shared/email-compliance-send.ts";
 
 const REPORT_URL = "https://sxdraeptzuamsgjcvfeg.supabase.co/functions/v1/ai-call-finished";
-const RECIPIENTS = [
-  "ops@novaracleaning.com",
-  "asannie74@gmail.com",
-  "maliksannie7@gmail.com",
-];
+const RECIPIENTS = ["contact@novaracleaning.com"];
 const OURS = new Set([
   "8337002611",
   "8337001210",
