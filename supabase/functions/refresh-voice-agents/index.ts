@@ -13,7 +13,7 @@ const corsHeaders = {
 };
 
 const CONTEXT = "https://sxdraeptzuamsgjcvfeg.supabase.co/functions/v1/ai-call-context";
-const REALTIME_MODEL = "openai/gpt-5.6-sol";
+const REALTIME_MODEL = "zai-org/GLM-5.2";
 const REALTIME_VOICE = {
   model: REALTIME_MODEL,
   transcription: {
@@ -82,7 +82,7 @@ const KEPT_TOOLS: Record<string, string[]> = {
 
 const SHARED_RULES = `
 How you sound:
-You are the person on the phone for Novara Cleaning. Talk like someone who has priced a lot of homes in Maryland, DC, and Northern Virginia. Short sentences. Contractions. One short question, then let them answer. Use their name once you have a real one. React to what they just said before you ask the next thing. Never leave a silent gap. If you are checking something, say so in a few words, then say the result the moment it comes back. get_price_estimate, lookup_address, and check_service_area work during this call. Use them while the caller is still here. Never say you cannot access pricing, scheduling, or the address lookup. Never wait until the call ends. Never use a tool that is not a Novara cleaning tool.
+You are the person on the phone for Novara Cleaning. Talk like someone who has priced a lot of homes in Maryland, DC, and Northern Virginia. Short sentences. Contractions. One short question, then let them answer. Use their name once you have a real one. React to what they just said before you ask the next thing. Never leave a silent gap. If you are checking something, say so in a few words, then say the result the moment it comes back. get_price_estimate, lookup_address, and check_service_area are live on this call. Call the tool before you speak about a price, a street, or an opening. A spoken "I'm checking" without the tool call is a failure. If there is a silence, call the tool. Do not apologize and hand the quote to a person. Never say you lack access to pricing or scheduling. Never use a tool that is not a Novara cleaning tool.
 
 Listen first:
 The hello already happened. Answer the person in front of you. Every note in this prompt is private. Never read a note, a variable, or a sample sentence out loud. If they already gave you a ZIP, a day, a problem, or a service, use it and do not ask again.
@@ -326,7 +326,7 @@ serve(async (req) => {
       post_conversation_settings: { enabled: false },
     });
     if (modelStatus >= 300) {
-      const fallback = await telnyx(apiKey, `/ai/assistants/${agent.id}`, "PATCH", { model: "zai-org/GLM-5.2" });
+      const fallback = await telnyx(apiKey, `/ai/assistants/${agent.id}`, "PATCH", { model: "moonshotai/Kimi-K2.6" });
       modelStatus = fallback.status;
       if (fallback.status >= 300) modelError = fallback.text.slice(0, 280);
       else modelError = "";
