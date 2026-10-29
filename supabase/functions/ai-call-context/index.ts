@@ -176,10 +176,12 @@ serve(async (req) => {
   const newest = bookings[0];
   const addressOnBooking = text(newest?.address);
   // A ZIP on a lead form, or passed in from an old test, is not the home.
-  // Ask on this call unless a booking already has a street address.
+  // A quote that already has a street is the home this follow-up continues.
   const zip = (addressOnBooking
     ? text(newest?.zip_code || payload.zip_code || hinted.zip_code || lead?.zip_code)
-    : ""
+    : resumeQuote
+      ? text(quoteSession?.zip_code)
+      : ""
   ).replace(/\D/g, "").slice(0, 5);
   let coverage: Record<string, unknown> | null = null;
   let zoneName = "";
@@ -210,23 +212,23 @@ serve(async (req) => {
   const fullName = `${firstName} ${lastName}`.trim();
   const email = text(newest?.email || quoteSession?.email || lead?.email);
   const address = addressOnBooking || (resumeQuote ? text(quoteSession?.address) : "");
-  const city = text(newest?.city || lead?.city || coverage?.city);
-  const state = text(newest?.state || lead?.state || coverage?.state);
+  const city = text(newest?.city || (resumeQuote ? quoteSession?.city || quoteSession?.coverage_city : "") || coverage?.city);
+  const state = text(newest?.state || (resumeQuote ? quoteSession?.state || quoteSession?.coverage_state : "") || coverage?.state);
   const serviced = lookupFailed ? "unknown" : coverage ? (coverage.is_active ? "yes" : "no") : (zip ? "no" : "unknown");
-  const serviceRaw = text(upcoming?.service_type || lead?.service_type || hinted.service_type);
+  const serviceRaw = text(upcoming?.service_type || (resumeQuote ? quoteSession?.service_type : "") || lead?.service_type || hinted.service_type);
   const knownService = serviceId(serviceRaw);
-  const sqft = Number(lead?.sqft || 0);
+  const sqft = Number((resumeQuote ? quoteSession?.sqft : 0) || lead?.sqft || 0);
   const sized = sizeFromSqft(sqft);
-  const knownSize = text(upcoming?.home_size_id) || sized.id;
+  const knownSize = text(upcoming?.home_size_id || (resumeQuote ? quoteSession?.home_size_id : "")) || sized.id;
   const sizeLabel = SIZE_BANDS.find((band) => band[2] === knownSize)?.[3] || sized.label;
-  const bedrooms = text(upcoming?.bedrooms || lead?.bedrooms || hinted.bedrooms);
-  const bathrooms = text(upcoming?.bathrooms || lead?.bathrooms);
-  const preferredDate = text(lead?.preferred_date || upcoming?.service_date);
+  const bedrooms = text(upcoming?.bedrooms || (resumeQuote ? quoteSession?.bedrooms : "") || lead?.bedrooms || hinted.bedrooms);
+  const bathrooms = text(upcoming?.bathrooms || (resumeQuote ? quoteSession?.bathrooms : "") || lead?.bathrooms);
+  const preferredDate = text(lead?.preferred_date || upcoming?.service_date || (resumeQuote ? quoteSession?.service_date : ""));
   const depositCents = Number(upcoming?.deposit_cents || 0);
   const unpaid = Boolean(upcoming && !upcoming.payment_received_at && ["pending_payment", "confirmed", "assigned"].includes(String(upcoming.status || "")));
   const dueNow = unpaid ? (depositCents || Math.round(Number(upcoming?.total_estimate_cents || 0) / 2)) : 0;
   const when = upcoming?.service_date ? spokenDate(text(upcoming.service_date)) : "";
-  const slot = text(upcoming?.time_slot);
+  const slot = text(upcoming?.time_slot || (!upcoming && resumeQuote ? quoteSession?.time_slot : ""));
   const svc = serviceLabel(text(upcoming?.service_type)) || "clean";
   const doNotCall = Boolean(lead?.do_not_call);
 
@@ -242,13 +244,13 @@ serve(async (req) => {
   if (!zip) missing.push("ZIP code");
   if (!bedrooms) missing.push("bedrooms");
   if (!bathrooms) missing.push("bathrooms");
-  if (!text(upcoming?.dwelling_type)) missing.push("home type");
+  if (!text(upcoming?.dwelling_type || (resumeQuote ? quoteSession?.dwelling_type : ""))) missing.push("home type");
   if (!knownSize) missing.push("home size");
   if (!knownService) missing.push("service");
   if (!preferredDate) missing.push("date");
   if (!slot) missing.push("arrival time");
 
-  const brandNew = bookings.length === 0 && !lead;
+  const brandNew = bookings.length === 0 && !lead && !resumeQuote;
   let sayFirst = "I can get you a price. What ZIP is the home in?";
   let nextStep = brandNew
     ? "They may want a first clean. Answer whatever they already said. When you have a ZIP, call check_service_area. If it is served, say the city and ask for the street. Do not ask for the city."
