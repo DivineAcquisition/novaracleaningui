@@ -375,7 +375,12 @@ serve(async (req) => {
     const priceBit = total > 0
       ? ` The total is ${money(total)} and the deposit is ${money(deposit)}.`
       : " I can give you the price now.";
-    openingLine = `Hey ${who}, it's Nova calling back. We left off on your ${kind} at ${street}${town ? ` in ${town}` : ""}.${priceBit} You wanted Saturday at 9. Is now still okay?`;
+    const savedDay = text(quoteSession.service_date).slice(0, 10);
+    const savedStart = text(quoteSession.time_slot).split(" - ")[0].trim();
+    const wanted = savedDay
+      ? ` You wanted ${spokenDate(savedDay)}${savedStart ? ` at ${savedStart}` : ""}.`
+      : "";
+    openingLine = `Hey ${who}, it's Nova calling back. We left off on your ${kind} at ${street}${town ? ` in ${town}` : ""}.${priceBit}${wanted} Is now still okay?`;
     sayFirst = [
       "Private note. This is a follow-up. Do not re-ask anything already known.",
       `Name ${who}. ${kind}. ZIP ${text(quoteSession.zip_code)}.`,
@@ -383,10 +388,15 @@ serve(async (req) => {
       `Pets ${text(quoteSession.pets) || "none"}. Email ${text(quoteSession.email)}. This phone can take a text.`,
       `Street ${street}, ${town} ${text(quoteSession.state)}.`,
       total > 0 ? `Price already calculated: total ${money(total)}, deposit ${money(deposit)}. Say those numbers first.` : "Call get_price_estimate immediately and say the total.",
-      "They asked for Saturday, October 31 at 9:00 AM.",
+      savedDay ? `They asked for ${spokenDate(savedDay)}${savedStart ? ` at ${savedStart}` : ""}.` : "No day was chosen yet.",
+      "The first get_price_estimate call passes only the phone. Do not pass service_date until they agree to a time.",
     ].join(" ");
-    nextStep = "Call get_price_estimate now with the caller phone before any new question. Say the total and the deposit out loud. Offer Saturday, October 31 at 9:00 AM if that opening is in the tool response. Book it when they say yes.";
-    resultTarget = "They hear the price on this call, then Saturday at 9 is booked or another open time is chosen.";
+    nextStep = savedDay
+      ? `Call get_price_estimate now with the caller phone and no service_date. Say the total and the deposit out loud. Offer ${spokenDate(savedDay)}${savedStart ? ` at ${savedStart}` : ""} if that opening is in the tool response. Pass service_date and time_slot only after they say yes.`
+      : "Call get_price_estimate now with the caller phone and no service_date. Say the total and the deposit out loud. Offer one opening from the tool response. Pass service_date only after they pick a time.";
+    resultTarget = savedDay
+      ? `They hear the price on this call, then ${spokenDate(savedDay)}${savedStart ? ` at ${savedStart}` : ""} is booked or another open time is chosen.`
+      : "They hear the price on this call, then a day from the live openings is booked or a callback is set.";
   }
 
   const nextBooking = upcoming
