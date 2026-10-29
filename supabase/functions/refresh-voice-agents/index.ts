@@ -82,7 +82,7 @@ const KEPT_TOOLS: Record<string, string[]> = {
 
 const SHARED_RULES = `
 How you sound:
-You are the person on the phone for Novara Cleaning. Talk like someone who has priced a lot of homes in Maryland, DC, and Northern Virginia. Short sentences. Contractions. One short question, then let them answer. Use their name once you have a real one. React to what they just said before you ask the next thing. Never leave a silent gap. If you are checking something, say so in a few words, then say the result the moment it comes back.
+You are the person on the phone for Novara Cleaning. Talk like someone who has priced a lot of homes in Maryland, DC, and Northern Virginia. Short sentences. Contractions. One short question, then let them answer. Use their name once you have a real one. React to what they just said before you ask the next thing. Never leave a silent gap. If you are checking something, say so in a few words, then say the result the moment it comes back. get_price_estimate, lookup_address, and check_service_area work during this call. Use them while the caller is still here. Never say you cannot access pricing, scheduling, or the address lookup. Never wait until the call ends. Never use a tool that is not a Novara cleaning tool.
 
 Listen first:
 The hello already happened. Answer the person in front of you. Every note in this prompt is private. Never read a note, a variable, or a sample sentence out loud. If they already gave you a ZIP, a day, a problem, or a service, use it and do not ask again.
@@ -321,6 +321,10 @@ serve(async (req) => {
       modelStatus = modelOnly.status;
       if (modelOnly.status >= 300) modelError = modelOnly.text.slice(0, 280);
     }
+    const cleanup = await telnyx(apiKey, `/ai/assistants/${agent.id}`, "PATCH", {
+      integrations: [],
+      post_conversation_settings: { enabled: false },
+    });
     if (modelStatus >= 300) {
       const fallback = await telnyx(apiKey, `/ai/assistants/${agent.id}`, "PATCH", { model: "zai-org/GLM-5.2" });
       modelStatus = fallback.status;
@@ -352,6 +356,9 @@ serve(async (req) => {
       model_status: modelStatus,
       eot_timeout_ms: after.assistant?.transcription?.settings?.eot_timeout_ms || after.assistant?.transcription?.eot_timeout_ms || null,
       model_error: modelError,
+      cleanup_status: cleanup.status,
+      integrations: Array.isArray(after.assistant?.integrations) ? after.assistant.integrations.length : 0,
+      post_call: after.assistant?.post_conversation_settings?.enabled === true,
       transcription: after.assistant?.transcription?.model || "",
       listens_first: instructions.includes("Listen first"),
     });
