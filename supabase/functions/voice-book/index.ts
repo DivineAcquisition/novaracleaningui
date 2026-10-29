@@ -129,8 +129,9 @@ serve(async (req) => {
     .maybeSingle();
   let booking: { id: string } | null = null;
   let insErr: { message?: string } | null = null;
+  let bookingNumber = Number(latestNumber?.booking_number || 0) + 1;
   for (let attempt = 0; attempt < 3 && !booking; attempt++) {
-    const bookingNumber = Number(latestNumber?.booking_number || 0) + 1 + attempt;
+    bookingNumber = Number(latestNumber?.booking_number || 0) + 1 + attempt;
     const inserted = await supabase.from("bookings").insert({
       email: body.email,
       first_name: body.first_name,
