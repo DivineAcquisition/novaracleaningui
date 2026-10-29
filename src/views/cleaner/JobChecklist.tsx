@@ -787,9 +787,9 @@ export default function CleanerJobChecklistPage() {
               </span>
             )}
           </div>
-          <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden">
+          <div className="h-3 rounded-full bg-slate-100 overflow-hidden">
             <div
-              className={cn("h-full rounded-full transition-all duration-500", progress === 100 ? "bg-emerald-500" : "bg-violet-600")}
+              className={cn("h-full rounded-full transition-all duration-500", progress === 100 ? "bg-emerald-500" : "bg-gradient-to-r from-[#5C0FFE] to-[#8F7BFD]")}
               style={{ width: `${progress}%` }}
             />
           </div>
@@ -993,8 +993,8 @@ export default function CleanerJobChecklistPage() {
             className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden"
             {...tourAnchor(TOUR.checklistSection)}
           >
-            <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
-              <h2 className="font-bold text-slate-900">{section.title}</h2>
+            <div className="px-5 py-3.5 border-b border-violet-100 bg-gradient-to-r from-violet-50 to-white flex items-center justify-between">
+              <h2 className="font-jakarta font-bold text-slate-900">{section.title}</h2>
               {sectionDone && (
                 <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1">
                   <RiCheckboxCircleFill className="w-4 h-4" /> Tasks done
@@ -1573,8 +1573,8 @@ export default function CleanerJobChecklistPage() {
 // ─── Shells ────────────────────────────────────────────────────────────────
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-background">
-      <div className="max-w-2xl mx-auto px-4 py-5 space-y-4">{children}</div>
+    <div className="min-h-screen bg-gradient-to-b from-violet-50 via-background to-background dark:from-background">
+      <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">{children}</div>
     </div>
   );
 }
