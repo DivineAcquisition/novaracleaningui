@@ -1,5 +1,5 @@
-// The contractor directory keeps ended engagements out of the main list.
-// A terminated contractor appears only in the termination view.
+// Terminated contractors are archived. They never appear in the directory,
+// including search and the old termination filters.
 
 export interface DirectoryCleaner {
   status?: string | null;
@@ -22,7 +22,7 @@ export function isTerminatedCleaner(row: Pick<DirectoryCleaner, "status" | "enga
   return status === "terminated" || action === "terminated";
 }
 
-/** True when the directory is showing the termination list and nothing else. */
+/** True when an older screen is asking for the termination list. That list is empty. */
 export function terminationOnlyView(statusFilter: string, endFilter: string): boolean {
   return statusFilter === "terminated" || TERMINATION_END_FILTERS.has(endFilter);
 }
@@ -31,13 +31,8 @@ export function cleanerMatchesDirectory<T extends DirectoryCleaner>(
   row: T,
   filters: { statusFilter: string; endFilter: string; search: string },
 ): boolean {
-  const terminated = isTerminatedCleaner(row);
-  const terminationView = terminationOnlyView(filters.statusFilter, filters.endFilter);
-  if (terminationView) {
-    if (!terminated) return false;
-  } else if (terminated) {
-    return false;
-  }
+  if (isTerminatedCleaner(row)) return false;
+  if (terminationOnlyView(filters.statusFilter, filters.endFilter)) return false;
 
   const status = String(row.status || "pending").toLowerCase();
   if (

@@ -87,7 +87,7 @@ import AdminCrews from "@/views/admin/Crews";
 import ApplicantsPipeline from "@/components/admin/ApplicantsPipeline";
 import CleanerAccountability from "@/components/admin/CleanerAccountability";
 import AccountabilityWatchlist from "@/components/admin/AccountabilityWatchlist";
-import { cleanerMatchesDirectory, isTerminatedCleaner, terminationOnlyView } from "@/lib/cleaners/directory-view";
+import { cleanerMatchesDirectory, isTerminatedCleaner } from "@/lib/cleaners/directory-view";
 import UnsignedAgreements from "@/components/admin/UnsignedAgreements";
 import PulseCheckQueue from "@/components/admin/PulseCheckQueue";
 import PulseCheckHistory from "@/components/admin/PulseCheckHistory";
@@ -104,15 +104,6 @@ const CLEANER_STATUSES = [
   { value: "pending", label: "Pending" },
   { value: "active", label: "Active" },
   { value: "inactive", label: "Inactive" },
-] as const;
-
-const END_FILTERS = [
-  { id: "all", label: "Any end action" },
-  { id: "terminated", label: "End: Terminated" },
-  { id: "resigned", label: "End: Resigned" },
-  { id: "no_cause", label: "No-cause 5.2" },
-  { id: "for_cause", label: "For-cause 5.3" },
-  { id: "job_abandonment", label: "Abandonment 6.4" },
 ] as const;
 
 function engagementIsClosed(status: string | null | undefined): boolean {
@@ -234,7 +225,6 @@ const STATUS_FILTERS = [
   { id: "pending", label: "Pending" },
   { id: "suspended", label: "Suspended" },
   { id: "inactive", label: "Inactive" },
-  { id: "terminated", label: "Termination" },
   { id: "resigned", label: "Resigned" },
 ] as const;
 
@@ -265,7 +255,6 @@ export default function AdminCleaners() {
   const [cleaners, setCleaners] = useState<CleanerRow[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<(typeof STATUS_FILTERS)[number]["id"]>("all");
-  const [endFilter, setEndFilter] = useState<(typeof END_FILTERS)[number]["id"]>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [actioning, setActioning] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -327,13 +316,11 @@ export default function AdminCleaners() {
     if (!opts.silent) setLoading(false);
   };
 
-  const showingTerminations = terminationOnlyView(statusFilter, endFilter);
-
   const visible = useMemo(() => {
     return cleaners.filter((c) =>
-      cleanerMatchesDirectory(c, { statusFilter, endFilter, search }),
+      cleanerMatchesDirectory(c, { statusFilter, endFilter: "all", search }),
     );
-  }, [cleaners, statusFilter, endFilter, search]);
+  }, [cleaners, statusFilter, search]);
 
   const counts = useMemo(() => {
     const c = { active: 0, pending: 0, suspended: 0, inactive: 0, terminated: 0 };
@@ -616,16 +603,6 @@ export default function AdminCleaners() {
                 </button>
               ))}
             </div>
-            <Select value={endFilter} onValueChange={(v) => setEndFilter(v as (typeof END_FILTERS)[number]["id"])}>
-              <SelectTrigger className="w-[180px] bg-white">
-                <SelectValue placeholder="Engagement end" />
-              </SelectTrigger>
-              <SelectContent>
-                {END_FILTERS.map((f) => (
-                  <SelectItem key={f.id} value={f.id}>{f.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
             <Button
               variant="outline"
               className="border-slate-200 text-slate-700"
@@ -666,9 +643,7 @@ export default function AdminCleaners() {
                 <tr>
                   <td colSpan={7} className="text-center py-12 text-slate-500">
                     <RiAlertLine className="w-7 h-7 mx-auto text-slate-300 mb-2" />
-                    {showingTerminations
-                      ? "No terminated contractors in this view."
-                      : "No cleaners match this filter."}
+                    No cleaners match this filter.
                   </td>
                 </tr>
               ) : (

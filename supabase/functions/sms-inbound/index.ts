@@ -37,6 +37,7 @@ import {
   toE164,
   SUPPORT_PHONE_DISPLAY,
 } from "../_shared/booking-policy.ts";
+import { deliverCompliantEmail } from "../_shared/email-compliance-send.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -61,6 +62,63 @@ const TOKEN_NO = new Set(["NO", "N", "KEEP", "NEVERMIND"]);
 const TOKEN_HELP = new Set(["HELP", "INFO", "SUPPORT"]);
 const TOKEN_STOP = new Set(["STOP", "STOPALL", "UNSUBSCRIBE", "CANCELSMS", "END", "QUIT"]);
 const TOKEN_SMS_OPT_IN = new Set(["START", "UNSTOP"]);
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+async function noteArchivedContractorReply(
+  supabase: ReturnType<typeof createClient>,
+  lastTen: string,
+  text: string,
+  messageId: string | null,
+): Promise<boolean> {
+  if (!lastTen) return false;
+  const { data: archived } = await supabase
+    .from("archived_contractors")
+    .select("id, cleaner_id, first_name, last_name, reply_count")
+    .eq("phone_digits", lastTen)
+    .limit(1)
+    .maybeSingle();
+  if (!archived?.id) return false;
+  const name = `${archived.first_name || ""} ${archived.last_name || ""}`.trim() || "Former contractor";
+  const clipped = text.slice(0, 2000);
+  await supabase.from("archived_contractor_replies").insert({
+    archive_id: archived.id,
+    channel: "sms",
+    body: clipped,
+  });
+  await supabase.from("archived_contractors").update({
+    last_reply_at: new Date().toISOString(),
+    last_reply_text: clipped.slice(0, 500),
+    reply_count: Number(archived.reply_count || 0) + 1,
+  }).eq("id", archived.id);
+  await supabase.from("events").insert({
+    event_type: "contractor.archived_reply",
+    cleaner_id: archived.cleaner_id,
+    source: "sms-inbound",
+    summary: `${name} replied after leaving Novara.`,
+    data: { archive_id: archived.id },
+  }).then(() => undefined).catch(() => undefined);
+  try {
+    await deliverCompliantEmail(supabase, {
+      apiKey: Deno.env.get("RESEND_API_KEY") || "",
+      to: "ops@novaracleaning.com",
+      subject: `Former contractor replied: ${name}`,
+      html: `<p>${escapeHtml(name)} sent a text.</p><p>${escapeHtml(clipped)}</p><p>The record is in the contractor archive.</p>`,
+      declaredType: "internal_admin",
+      templateKey: "admin_internal_notice",
+      staffRecipient: true,
+      idempotencyKey: messageId ? `archived-reply/${messageId}` : undefined,
+    });
+  } catch (err) {
+    log("archive reply notice failed", { error: err instanceof Error ? err.message : String(err) });
+  }
+  return true;
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -283,6 +341,12 @@ serve(async (req) => {
   }
 
   if (!activeBooking && (TOKEN_RESCHEDULE.has(upper) || TOKEN_CANCEL.has(upper) || TOKEN_YES.has(upper))) {
+    if (await noteArchivedContractorReply(supabase, lastTen, text, messageId)) {
+      return finalize(
+        "archived_contractor_reply",
+        "Novara Cleaning: We received your message. The office will review it.",
+      );
+    }
     return finalize(
       "no_active_booking",
       `Novara Cleaning: We couldn't find an upcoming appointment for this number. Call ${SUPPORT_PHONE_DISPLAY} and we'll sort it out.`,
@@ -438,6 +502,12 @@ serve(async (req) => {
   }
 
   // ─── Fallback — unrecognized keyword ───────────────────────────
+  if (!activeBooking && await noteArchivedContractorReply(supabase, lastTen, text, messageId)) {
+    return finalize(
+      "archived_contractor_reply",
+      "Novara Cleaning: We received your message. The office will review it.",
+    );
+  }
   return finalize(
     "unrecognized",
     `Novara Cleaning: We didn't recognize that reply. Reply R to reschedule, C to cancel, or call ${SUPPORT_PHONE_DISPLAY}.`,

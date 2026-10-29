@@ -78,6 +78,7 @@ export function AdminCommandMenu({ pages }: { pages: PageLink[] }) {
           .from("cleaners")
           .select("id, first_name, last_name, email")
           .or(`first_name.ilike.${pattern},last_name.ilike.${pattern},email.ilike.${pattern}`)
+          .neq("status", "terminated")
           .limit(6),
       ]);
       if (cancelled) return;
