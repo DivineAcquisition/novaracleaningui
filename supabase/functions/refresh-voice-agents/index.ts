@@ -321,12 +321,6 @@ serve(async (req) => {
       modelStatus = modelOnly.status;
       if (modelOnly.status >= 300) modelError = modelOnly.text.slice(0, 280);
     }
-    const idlePatch = await telnyx(apiKey, `/ai/assistants/${agent.id}`, "PATCH", {
-      telephony_settings: {
-        user_idle_reply_secs: 3,
-        user_idle_timeout_secs: 6,
-      },
-    });
     if (modelStatus >= 300) {
       const fallback = await telnyx(apiKey, `/ai/assistants/${agent.id}`, "PATCH", { model: "zai-org/GLM-5.2" });
       modelStatus = fallback.status;
@@ -356,9 +350,7 @@ serve(async (req) => {
       context_url: after.assistant?.dynamic_variables_webhook_url || "",
       model: after.assistant?.model || "",
       model_status: modelStatus,
-      idle_status: idlePatch.status,
       eot_timeout_ms: after.assistant?.transcription?.settings?.eot_timeout_ms || after.assistant?.transcription?.eot_timeout_ms || null,
-      idle_error: idlePatch.status >= 300 ? idlePatch.text.slice(0, 220) : "",
       model_error: modelError,
       transcription: after.assistant?.transcription?.model || "",
       listens_first: instructions.includes("Listen first"),
