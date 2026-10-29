@@ -234,7 +234,7 @@ serve(async (req) => {
 
   const missing: string[] = [];
   if (!firstName) missing.push("first name");
-  if (!lastName) missing.push("last name");
+  if (!lastName && !resumeQuote) missing.push("last name");
   if (!email.includes("@")) missing.push("email");
   if (!address) missing.push("street address");
   else {
