@@ -169,7 +169,7 @@ const AGENTS = [
   {
     id: "assistant-0ed80104-610b-4bc1-bdfe-fa41d760cf8d",
     role: "booking",
-    greeting: "Hey, this is Nova, Novara Cleaning's AI assistant. I can take care of this for you.",
+    greeting: "{{opening_line}}",
     instructions: BOOKING,
   },
   {

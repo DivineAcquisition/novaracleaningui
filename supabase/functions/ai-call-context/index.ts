@@ -160,6 +160,18 @@ serve(async (req) => {
     bookings = ((bookingRes.data || []) as Record<string, unknown>[]).filter((row) => last10(String(row.phone || "")) === ten);
     if (leadRes.data && last10(String(leadRes.data.phone || "")) === ten) lead = leadRes.data as Record<string, unknown>;
   }
+  let quoteSession: Record<string, unknown> | null = null;
+  if (ten.length === 10) {
+    const { data: session } = await supabase.from("quote_sessions").select("*").eq("phone", ten).maybeSingle();
+    quoteSession = (session || null) as Record<string, unknown> | null;
+  }
+  const resumeQuote = Boolean(
+    quoteSession
+    && !quoteSession.booking_id
+    && text(quoteSession.address)
+    && text(quoteSession.zip_code)
+    && text(quoteSession.service_type),
+  );
 
   const newest = bookings[0];
   const addressOnBooking = text(newest?.address);
@@ -193,11 +205,11 @@ serve(async (req) => {
     .filter((row) => text(row.service_date) >= today)
     .sort((a, b) => text(a.service_date).localeCompare(text(b.service_date)))[0] || active[0];
   const completedCount = bookings.filter((row) => row.status === "completed").length;
-  const firstName = realName(text(newest?.first_name || lead?.first_name || hinted.first_name));
+  const firstName = realName(text(newest?.first_name || quoteSession?.first_name || lead?.first_name || hinted.first_name));
   const lastName = realName(text(newest?.last_name || lead?.last_name || hinted.last_name));
   const fullName = `${firstName} ${lastName}`.trim();
-  const email = text(newest?.email || lead?.email);
-  const address = addressOnBooking;
+  const email = text(newest?.email || quoteSession?.email || lead?.email);
+  const address = addressOnBooking || (resumeQuote ? text(quoteSession?.address) : "");
   const city = text(newest?.city || lead?.city || coverage?.city);
   const state = text(newest?.state || lead?.state || coverage?.state);
   const serviced = lookupFailed ? "unknown" : coverage ? (coverage.is_active ? "yes" : "no") : (zip ? "no" : "unknown");
@@ -347,6 +359,36 @@ serve(async (req) => {
     nextStep = "Call get_price_estimate after every answer before you ask anything else. Right after their name, ask standard, deep, or move-in/out. Do not ask for the street until that tool says the street is next. Say a price only when its say field includes a total.";
   }
 
+  let openingLine = role === "service"
+    ? "Hi, this is Novara Cleaning. What's going on with your visit?"
+    : role === "outbound"
+      ? "Hey, this is Nova, Novara Cleaning's AI assistant. You asked about a clean. Is now an okay time?"
+      : "Hey, this is Nova, Novara Cleaning's AI assistant. I can take care of this for you.";
+
+  if (resumeQuote && quoteSession && role !== "service") {
+    const who = realName(text(quoteSession.first_name)) || firstName || "there";
+    const street = text(quoteSession.address);
+    const town = text(quoteSession.city || quoteSession.coverage_city);
+    const kind = serviceLabel(text(quoteSession.service_type));
+    const total = Number(quoteSession.total_cents || 0);
+    const deposit = Number(quoteSession.deposit_cents || 0);
+    const priceBit = total > 0
+      ? ` The total is ${money(total)} and the deposit is ${money(deposit)}.`
+      : " I can give you the price now.";
+    openingLine = `Hey ${who}, it's Nova calling back. We left off on your ${kind} at ${street}${town ? ` in ${town}` : ""}.${priceBit} You wanted Saturday at 9. Is now still okay?`;
+    sayFirst = [
+      "Private note. This is a follow-up. Do not re-ask anything already known.",
+      `Name ${who}. ${kind}. ZIP ${text(quoteSession.zip_code)}.`,
+      `${text(quoteSession.dwelling_type)}, ${text(quoteSession.bedrooms)} bedrooms, ${text(quoteSession.bathrooms)} bathrooms, ${text(quoteSession.sqft)} square feet.`,
+      `Pets ${text(quoteSession.pets) || "none"}. Email ${text(quoteSession.email)}. This phone can take a text.`,
+      `Street ${street}, ${town} ${text(quoteSession.state)}.`,
+      total > 0 ? `Price already calculated: total ${money(total)}, deposit ${money(deposit)}. Say those numbers first.` : "Call get_price_estimate immediately and say the total.",
+      "They asked for Saturday, October 31 at 9:00 AM.",
+    ].join(" ");
+    nextStep = "Call get_price_estimate now with the caller phone before any new question. Say the total and the deposit out loud. Offer Saturday, October 31 at 9:00 AM if that opening is in the tool response. Book it when they say yes.";
+    resultTarget = "They hear the price on this call, then Saturday at 9 is booked or another open time is chosen.";
+  }
+
   const nextBooking = upcoming
     ? `Booking ${text(upcoming.booking_number)} is ${text(upcoming.status)} on ${when || "an open date"}${slot ? ` at ${slot}` : ""}${address ? `, ${address}` : ""}${city ? `, ${city}` : ""}.`
     : "No active booking.";
@@ -406,6 +448,7 @@ serve(async (req) => {
     result_target: resultTarget,
     context_brief: brief,
     agent_role: role,
+    opening_line: openingLine,
   };
 
   const dynamic_variables: Record<string, string> = {};
