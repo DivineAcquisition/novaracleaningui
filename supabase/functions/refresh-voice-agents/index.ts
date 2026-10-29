@@ -357,6 +357,7 @@ serve(async (req) => {
       checklist_before_price: instructions.includes("send_checklist"),
       instruction_length: instructions.length,
       greeting: after.assistant?.greeting || "",
+      opening_default: after.assistant?.dynamic_variables?.opening_line || "",
       context_url: after.assistant?.dynamic_variables_webhook_url || "",
       model: after.assistant?.model || "",
       model_status: modelStatus,
