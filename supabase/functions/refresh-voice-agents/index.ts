@@ -19,9 +19,11 @@ const REALTIME_VOICE = {
   transcription: {
     model: "deepgram/flux",
     language: "en",
-    eot_threshold: 0.62,
-    eot_timeout_ms: 1100,
-    eager_eot_threshold: 0.35,
+    settings: {
+      eot_threshold: 0.62,
+      eot_timeout_ms: 1100,
+      eager_eot_threshold: 0.35,
+    },
   },
   interruption_settings: { enable: true },
 };
@@ -86,7 +88,7 @@ Listen first:
 The hello already happened. Answer the person in front of you. Every note in this prompt is private. Never read a note, a variable, or a sample sentence out loud. If they already gave you a ZIP, a day, a problem, or a service, use it and do not ask again.
 
 A new price:
-You judge the home as the facts come in. Call get_price_estimate after every new fact, on that same turn. The moment its say field includes a dollar total, say that total and the deposit out loud before you ask anything else. Do not save the number for later. Do not say you cannot price it. If the tool is slow or fails, call it again. Check the ZIP with check_service_area before you name a city. Ask the kind of clean right after their name. Ask the ZIP next. Ask size as soon as they know bedrooms or square feet. The street is last, and only when the tool says the street is next. An empty move-out includes the fridge and oven and is priced below a furnished move-out. A kept-up home that asks for deep is usually a standard clean. Say that in one short sentence, then keep going. Half holds the day. The rest is charged after the clean.
+You judge the home as the facts come in. Call get_price_estimate after every new fact, on that same turn. The moment its say field includes a dollar total, say that total and the deposit out loud before you ask anything else. Do not save the number for later. Do not say you cannot price it. If the tool is slow or fails, call it again. Check the ZIP with check_service_area before you name a city. Ask the kind of clean right after their name. Ask the ZIP next. Ask size as soon as they know bedrooms or square feet. Call lookup_address the moment they say a street. The street is last, and only when the tool says the street is next. An empty move-out includes the fridge and oven and is priced below a furnished move-out. A kept-up home that asks for deep is usually a standard clean. Say that in one short sentence, then keep going. Half holds the day. The rest is charged after the clean.
 Ads and old texts sometimes say 50 percent off. The link has come through at 25 percent or a flat $30 instead. Speak only the number the tool returns. If they mention a coupon, say the number in the text is the one that holds. Do not invent a second discount.
 
 A visit already on the books:
@@ -319,10 +321,12 @@ serve(async (req) => {
       modelStatus = modelOnly.status;
       if (modelOnly.status >= 300) modelError = modelOnly.text.slice(0, 280);
     }
-    const telephony = { ...(before.assistant?.telephony_settings || {}) };
-    telephony.user_idle_reply_secs = 3;
-    telephony.user_idle_timeout_secs = 6;
-    const idlePatch = await telnyx(apiKey, `/ai/assistants/${agent.id}`, "PATCH", { telephony_settings: telephony });
+    const idlePatch = await telnyx(apiKey, `/ai/assistants/${agent.id}`, "PATCH", {
+      telephony_settings: {
+        user_idle_reply_secs: 3,
+        user_idle_timeout_secs: 6,
+      },
+    });
     if (modelStatus >= 300) {
       const fallback = await telnyx(apiKey, `/ai/assistants/${agent.id}`, "PATCH", { model: "zai-org/GLM-5.2" });
       modelStatus = fallback.status;
@@ -353,7 +357,8 @@ serve(async (req) => {
       model: after.assistant?.model || "",
       model_status: modelStatus,
       idle_status: idlePatch.status,
-      eot_timeout_ms: after.assistant?.transcription?.eot_timeout_ms || after.assistant?.transcription?.settings?.eot_timeout_ms || null,
+      eot_timeout_ms: after.assistant?.transcription?.settings?.eot_timeout_ms || after.assistant?.transcription?.eot_timeout_ms || null,
+      idle_error: idlePatch.status >= 300 ? idlePatch.text.slice(0, 220) : "",
       model_error: modelError,
       transcription: after.assistant?.transcription?.model || "",
       listens_first: instructions.includes("Listen first"),
