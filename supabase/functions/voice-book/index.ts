@@ -121,37 +121,49 @@ serve(async (req) => {
     return json({ error: "already_booked_that_day", booking_id: duplicate.id, say: "They already have a visit that day. Do not create another one." });
   }
 
-  const { count } = await supabase.from("bookings").select("id", { count: "exact", head: true });
-  const bookingNumber = (count || 0) + 1;
-  const { data: booking, error: insErr } = await supabase.from("bookings").insert({
-    email: body.email,
-    first_name: body.first_name,
-    last_name: body.last_name,
-    phone,
-    address: body.address,
-    city: body.city,
-    state: body.state,
-    zip_code: zip,
-    bedrooms: Number(body.bedrooms),
-    bathrooms: Number(body.bathrooms),
-    dwelling_type: body.dwelling_type,
-    home_size_id: body.home_size_id,
-    service_type: body.service_type,
-    offer_type: body.service_type,
-    add_ons: Array.isArray(body.add_ons) ? body.add_ons : [],
-    service_date: body.service_date,
-    time_slot: body.time_slot,
-    membership_plan: body.membership_plan || "none",
-    base_price_cents: priced.subtotalCents,
-    total_estimate_cents: priced.totalCents,
-    deposit_cents: priced.depositCents,
-    payment_option: "deposit",
-    status: "pending_payment",
-    booking_number: bookingNumber,
-    booking_channel: "SMS Assistant",
-    booker_source: "Glow AI Assistant",
-    access_notes: body.access_notes || null,
-  }).select("id").single();
+  const { data: latestNumber } = await supabase
+    .from("bookings")
+    .select("booking_number")
+    .order("booking_number", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  let booking: { id: string } | null = null;
+  let insErr: { message?: string } | null = null;
+  for (let attempt = 0; attempt < 3 && !booking; attempt++) {
+    const bookingNumber = Number(latestNumber?.booking_number || 0) + 1 + attempt;
+    const inserted = await supabase.from("bookings").insert({
+      email: body.email,
+      first_name: body.first_name,
+      last_name: body.last_name,
+      phone,
+      address: body.address,
+      city: body.city,
+      state: body.state,
+      zip_code: zip,
+      bedrooms: Number(body.bedrooms),
+      bathrooms: Number(body.bathrooms),
+      dwelling_type: body.dwelling_type,
+      home_size_id: body.home_size_id,
+      service_type: body.service_type,
+      offer_type: body.service_type,
+      add_ons: Array.isArray(body.add_ons) ? body.add_ons : [],
+      service_date: body.service_date,
+      time_slot: body.time_slot,
+      membership_plan: body.membership_plan || "none",
+      base_price_cents: priced.subtotalCents,
+      total_estimate_cents: priced.totalCents,
+      deposit_cents: priced.depositCents,
+      payment_option: "deposit",
+      status: "pending_payment",
+      booking_number: bookingNumber,
+      booking_channel: "SMS Assistant",
+      booker_source: "Glow AI Assistant",
+      access_notes: body.access_notes || null,
+    }).select("id").single();
+    booking = inserted.data;
+    insErr = inserted.error;
+    if (insErr && !/booking_number/i.test(String(insErr.message || ""))) break;
+  }
   if (insErr || !booking) return json({ error: `booking_insert_failed: ${insErr?.message || "unknown"}` });
 
   const bytes = new Uint8Array(20);
