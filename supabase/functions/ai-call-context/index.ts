@@ -454,9 +454,11 @@ serve(async (req) => {
     next_step: nextStep,
     missing_to_book: upcoming?.status === "pending_payment"
       ? "Do not start a second booking unless they want a different home."
-      : brandNew
-        ? "New caller. Ask one thing at a time: ZIP, then the street address. Use the address lookup for city and state. Learn if they are moving, if the home is empty, and how kept up it is. Text the checklist before any price."
-        : (missing.length ? missing.join(", ") : "Nothing else. Read the visit back and ask for a yes."),
+      : resumeQuote
+        ? "Nothing new about the home. Say the saved price, then book only after they agree to a time."
+        : brandNew
+          ? "New caller. Ask one thing at a time: ZIP, then the street address. Use the address lookup for city and state. Learn if they are moving, if the home is empty, and how kept up it is. Text the checklist before any price."
+          : (missing.length ? missing.join(", ") : "Nothing else. Read the visit back and ask for a yes."),
     result_target: resultTarget,
     context_brief: brief,
     agent_role: role,
