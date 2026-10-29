@@ -302,6 +302,9 @@ serve(async (req) => {
     const voicePatch = {
       instructions: agent.instructions,
       greeting: agent.greeting,
+      dynamic_variables: {
+        opening_line: "Hey, this is Nova, Novara Cleaning's AI assistant. I can take care of this for you.",
+      },
       dynamic_variables_webhook_url: `${CONTEXT}?role=${agent.role}`,
       dynamic_variables_webhook_timeout_ms: 8000,
       ...REALTIME_VOICE,
@@ -314,6 +317,9 @@ serve(async (req) => {
       patched = await telnyx(apiKey, `/ai/assistants/${agent.id}`, "PATCH", {
         instructions: agent.instructions,
         greeting: agent.greeting,
+        dynamic_variables: {
+          opening_line: "Hey, this is Nova, Novara Cleaning's AI assistant. I can take care of this for you.",
+        },
         dynamic_variables_webhook_url: `${CONTEXT}?role=${agent.role}`,
         dynamic_variables_webhook_timeout_ms: 8000,
       });
