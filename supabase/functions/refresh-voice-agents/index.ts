@@ -13,18 +13,26 @@ const corsHeaders = {
 };
 
 const CONTEXT = "https://sxdraeptzuamsgjcvfeg.supabase.co/functions/v1/ai-call-context";
-const REALTIME_MODEL = "zai-org/GLM-5.3-Flash";
+const REALTIME_MODEL = "openai/gpt-5.6-sol";
 const REALTIME_VOICE = {
   model: REALTIME_MODEL,
   transcription: {
     model: "deepgram/flux",
     language: "en",
-    eot_threshold: 0.8,
-    eot_timeout_ms: 5000,
-    eager_eot_threshold: 0.4,
+    eot_threshold: 0.62,
+    eot_timeout_ms: 1100,
+    eager_eot_threshold: 0.35,
   },
   interruption_settings: { enable: true },
 };
+const PRICE_FILLERS = [
+  { type: "request_start", content: "One second, I'm pricing that." },
+  { type: "request_response_delayed", content: "Still pulling the live price.", timing_ms: 1800 },
+];
+const ADDRESS_FILLERS = [
+  { type: "request_start", content: "Checking that street." },
+  { type: "request_response_delayed", content: "Still checking it.", timing_ms: 1800 },
+];
 const PRICE_TOOL_ID = "tool-a5972a1e-2ada-49e4-9e1f-14e7f0c34d14";
 const BOOK_TOOL_ID = "tool-264d2494-0c0a-4d97-ab81-b5d514e8e397";
 const LOOKUP_TOOL_ID = "tool-13153730-07a5-4d7b-9651-b175d79eda21";
@@ -72,13 +80,13 @@ const KEPT_TOOLS: Record<string, string[]> = {
 
 const SHARED_RULES = `
 How you sound:
-You are the person on the phone for Novara Cleaning. Talk like someone who has priced a lot of homes in Maryland, DC, and Northern Virginia. Short sentences. Contractions. One question, then wait. Use their name once you have a real one. React to what they just said before you ask the next thing.
+You are the person on the phone for Novara Cleaning. Talk like someone who has priced a lot of homes in Maryland, DC, and Northern Virginia. Short sentences. Contractions. One short question, then let them answer. Use their name once you have a real one. React to what they just said before you ask the next thing. Never leave a silent gap. If you are checking something, say so in a few words, then say the result the moment it comes back.
 
 Listen first:
 The hello already happened. Answer the person in front of you. Every note in this prompt is private. Never read a note, a variable, or a sample sentence out loud. If they already gave you a ZIP, a day, a problem, or a service, use it and do not ask again.
 
 A new price:
-Check the ZIP with check_service_area before you name a city. On a quote, the street address is last. Do not ask for it until you have the name, ZIP, home type, bedrooms, bathrooms, size, pets, email, and a confirmed phone. Then call lookup_address. Then call get_price_estimate and say the total and the deposit out loud. An empty move-out includes the fridge and oven and is priced below a furnished move-out. A kept-up home that asks for deep is usually a standard clean. Say that in one short sentence, then keep going. Half holds the day. The rest is charged after the clean.
+You judge the home as the facts come in. Call get_price_estimate after every new fact, on that same turn. The moment its say field includes a dollar total, say that total and the deposit out loud before you ask anything else. Do not save the number for later. Do not say you cannot price it. If the tool is slow or fails, call it again. Check the ZIP with check_service_area before you name a city. Ask the kind of clean right after their name. Ask the ZIP next. Ask size as soon as they know bedrooms or square feet. The street is last, and only when the tool says the street is next. An empty move-out includes the fridge and oven and is priced below a furnished move-out. A kept-up home that asks for deep is usually a standard clean. Say that in one short sentence, then keep going. Half holds the day. The rest is charged after the clean.
 Ads and old texts sometimes say 50 percent off. The link has come through at 25 percent or a flat $30 instead. Speak only the number the tool returns. If they mention a coupon, say the number in the text is the one that holds. Do not invent a second discount.
 
 A visit already on the books:
@@ -135,9 +143,9 @@ Before you hang up, say what you did: moved, cancelled, sent them back to the te
 `.trim();
 
 const OUTBOUND = `
-You are calling someone who asked Novara Cleaning for a quote. They may have nothing saved yet. Sound like a person who can price the home on this call. Your job is a booked visit, a callback with a real day and time, or a clear no.
+You are Nova, Novara Cleaning's AI assistant, calling someone who asked for a quote. They may have nothing saved yet. You can price the home on this call. Your job is to say a real total out loud, then book a visit, set a callback with a real day and time, or take a clear no.
 
-The greeting already asked if now is a good time. If they say no, offer one callback window or https://try.novaracleaning.com/book/zip, then end warmly. If they say yes, answer them in your own words.
+The greeting already asked if now is a good time. If they say no, offer one callback window or https://try.novaracleaning.com/book/zip, then end warmly. If they say yes, do not repeat the greeting. Ask the next missing fact in under seven words and keep the call moving.
 Private notes, not lines to read:
 {{context_brief}}
 Situation: {{say_first}}
@@ -171,7 +179,7 @@ const AGENTS = [
   {
     id: "assistant-689983fe-f3bb-4207-8d2c-1013debefb4e",
     role: "outbound",
-    greeting: "Hi, this is Novara Cleaning. You asked about a clean. Is now an okay time?",
+    greeting: "Hey, this is Nova, Novara Cleaning's AI assistant. You asked about a clean. Is now an okay time?",
     instructions: OUTBOUND,
   },
 ];
@@ -218,8 +226,9 @@ function presentTools(text: string, ids: string[]): number {
 function withZip(webhook: any): { webhook: any; changed: boolean } {
   if (!webhook || typeof webhook !== "object") return { webhook, changed: false };
   const next = { ...webhook };
-  next.description = "Price a clean for this ZIP from the live price table. Speak human_summary only. Do not add a promo, a courtesy, or the words 50 percent new. Pass zip_code.";
-  let changed = next.description !== webhook.description;
+  next.description = "Call after every new fact. When say includes a dollar total, speak that total and the deposit immediately, before the next question. Do not invent a price. Pass the caller phone, the ZIP, the service, and the size.";
+  next.messages = PRICE_FILLERS;
+  let changed = next.description !== webhook.description || JSON.stringify(webhook.messages || []) !== JSON.stringify(PRICE_FILLERS);
   const schema = next.body_parameters;
   if (schema && typeof schema === "object" && !Array.isArray(schema)) {
     const properties = { ...(schema.properties || {}) };
@@ -310,6 +319,16 @@ serve(async (req) => {
       modelStatus = modelOnly.status;
       if (modelOnly.status >= 300) modelError = modelOnly.text.slice(0, 280);
     }
+    const telephony = { ...(before.assistant?.telephony_settings || {}) };
+    telephony.user_idle_reply_secs = 3;
+    telephony.user_idle_timeout_secs = 6;
+    const idlePatch = await telnyx(apiKey, `/ai/assistants/${agent.id}`, "PATCH", { telephony_settings: telephony });
+    if (modelStatus >= 300) {
+      const fallback = await telnyx(apiKey, `/ai/assistants/${agent.id}`, "PATCH", { model: "zai-org/GLM-5.2" });
+      modelStatus = fallback.status;
+      if (fallback.status >= 300) modelError = fallback.text.slice(0, 280);
+      else modelError = "";
+    }
     let after = await telnyx(apiKey, `/ai/assistants/${agent.id}`, "GET");
     let restored = false;
     if (presentTools(after.text, kept) < kept.length) {
@@ -333,6 +352,8 @@ serve(async (req) => {
       context_url: after.assistant?.dynamic_variables_webhook_url || "",
       model: after.assistant?.model || "",
       model_status: modelStatus,
+      idle_status: idlePatch.status,
+      eot_timeout_ms: after.assistant?.transcription?.eot_timeout_ms || after.assistant?.transcription?.settings?.eot_timeout_ms || null,
       model_error: modelError,
       transcription: after.assistant?.transcription?.model || "",
       listens_first: instructions.includes("Listen first"),
@@ -347,6 +368,16 @@ serve(async (req) => {
   if (currentWebhook) {
     const pricePatch = await telnyx(apiKey, `/ai/tools/${PRICE_TOOL_ID}`, "PATCH", { webhook: zipped.webhook });
     priceStatus = pricePatch.status;
+  }
+
+  const lookup = await telnyx(apiKey, `/ai/tools/${LOOKUP_TOOL_ID}`, "GET");
+  const lookupObj = lookup.assistant || {};
+  const lookupDef = { ...(lookupObj.tool_definition || lookupObj.webhook || {}) };
+  let lookupStatus = lookup.status;
+  if (lookupDef.url || lookupDef.name) {
+    lookupDef.messages = ADDRESS_FILLERS;
+    const lookupPatch = await telnyx(apiKey, `/ai/tools/${LOOKUP_TOOL_ID}`, "PATCH", { webhook: lookupDef });
+    lookupStatus = lookupPatch.status;
   }
 
   const book = await telnyx(apiKey, `/ai/tools/${BOOK_TOOL_ID}`, "GET");
@@ -371,6 +402,7 @@ serve(async (req) => {
     ok: !failed && priceStatus < 300 && bookStatus < 300,
     agents,
     price_tool_status: priceStatus,
+    address_tool_status: lookupStatus,
     price_webhook_found: Boolean(currentWebhook),
     price_tool_keys: Object.keys(toolObj).slice(0, 12),
     price_tool_changed: zipped.changed,
