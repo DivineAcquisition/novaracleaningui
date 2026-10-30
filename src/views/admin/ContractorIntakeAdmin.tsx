@@ -198,7 +198,7 @@ function BeforeStartMinutes({
   return (
     <section className="mt-6">
       <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Before you start, estimated minutes</h2>
-      <p className="mt-1 text-sm text-slate-600">Shown as estimates. A zero means the step waits on Novara.</p>
+      <p className="mt-1 text-sm text-slate-600">Not shown to applicants. The before-you-start page says they can get fully onboarded in less than 10 minutes. A zero means the step waits on Novara.</p>
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         {keys.map((key) => (
           <label key={key} className="flex items-center justify-between gap-3 text-sm">

@@ -3,11 +3,10 @@
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { RiCheckboxCircleLine, RiTimeLine } from "@remixicon/react";
+import { RiCheckboxCircleLine } from "@remixicon/react";
 import { HiringMotionStyle } from "@/components/hiring/HiringChrome";
 import { BlurFade } from "@/components/magicui/blur-fade";
 import { MagicCard } from "@/components/magicui/magic-card";
-import { NumberTicker } from "@/components/magicui/number-ticker";
 import { ShimmerButton } from "@/components/magicui/shimmer-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -33,7 +32,6 @@ interface PageModel {
   notYet: string;
   safety: string[];
   steps: Step[];
-  totalMinutes: number;
   ready: string[];
   contactEmail: string;
   contactPhone: string;
@@ -148,15 +146,13 @@ function BeforeYouStart() {
           <BlurFade>
             <h1 className="font-heading text-2xl font-semibold leading-snug sm:text-3xl">{page.title}</h1>
             <p className="mt-3 text-base leading-relaxed text-slate-700">{page.intro}</p>
+            <p className="mt-3 text-base font-semibold leading-relaxed text-slate-900">
+              Get fully onboarded in less than 10 minutes. You can stop and come back.
+            </p>
           </BlurFade>
 
           <section className="mt-8" aria-labelledby="steps-heading">
-            <div className="flex flex-wrap items-end justify-between gap-2">
-              <h2 id="steps-heading" className="font-heading text-lg font-semibold">The steps</h2>
-              <p className="text-sm text-slate-600">
-                About <NumberTicker value={page.totalMinutes} className="font-semibold text-slate-900" /> minutes. You can stop and come back. Times are estimates.
-              </p>
-            </div>
+            <h2 id="steps-heading" className="font-heading text-lg font-semibold">The steps</h2>
             <ol className="mt-4 space-y-3">
               {page.steps.map((step, index) => (
                 <li key={step.id}>
@@ -166,15 +162,11 @@ function BeforeYouStart() {
                       <p className="text-base font-semibold">{step.name}</p>
                     </div>
                     <p className="mt-2 text-sm leading-relaxed text-slate-700">{step.detail}</p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Badge variant="secondary">
-                        <RiTimeLine className="mr-1 h-3.5 w-3.5" aria-hidden />
-                        About {step.minutes} minutes
-                      </Badge>
-                      {step.waitsOnNovara && (
+                    {step.waitsOnNovara && (
+                      <div className="mt-3">
                         <Badge variant="outline">Waits on a person at Novara</Badge>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </MagicCard>
                 </li>
               ))}

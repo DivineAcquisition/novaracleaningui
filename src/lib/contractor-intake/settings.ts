@@ -45,7 +45,7 @@ export interface IntakeSettings {
   legalAddress: string;
   applicantPhone: string;
   applicantEmail: string;
-  /** Estimated minutes for each before-you-start step. Labels on the page say these are estimates. */
+  /** Kept for admin records. The before-you-start page does not add these up. */
   beforeStartMinutes: Record<string, number>;
   /** Empty until counsel names the background-check company. Footers then say “named in your authorization.” */
   backgroundCheckCompany: string;
