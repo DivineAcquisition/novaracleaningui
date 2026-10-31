@@ -1,17 +1,17 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
-  BEFORE_YOU_START_INK,
-  BEFORE_YOU_START_PAPER,
+  BeforeYouStartFrame,
+  BeforeYouStartHeader,
   BeforeYouStartHero,
   OnboardingStepRail,
   PrivacyNotes,
   ReadyToStartList,
   StartDecision,
 } from "@/components/hiring/BeforeYouStartPanels";
+import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface Step {
@@ -37,8 +37,6 @@ interface PageModel {
   contactPhone: string;
   privacyUrl: string;
 }
-
-const LOGO = "/novara-logo.png";
 
 function BeforeYouStart() {
   const params = useSearchParams();
@@ -106,34 +104,31 @@ function BeforeYouStart() {
   }
 
   return (
-    <div className="min-h-dvh" style={{ background: BEFORE_YOU_START_PAPER, color: BEFORE_YOU_START_INK }}>
-      <header className="mx-auto flex w-full max-w-[34rem] items-center justify-between border-b border-[#16141C]/10 px-5 py-4">
-        <Link href="/hiring" className="flex items-center gap-2.5 transition hover:opacity-80">
-          <img src={LOGO} alt="" className="h-8 w-8" />
-          <span className="font-heading text-[15px] font-bold tracking-tight">
-            Novara<span className="text-[#5C0FFE]">Cleaning</span>
-          </span>
-        </Link>
-        <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#16141C]/50">Field Cleaner</p>
-      </header>
+    <BeforeYouStartFrame>
+      <BeforeYouStartHeader />
 
       {!page && !error && (
-        <main className="mx-auto max-w-[34rem] space-y-4 px-5 py-8" aria-busy="true">
-          <Skeleton className="h-8 w-full bg-[#16141C]/10" />
-          <Skeleton className="h-16 w-4/5 bg-[#16141C]/10" />
-          <Skeleton className="h-32 w-full bg-[#16141C]/80" />
+        <main className="container mx-auto max-w-xl space-y-4 px-4 py-8" aria-busy="true">
+          <Skeleton className="h-8 w-2/3" />
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-40 w-full rounded-2xl" />
+          <Skeleton className="h-28 w-full rounded-2xl" />
         </main>
       )}
 
       {error && !page && (
-        <main className="mx-auto max-w-[34rem] px-5 py-12">
-          <h1 className="font-heading text-3xl font-semibold tracking-tight">Link unavailable</h1>
-          <p className="mt-3 max-w-prose text-base leading-relaxed text-[#16141C]/70">{error}</p>
+        <main className="container mx-auto max-w-xl px-4 py-10">
+          <Card>
+            <CardContent className="p-6">
+              <h1 className="font-jakarta text-2xl font-extrabold tracking-tight">Link unavailable</h1>
+              <p className="mt-3 text-base leading-relaxed text-muted-foreground">{error}</p>
+            </CardContent>
+          </Card>
         </main>
       )}
 
       {page && (
-        <main className="mx-auto max-w-[34rem] px-5 pb-16 pt-8">
+        <main className="container mx-auto max-w-xl px-4 pb-16 pt-8">
           <BeforeYouStartHero title={page.title} intro={page.intro} />
           <OnboardingStepRail steps={page.steps} />
           <ReadyToStartList items={page.ready} />
@@ -156,7 +151,7 @@ function BeforeYouStart() {
           />
         </main>
       )}
-    </div>
+    </BeforeYouStartFrame>
   );
 }
 
