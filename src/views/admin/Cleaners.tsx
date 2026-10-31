@@ -79,6 +79,7 @@ import {
 } from "@/lib/cleaner-supplies";
 import TerminateCleanerDialog from "@/components/admin/TerminateCleanerDialog";
 import ContractorPayoutPanel from "@/components/admin/ContractorPayoutPanel";
+import ContractorOperationsTab from "@/components/admin/ContractorOperationsTab";
 import LogResignationDialog from "@/components/admin/LogResignationDialog";
 import { CleanerTourStatus } from "@/components/admin/CleanerTourStatus";
 import { TourRecordingFreshness } from "@/components/admin/TourRecordingFreshness";
@@ -268,7 +269,19 @@ export default function AdminCleaners() {
 
   useEffect(() => {
     setSectionState(parseCleanerSection(searchParams?.get("section")));
+    const linked = searchParams?.get("cleaner");
+    if (linked) setSelectedId(linked);
   }, [searchParams]);
+
+  const closeSheet = () => {
+    setSelectedId(null);
+    if (searchParams?.get("cleaner")) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete("cleaner");
+      const q = params.toString();
+      router.replace(q ? `${pathname}?${q}` : pathname || "/admin/cleaners", { scroll: false });
+    }
+  };
 
   const setSection = (id: CleanerSection) => {
     setSectionState(id);
@@ -740,7 +753,7 @@ export default function AdminCleaners() {
 
       <CleanerSheet
         cleaner={selected}
-        onClose={() => setSelectedId(null)}
+        onClose={closeSheet}
         onAction={runAction}
         onDelete={deleteCleaner}
         onResyncGhl={resyncToGhl}
@@ -820,7 +833,7 @@ function CleanerSheet({
               <ContactSection cleaner={cleaner} />
 
               <Tabs defaultValue="jobs">
-                <TabsList className="grid grid-cols-3 sm:grid-cols-5 h-auto bg-slate-100">
+                <TabsList className="grid grid-cols-3 sm:grid-cols-6 h-auto bg-slate-100">
                   <TabsTrigger value="jobs" className="data-[state=active]:bg-white">
                     Jobs
                   </TabsTrigger>
@@ -835,6 +848,9 @@ function CleanerSheet({
                   </TabsTrigger>
                   <TabsTrigger value="ghl" className="data-[state=active]:bg-white">
                     GHL
+                  </TabsTrigger>
+                  <TabsTrigger value="operations" className="data-[state=active]:bg-white">
+                    Operations
                   </TabsTrigger>
                 </TabsList>
                 <TabsContent value="jobs" className="pt-3">
@@ -869,6 +885,9 @@ function CleanerSheet({
                 </TabsContent>
                 <TabsContent value="ghl" className="pt-3">
                   <GhlBlock cleaner={cleaner} onResync={onResyncGhl} actioning={actioning} />
+                </TabsContent>
+                <TabsContent value="operations" className="pt-3">
+                  <ContractorOperationsTab cleanerId={cleaner.id} cleanerName={fullName(cleaner)} />
                 </TabsContent>
               </Tabs>
 

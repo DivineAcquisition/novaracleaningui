@@ -125,6 +125,7 @@ interface LinkedCleaner {
   payouts_enabled: boolean | null;
   stripe_account_id: string | null;
   payout_method_status?: string | null;
+  engagement_end_action?: string | null;
   onboarding_complete: boolean | null;
 }
 
@@ -135,6 +136,8 @@ type EffectiveStage =
   | "onboarding"
   | "agreement_signed"
   | "active"
+  | "paused"
+  | "terminated"
   | "rejected"
   | "withdrawn"
   | "conditional_approval"
@@ -154,6 +157,8 @@ const STAGE_FILTERS: Array<{ id: "all" | EffectiveStage | "attention"; label: st
   { id: "onboarding", label: "Onboarding" },
   { id: "agreement_signed", label: "Agreement signed" },
   { id: "active", label: "Active" },
+  { id: "paused", label: "Paused" },
+  { id: "terminated", label: "Terminated" },
   { id: "rejected", label: "Rejected" },
   { id: "needs_review", label: "Needs review" },
   { id: "waitlist", label: "Waitlist" },
@@ -168,6 +173,8 @@ const STAGE_BADGE: Record<EffectiveStage, { label: string; cls: string }> = {
   onboarding: { label: "Onboarding", cls: "bg-amber-50 text-amber-800 border-amber-200" },
   agreement_signed: { label: "Agreement signed", cls: "bg-teal-50 text-teal-700 border-teal-200" },
   active: { label: "Active", cls: "bg-violet-100 text-violet-800 border-violet-200" },
+  paused: { label: "Paused", cls: "bg-slate-100 text-slate-700 border-slate-300" },
+  terminated: { label: "Terminated", cls: "bg-rose-100 text-rose-800 border-rose-300" },
   rejected: { label: "Rejected", cls: "bg-rose-50 text-rose-700 border-rose-200" },
   withdrawn: { label: "Withdrawn", cls: "bg-slate-100 text-slate-600 border-slate-200" },
   conditional_approval: { label: "Conditional approval", cls: "bg-emerald-50 text-emerald-800 border-emerald-200" },
@@ -186,7 +193,25 @@ const applicantName = (a: ApplicantRow) =>
 const payoutsReady = (c: LinkedCleaner | undefined): boolean =>
   Boolean(c && (c.payouts_enabled || c.ob_payouts_setup || c.stripe_account_id || c.payout_method_status === "verified"));
 
+function isTerminatedLinked(c: LinkedCleaner | undefined): boolean {
+  if (!c) return false;
+  return (
+    String(c.status || "").toLowerCase() === "terminated" ||
+    String(c.engagement_end_action || "").toLowerCase() === "terminated"
+  );
+}
+
+// The contractor row is the source of truth once one is linked, so this tab
+// can never say Active for someone the Contractors tab does not list as active.
 function effectiveStage(a: ApplicantRow, c: LinkedCleaner | undefined): EffectiveStage {
+  if (isTerminatedLinked(c)) return "terminated";
+  if (c) {
+    const status = String(c.status || "").toLowerCase();
+    if (status === "active") return "active";
+    if (a.stage === "active" && (status === "inactive" || status === "suspended" || status === "resigned")) {
+      return "paused";
+    }
+  }
   if (a.intake_stage === "needs_review" || a.intake_stage === "waitlist" || a.intake_stage === "not_a_fit") {
     return a.intake_stage;
   }
@@ -307,7 +332,7 @@ export default function ApplicantsPipeline() {
       const { data: linked } = await supabase
         .from("cleaners")
         .select(
-          "id,user_id,status,approved,ob_agreement_signed,ob_agreement_signed_at,ob_payouts_setup,payouts_enabled,stripe_account_id,payout_method_status,onboarding_complete",
+          "id,user_id,status,approved,engagement_end_action,ob_agreement_signed,ob_agreement_signed_at,ob_payouts_setup,payouts_enabled,stripe_account_id,payout_method_status,onboarding_complete",
         )
         .in("id", cleanerIds);
       setCleaners(new Map(((linked || []) as unknown as LinkedCleaner[]).map((c) => [c.id, c])));
@@ -326,6 +351,11 @@ export default function ApplicantsPipeline() {
         { event: "*", schema: "public", table: "cleaner_applicants" },
         () => void load({ silent: true }),
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "cleaners" },
+        () => void load({ silent: true }),
+      )
       .subscribe();
     return () => {
       void supabase.removeChannel(channel);
@@ -337,6 +367,7 @@ export default function ApplicantsPipeline() {
     [applicants, selectedId],
   );
   const selectedCleaner = selected?.cleaner_id ? cleaners.get(selected.cleaner_id) : undefined;
+  const selectedStage: EffectiveStage | null = selected ? effectiveStage(selected, selectedCleaner) : null;
 
   // Screening history for the open applicant (newest first, with signed PDF urls).
   const loadScreenings = useCallback(async (applicantId: string) => {
@@ -981,7 +1012,30 @@ export default function ApplicantsPipeline() {
                 {/* Actions */}
                 <section className="space-y-2">
                   <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</h3>
-                  <div className="flex flex-wrap gap-2">
+                  {(selectedStage === "active" || selectedStage === "paused" || selectedStage === "terminated") &&
+                    selected.cleaner_id && (
+                    <div
+                      className={cn(
+                        "flex flex-wrap items-center justify-between gap-2 p-3 rounded-lg border text-sm",
+                        selectedStage === "terminated"
+                          ? "bg-rose-50 border-rose-200 text-rose-800"
+                          : "bg-violet-50 border-violet-200 text-violet-900",
+                      )}
+                    >
+                      <span>
+                        {selectedStage === "active" && "Active contractor. Their record lives in the Contractors tab."}
+                        {selectedStage === "paused" && "Contractor is paused. Manage them in the Contractors tab."}
+                        {selectedStage === "terminated" &&
+                          "Contractor was terminated and is archived. They no longer appear in the Contractors tab."}
+                      </span>
+                      {selectedStage !== "terminated" && (
+                        <Button size="sm" variant="outline" asChild>
+                          <a href={`/admin/cleaners?cleaner=${selected.cleaner_id}`}>Open in Contractors</a>
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                  <div className={cn("flex flex-wrap gap-2", selectedStage === "terminated" && "hidden")}>
                     {["applicant", "screening", "hold"].includes(selected.stage) && (
                       <Button
                         size="sm"
@@ -1081,8 +1135,8 @@ export default function ApplicantsPipeline() {
                         Send agreement link
                       </Button>
                     )}
-                    {(selected.stage === "onboarding" ||
-                      effectiveStage(selected, selectedCleaner) === "agreement_signed") && (
+                    {(selected.stage === "onboarding" || selectedStage === "agreement_signed") &&
+                      selectedStage !== "active" && (
                       <Button
                         size="sm"
                         className="bg-emerald-600 hover:bg-emerald-700 text-white"
@@ -1103,7 +1157,7 @@ export default function ApplicantsPipeline() {
                         Activate contractor
                       </Button>
                     )}
-                    {selected.stage !== "rejected" && selected.stage !== "active" && (
+                    {selected.stage !== "rejected" && selected.stage !== "active" && selectedStage !== "active" && (
                       <Button
                         size="sm"
                         variant="outline"

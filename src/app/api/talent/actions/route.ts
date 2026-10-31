@@ -530,6 +530,18 @@ export async function POST(req: Request): Promise<NextResponse> {
         const cleaner = cleanerData as CleanerRow | null;
         if (!cleaner) return NextResponse.json({ error: "Linked contractor record not found" }, { status: 404 });
 
+        const currentStatus = String(cleaner.status || "").toLowerCase();
+        if (currentStatus === "terminated") {
+          return NextResponse.json(
+            { error: "This contractor was terminated and is archived. Activation is blocked." },
+            { status: 409 },
+          );
+        }
+        if (currentStatus === "active") {
+          await setStage("active");
+          return NextResponse.json({ ok: true, stage: "active", cleanerId: cleaner.id, alreadyActive: true });
+        }
+
         // Standing gate: no activation before signed agreement + payout setup.
         if (!cleaner.ob_agreement_signed) {
           return NextResponse.json(
@@ -573,6 +585,9 @@ export async function POST(req: Request): Promise<NextResponse> {
           .update({
             status: "active",
             approved: true,
+            available_for_bookings: true,
+            deactivated_at: null,
+            deactivation_reason: null,
             activated_at: new Date().toISOString(),
           })
           .eq("id", cleaner.id);
