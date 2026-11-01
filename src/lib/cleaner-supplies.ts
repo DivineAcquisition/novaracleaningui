@@ -171,12 +171,16 @@ export function supplySubmissionPatch(
   inventory: SupplyInventory,
   now: string = new Date().toISOString(),
 ) {
+  const ready = scoreSupplyInventory(inventory).ready;
   return {
     supply_inventory: inventory,
     supply_checklist_submitted_at: now,
     ob_supplies_checklist_viewed: true,
     ob_supplies_checklist_viewed_at: now,
     updated_at: now,
+    // Submitting a checklist with the job essentials confirms the kit. A short
+    // checklist never un-confirms a kit an admin already confirmed.
+    ...(ready ? { kit_confirmed: true } : {}),
   };
 }
 

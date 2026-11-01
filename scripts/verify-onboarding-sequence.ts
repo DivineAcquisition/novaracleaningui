@@ -38,6 +38,7 @@ import {
   sanitizeSupplyInventory,
   scoreSupplyInventory,
   supplySubmissionPatch,
+  neededSupplyItems,
   type CleanerSetupState,
 } from "../src/lib/cleaner-supplies";
 import { ONBOARDING_GUIDES } from "../src/lib/cleaner-onboarding-guides";
@@ -207,6 +208,9 @@ function checkSequence(): void {
     isSupplyChecklistSubmitted(patch as CleanerSetupState),
     true,
   );
+  const essentials = Object.fromEntries(neededSupplyItems().map((item) => [item.id, true]));
+  check("a checklist with the job essentials confirms the kit", supplySubmissionPatch(essentials).kit_confirmed, true);
+  check("a short checklist does not write the kit flag", "kit_confirmed" in supplySubmissionPatch({ vacuum: true }), false);
   check(
     "unknown ids are dropped rather than stored",
     sanitizeSupplyInventory({ vacuum: true, not_a_real_item: true }),
