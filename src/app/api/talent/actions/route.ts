@@ -9,6 +9,7 @@
 //   { action: "launch_onboarding", applicantId }   ← email (Resend) + SMS
 //   { action: "resend_onboarding", applicantId }   ← one-click nudge for stalled onboarding
 //   { action: "activate",          applicantId }   ← gates: agreement signed + payout setup
+//   { action: "confirm_kit",       applicantId, note }  ← admin confirms the supply kit, with a note
 //
 // launch_onboarding reuses the EXISTING contractor onboarding flow: the invite
 // email/SMS point at a TOKENIZED contractor auth link (?invite=…) that skips
@@ -215,7 +216,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     return NextResponse.json({ error: e.message }, { status: e.status || 401 });
   }
 
-  let body: { action?: string; applicantId?: string; reason?: string; targetStage?: string };
+  let body: { action?: string; applicantId?: string; reason?: string; targetStage?: string; note?: string };
   try {
     body = await req.json();
   } catch {
@@ -512,6 +513,38 @@ export async function POST(req: Request): Promise<NextResponse> {
           inviteUrl,
           inviteExpiresAt,
         });
+      }
+
+      case "confirm_kit": {
+        if (!applicant.cleaner_id) {
+          return NextResponse.json({ error: "No linked contractor record — launch onboarding first." }, { status: 400 });
+        }
+        const note = String(body.note || "").trim();
+        if (note.length < 3) {
+          return NextResponse.json({ error: "Add a short note saying how you confirmed the kit." }, { status: 400 });
+        }
+        const { data: kitRow, error: kitErr } = await supabase
+          .from("cleaners")
+          .select("intake_record")
+          .eq("id", applicant.cleaner_id)
+          .maybeSingle();
+        if (kitErr) return NextResponse.json({ error: kitErr.message }, { status: 500 });
+        const now = new Date().toISOString();
+        const record = { ...((kitRow?.intake_record as Record<string, unknown> | null) || {}) };
+        record.kitConfirmed = true;
+        record.kitAdminConfirmation = { by: principal.email, at: now, note };
+        const { error: kitUpErr } = await supabase
+          .from("cleaners")
+          .update({ kit_confirmed: true, intake_record: record, updated_at: now })
+          .eq("id", applicant.cleaner_id);
+        if (kitUpErr) return NextResponse.json({ error: kitUpErr.message }, { status: 500 });
+        await logEvent(supabase, {
+          type: "cleaner.kit_confirmed",
+          summary: `${who} supply kit confirmed by ${principal.email}: ${note}`,
+          cleanerId: applicant.cleaner_id,
+          data: { applicant_id: applicantId, action: "confirm_kit", note },
+        });
+        return NextResponse.json({ ok: true, cleanerId: applicant.cleaner_id });
       }
 
       case "activate": {

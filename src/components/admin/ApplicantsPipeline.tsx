@@ -127,7 +127,12 @@ interface LinkedCleaner {
   payout_method_status?: string | null;
   engagement_end_action?: string | null;
   onboarding_complete: boolean | null;
+  intake_flow?: string | null;
+  kit_confirmed?: boolean | null;
 }
+
+const kitBlocks = (c: LinkedCleaner | null | undefined): boolean =>
+  Boolean(c && c.intake_flow === "automated" && c.kit_confirmed === false);
 
 type EffectiveStage =
   | "applicant"
@@ -294,6 +299,8 @@ export default function ApplicantsPipeline() {
   const [actioning, setActioning] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
+  const [kitOpen, setKitOpen] = useState(false);
+  const [kitNote, setKitNote] = useState("");
   const [rejectReason, setRejectReason] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -332,7 +339,7 @@ export default function ApplicantsPipeline() {
       const { data: linked } = await supabase
         .from("cleaners")
         .select(
-          "id,user_id,status,approved,engagement_end_action,ob_agreement_signed,ob_agreement_signed_at,ob_payouts_setup,payouts_enabled,stripe_account_id,payout_method_status,onboarding_complete",
+          "id,user_id,status,approved,engagement_end_action,ob_agreement_signed,ob_agreement_signed_at,ob_payouts_setup,payouts_enabled,stripe_account_id,payout_method_status,onboarding_complete,intake_flow,kit_confirmed",
         )
         .in("id", cleanerIds);
       setCleaners(new Map(((linked || []) as unknown as LinkedCleaner[]).map((c) => [c.id, c])));
@@ -1136,17 +1143,35 @@ export default function ApplicantsPipeline() {
                       </Button>
                     )}
                     {(selected.stage === "onboarding" || selectedStage === "agreement_signed") &&
+                      selectedStage !== "active" &&
+                      kitBlocks(selectedCleaner) && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={actioning}
+                        onClick={() => {
+                          setKitNote("");
+                          setKitOpen(true);
+                        }}
+                      >
+                        <RiCheckboxCircleFill className="w-4 h-4 mr-1.5" />
+                        Confirm supply kit
+                      </Button>
+                    )}
+                    {(selected.stage === "onboarding" || selectedStage === "agreement_signed") &&
                       selectedStage !== "active" && (
                       <Button
                         size="sm"
                         className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                        disabled={actioning || !selectedCleaner?.ob_agreement_signed || !payoutsReady(selectedCleaner)}
+                        disabled={actioning || !selectedCleaner?.ob_agreement_signed || !payoutsReady(selectedCleaner) || kitBlocks(selectedCleaner)}
                         title={
                           !selectedCleaner?.ob_agreement_signed
                             ? "Blocked until the agreement is signed"
                             : !payoutsReady(selectedCleaner)
                               ? "Blocked until payout setup is complete"
-                              : undefined
+                              : kitBlocks(selectedCleaner)
+                                ? "Blocked until the supply kit is confirmed"
+                                : undefined
                         }
                         onClick={async () => {
                           const ok = await runAction("activate");
@@ -1300,6 +1325,44 @@ export default function ApplicantsPipeline() {
             >
               {adding ? <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" /> : <RiUserAddLine className="w-4 h-4 mr-1.5" />}
               Add to pipeline
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Confirm supply kit dialog ── */}
+      <Dialog open={kitOpen} onOpenChange={setKitOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirm supply kit</DialogTitle>
+            <DialogDescription>
+              {selected
+                ? `Confirm that ${applicantName(selected)} has the supplies for the job. This is audited. It happens on its own when they submit the supply checklist with the job essentials checked.`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            value={kitNote}
+            onChange={(e) => setKitNote(e.target.value)}
+            placeholder="How did you confirm it? e.g. Saw the kit on a video call, photo received"
+            rows={3}
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setKitOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={actioning || kitNote.trim().length < 3}
+              onClick={async () => {
+                const ok = await runAction("confirm_kit", { note: kitNote.trim() });
+                if (ok) {
+                  toast.success("Supply kit confirmed.");
+                  setKitOpen(false);
+                  setKitNote("");
+                }
+              }}
+            >
+              Confirm kit
             </Button>
           </div>
         </DialogContent>
