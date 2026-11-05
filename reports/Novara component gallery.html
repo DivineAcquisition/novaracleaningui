@@ -1,0 +1,1210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Novara landing page component gallery</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Novara design system: brand purple used as an accent on warm-neutral paper, not as a glow.
+   Layout: a section map, then component specimens (live demo left, build card right). */
+:root{
+  --ink:#16043F;          /* brand-950 */
+  --body:#3B3556;
+  --muted:#6B6585;
+  --paper:#FBFAF7;        /* warm off-white so it never reads as cold SaaS */
+  --surface:#FFFFFF;
+  --line:#E8E4EF;
+  --accent:#6810FE;       /* brand-500 */
+  --accent-soft:#F1EBFF;
+  --accent-ink:#4A0CD0;
+  --warm:#F3ECE1;         /* stands in for real cleaner photography */
+  --ok:#0F7A55; --ok-soft:#E3F4EC;
+  --warn:#9A5B00; --warn-soft:#FFF2DB;
+  --bad:#B42318; --bad-soft:#FDECEA;
+  --display:"Plus Jakarta Sans","Inter",system-ui,sans-serif;
+  --sans:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,monospace;
+  --r:14px;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--paper);color:var(--body);font:15px/1.55 var(--sans);-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4{font-family:var(--display);color:var(--ink);text-wrap:balance;margin:0}
+a{color:var(--accent-ink)}
+code,kbd{font-family:var(--mono);font-size:12.5px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+.wrap{max-width:1180px;margin:0 auto;padding:0 20px}
+
+/* ---------- page header ---------- */
+header.top{padding:48px 0 28px;border-bottom:1px solid var(--line)}
+.kicker{font:600 12px/1 var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--accent-ink)}
+header.top h1{font-size:clamp(28px,4vw,42px);font-weight:800;letter-spacing:-.02em;margin:10px 0 12px}
+header.top p{max-width:68ch;margin:0 0 10px}
+.legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+.pill{display:inline-flex;align-items:center;gap:6px;font:600 12px/1 var(--sans);padding:6px 10px;border-radius:999px;border:1px solid transparent;white-space:nowrap}
+.v-use{background:var(--ok-soft);color:var(--ok)}
+.v-some{background:var(--warn-soft);color:var(--warn)}
+.v-avoid{background:var(--bad-soft);color:var(--bad)}
+.v-have{background:var(--accent-soft);color:var(--accent-ink)}
+
+/* ---------- section map ---------- */
+.map{padding:32px 0 8px}
+.map h2{font-size:22px;margin-bottom:6px}
+.map>p{margin:0 0 16px;max-width:70ch}
+.map ol{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:8px;counter-reset:s}
+.map li{counter-increment:s;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:grid;grid-template-columns:26px 1fr;gap:2px 8px;align-items:start}
+.map li::before{content:counter(s);grid-row:span 2;font:700 12px/22px var(--mono);color:var(--accent-ink);background:var(--accent-soft);border-radius:6px;text-align:center}
+.map li b{color:var(--ink);font-weight:600}
+.map li a{font-size:12.5px;text-decoration:none}
+.map li a:hover{text-decoration:underline}
+
+/* ---------- groups + specimens ---------- */
+.group{padding:44px 0 8px}
+.group>h2{font-size:26px;letter-spacing:-.01em}
+.group>p{max-width:72ch;margin:6px 0 20px}
+.spec{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);background:var(--surface);border:1px solid var(--line);border-radius:18px;overflow:hidden;margin-bottom:18px;scroll-margin-top:16px}
+.demo{padding:22px;background:linear-gradient(var(--paper),var(--paper)) padding-box;border-right:1px solid var(--line);display:flex;flex-direction:column;justify-content:center;min-width:0;position:relative}
+.meta{padding:20px 22px}
+.meta h3{font-size:18px;margin:0 0 4px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.meta .why{margin:4px 0 12px;color:var(--body)}
+.meta dl{margin:0;display:grid;grid-template-columns:112px 1fr;gap:8px 10px;font-size:13.5px}
+.meta dt{color:var(--muted);font-weight:500}
+.meta dd{margin:0;min-width:0}
+.cmd{display:flex;align-items:center;gap:6px;background:#F6F4FA;border:1px solid var(--line);border-radius:8px;padding:6px 6px 6px 9px;overflow-x:auto}
+.cmd code{white-space:nowrap;flex:1}
+.copy{flex:none;font:600 11px/1 var(--sans);border:1px solid var(--line);background:#fff;border-radius:6px;padding:5px 7px;cursor:pointer;color:var(--body)}
+.copy:hover{border-color:var(--accent);color:var(--accent-ink)}
+.replay{position:absolute;top:8px;right:8px;font:600 11px/1 var(--sans);border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 10px;cursor:pointer;color:var(--body);z-index:3}
+.replay:hover{border-color:var(--accent);color:var(--accent-ink)}
+.tag{font:500 11px/1 var(--mono);color:var(--muted);background:#F2F0F6;padding:3px 6px;border-radius:5px}
+.example{font:600 10.5px/1 var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+@media (max-width:860px){.spec{grid-template-columns:1fr}.demo{border-right:0;border-bottom:1px solid var(--line)}}
+@media (max-width:420px){.meta dl{grid-template-columns:1fr}.meta dt{margin-top:4px}}
+
+/* shared UI atoms (Novara look) */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font:600 14px/1 var(--sans);border-radius:10px;padding:12px 16px;border:1px solid transparent;cursor:pointer;white-space:nowrap}
+.btn-p{background:var(--accent);color:#fff}
+.btn-p:hover{background:var(--accent-ink)}
+.btn-g{background:#fff;color:var(--ink);border-color:var(--line)}
+.field{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:0 12px;height:44px}
+.field input{border:0;outline:0;font:500 15px var(--sans);width:100%;background:transparent;color:var(--ink)}
+.field:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.stars{color:#E8A400;letter-spacing:1px}
+.av{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;font:700 13px var(--display);color:#fff;flex:none}
+.tnum{font-variant-numeric:tabular-nums}
+
+/* 1 hero */
+.hero{display:grid;grid-template-columns:1.1fr .9fr;gap:18px;align-items:center}
+.hero h4{font-size:clamp(22px,2.6vw,30px);font-weight:800;letter-spacing:-.02em;line-height:1.1}
+.hero p{margin:8px 0 14px;font-size:14px}
+.hero .row{display:flex;gap:8px}
+.hero .row .field{flex:1}
+.hero .call{display:flex;gap:6px;align-items:center;font-size:13px;margin-top:10px;color:var(--body)}
+.hero .call b{color:var(--ink)}
+.hero .proof{font-size:12.5px;color:var(--muted);margin-top:10px}
+.photo{aspect-ratio:4/5;border-radius:16px;background:
+  radial-gradient(120% 80% at 70% 20%,#fff8ec 0,transparent 60%),
+  linear-gradient(160deg,#E9DCC6,#D8C5A6 60%,#C9B08A);position:relative;overflow:hidden}
+.photo::after{content:"Real crew photo here";position:absolute;top:12px;left:12px;font:600 10px/1 var(--sans);letter-spacing:.06em;text-transform:uppercase;color:#7a6440;background:#fff9;padding:5px 7px;border-radius:5px}
+.floater{position:absolute;left:10px;right:10px;background:#fff;border-radius:12px;padding:10px;box-shadow:0 8px 24px -10px #16043f40;display:flex;gap:10px;align-items:center;font-size:12.5px}
+.floater b{color:var(--ink);display:block;font-size:13px}
+@media (max-width:520px){.hero{grid-template-columns:1fr}.photo{aspect-ratio:16/10}}
+
+/* 2 backgrounds */
+.bgs{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.bg{height:110px;border-radius:12px;border:1px solid var(--line);position:relative;overflow:hidden;display:flex;align-items:flex-end;padding:8px}
+.bg span{position:relative;z-index:2;font:600 11.5px/1 var(--sans);background:#fff;padding:5px 7px;border-radius:6px;color:var(--ink);display:flex;gap:6px;align-items:center}
+.bg-dot{background:#fff radial-gradient(#6810FE33 1px,transparent 1.4px) 0 0/14px 14px}
+.bg-dot::before{content:"";position:absolute;inset:0;background:radial-gradient(60% 70% at 50% 40%,transparent 30%,#fff 100%)}
+.bg-grid{background:#fff;background-image:linear-gradient(#16043f10 1px,transparent 1px),linear-gradient(90deg,#16043f10 1px,transparent 1px);background-size:22px 22px}
+.bg-grid::before{content:"";position:absolute;inset:0;background:linear-gradient(transparent 40%,#fff)}
+.bg-aurora{background:#fff}
+.bg-aurora::before{content:"";position:absolute;inset:-40%;background:
+  radial-gradient(30% 35% at 30% 40%,#6810FE2e,transparent 70%),
+  radial-gradient(30% 35% at 70% 55%,#F2B98A40,transparent 70%);filter:blur(10px);animation:drift 14s ease-in-out infinite alternate}
+@keyframes drift{to{transform:translate(8%,-6%) rotate(8deg)}}
+.bg-slop{background:radial-gradient(80% 90% at 50% 0,#7c3aed,#1e1b4b 70%)}
+.bg-slop canvas{position:absolute;inset:0;width:100%;height:100%}
+
+/* 3 quote */
+.quote{display:grid;gap:14px}
+.steps{display:flex;gap:6px}
+.steps button{flex:1;font:600 12px/1 var(--sans);padding:9px 6px;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--muted);cursor:pointer}
+.steps button[aria-current="step"]{background:var(--ink);border-color:var(--ink);color:#fff}
+.steps button.done{color:var(--ok);border-color:#bfe3d2;background:var(--ok-soft)}
+.pane{display:none;gap:12px}
+.pane.on{display:grid}
+.ctr{display:flex;align-items:center;justify-content:space-between;background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.ctr .lbl{font-weight:600;color:var(--ink)}
+.ctr .n{display:flex;align-items:center;gap:10px}
+.ctr button{width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:#fff;font:600 16px/1 var(--sans);cursor:pointer;color:var(--ink)}
+.ctr output{min-width:18px;text-align:center;font:700 16px var(--display);color:var(--ink)}
+.seg{display:grid;grid-template-columns:repeat(var(--n,3),1fr);gap:6px}
+.seg label{position:relative;cursor:pointer}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg span{display:flex;flex-direction:column;gap:3px;border:1px solid var(--line);background:#fff;border-radius:10px;padding:9px 8px;font:600 13px/1.2 var(--sans);color:var(--ink);text-align:center;height:100%}
+.seg small{font:500 11px/1.2 var(--sans);color:var(--muted)}
+.seg small.save{color:var(--ok);font-weight:700}
+.seg input:checked+span{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset;background:var(--accent-soft)}
+.seg input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips label{cursor:pointer}
+.chips input{position:absolute;opacity:0;pointer-events:none}
+.chips span{display:inline-block;border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 11px;font:500 13px/1 var(--sans);color:var(--ink)}
+.chips input:checked+span{background:var(--ink);color:#fff;border-color:var(--ink)}
+.chips input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
+.total{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--ink);color:#fff;border-radius:12px;padding:12px 14px}
+.total .p{font:800 26px/1 var(--display);color:#fff}
+.total small{display:block;color:#C9C2E0;font-size:12px;margin-top:3px}
+.total .btn{background:#fff;color:var(--ink)}
+.navq{display:flex;justify-content:space-between}
+.navq button{font:600 13px var(--sans);background:none;border:0;color:var(--accent-ink);cursor:pointer;padding:4px}
+.navq button[disabled]{color:#bbb;cursor:default}
+
+/* 4 itemised price */
+.receipt{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px 16px;font-size:14px}
+.receipt .hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.receipt .hd b{color:var(--ink);font-family:var(--display)}
+.ln{display:flex;justify-content:space-between;padding:7px 0;border-top:1px dashed var(--line);opacity:0;transform:translateY(4px);transition:opacity .35s,transform .35s}
+.ln.in{opacity:1;transform:none}
+.ln .d{color:var(--ok);font-weight:600}
+.ln.tot{border-top:1px solid var(--ink);font:700 16px var(--display);color:var(--ink)}
+.shim{height:12px;border-radius:6px;background:linear-gradient(90deg,#efedf4 0,#f8f7fb 50%,#efedf4 100%) 0 0/200% 100%;animation:sh 1.1s linear infinite}
+@keyframes sh{to{background-position:-200% 0}}
+.status{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--accent);animation:pulse 1.2s ease-in-out infinite}
+.dot.ok{background:var(--ok);animation:none}
+@keyframes pulse{50%{opacity:.3}}
+
+/* 5 timeline */
+.tl{list-style:none;margin:18px 0 0;padding:0;display:grid;gap:0}
+.tl li{display:grid;grid-template-columns:26px 1fr auto;gap:10px;padding:8px 0;position:relative;opacity:.45;transition:opacity .3s}
+.tl li.active,.tl li.done{opacity:1}
+.tl li::before{content:"";position:absolute;left:12px;top:30px;bottom:-8px;width:2px;background:var(--line)}
+.tl li:last-child::before{display:none}
+.tl .ic{width:26px;height:26px;border-radius:50%;border:2px solid var(--line);background:#fff;display:grid;place-items:center;position:relative;z-index:1}
+.tl li.active .ic{border-color:var(--accent)}
+.tl li.active .ic::after{content:"";width:8px;height:8px;border-radius:50%;background:var(--accent);animation:pulse 1s infinite}
+.tl li.done .ic{background:var(--ok);border-color:var(--ok)}
+.tl li.done .ic::after{content:"";width:9px;height:5px;border:2px solid #fff;border-top:0;border-right:0;transform:rotate(-45deg) translate(1px,-1px)}
+.tl b{color:var(--ink);font-weight:600;display:block;font-size:14px}
+.tl small{color:var(--muted);font-size:12.5px}
+.tl time{font:500 11.5px var(--mono);color:var(--muted);padding-top:3px}
+.match{display:flex;gap:10px;align-items:center;background:var(--accent-soft);border-radius:10px;padding:8px 10px;margin-top:6px}
+.match b{font-size:13.5px}
+
+/* 6 feed */
+.feed{height:250px;overflow:hidden;display:flex;flex-direction:column;gap:8px;mask-image:linear-gradient(#000 75%,transparent)}
+.note{display:flex;gap:10px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:12px;padding:9px 11px;animation:pop .45s cubic-bezier(.2,.9,.3,1.2) both}
+.note .ic2{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;flex:none;font-size:15px}
+.note b{color:var(--ink);font-size:13.5px;display:block}
+.note small{color:var(--muted);font-size:12px}
+@keyframes pop{from{opacity:0;transform:scale(.96) translateY(-8px)}}
+
+/* 7 voice */
+.voice{display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:center}
+.orbwrap{display:grid;justify-items:center;gap:10px}
+#orb{width:132px;height:132px;border-radius:50%;display:block}
+.vbtn{display:inline-flex;align-items:center;gap:8px;font:600 13px var(--sans);background:var(--ink);color:#fff;border:0;border-radius:999px;padding:9px 14px;cursor:pointer}
+.bars{display:flex;align-items:center;gap:3px;height:28px}
+.bars i{display:block;width:3px;border-radius:2px;background:var(--accent);height:20%;transition:height .12s}
+.tx{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px;height:210px;overflow:auto;display:flex;flex-direction:column;gap:8px;font-size:13.5px}
+.msg{max-width:88%;padding:7px 10px;border-radius:12px;line-height:1.4}
+.msg.ai{background:var(--accent-soft);color:var(--ink);border-bottom-left-radius:4px}
+.msg.cu{background:#F2F0F6;align-self:flex-end;border-bottom-right-radius:4px}
+.msg em{font-style:normal;font:500 10.5px var(--mono);color:var(--muted);display:block;margin-bottom:2px}
+.disclose{font-size:12px;color:var(--muted);margin-top:8px}
+@media (max-width:520px){.voice{grid-template-columns:1fr}}
+
+/* 8 beam */
+.beam{position:relative;height:240px}
+.beam svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.node{position:absolute;transform:translate(-50%,-50%);background:#fff;border:1px solid var(--line);border-radius:12px;padding:7px 9px;font:600 12px/1.2 var(--sans);color:var(--ink);display:flex;align-items:center;gap:6px;box-shadow:0 4px 12px -8px #16043f55;white-space:nowrap}
+.node.hub{background:var(--ink);color:#fff;border-color:var(--ink);padding:12px 14px;font-size:13px}
+.flow{stroke:var(--accent);stroke-width:2;fill:none;stroke-dasharray:8 140;animation:flow 2.6s linear infinite}
+@keyframes flow{from{stroke-dashoffset:148}to{stroke-dashoffset:0}}
+
+/* 9 bento */
+.bento{display:grid;grid-template-columns:1.3fr 1fr;grid-template-rows:auto auto;gap:10px}
+.tile{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:6px;min-height:110px}
+.tile h5{font:700 15px/1.2 var(--display);color:var(--ink);margin:0}
+.tile p{margin:0;font-size:13px}
+.tile.big{grid-row:span 2;background:linear-gradient(180deg,#fff,var(--warm))}
+.tile .big-n{font:800 40px/1 var(--display);color:var(--accent);margin-top:auto}
+
+/* 10 before/after */
+.ba{position:relative;aspect-ratio:16/9;border-radius:14px;overflow:hidden;user-select:none;--x:50%}
+.ba .layer{position:absolute;inset:0}
+.room{position:absolute;inset:0;background:
+  linear-gradient(180deg,#F4F1EA 0 62%,#D8C8AE 62% 100%)}
+.room .counter{position:absolute;left:8%;right:8%;top:48%;height:14%;background:#fff;border-radius:4px;box-shadow:0 2px 0 #c9bba2}
+.room .cab{position:absolute;left:8%;right:8%;top:14%;height:22%;background:#fff;border-radius:4px;box-shadow:0 2px 0 #ddd}
+.room .win{position:absolute;left:40%;width:20%;top:16%;height:18%;background:linear-gradient(#cfe6ff,#eaf4ff);border:3px solid #fff;border-radius:3px}
+.grime .counter{background:#E9E1CF}
+.grime .cab{background:#EFE8D8}
+.grime .win{background:linear-gradient(#b9c4cc,#d3d6cf)}
+.grime::after{content:"";position:absolute;inset:0;background:
+  radial-gradient(6% 4% at 30% 55%,#8a6f4466,transparent),radial-gradient(5% 3% at 62% 53%,#7a5d3566,transparent),
+  radial-gradient(10% 6% at 75% 80%,#6b553366,transparent),radial-gradient(8% 5% at 20% 85%,#6b553355,transparent),
+  radial-gradient(4% 3% at 48% 25%,#7f7a6a55,transparent);}
+.ba .before{clip-path:inset(0 calc(100% - var(--x)) 0 0)}
+.ba .handle{position:absolute;top:0;bottom:0;left:var(--x);width:2px;background:#fff;box-shadow:0 0 0 1px #16043f30;transform:translateX(-1px);pointer-events:none}
+.ba .handle::after{content:"◀ ▶";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;color:var(--ink);font-size:10px;padding:8px 9px;border-radius:999px;box-shadow:0 2px 8px #16043f40;white-space:nowrap}
+.ba .lab{position:absolute;top:10px;font:700 11px/1 var(--sans);letter-spacing:.06em;text-transform:uppercase;background:#fff;color:var(--ink);padding:5px 7px;border-radius:5px}
+.ba input[type=range]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:ew-resize;margin:0}
+
+/* 11 reviews */
+.rv{display:grid;grid-template-columns:150px 1fr;gap:14px}
+.sum{display:grid;gap:4px;align-content:start}
+.sum .big{font:800 36px/1 var(--display);color:var(--ink)}
+.hist{display:grid;gap:3px;margin-top:6px}
+.hist div{display:grid;grid-template-columns:12px 1fr 30px;gap:6px;align-items:center;font:500 11px var(--mono);color:var(--muted)}
+.hist i{display:block;height:6px;border-radius:3px;background:#EEEAF4;position:relative;overflow:hidden}
+.hist i::after{content:"";position:absolute;inset:0;width:var(--w);background:#E8A400}
+.rcards{display:grid;gap:8px}
+.rc{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:13.5px}
+.rc header{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px}
+.rc header b{color:var(--ink);font-size:13.5px}
+.rc .src{font:500 11px var(--sans);color:var(--muted)}
+.rc p{margin:0}
+@media (max-width:520px){.rv{grid-template-columns:1fr}}
+
+/* 12 guarantee */
+.gtee{display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:center}
+.seal{width:120px;height:120px;position:relative}
+.seal svg{width:100%;height:100%}
+.cmp{width:100%;border-collapse:collapse;font-size:13.5px}
+.cmp th,.cmp td{padding:8px 6px;text-align:left;border-bottom:1px solid var(--line)}
+.cmp th{font:600 12px var(--sans);color:var(--muted)}
+.cmp tr.us td{color:var(--ink);font-weight:700;background:var(--accent-soft)}
+.cmp tr.us td:first-child{border-radius:8px 0 0 8px}.cmp tr.us td:last-child{border-radius:0 8px 8px 0}
+@media (max-width:520px){.gtee{grid-template-columns:1fr}}
+
+/* 13 included table */
+.tabs{display:flex;gap:4px;background:#F2F0F6;border-radius:10px;padding:4px;margin-bottom:10px}
+.tabs button{flex:1;border:0;background:none;font:600 13px var(--sans);padding:8px;border-radius:7px;cursor:pointer;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:#fff;color:var(--ink);box-shadow:0 1px 3px #16043f20}
+.inc{width:100%;border-collapse:collapse;font-size:13.5px;background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.inc th,.inc td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:center}
+.inc th:first-child,.inc td:first-child{text-align:left}
+.inc thead th{font:600 12px var(--sans);color:var(--muted);background:#FAF9FC}
+.inc td.y{color:var(--ok);font-weight:700}.inc td.n{color:#c8c3d3}
+
+/* 14 pricing */
+.plans{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.plan{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:8px}
+.plan.feat{border:2px solid var(--accent);position:relative}
+.plan.feat::before{content:"Most hosts pick this";position:absolute;top:-10px;left:12px;background:var(--accent);color:#fff;font:700 10.5px/1 var(--sans);padding:5px 8px;border-radius:999px}
+.plan h5{margin:0;font:700 15px var(--display);color:var(--ink)}
+.plan .pr{font:800 26px/1 var(--display);color:var(--ink)}
+.plan .pr small{font:500 12px var(--sans);color:var(--muted)}
+.plan ul{margin:0;padding:0;list-style:none;display:grid;gap:5px;font-size:13px}
+.plan li::before{content:"✓ ";color:var(--ok);font-weight:700}
+@media (max-width:480px){.plans{grid-template-columns:1fr}}
+
+/* 15 team */
+.team{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.tm{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;font-size:12.5px}
+.tm .ph{aspect-ratio:1;background:linear-gradient(160deg,#E9DCC6,#CDB592);display:grid;place-items:center;font:800 26px var(--display);color:#fff8}
+.tm .bd{padding:8px 10px;display:grid;gap:2px}
+.tm b{color:var(--ink);font-size:13.5px}
+.tm .chk{color:var(--ok);font-weight:600}
+@media (max-width:480px){.team{grid-template-columns:1fr 1fr}}
+
+/* 16 stats */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.st{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px}
+.st .n{font:800 26px/1 var(--display);color:var(--ink);display:flex}
+.st small{color:var(--muted);font-size:12px}
+.odo{display:inline-block;height:1em;overflow:hidden;line-height:1}
+.odo span{display:block;transition:transform 1.2s cubic-bezier(.2,.8,.2,1)}
+.odo span i{display:block;font-style:normal;height:1em}
+@media (max-width:520px){.stats{grid-template-columns:1fr 1fr}}
+
+/* 17 faq */
+.faq{display:grid;gap:6px}
+.faq details{background:#fff;border:1px solid var(--line);border-radius:12px;padding:0 12px}
+.faq summary{list-style:none;cursor:pointer;padding:11px 0;font-weight:600;color:var(--ink);display:flex;justify-content:space-between;gap:10px}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary::after{content:"+";font:500 18px/1 var(--sans);color:var(--accent);transition:transform .2s}
+.faq details[open] summary::after{transform:rotate(45deg)}
+.faq details p{margin:0 0 12px;font-size:13.5px}
+
+/* 18 sticky mobile */
+.phone{width:220px;height:390px;margin:0 auto;border-radius:30px;border:8px solid var(--ink);background:#fff;position:relative;overflow:hidden}
+.phone .scr{position:absolute;inset:0;overflow:auto;padding:14px 12px 80px;font-size:11.5px}
+.phone .scr h6{font:800 17px/1.15 var(--display);color:var(--ink);margin:6px 0}
+.phone .blk{height:60px;border-radius:8px;background:#F2F0F6;margin:8px 0}
+.phone .blk.w{background:var(--warm);height:110px}
+.sticky{position:absolute;left:0;right:0;bottom:0;display:grid;grid-template-columns:1fr 1.4fr;gap:6px;padding:8px 8px 14px;background:#fffffff0;border-top:1px solid var(--line);backdrop-filter:blur(6px)}
+.sticky .btn{padding:10px 8px;font-size:12.5px;border-radius:9px}
+
+/* 19 service area */
+.area{display:grid;gap:10px}
+.area .res{border-radius:10px;padding:10px 12px;font-size:13.5px;display:none}
+.area .res.ok{display:block;background:var(--ok-soft);color:var(--ok)}
+.area .res.no{display:block;background:var(--warn-soft);color:var(--warn)}
+.cities{display:flex;flex-wrap:wrap;gap:6px}
+.cities span{font-size:12.5px;background:#fff;border:1px solid var(--line);border-radius:999px;padding:5px 9px;color:var(--ink)}
+
+/* 20 announcement */
+.ann{display:flex;align-items:center;justify-content:center;gap:10px;background:var(--ink);color:#fff;border-radius:10px;padding:10px 14px;font-size:13.5px;flex-wrap:wrap}
+.shiny{background:linear-gradient(110deg,#cfc6ee 35%,#fff 50%,#cfc6ee 65%) 0 0/250% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shine 4s linear infinite;font-weight:600}
+@keyframes shine{to{background-position:-250% 0}}
+.ann a{color:#fff;font-weight:600}
+
+/* 21 slop */
+.slop{height:200px;border-radius:14px;position:relative;overflow:hidden;display:grid;place-items:center;text-align:center;padding:16px}
+.slop h5{position:relative;z-index:2;font:800 22px/1.15 var(--display);margin:0;background:linear-gradient(90deg,#c4b5fd,#f0abfc,#93c5fd);-webkit-background-clip:text;background-clip:text;color:transparent}
+.slop p{position:relative;z-index:2;color:#c7c2e8;font-size:12.5px;margin:6px 0 0}
+.xmark{position:absolute;top:10px;left:10px;z-index:3}
+
+/* footer guide */
+.guide{padding:44px 0 64px}
+.guide h2{font-size:26px;margin-bottom:8px}
+.guide .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-top:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px 18px}
+.card h3{font-size:16px;margin-bottom:6px}
+.card ul,.card ol{margin:0;padding-left:18px;display:grid;gap:5px;font-size:14px}
+pre{background:#14102A;color:#E8E4F8;border-radius:12px;padding:14px;overflow-x:auto;font:12.5px/1.55 var(--mono);margin:8px 0 0}
+pre .c{color:#8F86B5}
+
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <div class="kicker">Novara Cleaning · landing page overhaul</div>
+    <h1>Component gallery for the new landing page</h1>
+    <p>Each component below is a working specimen in Novara's purple, Plus Jakarta Sans headings and Inter body text. Beside each one is where it comes from, the install command for your repo, which section of the new page it belongs in, and how to build it so it stays fast and accessible.</p>
+    <p>The visual direction is <b>warm and proof-first</b>: real crew photos on warm off-white, purple used for actions and highlights, and AI shown as the thing actually doing the work (pricing, answering, booking) rather than as glow in the background. Prices, names and reviews are examples.</p>
+    <div class="legend" aria-label="Verdict key">
+      <span class="pill v-use">Use</span>
+      <span class="pill v-some">Use sparingly</span>
+      <span class="pill v-avoid">Avoid</span>
+      <span class="pill v-have">Already installed</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+<section class="map" aria-labelledby="map-h">
+  <h2 id="map-h">Recommended page order</h2>
+  <p>Top to bottom. Each item jumps to the component that builds it.</p>
+  <ol>
+    <li><b>Announcement bar</b><a href="#c-ann">Shiny text strip</a></li>
+    <li><b>Hero</b><a href="#c-hero">Split hero with ZIP, price and call</a></li>
+    <li><b>Proof strip</b><a href="#c-stats">Stats with rolling numbers</a></li>
+    <li><b>Instant quote</b><a href="#c-quote">Multi-step quote builder</a></li>
+    <li><b>Your price, explained</b><a href="#c-receipt">Price that builds itself</a></li>
+    <li><b>Hear Nova answer</b><a href="#c-voice">Voice orb and live transcript</a></li>
+    <li><b>Watch your booking happen</b><a href="#c-timeline">Booking timeline</a></li>
+    <li><b>What's included</b><a href="#c-included">Room-by-room table</a></li>
+    <li><b>Before and after</b><a href="#c-ba">Comparison slider</a></li>
+    <li><b>Airbnb and STR hosts</b><a href="#c-beam">Calendar-to-crew diagram</a></li>
+    <li><b>Plans</b><a href="#c-plans">One-time vs membership</a></li>
+    <li><b>48-hour guarantee</b><a href="#c-gtee">Guarantee seal</a></li>
+    <li><b>Reviews</b><a href="#c-reviews">Dated, sourced reviews</a></li>
+    <li><b>Meet the crew</b><a href="#c-team">Cleaner profile cards</a></li>
+    <li><b>Live activity</b><a href="#c-feed">Ops feed (optional)</a></li>
+    <li><b>Service area</b><a href="#c-area">ZIP checker and city list</a></li>
+    <li><b>FAQ</b><a href="#c-faq">Accordion</a></li>
+    <li><b>Mobile, always on</b><a href="#c-sticky">Sticky call and price bar</a></li>
+  </ol>
+</section>
+
+<!-- ================= GROUP 1 ================= -->
+<section class="group" aria-labelledby="g1">
+  <h2 id="g1">Hero and backgrounds</h2>
+  <p>The hero has one job: get a ZIP or a phone call. Keep the headline visible on first paint (it is the LCP element) and keep the background quiet.</p>
+
+  <article class="spec" id="c-hero">
+    <div class="demo">
+      <div class="hero">
+        <div>
+          <h4>A spotless home. Your exact price in 30 seconds.</h4>
+          <p>Vetted, insured crews across the DMV. Same cleaner every visit, and we re-clean free within 48 hours if anything's missed.</p>
+          <form class="row" onsubmit="event.preventDefault()">
+            <label class="field" for="hz"><span aria-hidden="true">📍</span><input id="hz" inputmode="numeric" maxlength="5" placeholder="ZIP code" aria-label="ZIP code"></label>
+            <button class="btn btn-p" type="submit">See my price</button>
+          </form>
+          <div class="call">or call <b>(833) 700-2611</b> · answered 24/7, a person anytime</div>
+          <div class="proof"><span class="stars">★★★★★</span> 4.9 from 512 Google reviews · newest 2 days ago</div>
+        </div>
+        <div class="photo">
+          <div class="floater" style="bottom:12px">
+            <div class="av" style="background:#8a5a2b">MR</div>
+            <div><b>Maria arrives Thu 9:00 AM</b>Deep clean · 3 bd / 2 ba · $214</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="meta">
+      <h3>Split hero with ZIP, price and call <span class="pill v-use">Use</span></h3>
+      <p class="why">Combines the two hero types that work for cleaning: ZIP-first and price-first. A real crew photo with a small booking card on top shows the result instead of describing it.</p>
+      <dl>
+        <dt>Built from</dt><dd>shadcn <span class="tag">Input</span> <span class="tag">Button</span> (installed) + <span class="tag">next/image</span> with <code>priority</code></dd>
+        <dt>Replaces</dt><dd>Current centered hero with <span class="tag">Particles</span> and <span class="tag">BlurFade</span> on the H1</dd>
+        <dt>Build notes</dt><dd>Server component; only the ZIP form is a client island. No fade-in on the H1. Make the phone a <code>tel:</code> link. "From $X" price comes from <code>src/lib/dynamic-pricing.ts</code>.</dd>
+      </dl>
+    </div>
+  </article>
+
+  <article class="spec" id="c-bg">
+    <div class="demo">
+      <div class="bgs">
+        <div class="bg bg-dot"><span><i class="pill v-use" style="padding:2px 6px">Use</i> Dot pattern</span></div>
+        <div class="bg bg-grid"><span><i class="pill v-use" style="padding:2px 6px">Use</i> Faded grid</span></div>
+        <div class="bg bg-aurora"><span><i class="pill v-some" style="padding:2px 6px">Sparingly</i> Warm aurora, 2 blobs</span></div>
+        <div class="bg bg-slop"><canvas id="slopP" aria-hidden="true"></canvas><span><i class="pill v-avoid" style="padding:2px 6px">Avoid</i> Purple glow + particles</span></div>
+      </div>
+    </div>
+    <div class="meta">
+      <h3>Section backgrounds <span class="pill v-some">Pick one</span></h3>
+      <p class="why">Pure CSS dot and grid patterns add texture at no performance cost. A slow, low-opacity aurora mixing purple with a warm peach works for one section at most. The dark purple glow with particles is what your current hero leans toward, and it now reads as generic "AI" styling.</p>
+      <dl>
+        <dt>Source</dt><dd>Magic UI <span class="tag">dot-pattern</span> <span class="tag">grid-pattern</span>; Aceternity <span class="tag">aurora-background</span></dd>
+        <dt>Install</dt><dd><div class="cmd"><code>npx shadcn@latest add @magicui/dot-pattern</code><button class="copy">Copy</button></div></dd>
+        <dt>Build notes</dt><dd>Prefer CSS/SVG over canvas. Retire <span class="tag">particles</span> from the hero. Pause aurora animation under <code>prefers-reduced-motion</code>.</dd>
+      </dl>
+    </div>
+  </article>
+
+  <article class="spec" id="c-ann">
+    <div class="demo">
+      <div class="ann"><span class="shiny">Airbnb hosts: same-day turnovers now across DC, MD and VA</span><a href="#c-beam">See host plans →</a></div>
+    </div>
+    <div class="meta">
+      <h3>Announcement bar <span class="pill v-have">Installed</span></h3>
+      <p class="why">One line above the header for the current offer or the STR program. The shine draws the eye once without moving the layout.</p>
+      <dl>
+        <dt>Source</dt><dd>Magic UI <span class="tag">animated-shiny-text</span> (already in <code>src/components/magicui</code>)</dd>
+        <dt>Build notes</dt><dd>Keep it one line on mobile, dismissible, and above the LCP element so it doesn't shift the layout.</dd>
+      </dl>
+    </div>
+  </article>
+</section>
+
+<!-- ================= GROUP 2 ================= -->
+<section class="group" aria-labelledby="g2">
+  <h2 id="g2">Pricing and booking</h2>
+  <p>This is where Novara's instant pricing becomes visible. A short multi-step form beats one long one, and showing how the price is built answers "why does it cost that?" before anyone asks.</p>
+
+  <article class="spec" id="c-quote">
+    <div class="demo">
+      <div class="quote" id="quote">
+        <div class="steps" role="list">
+          <button role="listitem" data-s="0" aria-current="step">1 · Home</button>
+          <button role="listitem" data-s="1">2 · Clean</button>
+          <button role="listitem" data-s="2">3 · How often</button>
+          <button role="listitem" data-s="3">4 · Extras</button>
+        </div>
+        <div class="pane on" data-p="0">
+          <div class="ctr"><span class="lbl">Bedrooms</span><span class="n"><button data-k="bed" data-d="-1" aria-label="Fewer bedrooms">−</button><output id="bed">3</output><button data-k="bed" data-d="1" aria-label="More bedrooms">+</button></span></div>
+          <div class="ctr"><span class="lbl">Bathrooms</span><span class="n"><button data-k="bath" data-d="-1" aria-label="Fewer bathrooms">−</button><output id="bath">2</output><button data-k="bath" data-d="1" aria-label="More bathrooms">+</button></span></div>
+        </div>
+        <div class="pane" data-p="1">
+          <div class="seg" role="radiogroup" aria-label="Type of clean">
+            <label><input type="radio" name="t" value="1" checked><span>Standard<small>Regular upkeep</small></span></label>
+            <label><input type="radio" name="t" value="1.5"><span>Deep<small>Baseboards, grout, inside appliances</small></span></label>
+            <label><input type="radio" name="t" value="1.8"><span>Move-out<small>Inside every cabinet</small></span></label>
+          </div>
+        </div>
+        <div class="pane" data-p="2">
+          <div class="seg" style="--n:4" role="radiogroup" aria-label="Frequency">
+            <label><input type="radio" name="f" value="0"><span>Once<small>&nbsp;</small></span></label>
+            <label><input type="radio" name="f" value="10"><span>Monthly<small class="save">Save 10%</small></span></label>
+            <label><input type="radio" name="f" value="15" checked><span>Every 2 wks<small class="save">Save 15%</small></span></label>
+            <label><input type="radio" name="f" value="20"><span>Weekly<small class="save">Save 20%</small></span></label>
+          </div>
+        </div>
+        <div class="pane" data-p="3">
+          <div class="chips" role="group" aria-label="Extras">
+            <label><input type="checkbox" value="35"><span>Inside oven +$35</span></label>
+            <label><input type="checkbox" value="35"><span>Inside fridge +$35</span></label>
+            <label><input type="checkbox" value="40"><span>Inside cabinets +$40</span></label>
+            <label><input type="checkbox" value="45"><span>Interior windows +$45</span></label>
+            <label><input type="checkbox" value="25"><span>Pet hair +$25</span></label>
+            <label><input type="checkbox" value="30"><span>Laundry +$30</span></label>
+          </div>
+        </div>
+        <div class="navq"><button id="qBack" disabled>← Back</button><button id="qNext">Next →</button></div>
+        <div class="total" aria-live="polite">
+          <div><div class="p tnum" id="qTotal">$0</div><small id="qSub">per visit · example pricing</small></div>
+          <button class="btn">Pick a time</button>
+        </div>
+      </div>
+    </div>
+    <div class="meta">
+      <h3>Multi-step quote builder <span class="pill v-use">Use</span></h3>
+      <p class="why">The standard cleaning quote inputs (bedrooms, bathrooms, type of clean, frequency, extras), one short step at a time, with the total always visible and updating live. Frequency discounts sit on the option itself.</p>
+      <dl>
+        <dt>Built from</dt><dd>shadcn <span class="tag">ToggleGroup</span> <span class="tag">RadioGroup</span> <span class="tag">Checkbox</span> (Radix, installed); coss <span class="tag">stepper</span> optional</dd>
+        <dt>Price number</dt><dd><div class="cmd"><code>npm i @number-flow/react</code><button class="copy">Copy</button></div></dd>
+        <dt>Novara section</dt><dd>Right after the proof strip; the hero's ZIP pre-fills it</dd>
+        <dt>Build notes</dt><dd>Wire to your existing <code>dynamic-pricing.ts</code> and <code>BookingContext</code> so the page and <code>/book</code> share one price. Announce the total with <code>aria-live="polite"</code>.</dd>
+      </dl>
+    </div>
+  </article>
+
+  <article class="spec" id="c-receipt">
+    <div class="demo">
+      <button class="replay" data-replay="receipt">↻ Replay</button>
+      <div class="receipt" id="receipt">
+        <div class="hd"><b>Your price, line by line</b><span class="status" id="rStatus"><span class="dot"></span>Pricing your home…</span></div>
+        <div id="rLines"></div>
+      </div>
+    </div>
+    <div class="meta">
+      <h3>Price that builds itself <span class="pill v-use">Use</span></h3>
+      <p class="why">The most useful "agentic" visual for a cleaning company. The AI shows its working: each line arrives with a short loading shimmer, then the total. It makes instant pricing feel transparent rather than like a black box.</p>
+      <dl>
+        <dt>Source</dt><dd>Magic UI <span class="tag">animated-list</span>, or Motion Primitives <span class="tag">text-shimmer</span> + <span class="tag">motion</span> (installed)</dd>
+        <dt>Install</dt><dd><div class="cmd"><code>npx shadcn@latest add @magicui/animated-list</code><button class="copy">Copy</button></div></dd>
+        <dt>Build notes</dt><dd>Lines come from the real price breakdown, not a script. Play once when it scrolls into view; show the final state instantly under reduced motion.</dd>
+      </dl>
+    </div>
+  </article>
+
+  <article class="spec" id="c-plans">
+    <div class="demo">
+      <div class="plans">
+        <div class="plan"><h5>One-time clean</h5><div class="pr">$189 <small>3 bd / 2 ba</small></div><ul><li>Any date, no commitment</li><li>48-hour re-clean guarantee</li><li>Pay after the visit</li></ul><button class="btn btn-g">Book once</button></div>
+        <div class="plan feat"><h5>Novara Membership</h5><div class="pr">$161 <small>per visit, every 2 weeks</small></div><ul><li>Same cleaner every time</li><li>15% off every visit</li><li>Priority same-week slots</li><li>Pause or cancel anytime</li></ul><button class="btn btn-p">Start membership</button></div>
+      </div>
+      <p class="example" style="margin:10px 0 0">Example prices</p>
+    </div>
+    <div class="meta">
+      <h3>One-time vs membership <span class="pill v-use">Use</span></h3>
+      <p class="why">Two cards, not four. The membership card is highlighted and spells out the saving in dollars per visit. "Cancel anytime" sits on the card to head off the contract worry.</p>
+      <dl>
+        <dt>Source</dt><dd>shadcn <span class="tag">Card</span> (installed); Launch UI or Tailark pricing blocks for layout ideas</dd>
+        <dt>Novara section</dt><dd>After the STR section; links to your existing <code>/membership</code> page</dd>
+        <dt>Build notes</dt><dd>Prices must come from the same pricing engine as the quote builder. Avoid a headline price that only applies with a membership; state the terms on the card.</dd>
+      </dl>
+    </div>
+  </article>
+</section>
+
+<!-- ================= GROUP 3 ================= -->
+<section class="group" aria-labelledby="g3">
+  <h2 id="g3">Agentic visuals</h2>
+  <p>Show the AI doing real work: answering the phone, booking, dispatching. Each one sits next to a promise that a human is reachable, because people trust AI far more when they know they can reach a person.</p>
+
+  <article class="spec" id="c-voice">
+    <div class="demo">
+      <div class="voice">
+        <div class="orbwrap">
+          <canvas id="orb" width="264" height="264" aria-hidden="true"></canvas>
+          <div class="bars" id="bars" aria-hidden="true"></div>
+          <button class="vbtn" id="vPlay">▶ Hear Nova book a clean</button>
+        </div>
+        <div>
+          <div class="tx" id="tx" aria-live="polite"></div>
+          <div class="disclose">Nova is Novara's AI receptionist. Say "person" anytime and we'll connect you to our team.</div>
+        </div>
+      </div>
+    </div>
+    <div class="meta">
+      <h3>Voice orb and live transcript <span class="pill v-use">Use</span></h3>
+      <p class="why">Home-service AI vendors (Sameday, Hatch, Avoca) all sell on "hear it take a call", and you have a real receptionist to show. Play a real recorded call with customer details removed while the transcript appears line by line. The orb reacts to the audio.</p>
+      <dl>
+        <dt>Source</dt><dd>ElevenLabs UI <span class="tag">orb</span> <span class="tag">bar-visualizer</span> <span class="tag">waveform</span> (MIT)</dd>
+        <dt>Install</dt><dd><div class="cmd"><code>npx shadcn@latest add https://ui.elevenlabs.io/r/orb.json</code><button class="copy">Copy</button></div></dd>
+        <dt>Lighter option</dt><dd>A 2D canvas orb like this one (no three.js) driven by the Web Audio <code>AnalyserNode</code></dd>
+        <dt>Build notes</dt><dd>Load it with <code>next/dynamic({ssr:false})</code> below the fold, with a static poster first. Check whether the ElevenLabs orb pulls in three.js and whether it supports React 18 before installing. Add a "Call Nova now" <code>tel:</code> button too.</dd>
+      </dl>
+    </div>
+  </article>
+
+  <article class="spec" id="c-timeline">
+    <div class="demo">
+      <button class="replay" data-replay="timeline">↻ Replay</button>
+      <ol class="tl" id="tl">
+        <li><span class="ic"></span><div><b>Checked ZIP 20011</b><small>Petworth, DC is in our area</small></div><time>0.4s</time></li>
+        <li><span class="ic"></span><div><b>Found 4 open slots this week</b><small>Earliest Thu 9:00 AM</small></div><time>1.1s</time></li>
+        <li><span class="ic"></span><div><b>Matched your cleaner</b><small>Based on rating, distance and your pets</small>
+          <div class="match"><div class="av" style="background:#8a5a2b;width:30px;height:30px">MR</div><div><b>Maria R.</b><br><small>4.9 ★ · 212 cleans · cleans 3 homes on your street</small></div></div></div><time>1.9s</time></li>
+        <li><span class="ic"></span><div><b>Booked and texted you</b><small>Confirmation #4821 · reschedule anytime</small></div><time>2.4s</time></li>
+      </ol>
+    </div>
+    <div class="meta">
+      <h3>"Watch your booking happen" timeline <span class="pill v-use">Use</span></h3>
+      <p class="why">A tool-call timeline turned into plain English. It shows the ops automation as concrete steps that end with a real person's face and an arrival time, rather than an abstract diagram.</p>
+      <dl>
+        <dt>Source</dt><dd>AI Elements <span class="tag">chain-of-thought</span> (moving into shadcn at end of Nov 2026), Aceternity <span class="tag">timeline</span>, or a custom version with <span class="tag">motion</span></dd>
+        <dt>Recommendation</dt><dd>Build it yourself: about 80 lines with <code>motion</code>, avoids the AI SDK dependency and the deprecation</dd>
+        <dt>Build notes</dt><dd>Run it when it scrolls into view. Use an ordered list so screen readers get the steps in order. Under reduced motion, show every step as done.</dd>
+      </dl>
+    </div>
+  </article>
+
+  <article class="spec" id="c-beam">
+    <div class="demo">
+      <div class="beam" id="beam">
+        <svg id="beamSvg" aria-hidden="true"></svg>
+        <div class="node" data-x="14" data-y="18">📅 Airbnb calendar</div>
+        <div class="node" data-x="14" data-y="50">🏠 VRBO / Hospitable</div>
+        <div class="node" data-x="14" data-y="82">📞 Guest call or text</div>
+        <div class="node hub" data-x="50" data-y="50">Novara dispatch</div>
+        <div class="node" data-x="86" data-y="22">🧹 Crew assigned</div>
+        <div class="node" data-x="86" data-y="50">📸 Photo checklist</div>
+        <div class="node" data-x="86" data-y="78">✅ Ready by 3 PM</div>
+      </div>
+    </div>
+    <div class="meta">
+      <h3>Calendar-to-crew diagram <span class="pill v-some">STR section only</span></h3>
+      <p class="why">Animated beams make sense where there is a real system to show. For Airbnb hosts that system is: booking calendar in, cleaner and photo proof out. It is the Turno-style pitch. Elsewhere on the page it would just be decoration.</p>
+      <dl>
+        <dt>Source</dt><dd>Magic UI <span class="tag">animated-beam</span></dd>
+        <dt>Install</dt><dd><div class="cmd"><code>npx shadcn@latest add @magicui/animated-beam</code><button class="copy">Copy</button></div></dd>
+        <dt>Build notes</dt><dd>Show only integrations Novara actually runs. On phones, stack it vertically or swap for a 3-step list. Hide the beams from screen readers and keep the text labels.</dd>
+      </dl>
+    </div>
+  </article>
+
+  <article class="spec" id="c-feed">
+    <div class="demo">
+      <div class="feed" id="feed" aria-hidden="true"></div>
+      <p class="example" style="margin:8px 0 0">Example activity, must be real if shipped</p>
+    </div>
+    <div class="meta">
+      <h3>Live ops feed <span class="pill v-some">Only with real data</span></h3>
+      <p class="why">A stream of real events (calls answered, crews checked in, re-cleans scheduled) shows the business is alive. Faked "someone just booked" pop-ups are a known dark pattern and an FTC risk, so ship this only if it reads from Supabase, with names reduced to first initials.</p>
+      <dl>
+        <dt>Source</dt><dd>Magic UI <span class="tag">animated-list</span></dd>
+        <dt>Build notes</dt><dd>Fill it from a cached API route that refreshes every few minutes, not a live socket. Pause on hover and offscreen. Hide it from screen readers or give it a static summary.</dd>
+      </dl>
+    </div>
+  </article>
+
+  <article class="spec" id="c-bento">
+    <div class="demo">
+      <div class="bento">
+        <div class="tile big"><h5>Answered in 1 ring, day or night</h5><p>Nova picks up, quotes and books. A person takes over whenever you ask.</p><div class="big-n tnum">24/7</div></div>
+        <div class="tile"><h5>Same cleaner every visit</h5><p>Your crew learns your home.</p></div>
+        <div class="tile"><h5>48-hour re-clean</h5><p>Missed a spot? We come back free.</p></div>
+      </div>
+    </div>
+    <div class="meta">
+      <h3>Bento grid <span class="pill v-some">Use sparingly</span></h3>
+      <p class="why">Fine for a compact "why Novara" block if every tile carries a real photo or product screen. Three identical text tiles is the most common "AI landing page" layout of 2025–26, so don't build the whole page from them.</p>
+      <dl>
+        <dt>Source</dt><dd>Magic UI <span class="tag">bento-grid</span>, or plain CSS grid as here</dd>
+        <dt>Replaces</dt><dd>The six-item feature grid</dd>
+        <dt>Build notes</dt><dd>No library needed. Uneven tile sizes keep it from looking templated.</dd>
+      </dl>
+    </div>
+  </article>
+
+  <article class="spec" id="c-slop">
+    <div class="demo">
+      <div class="slop bg-slop"><canvas id="slopP2" aria-hidden="true"></canvas><span class="pill v-avoid xmark">Avoid</span><div><h5>Revolutionizing home cleaning with AI</h5><p>The future of clean is here ✨</p></div></div>
+    </div>
+    <div class="meta">
+      <h3>The generic AI look <span class="pill v-avoid">Avoid</span></h3>
+      <p class="why">Dark indigo gradient, particles, gradient text and an "AI-powered" headline. It looks like every AI startup, and a WSU study found the word "AI" in product copy lowers purchase intent, more so for higher-stakes purchases. Lead with outcomes like "exact price, answered 24/7" and explain the AI in the supporting copy.</p>
+      <dl>
+        <dt>In your code</dt><dd><span class="tag">Particles</span> behind the hero, <span class="tag">BorderBeam</span> on the CTA, <span class="tag">MagicCard</span> glow: keep at most one</dd>
+      </dl>
+    </div>
+  </article>
+</section>
+
+<!-- ================= GROUP 4 ================= -->
+<section class="group" aria-labelledby="g4">
+  <h2 id="g4">Trust and proof</h2>
+  <p>Recent dated reviews, a guarantee that beats the competition, real cleaners and real photos. Note: "Google Guaranteed" became "Google Verified" in October 2025 and the $2,000 guarantee is gone, so that tile needs replacing.</p>
+
+  <article class="spec" id="c-stats">
+    <div class="demo">
+      <div class="stats" id="stats">
+        <div class="st"><div class="n" data-v="1284"></div><small>homes cleaned</small></div>
+        <div class="st"><div class="n" data-v="4.9" data-dec="1"></div><small>Google rating</small></div>
+        <div class="st"><div class="n" data-v="92" data-suf="%"></div><small>book again</small></div>
+        <div class="st"><div class="n" data-v="1" data-suf=" ring"></div><small>to answer, 24/7</small></div>
+      </div>
+      <p class="example" style="margin:10px 0 0">Example numbers, use real ones</p>
+    </div>
+    <div class="meta">
+      <h3>Stats with rolling numbers <span class="pill v-have">Installed</span></h3>
+      <p class="why">Keep the strip but tie each stat to something checkable (Google rating with review count, rebook rate). "1 ring to answer" ties the AI receptionist to an outcome people care about.</p>
+      <dl>
+        <dt>Source</dt><dd>Magic UI <span class="tag">number-ticker</span> (installed) or <span class="tag">@number-flow/react</span> for odometer-style digits</dd>
+        <dt>Build notes</dt><dd>Render the final number in the HTML on the server and animate on top, so it reads correctly with JS off or reduced motion.</dd>
+      </dl>
+    </div>
+  </article>
+
+  <article class="spec" id="c-reviews">
+    <div class="demo">
+      <div class="rv">
+        <div class="sum">
+          <div class="big">4.9</div><div class="stars">★★★★★</div><small style="color:var(--muted)">512 Google reviews</small>
+          <div class="hist">
+            <div>5<i style="--w:90%"></i>461</div><div>4<i style="--w:7%"></i>36</div><div>3<i style="--w:2%"></i>9</div><div>2<i style="--w:.5%"></i>3</div><div>1<i style="--w:.5%"></i>3</div>
+          </div>
+        </div>
+        <div class="rcards">
+          <div class="rc"><header><b>Sarah M. · Silver Spring</b><span class="src">Google · Oct 31, 2026</span></header><div class="stars">★★★★★</div><p>Maria found the spot behind the fridge I'd given up on. Booked biweekly on the spot.</p></div>
+          <div class="rc"><header><b>James R. · Airbnb host, Arlington</b><span class="src">Google · Oct 24, 2026</span></header><div class="stars">★★★★★</div><p>Same-day turnover between guests, photos in my inbox by 2:40.</p></div>
+        </div>
+      </div>
+      <p class="example" style="margin:10px 0 0">Example reviews</p>
+    </div>
+    <div class="meta">
+      <h3>Dated, sourced reviews <span class="pill v-use">Use</span></h3>
+      <p class="why">74% of people want reviews from the last three months, and 31% only use businesses rated 4.5+. Show the source, the date, the neighborhood and the star breakdown. A static grid you can actually read works better than a scrolling marquee.</p>
+      <dl>
+        <dt>Built from</dt><dd>shadcn <span class="tag">Card</span> + <span class="tag">Progress</span> (installed); keep Magic UI <span class="tag">marquee</span> for a secondary row only</dd>
+        <dt>Build notes</dt><dd>Pull from the Google Business Profile API on a daily schedule. Add <code>AggregateRating</code> structured data only if it matches what's shown on the page.</dd>
+      </dl>
+    </div>
+  </article>
+
+  <article class="spec" id="c-gtee">
+    <div class="demo">
+      <div class="gtee">
+        <div class="seal">
+          <svg viewBox="0 0 120 120" aria-hidden="true">
+            <defs><path id="circ" d="M60,60 m-44,0 a44,44 0 1,1 88,0 a44,44 0 1,1 -88,0"/></defs>
+            <circle cx="60" cy="60" r="56" fill="#16043F"/>
+            <circle cx="60" cy="60" r="34" fill="#6810FE"/>
+            <text font-family="Inter" font-size="9.5" font-weight="600" fill="#CFC6EE" letter-spacing="2.2"><textPath href="#circ">RE-CLEAN GUARANTEE · FREE · NO FORMS ·</textPath></text>
+            <text x="60" y="62" text-anchor="middle" font-family="Plus Jakarta Sans" font-weight="800" font-size="26" fill="#fff">48</text>
+            <text x="60" y="76" text-anchor="middle" font-family="Inter" font-weight="600" font-size="9" fill="#fff">HOURS</text>
+          </svg>
+        </div>
+        <table class="cmp">
+          <thead><tr><th>Re-clean window</th><th>If something's missed</th></tr></thead>
+          <tbody>
+            <tr class="us"><td>Novara</td><td>48 hours</td></tr>
+            <tr><td>MaidPro</td><td>24 hours</td></tr>
+            <tr><td>Molly Maid</td><td>Next business day</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="meta">
+      <h3>Guarantee seal <span class="pill v-use">Use</span></h3>
+      <p class="why">Your 48-hour window is longer than the big franchises', so give it a full section and a seal people remember instead of one tile in six.</p>
+      <dl>
+        <dt>Source</dt><dd>Custom SVG; optional Magic UI <span class="tag">border-beam</span> (installed) around the section</dd>
+        <dt>Build notes</dt><dd>Check competitor terms before naming them; you can also say "twice the industry standard". Link to the full terms.</dd>
+      </dl>
+    </div>
+  </article>
+
+  <article class="spec" id="c-ba">
+    <div class="demo">
+      <div class="ba" id="ba">
+        <div class="layer after"><div class="room"><div class="cab"></div><div class="win"></div><div class="counter"></div></div></div>
+        <div class="layer before"><div class="room grime"><div class="cab"></div><div class="win"></div><div class="counter"></div></div></div>
+        <span class="lab" style="left:10px">Before</span><span class="lab" style="right:10px">After</span>
+        <div class="handle"></div>
+        <input type="range" min="0" max="100" value="50" aria-label="Drag to compare before and after">
+      </div>
+    </div>
+    <div class="meta">
+      <h3>Before/after slider <span class="pill v-some">Only with real photos</span></h3>
+      <p class="why">The most persuasive visual a cleaning company has, but only with real photos from Novara jobs, taken from the same angle and light. Stock photos here undo the trust it is meant to build.</p>
+      <dl>
+        <dt>Source</dt><dd><span class="tag">react-compare-slider</span> (MIT, keyboard accessible), or Aceternity <span class="tag">compare</span></dd>
+        <dt>Install</dt><dd><div class="cmd"><code>npm i react-compare-slider</code><button class="copy">Copy</button></div></dd>
+        <dt>Build notes</dt><dd>Your QC photo pipeline already captures job photos, so pick the best pairs from it. Use <code>next/image</code> and lazy-load below the fold.</dd>
+      </dl>
+    </div>
+  </article>
+
+  <article class="spec" id="c-team">
+    <div class="demo">
+      <div class="team">
+        <div class="tm"><div class="ph">MR</div><div class="bd"><b>Maria R.</b><span>4 years · English, Spanish</span><span class="chk">✓ Background-checked</span></div></div>
+        <div class="tm"><div class="ph" style="background:linear-gradient(160deg,#D9CFE9,#A894C9)">DA</div><div class="bd"><b>Denise A.</b><span>STR turnover lead</span><span class="chk">✓ Background-checked</span></div></div>
+        <div class="tm"><div class="ph" style="background:linear-gradient(160deg,#E4D6C0,#B99C74)">KT</div><div class="bd"><b>Kofi T.</b><span>Deep & move-out</span><span class="chk">✓ Background-checked</span></div></div>
+      </div>
+    </div>
+    <div class="meta">
+      <h3>Cleaner profile cards <span class="pill v-use">Use</span></h3>
+      <p class="why">"Same team every time" means more when the team has faces. Real crew photos also balance the AI sections and keep the brand feeling human.</p>
+      <dl>
+        <dt>Source</dt><dd>shadcn <span class="tag">Card</span> <span class="tag">Avatar</span> <span class="tag">HoverCard</span> (installed)</dd>
+        <dt>Build notes</dt><dd>Get written consent for photos and first names. Pull from the contractor table so profiles stay current.</dd>
+      </dl>
+    </div>
+  </article>
+</section>
+
+<!-- ================= GROUP 5 ================= -->
+<section class="group" aria-labelledby="g5">
+  <h2 id="g5">Utility sections</h2>
+  <p>Plain components that answer the last questions and keep the call and price buttons within reach.</p>
+
+  <article class="spec" id="c-included">
+    <div class="demo">
+      <div class="tabs" role="tablist" id="incTabs">
+        <button role="tab" aria-selected="true" data-r="k">Kitchen</button>
+        <button role="tab" aria-selected="false" data-r="b">Bathrooms</button>
+        <button role="tab" aria-selected="false" data-r="l">Living & bed</button>
+      </div>
+      <table class="inc"><thead><tr><th>Task</th><th>Standard</th><th>Deep</th><th>Move-out</th></tr></thead><tbody id="incBody"></tbody></table>
+    </div>
+    <div class="meta">
+      <h3>Room-by-room table <span class="pill v-use">Use</span></h3>
+      <p class="why">Franchises sell their process ("49-point checklist", "22-step system"). Novara already has detailed checklists, so show them as a compare-by-room table that makes the step up from Standard to Deep obvious.</p>
+      <dl>
+        <dt>Source</dt><dd>shadcn <span class="tag">Tabs</span> <span class="tag">Table</span> (installed)</dd>
+        <dt>Build notes</dt><dd>Generate it from your checklist catalog (<code>checklists:verify</code> data) so the page never disagrees with what crews actually do.</dd>
+      </dl>
+    </div>
+  </article>
+
+  <article class="spec" id="c-area">
+    <div class="demo">
+      <div class="area">
+        <form class="hero" style="grid-template-columns:1fr auto;gap:8px" onsubmit="event.preventDefault();checkZip()">
+          <label class="field" for="az"><span aria-hidden="true">📍</span><input id="az" inputmode="numeric" maxlength="5" placeholder="Try 20011 or 90210" aria-label="ZIP code"></label>
+          <button class="btn btn-p" type="submit">Check</button>
+        </form>
+        <div class="res" id="azRes" role="status"></div>
+        <div class="cities"><span>Washington, DC</span><span>Silver Spring</span><span>Bethesda</span><span>Rockville</span><span>Arlington</span><span>Alexandria</span><span>Falls Church</span><span>Takoma Park</span><span>Hyattsville</span></div>
+      </div>
+    </div>
+    <div class="meta">
+      <h3>ZIP checker and city list <span class="pill v-use">Use</span></h3>
+      <p class="why">Answers "do you come to me?" right away. The city chips double as links to local SEO pages. Out-of-area visitors get a waitlist instead of a dead end.</p>
+      <dl>
+        <dt>Source</dt><dd>shadcn <span class="tag">Input</span> <span class="tag">Badge</span> (installed). Skip Magic UI <span class="tag">globe</span>: a WebGL globe is the wrong scale for a regional business</dd>
+        <dt>Build notes</dt><dd>Reuse the ZIP validation from your booking flow. A static SVG map of the DMV is enough if you want a visual.</dd>
+      </dl>
+    </div>
+  </article>
+
+  <article class="spec" id="c-faq">
+    <div class="demo">
+      <div class="faq">
+        <details open><summary>Do I need to be home?</summary><p>No. Most clients leave a code or key. Your cleaner texts when they arrive and when they leave, with photos.</p></details>
+        <details><summary>Is Nova a real person?</summary><p>Nova is our AI receptionist. It can quote, book and reschedule any time. Say "person" and it connects you to our team.</p></details>
+        <details><summary>What if something gets missed?</summary><p>Tell us within 48 hours and we come back to re-clean it free. No forms.</p></details>
+        <details><summary>Are your cleaners insured and background-checked?</summary><p>Yes, every one of them.</p></details>
+      </div>
+    </div>
+    <div class="meta">
+      <h3>FAQ accordion <span class="pill v-have">Installed</span></h3>
+      <p class="why">Handles objections without leaving the page. Include an honest "Is Nova a real person?" answer: about 80% of people want to be told when they're talking to AI.</p>
+      <dl>
+        <dt>Source</dt><dd>shadcn <span class="tag">Accordion</span> (Radix, installed)</dd>
+        <dt>Build notes</dt><dd>Add <code>FAQPage</code> structured data. Keep answers in the server-rendered HTML.</dd>
+      </dl>
+    </div>
+  </article>
+
+  <article class="spec" id="c-sticky">
+    <div class="demo">
+      <div class="phone" aria-label="Phone preview">
+        <div class="scr">
+          <div class="example">novaracleaning.com</div>
+          <h6>A spotless home. Your exact price in 30 seconds.</h6>
+          <div class="blk w"></div><div class="blk"></div><div class="blk"></div><div class="blk"></div>
+        </div>
+        <div class="sticky"><span class="btn btn-g">📞 Call</span><span class="btn btn-p">Get my price</span></div>
+      </div>
+    </div>
+    <div class="meta">
+      <h3>Sticky call and price bar <span class="pill v-use">Use</span></h3>
+      <p class="why">Most home-service traffic is on phones, and phone leads convert at about 45%. Keep both actions under the thumb at all times. Because Nova answers every call, the Call button never goes to voicemail.</p>
+      <dl>
+        <dt>Built from</dt><dd>A fixed <code>div</code> with shadcn <span class="tag">Button</span>; show below 768px only</dd>
+        <dt>Build notes</dt><dd>Pad with <code>env(safe-area-inset-bottom)</code>. Hide it while the quote form is on screen so it doesn't cover the total. Reserve its height so it causes no layout shift.</dd>
+      </dl>
+    </div>
+  </article>
+</section>
+
+<!-- ================= IMPLEMENTATION ================= -->
+<section class="guide" aria-labelledby="gi">
+  <h2 id="gi">How to implement it in the repo</h2>
+  <p style="max-width:72ch">Your stack is Next 14, React 18 and Tailwind 3. Most registries now default to React 19 and Tailwind v4, so every install below should be checked for v4-only classes like <code>size-*</code> and <code>bg-linear-*</code>.</p>
+  <div class="cols">
+    <div class="card">
+      <h3>File structure</h3>
+<pre><span class="c">// split Index.tsx (683 lines) into sections</span>
+src/components/landing/
+  Hero.tsx            <span class="c">server + ZipForm island</span>
+  ProofStrip.tsx
+  QuoteBuilder.tsx    <span class="c">"use client"</span>
+  PriceReceipt.tsx    <span class="c">"use client"</span>
+  VoiceDemo.tsx       <span class="c">dynamic, ssr:false</span>
+  BookingTimeline.tsx <span class="c">"use client"</span>
+  Included.tsx  StrHosts.tsx  Plans.tsx
+  Guarantee.tsx Reviews.tsx   Crew.tsx
+  ServiceArea.tsx Faq.tsx     StickyMobileBar.tsx
+src/views/Index.tsx   <span class="c">just composes them</span></pre>
+    </div>
+    <div class="card">
+      <h3>Installs, in order</h3>
+<pre>npx shadcn@latest add @magicui/dot-pattern
+npx shadcn@latest add @magicui/animated-list
+npx shadcn@latest add @magicui/animated-beam
+npm i @number-flow/react react-compare-slider
+<span class="c"># after checking React 18 + three.js:</span>
+npx shadcn@latest add https://ui.elevenlabs.io/r/orb.json</pre>
+      <p style="font-size:13.5px;margin:10px 0 0"><code>components.json</code> has <code>rsc: false</code>, so add <code>"use client"</code> to each animated file by hand.</p>
+    </div>
+    <div class="card">
+      <h3>Rules that keep it fast</h3>
+      <ul>
+        <li>The H1 and hero image render on the server with no fade-in. Target LCP under 2.5s.</li>
+        <li>At most one canvas or WebGL element above the fold; ideally none.</li>
+        <li>Load the voice orb, beams and feed with <code>next/dynamic</code> and start them when scrolled into view.</li>
+        <li>One <code>useReducedMotion()</code> hook from <code>motion</code> that every animated section reads.</li>
+        <li>Pick one of <code>framer-motion</code> v12 or <code>motion</code> and remove the other.</li>
+        <li>Stay on HeroUI 2.8. v3 needs React 19 and Tailwind v4.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Fix before launch</h3>
+      <ul>
+        <li>Remove "Google Guaranteed" and the "$2,000 guarantee" from the H1 badge, the trust grid and the SEO description. Use "Google Verified" only if your Local Services Ads profile shows it.</li>
+        <li>Replace example prices, stats and reviews with real data.</li>
+        <li>Get a real call recording with customer details removed for the voice demo.</li>
+        <li>Collect before/after pairs and crew photos with consent.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+</main>
+
+<script>
+(function(){
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const $ = (s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const money = n => '$'+Math.round(n).toLocaleString('en-US');
+
+/* copy buttons */
+$$('.copy').forEach(b=>b.addEventListener('click',async()=>{
+  const t=b.previousElementSibling.textContent;
+  try{await navigator.clipboard.writeText(t);b.textContent='Copied';}catch(e){b.textContent='Select it';}
+  setTimeout(()=>b.textContent='Copy',1400);
+}));
+
+/* ---------- quote builder ---------- */
+const st={bed:3,bath:2,step:0};
+function price(){
+  const t=+($('input[name=t]:checked')||{value:1}).value;
+  const f=+($('input[name=f]:checked')||{value:0}).value;
+  const base=(89+st.bed*25+st.bath*30)*t;
+  const ext=$$('#quote .chips input:checked').reduce((a,c)=>a+ +c.value,0);
+  return {base,ext,f,total:(base+ext)*(1-f/100)};
+}
+let shown=0,raf;
+function renderTotal(){
+  const p=price(),to=p.total,from=shown;cancelAnimationFrame(raf);
+  const el=$('#qTotal');
+  if(RM){el.textContent=money(to);shown=to;}
+  else{const t0=performance.now();(function k(now){const q=Math.min(1,(now-t0)/450),e=1-Math.pow(1-q,3);shown=from+(to-from)*e;el.textContent=money(shown);if(q<1)raf=requestAnimationFrame(k);})(t0);}
+  $('#qSub').textContent=(p.f?'per visit · '+p.f+'% frequency discount':'one visit')+' · example pricing';
+}
+$$('#quote .ctr button').forEach(b=>b.addEventListener('click',()=>{
+  const k=b.dataset.k;st[k]=Math.max(k==='bed'?0:1,Math.min(7,st[k]+ +b.dataset.d));$('#'+k).textContent=st[k];renderTotal();
+}));
+$$('#quote input').forEach(i=>i.addEventListener('change',renderTotal));
+function go(s){
+  st.step=Math.max(0,Math.min(3,s));
+  $$('#quote .pane').forEach(p=>p.classList.toggle('on',+p.dataset.p===st.step));
+  $$('#quote .steps button').forEach(b=>{const i=+b.dataset.s;b.classList.toggle('done',i<st.step);if(i===st.step)b.setAttribute('aria-current','step');else b.removeAttribute('aria-current');});
+  $('#qBack').disabled=st.step===0;$('#qNext').disabled=st.step===3;
+}
+$$('#quote .steps button').forEach(b=>b.addEventListener('click',()=>go(+b.dataset.s)));
+$('#qBack').addEventListener('click',()=>go(st.step-1));
+$('#qNext').addEventListener('click',()=>go(st.step+1));
+renderTotal();
+
+/* ---------- receipt ---------- */
+let rTimers=[];
+function playReceipt(){
+  rTimers.forEach(clearTimeout);rTimers=[];
+  const box=$('#rLines');box.innerHTML='';
+  const lines=[['Base visit','$89'],['3 bedrooms × $25','$75'],['2 bathrooms × $30','$60'],['Deep clean (×1.5)','+$112'],['Inside oven','+$35'],['Every 2 weeks','−$56','d'],['Total per visit','$315','tot']];
+  const s=$('#rStatus');s.innerHTML='<span class="dot"></span>Pricing your home…';
+  lines.forEach((l,i)=>{
+    const row=document.createElement('div');row.className='ln'+(l[2]==='tot'?' tot':'');
+    row.innerHTML='<span>'+l[0]+'</span><span class="'+(l[2]==='d'?'d':'')+' tnum">'+(RM?l[1]:'<span class="shim" style="display:inline-block;width:42px"></span>')+'</span>';
+    box.appendChild(row);
+    const t=RM?0:i*420;
+    rTimers.push(setTimeout(()=>row.classList.add('in'),t));
+    if(!RM)rTimers.push(setTimeout(()=>{row.lastChild.innerHTML=l[1];},t+320));
+  });
+  rTimers.push(setTimeout(()=>{s.innerHTML='<span class="dot ok"></span>Exact price · no surprises';},RM?0:lines.length*420+200));
+}
+
+/* ---------- timeline ---------- */
+let tTimers=[];
+function playTimeline(){
+  tTimers.forEach(clearTimeout);tTimers=[];
+  const items=$$('#tl li');items.forEach(li=>li.className='');
+  if(RM){items.forEach(li=>li.className='done');return;}
+  items.forEach((li,i)=>{
+    tTimers.push(setTimeout(()=>li.className='active',i*1100));
+    tTimers.push(setTimeout(()=>li.className='done',i*1100+900));
+  });
+}
+
+/* ---------- feed ---------- */
+const events=[
+ ['📞','#F1EBFF','Nova answered a call','Quoted a move-out clean · Bethesda · 11:42 PM'],
+ ['🧹','#E3F4EC','Crew checked in','Denise A. · Airbnb turnover · Arlington'],
+ ['📸','#FFF2DB','Photo checklist sent','34 photos · host notified · 2:38 PM'],
+ ['🔁','#F1EBFF','Re-clean booked','Within 48h guarantee · Silver Spring'],
+ ['⭐','#FFF2DB','New 5-star review','"Same cleaner, every time." · Google'],
+ ['📅','#E3F4EC','Calendar synced','3 checkouts → 3 cleans scheduled']];
+let fi=0,fTimer;
+function pushFeed(){
+  const f=$('#feed');const e=events[fi++%events.length];
+  const n=document.createElement('div');n.className='note';
+  n.innerHTML='<span class="ic2" style="background:'+e[1]+'">'+e[0]+'</span><div><b>'+e[2]+'</b><small>'+e[3]+'</small></div>';
+  f.prepend(n);while(f.children.length>5)f.lastChild.remove();
+}
+for(let i=0;i<4;i++)pushFeed();
+function runFeed(on){clearInterval(fTimer);if(on&&!RM)fTimer=setInterval(pushFeed,2200);}
+
+/* ---------- orb ---------- */
+const oc=$('#orb'),ox=oc.getContext('2d');let level=0,target=0.05,oT=0,orbOn=false;
+function drawOrb(){
+  const w=oc.width,h=oc.height,c=w/2;ox.clearRect(0,0,w,h);
+  level+=(target-level)*0.15;oT+=0.012+level*0.05;
+  const g=ox.createRadialGradient(c,c*0.8,10,c,c,c);g.addColorStop(0,'#F4EEFF');g.addColorStop(1,'#E4D9FF');
+  ox.beginPath();ox.arc(c,c,c-2,0,7);ox.fillStyle=g;ox.fill();
+  ox.save();ox.beginPath();ox.arc(c,c,c-2,0,7);ox.clip();
+  const blobs=[['#6810FE',0],['#B49AFE',2.1],['#F2B98A',4.2]];
+  ox.globalCompositeOperation='multiply';
+  blobs.forEach(([col,ph],i)=>{
+    const r=c*(0.55+level*0.35);const x=c+Math.cos(oT+ph)*c*0.32,y=c+Math.sin(oT*1.3+ph)*c*0.32;
+    const gg=ox.createRadialGradient(x,y,0,x,y,r);gg.addColorStop(0,col+'cc');gg.addColorStop(1,col+'00');
+    ox.fillStyle=gg;ox.fillRect(0,0,w,h);
+  });
+  ox.restore();
+  const s=ox.createRadialGradient(c*0.7,c*0.55,0,c*0.7,c*0.55,c*0.6);s.addColorStop(0,'#ffffffaa');s.addColorStop(1,'#ffffff00');
+  ox.fillStyle=s;ox.beginPath();ox.arc(c,c,c-2,0,7);ox.fill();
+  if(orbOn)requestAnimationFrame(drawOrb);
+}
+const barsEl=$('#bars');for(let i=0;i<24;i++)barsEl.appendChild(document.createElement('i'));
+const barEls=$$('#bars i');
+function tickBars(){barEls.forEach((b,i)=>{const v=level>0.1?Math.max(.15,Math.random()*level*1.6+Math.sin(i/2+oT*4)*.15):.15;b.style.height=Math.min(100,v*100)+'%';});}
+let bTimer=setInterval(tickBars,120);
+const convo=[['ai','Nova','Thanks for calling Novara, this is Nova, the AI assistant. Want a price, or to book a clean?'],
+ ['cu','Caller','Hi, I need a deep clean before my in-laws visit. Three bed, two bath.'],
+ ['ai','Nova','I can do that. In ZIP 20011 a deep clean for 3 bed, 2 bath is $274. I have Thursday at 9 or Friday at 1.'],
+ ['cu','Caller','Thursday works. Can you do inside the oven?'],
+ ['ai','Nova','Added, so $309 total. Maria will be your cleaner, 4.9 stars. I just texted your confirmation.'],
+ ['cu','Caller','Perfect, thanks!']];
+let vTimers=[],playing=false;
+function playVoice(){
+  vTimers.forEach(clearTimeout);vTimers=[];const tx=$('#tx');tx.innerHTML='';playing=true;$('#vPlay').textContent='■ Stop';
+  let t=0;
+  convo.forEach((m,i)=>{
+    vTimers.push(setTimeout(()=>{
+      target=m[0]==='ai'?0.75:0.3;
+      const d=document.createElement('div');d.className='msg '+m[0];d.innerHTML='<em>'+m[1]+' · 0:'+String(i*7+2).padStart(2,'0')+'</em><span></span>';
+      tx.appendChild(d);const sp=d.lastChild;
+      if(RM){sp.textContent=m[2];}else{let k=0;const words=m[2].split(' ');const iv=setInterval(()=>{sp.textContent=words.slice(0,++k).join(' ');tx.scrollTop=tx.scrollHeight;if(k>=words.length)clearInterval(iv);},70);vTimers.push(iv);}
+      tx.scrollTop=tx.scrollHeight;
+    },t));
+    t+=RM?0:m[2].split(' ').length*70+700;
+  });
+  vTimers.push(setTimeout(stopVoice,t+400));
+}
+function stopVoice(){vTimers.forEach(x=>{clearTimeout(x);clearInterval(x);});playing=false;target=0.05;$('#vPlay').textContent='▶ Hear Nova book a clean';}
+$('#vPlay').addEventListener('click',()=>playing?stopVoice():playVoice());
+(function seed(){const tx=$('#tx');convo.slice(0,3).forEach((m,i)=>{const d=document.createElement('div');d.className='msg '+m[0];d.innerHTML='<em>'+m[1]+' · 0:'+String(i*7+2).padStart(2,'0')+'</em>'+m[2];tx.appendChild(d);});})();
+
+/* ---------- beams ---------- */
+function layoutBeam(){
+  const box=$('#beam'),svg=$('#beamSvg'),W=box.clientWidth,H=box.clientHeight;
+  const nodes=$$('.node',box);nodes.forEach(n=>{n.style.left=n.dataset.x+'%';n.style.top=n.dataset.y+'%';});
+  const hub=[W*.5,H*.5];let html='';
+  nodes.filter(n=>!n.classList.contains('hub')).forEach((n,i)=>{
+    const x=W*n.dataset.x/100,y=H*n.dataset.y/100;const inb=n.dataset.x<50;
+    const a=inb?[x+n.offsetWidth/2,y]:hub, b=inb?hub:[x-n.offsetWidth/2,y];
+    const mx=(a[0]+b[0])/2;const d='M'+a[0]+','+a[1]+' C'+mx+','+a[1]+' '+mx+','+b[1]+' '+b[0]+','+b[1];
+    html+='<path d="'+d+'" stroke="#E8E4EF" stroke-width="2" fill="none"/>';
+    if(!RM)html+='<path class="flow" d="'+d+'" style="animation-delay:'+(inb?i*.35:1.3+i*.35)+'s"/>';
+  });
+  svg.innerHTML=html;
+}
+layoutBeam();addEventListener('resize',layoutBeam);
+
+/* ---------- before/after ---------- */
+const ba=$('#ba');$('input',ba).addEventListener('input',e=>ba.style.setProperty('--x',e.target.value+'%'));
+
+/* ---------- stats odometer ---------- */
+function buildStats(){
+  $$('#stats .n').forEach(n=>{
+    const v=n.dataset.v,suf=n.dataset.suf||'',str=String(v);
+    n.innerHTML='';
+    [...str].forEach(ch=>{
+      if(/\d/.test(ch)){const o=document.createElement('span');o.className='odo';const col=document.createElement('span');
+        for(let i=0;i<=9;i++){const d=document.createElement('i');d.textContent=i;col.appendChild(d);}
+        o.appendChild(col);o.dataset.d=ch;n.appendChild(o);}
+      else{const s=document.createElement('span');s.textContent=ch;n.appendChild(s);}
+    });
+    if(suf){const s=document.createElement('span');s.textContent=suf;n.appendChild(s);}
+    n.setAttribute('aria-label',v+suf);
+  });
+}
+function rollStats(){$$('#stats .odo').forEach((o,i)=>{const col=o.firstChild;col.style.transitionDelay=(i*60)+'ms';col.style.transform='translateY(-'+o.dataset.d+'em)';});}
+buildStats();
+if(RM)rollStats();
+
+/* ---------- included table ---------- */
+const inc={k:[['Counters, sink, stovetop',1,1,1],['Microwave inside',1,1,1],['Cabinet fronts',0,1,1],['Inside oven & fridge',0,'+',1],['Inside every cabinet',0,0,1]],
+ b:[['Toilet, tub, shower',1,1,1],['Mirrors & fixtures',1,1,1],['Grout scrub',0,1,1],['Exhaust fan',0,1,1],['Inside vanity drawers',0,0,1]],
+ l:[['Dust reachable surfaces',1,1,1],['Vacuum & mop floors',1,1,1],['Baseboards by hand',0,1,1],['Door frames & switches',0,1,1],['Inside closets',0,0,1]]};
+function renderInc(r){$('#incBody').innerHTML=inc[r].map(row=>'<tr><td>'+row[0]+'</td>'+row.slice(1).map(v=>v===1?'<td class="y">✓</td>':v==='+'?'<td>Add-on</td>':'<td class="n">—</td>').join('')+'</tr>').join('');}
+$$('#incTabs button').forEach(b=>b.addEventListener('click',()=>{$$('#incTabs button').forEach(x=>x.setAttribute('aria-selected',x===b));renderInc(b.dataset.r);}));
+renderInc('k');
+
+/* ---------- service area ---------- */
+window.checkZip=function(){
+  const z=$('#az').value.trim(),r=$('#azRes');
+  const ok=/^(200|201|202|203|204|205|206|207|208|209|220|221|222|223)\d\d$/.test(z);
+  if(!/^\d{5}$/.test(z)){r.className='res no';r.textContent='Enter a 5-digit ZIP code.';return;}
+  r.className='res '+(ok?'ok':'no');
+  r.textContent=ok?'✓ We clean in '+z+'. Next opening: Thursday 9:00 AM.':'We’re not in '+z+' yet. Join the waitlist and we’ll text you when we arrive.';
+};
+
+/* ---------- slop particles (the "avoid" example) ---------- */
+function particles(id){
+  const c=document.getElementById(id);if(!c)return;const x=c.getContext('2d');
+  function size(){c.width=c.clientWidth;c.height=c.clientHeight;}size();
+  const ps=Array.from({length:40},()=>({x:Math.random(),y:Math.random(),v:.0006+Math.random()*.0012,r:Math.random()*1.6+.4}));
+  (function f(){x.clearRect(0,0,c.width,c.height);ps.forEach(p=>{if(!RM)p.y-=p.v;if(p.y<0)p.y=1;x.fillStyle='#ffffffaa';x.beginPath();x.arc(p.x*c.width,p.y*c.height,p.r,0,7);x.fill();});if(!RM)requestAnimationFrame(f);})();
+}
+particles('slopP');particles('slopP2');
+
+/* ---------- run animations when visible ---------- */
+const io=new IntersectionObserver(es=>es.forEach(e=>{
+  const id=e.target.id;
+  if(id==='c-receipt'&&e.isIntersecting&&!e.target.dataset.ran){e.target.dataset.ran=1;playReceipt();}
+  if(id==='c-timeline'&&e.isIntersecting&&!e.target.dataset.ran){e.target.dataset.ran=1;playTimeline();}
+  if(id==='c-stats'&&e.isIntersecting)rollStats();
+  if(id==='c-feed')runFeed(e.isIntersecting);
+  if(id==='c-voice'){if(e.isIntersecting&&!orbOn){orbOn=true;drawOrb();}else if(!e.isIntersecting)orbOn=false;}
+}),{threshold:.3});
+['c-receipt','c-timeline','c-stats','c-feed','c-voice'].forEach(i=>io.observe(document.getElementById(i)));
+/* complete at rest: show final states immediately, then animate on view */
+playReceipt();playTimeline();drawOrb();
+$$('[data-replay]').forEach(b=>b.addEventListener('click',()=>b.dataset.replay==='receipt'?playReceipt():playTimeline()));
+})();
+</script>
+</body>
+</html>
