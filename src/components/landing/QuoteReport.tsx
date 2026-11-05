@@ -2,12 +2,11 @@
 
 // "Every price shows its math." The starting price, line by line, with each
 // line labelled by where it comes from. All amounts are read from the active
-// pricing config (src/lib/landing/data.ts). ZIP and home condition are set at
-// booking and the report says so instead of guessing them.
+// booking flow's price tables (src/lib/landing/data.ts), which do not vary by ZIP.
 
 import { useEffect, useMemo, useState } from "react";
 import { RiArrowRightLine, RiTimeLine, RiUserLine } from "@remixicon/react";
-import type { LandingPlan, LandingPrices, LandingServiceType } from "@/lib/landing/data";
+import { onlineDiscountPct, type LandingPlan, type LandingPrices, type LandingServiceType } from "@/lib/landing/prices";
 import { QUOTE_REPORT } from "@/lib/landing/content";
 import { cn } from "@/lib/utils";
 import { dollars } from "./format";
@@ -27,10 +26,10 @@ const FREQUENCIES: Array<{ id: Frequency; label: string }> = [
   { id: "weekly", label: "Weekly" },
 ];
 const PLAN_NAME: Record<LandingPlan, string> = { monthly: "Monthly", biweekly: "Every-2-weeks", weekly: "Weekly" };
-const OFFER: Partial<Record<LandingServiceType, string>> = { standard: "15% off", deep: "25% off" };
+
 
 type Kind = (typeof QUOTE_REPORT.kinds)[number]["id"];
-const KIND_TONE: Record<Kind, ChipTone> = { base: "good", extra: "brand", plan: "solid", booking: "warn", offer: "neutral" };
+const KIND_TONE: Record<Kind, ChipTone> = { base: "good", extra: "brand", plan: "solid", offer: "neutral" };
 const KIND_LABEL = Object.fromEntries(QUOTE_REPORT.kinds.map((k) => [k.id, k.label])) as Record<Kind, string>;
 
 interface Line {
@@ -113,7 +112,6 @@ export function QuoteReport({ prices }: { prices: LandingPrices }) {
       if (prices.firstMonthFeeCents > 0) {
         out.push({ key: "first", label: "First month starts with a deep clean", value: `+${dollars(prices.firstMonthFeeCents)} once`, kind: "extra", muted: true });
       }
-      out.push({ key: "booking", label: QUOTE_REPORT.bookingLine, value: QUOTE_REPORT.bookingValue, kind: "booking", muted: true });
       return { lines: out, total: monthly, suffix: "/mo" };
     }
     const base = prices.base[band.id]?.[service] || 0;
@@ -127,9 +125,11 @@ export function QuoteReport({ prices }: { prices: LandingPrices }) {
       out.push({ key: `x-${id}`, label: a.label, value: free ? "Included" : `+${dollars(a.cents)}`, kind: "extra", muted: free });
       if (!free) sum += a.cents;
     }
-    out.push({ key: "booking", label: QUOTE_REPORT.bookingLine, value: QUOTE_REPORT.bookingValue, kind: "booking", muted: true });
-    if (OFFER[service]) {
-      out.push({ key: "offer", label: `New customers: ${OFFER[service]} this clean`, value: "At checkout", kind: "offer", muted: true });
+    const pct = onlineDiscountPct(service);
+    if (pct) {
+      const off = Math.round((base * pct) / 100);
+      out.push({ key: "offer", label: `Online discount, ${pct}% off the clean`, value: `−${dollars(off)}`, kind: "offer" });
+      sum -= off;
     }
     return { lines: out, total: sum, suffix: "" };
   }, [band, isPlan, frequency, plans, prices, service, extras]);
@@ -223,7 +223,7 @@ export function QuoteReport({ prices }: { prices: LandingPrices }) {
             <div>
               <p className="text-[12.5px] text-ink-muted">{isPlan ? QUOTE_REPORT.totalPlan : QUOTE_REPORT.totalOnce}</p>
               <p className="text-[32px] font-medium leading-none tracking-[-0.03em] tabular-nums text-ink" aria-live="polite">
-                {dollars(Math.round(shownTotal / 100) * 100)}
+                {dollars(Math.round(shownTotal))}
                 {suffix ? <span className="text-[16px] text-ink-muted">{suffix}</span> : null}
               </p>
             </div>

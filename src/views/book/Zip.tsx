@@ -332,8 +332,8 @@ export default function BookingZip() {
           <div className="space-y-4">
             <h1 className="text-3xl md:text-4xl tracking-tight lg:text-6xl text-center font-extrabold font-jakarta mx-auto max-w-4xl">
               {formMode === 'waitlist-success'
-                ? "You're On The List! 🎉"
-                : "Book Your Cleaning Today"}
+                ? "You're on the list."
+                : "Book your clean."}
             </h1>
 
             {/* New-customer 50% off sub-headline — sits directly under
@@ -360,7 +360,7 @@ export default function BookingZip() {
                 <form onSubmit={handleZipSubmit} className="space-y-4 animate-fade-in">
                   <div className="space-y-2">
                     <label htmlFor="zipCode" className="text-sm font-medium text-left block">
-                      Enter Your ZIP Code
+                      Your ZIP code
                     </label>
                     <Input 
                       id="zipCode" 
@@ -375,7 +375,7 @@ export default function BookingZip() {
                       autoFocus 
                     />
                     <p className="text-xs text-muted-foreground">
-                      We'll check if we service your area
+                      We check that we serve your area. It does not change the price.
                     </p>
                   </div>
 
@@ -658,14 +658,14 @@ export default function BookingZip() {
                     </div>
                   </div>
                   <div className="flex-1 text-center md:text-left space-y-2">
-                    <h3 className="text-lg md:text-xl font-semibold">Join Our Membership Program</h3>
+                    <h3 className="text-lg md:text-xl font-semibold">Want a regular clean?</h3>
                     <p className="text-sm md:text-base text-muted-foreground">
-                      Get priority booking, exclusive discounts up to 30%, and credits that never expire. 
-                      Perfect for regular cleaning schedules.
+                      Memberships run monthly, every two weeks, or weekly. Bi-weekly and weekly plans
+                      come with a dedicated cleaner and up to 30% off add-ons.
                     </p>
                   </div>
                   <Button onClick={() => router.push("/membership")} size="lg" className="bg-primary hover:bg-primary-hover w-full md:w-auto h-11 md:h-12">
-                    Learn More
+                    See plans
                     <RiArrowRightLine className="w-4 h-4 ml-2" />
                   </Button>
                 </div>

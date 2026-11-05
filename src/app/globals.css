@@ -761,3 +761,77 @@
 .landing :is(h1, h2, h3, h4, h5, h6) {
   font-family: var(--font-inter), Inter, system-ui, sans-serif;
 }
+
+/* ── Booking flow theme ─────────────────────────────────────────────────────
+   Applied by src/app/book/layout.tsx. Maps the shared design tokens onto the
+   landing page look: white page, ink text, hairline borders, Inter headings,
+   the Novara purple for actions. Always light, so a dark OS theme does not
+   change the checkout. */
+.book-theme {
+  color-scheme: light;
+  --background: 0 0% 100%;
+  --foreground: 250 26% 5%;
+  --card: 0 0% 100%;
+  --card-foreground: 250 26% 5%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 250 26% 5%;
+  --primary: 263 99% 53%;
+  --primary-foreground: 0 0% 100%;
+  --primary-hover: 263 92% 47%;
+  --primary-glow: 262 100% 68%;
+  --secondary: 255 20% 97%;
+  --secondary-foreground: 250 26% 5%;
+  --muted: 255 20% 97%;
+  --muted-foreground: 254 8% 39%;
+  --accent: 262 100% 96%;
+  --accent-foreground: 263 90% 42%;
+  --border: 255 14% 92%;
+  --input: 255 14% 90%;
+  --ring: 263 99% 53%;
+  --focus-ring: 263 99% 53%;
+  --focus-ring-offset: 0 0% 100%;
+  --radius: 0.75rem;
+  --hairline: #e9e7ee;
+  --gradient-primary: linear-gradient(180deg, #7a2bff, #5a0be6);
+  --gradient-hero: radial-gradient(60% 40% at 85% 0%, rgba(104, 16, 254, 0.06), transparent 70%), #ffffff;
+  --gradient-lavender: linear-gradient(180deg, #f7f4ff, #f3eeff);
+  --shadow-sm: 0 1px 2px 0 rgba(11, 10, 17, 0.04);
+  --shadow-md: 0 8px 24px -18px rgba(11, 10, 17, 0.3);
+  --shadow-lg: 0 16px 40px -28px rgba(11, 10, 17, 0.35);
+  --shadow-xl: 0 24px 50px -30px rgba(11, 10, 17, 0.4);
+  --shadow-card: 0 16px 40px -30px rgba(11, 10, 17, 0.35);
+  --shadow-lavender: 0 10px 24px -12px rgba(104, 16, 254, 0.55);
+}
+.book-theme :is(h1, h2, h3, h4, h5, h6),
+.book-theme .font-jakarta,
+.book-theme .font-heading {
+  font-family: var(--font-inter), Inter, system-ui, sans-serif;
+  letter-spacing: -0.02em;
+}
+.book-theme :is(h1, h2) {
+  font-weight: 500;
+  letter-spacing: -0.03em;
+}
+.book-theme .hairline-glow::before {
+  display: none;
+}
+.book-theme .panel {
+  background: #ffffff;
+  border: 1px solid #e9e7ee;
+  box-shadow: 0 16px 40px -30px rgba(11, 10, 17, 0.35);
+}
+.book-theme .panel-hover:hover {
+  border-color: #c9b6ff;
+  box-shadow: 0 16px 40px -28px rgba(11, 10, 17, 0.35);
+}
+.book-theme .surface-raised {
+  border-color: #e9e7ee;
+  box-shadow: 0 24px 50px -30px rgba(11, 10, 17, 0.4);
+}
+.book-theme .btn-coss {
+  font-weight: 500;
+  border-radius: 9px;
+}
+.book-theme .btn-trail::after {
+  display: none;
+}

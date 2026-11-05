@@ -4,7 +4,7 @@
 import Link from "next/link";
 import { RiArrowRightUpLine } from "@remixicon/react";
 import { SERVICES } from "@/lib/landing/content";
-import { startingPrice, type LandingPrices } from "@/lib/landing/data";
+import { startingOnlinePrice, type LandingPrices } from "@/lib/landing/prices";
 import { cn } from "@/lib/utils";
 import { dollars } from "./format";
 import { Chip, Section } from "./primitives";
@@ -17,7 +17,7 @@ function fromPrice(prices: LandingPrices, key: "standard" | "deep" | "moveInOut"
       .filter((v): v is number => typeof v === "number" && v > 0);
     return monthly.length ? `from ${dollars(Math.min(...monthly))}/mo` : null;
   }
-  const v = startingPrice(prices, key);
+  const v = startingOnlinePrice(prices, key);
   return v ? `from ${dollars(v)}` : null;
 }
 

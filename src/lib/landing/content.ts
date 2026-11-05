@@ -35,7 +35,7 @@ export const HERO = {
   primaryCta: "Get my price",
   secondaryCta: "Hear Nova take a call",
   trust: "No card to see a price. A written checklist on every visit. Missed something? We come back within 48 hours.",
-  offer: "New customers: 15% off a standard clean, 25% off a deep clean.",
+  offer: "Book online: 15% off a standard clean, 25% off a deep clean.",
   exampleLabel: "Example with sample data",
 } as const;
 
@@ -47,11 +47,11 @@ export const QUOTE_STUDIO = {
   inputs: [
     { label: "ZIP", value: "20814" },
     { label: "Home", value: "1,000 – 1,500 sq ft" },
-    { label: "Condition", value: "Standard" },
+    { label: "Visit", value: "One time" },
     { label: "Extras", value: "Inside oven" },
   ],
   slots: ["Thu 9:00 AM", "Thu 1:00 PM", "Fri 9:00 AM"],
-  footnote: "Exact price. Shown before you pay.",
+  footnote: "Online discount applied. The exact total is shown before you pay.",
 } as const;
 
 /** The strip under the hero: requests flow into Nova, and Nova hands back a booked visit. */
@@ -127,7 +127,7 @@ export const HOW = {
   lead: "Every booking goes through the same five steps. Here is one, with sample details.",
   labels: { queued: "Queued", running: "Running", done: "Done", waiting: "Waiting on you" },
   steps: [
-    { id: "quote", title: "Quote", body: "Your ZIP, your home's size, and the type of clean set the price. Extras are listed line by line.", note: "Deep clean · 4 lines" },
+    { id: "quote", title: "Quote", body: "Your home's size and the type of clean set the price. Extras are listed line by line.", note: "Deep clean · 4 lines" },
     { id: "schedule", title: "Schedule", body: "Pick an open time. Reschedule later from your confirmation text.", note: "Thu 9:00 AM" },
     { id: "match", title: "Match", body: "A cleaner is matched by location, availability, and ratings.", note: "Maria R. assigned" },
     { id: "clean", title: "Clean", body: "Your cleaner works from the written checklist for your service.", note: "Checklist complete" },
@@ -159,20 +159,17 @@ export const NOVA = {
 export const QUOTE_REPORT = {
   id: "prices",
   headline: "Every price shows its math.",
-  lead: "These are the starting prices our booking system uses today. Pick a size and a clean. Two things are set when you book: your ZIP and your home's condition.",
+  lead: "These are the prices our website charges today. Pick a size and a clean. Your ZIP only checks that we serve your area; it does not change the price.",
   frameLabel: "Quote · Starting price",
   controls: { size: "Home size", service: "Type of clean", frequency: "How often", extras: "Extras" },
   kinds: [
     { id: "base", label: "Base rate", body: "Set by your home's size and the type of clean." },
     { id: "extra", label: "Extra", body: "Only what you add. Each one is listed." },
     { id: "plan", label: "Plan", body: "Monthly membership rate for recurring cleans." },
-    { id: "booking", label: "Set at booking", body: "Your ZIP and your home's condition. Shown before you pay." },
-    { id: "offer", label: "Offer", body: "New-customer discount, applied when you book." },
+    { id: "offer", label: "Online discount", body: "15% off standard, 25% off deep. Extras are not discounted." },
   ],
-  totalOnce: "Starting at",
+  totalOnce: "Your price",
   totalPlan: "Per month",
-  bookingLine: "Your ZIP and home condition",
-  bookingValue: "At booking",
   cta: "Get my exact price",
 } as const;
 
@@ -292,9 +289,9 @@ export const PRICING = {
       "Standard, deep, or move-in/out",
       "Written checklist on every visit",
       "48-hour re-clean if something is missed",
-      "New customers: 15% off standard, 25% off deep",
+      "15% off standard and 25% off deep, online",
     ],
-    note: "Your exact price depends on your ZIP and your home. You see it before you pay.",
+    note: "Prices include the online discount. You see the exact total before you pay.",
     cta: "Get my price",
   },
   plan: {
@@ -316,7 +313,7 @@ export const FAQ = {
   id: "faq",
   headline: "Frequently asked questions",
   items: [
-    { q: "How is my price set?", a: "Your home's size and the type of clean set the base price. Your ZIP code and your home's condition are added when you book. You see the exact total before you pay." },
+    { q: "How is my price set?", a: "Your home's size and the type of clean set the price, and any extras are listed line by line. Your ZIP code tells us you are in our area. You see the exact total before you pay." },
     { q: "Do I need to be home?", a: "No. Many customers leave a door code or a key. You get text updates about your visit." },
     { q: "Is Nova a person?", a: "No. Nova is an AI assistant, and it tells you so. It can price your home and book a time. If you ask for a person, our team follows up with you." },
     { q: "What if something is missed?", a: "Tell us within 48 hours and a cleaner comes back to re-clean those areas. There is no charge." },

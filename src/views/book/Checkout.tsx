@@ -947,7 +947,7 @@ export default function BookingCheckout() {
               Google Guaranteed sits immediately under the subtitle. */}
           <div className="text-center space-y-3">
             <h1 className="font-jakarta text-2xl md:text-3xl font-extrabold">
-              Review &amp; Reserve
+              Review and reserve.
             </h1>
             <p className="mx-auto max-w-xl text-sm leading-relaxed text-muted-foreground md:text-base">
               <span className="font-semibold text-foreground">
@@ -971,7 +971,7 @@ export default function BookingCheckout() {
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <RiSparklingLine className="w-4 h-4 text-primary" />
-                Booking Summary
+                Your booking
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">

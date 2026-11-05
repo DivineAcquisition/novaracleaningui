@@ -610,10 +610,10 @@ export default function BookingSuccess() {
     ? { bg: 'bg-success/10', icon: 'text-success', dot: 'bg-emerald-500', pill: 'bg-emerald-50 text-emerald-700 border-emerald-200', label: 'Confirmed' }
     : { bg: 'bg-amber-100', icon: 'text-amber-600', dot: 'bg-amber-500', pill: 'bg-amber-50 text-amber-700 border-amber-200', label: depositPending ? 'Payment pending' : 'Finalizing' };
   const heroTitle = depositPending
-    ? 'Deposit Not Received Yet'
+    ? 'Your deposit has not arrived yet.'
     : isConfirmed
-    ? (bookingData.membershipPlan !== 'none' ? 'Welcome to Glow!' : 'Booking Confirmed!')
-    : 'Locking In Your Booking…';
+    ? (bookingData.membershipPlan !== 'none' ? 'Welcome to Glow.' : 'Your clean is booked.')
+    : 'Confirming your booking…';
   const heroSubtitle = depositPending
     ? 'We haven\'t received your deposit yet — your booking isn\'t fully locked in until it\'s paid. Use your secure payment link below to finish up.'
     : isConfirmed

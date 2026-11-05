@@ -19,10 +19,12 @@ export function QuoteStudio({ baseCents, extraCents }: { baseCents: number; extr
   const shownStep = Math.min(step, steps.length - 1);
   const progress = done ? 100 : ((shownStep + 1) / (steps.length + 1)) * 100;
 
-  const lines = [
+  // Online bookings get 25% off a deep clean (src/lib/pricing.ts). Extras are not discounted.
+  const offerCents = Math.round(baseCents * 0.25);
+  const lines: Array<{ label: string; value: string; at: number; muted?: boolean }> = [
     { label: "Deep clean · 1,000 – 1,500 sq ft", value: dollars(baseCents), at: 1 },
     { label: "Inside oven", value: `+${dollars(extraCents)}`, at: 2 },
-    { label: "ZIP and home condition", value: "Set at booking", at: 0, muted: true },
+    { label: "Online discount, 25% off the clean", value: `−${dollars(offerCents)}`, at: 3 },
   ];
 
   return (
@@ -86,9 +88,9 @@ export function QuoteStudio({ baseCents, extraCents }: { baseCents: number; extr
         </ul>
 
         <div className="mt-2 flex items-end justify-between border-t border-ink pt-3">
-          <span className="text-[13px] text-ink-muted">Starting at</span>
+          <span className="text-[13px] text-ink-muted">{done ? "Total" : "Starting at"}</span>
           <span className="text-[30px] font-medium tracking-[-0.03em] tabular-nums text-ink">
-            {done || step >= 2 ? dollars(baseCents + extraCents) : dollars(baseCents)}
+            {done ? dollars(baseCents + extraCents - offerCents) : step >= 2 ? dollars(baseCents + extraCents) : dollars(baseCents)}
           </span>
         </div>
 

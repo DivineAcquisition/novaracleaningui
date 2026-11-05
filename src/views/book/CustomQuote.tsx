@@ -97,7 +97,7 @@ export default function CustomQuote() {
             <div className="mx-auto w-20 h-20 bg-success/10 rounded-full flex items-center justify-center mb-4 animate-in zoom-in duration-500">
               <RiCheckboxCircleLine className="w-12 h-12 text-success" />
             </div>
-            <CardTitle className="text-2xl md:text-4xl font-bold">Request Received!</CardTitle>
+            <CardTitle className="text-2xl md:text-4xl font-bold">Request received.</CardTitle>
             <CardDescription className="text-sm md:text-base">
               We'll contact you within 24 hours with a custom quote
             </CardDescription>
@@ -132,7 +132,7 @@ export default function CustomQuote() {
             <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
               <RiHomeLine className="w-8 h-8 text-primary" />
             </div>
-            <CardTitle className="text-xl md:text-3xl font-bold">Request a Custom Quote</CardTitle>
+            <CardTitle className="text-xl md:text-3xl font-bold">Request a custom quote.</CardTitle>
             <CardDescription className="text-sm">
               For homes over 5,000 sq ft, we provide personalized quotes
             </CardDescription>

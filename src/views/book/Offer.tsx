@@ -290,7 +290,7 @@ export default function BookingOffer() {
           <div className="container max-w-2xl mx-auto px-4 py-8 space-y-6">
             <Card className="border-2 border-primary/30">
               <CardContent className="pt-8 pb-8 text-center space-y-6">
-                <h1 className="text-2xl md:text-3xl font-bold font-jakarta">Custom Quote Required</h1>
+                <h1 className="text-2xl md:text-3xl font-bold font-jakarta">This home needs a custom quote.</h1>
                 <p className="text-muted-foreground">
                   Your home requires a customized quote to ensure accurate pricing.
                 </p>
@@ -338,7 +338,7 @@ export default function BookingOffer() {
             </Badge>
 
             <h1 className="font-jakarta text-3xl md:text-4xl lg:text-5xl font-extrabold leading-tight">
-              Choose a clean
+              Choose a clean.
             </h1>
 
             <p className="mx-auto max-w-xl text-sm leading-relaxed text-muted-foreground md:text-base">

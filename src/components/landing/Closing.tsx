@@ -4,7 +4,7 @@ import Link from "next/link";
 import { RiArrowDownSLine, RiArrowRightLine, RiPhoneLine } from "@remixicon/react";
 import { INBOUND_PHONE } from "@/config/brand-config";
 import { FAQ, FINAL_CTA, PRICING } from "@/lib/landing/content";
-import { startingPrice, type LandingPrices } from "@/lib/landing/data";
+import { startingOnlinePrice, type LandingPrices } from "@/lib/landing/prices";
 import { cn } from "@/lib/utils";
 import { PriceButton } from "./Chrome";
 import { dollars } from "./format";
@@ -21,7 +21,7 @@ function Includes({ items }: { items: readonly string[] }) {
 }
 
 export function Pricing({ prices }: { prices: LandingPrices }) {
-  const once = startingPrice(prices, "standard");
+  const once = startingOnlinePrice(prices, "standard");
   const monthly = prices.bands
     .map((b) => prices.membership[b.id]?.monthly)
     .filter((v): v is number => typeof v === "number" && v > 0);
