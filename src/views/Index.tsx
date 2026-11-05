@@ -18,7 +18,7 @@ import { Promises } from "@/components/landing/Promises";
 import { QuoteReport } from "@/components/landing/QuoteReport";
 import { QuoteStudio } from "@/components/landing/QuoteStudio";
 import { Services } from "@/components/landing/Services";
-import { Eyebrow, displayTitle, gutter, shell, subhead } from "@/components/landing/primitives";
+import { Eyebrow, gutter, shell, subhead } from "@/components/landing/primitives";
 import { HERO } from "@/lib/landing/content";
 import { type LandingData, startingPrice, visibleProof } from "@/lib/landing/data";
 import { cn } from "@/lib/utils";
@@ -43,8 +43,11 @@ export default function IndexPage({ data }: { data: LandingData }) {
             className="pointer-events-none absolute inset-x-0 top-0 h-[520px] bg-[radial-gradient(60%_60%_at_50%_0%,rgba(104,16,254,0.08),transparent_70%)]"
           />
           <div className="relative mx-auto max-w-3xl text-center">
-            <Eyebrow className="text-center">{HERO.eyebrow}</Eyebrow>
-            <h1 className={cn(displayTitle, "mx-auto")}>
+            <Eyebrow className="text-center">
+              <span className="sm:hidden">House cleaning · MD, DC &amp; VA</span>
+              <span className="hidden sm:inline">House cleaning in Maryland, DC &amp; Northern Virginia</span>
+            </Eyebrow>
+            <h1 className="mx-auto text-[2.05rem] font-bold leading-[1.08] tracking-[-0.03em] text-ink sm:text-5xl md:text-[3.9rem] md:leading-[1.04]">
               Stop Spending Your
               <br />
               <span className="bg-gradient-to-r from-[#6810FE] to-[#9A6BFF] bg-clip-text text-transparent">One Day Off</span>{" "}
@@ -56,7 +59,14 @@ export default function IndexPage({ data }: { data: LandingData }) {
             <div className="mx-auto mt-8 flex max-w-xl justify-center">
               <HeroBookingCard centered />
             </div>
-            <p className="mx-auto mt-4 max-w-xl text-[14px] leading-relaxed text-ink-muted">{HERO.trust}</p>
+            <ul className="mx-auto mt-5 flex max-w-xl flex-wrap justify-center gap-2" aria-label="Cleans you can book">
+              {["Standard clean", "Deep clean", "Move-in / move-out", "Recurring", "Airbnb turnovers"].map((s) => (
+                <li key={s} className="rounded-full border border-line bg-white px-3 py-1 text-[13px] text-ink">
+                  {s}
+                </li>
+              ))}
+            </ul>
+            <p className="mx-auto mt-5 max-w-xl text-[14px] leading-relaxed text-ink-muted">{HERO.trust}</p>
             <p className="mt-3 text-[14px] text-ink-muted">
               Rather talk?{" "}
               <a href="#nova" className="font-medium text-ink underline-offset-4 hover:underline">
