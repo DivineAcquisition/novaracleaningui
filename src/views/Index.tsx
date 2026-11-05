@@ -1,683 +1,208 @@
-"use client";
+// Public landing page (try.novaracleaning.com).
+//
+// Server component. Numbers come from getLandingData() (src/lib/landing/data.ts):
+// prices from the active pricing config, proof numbers from completed jobs and
+// post-visit ratings, shown only once they clear their thresholds.
+// Interactive pieces are small client islands under src/components/landing.
 
-import {
-  RiArrowRightLine,
-  RiCalendarCheckLine,
-  RiCheckboxCircleLine,
-  RiFlashlightLine,
-  RiGroupLine,
-  RiMapPinLine,
-  RiPhoneLine,
-  RiRepeatLine,
-  RiShieldLine,
-  RiSparklingLine,
-  RiStarLine,
-  RiTimeLine,
-  RiTrophyLine
-} from "@remixicon/react";
-import { useState } from "react";
-import { SEO } from "@/components/SEO";
-import { Button } from "@/components/ui/button";
-import { INBOUND_PHONE } from "@/config/brand-config";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useAuth } from "@/contexts/AuthContext";
-import { useBooking } from "@/contexts/BookingContext";
-
-import { supabase } from "@/integrations/supabase/client";
-import { formatPhoneNumber } from "@/lib/input-formatters";
+import Link from "next/link";
+import { RiPhoneLine, RiSparklingLine } from "@remixicon/react";
 import { BookingFooter } from "@/components/booking/BookingFooter";
-import { AnimatedShinyText } from "@/components/magicui/animated-shiny-text";
-import { BlurFade } from "@/components/magicui/blur-fade";
-import { BorderBeam } from "@/components/magicui/border-beam";
-import { MagicCard } from "@/components/magicui/magic-card";
-import { Marquee } from "@/components/magicui/marquee";
-import { NumberTicker } from "@/components/magicui/number-ticker";
-import { Particles } from "@/components/magicui/particles";
-import { ShineBorder } from "@/components/magicui/shine-border";
-import { BRAND } from "@/lib/brand";
-const logo = "/novara-logo.png";
+import { AfterYouBook } from "@/components/landing/AfterYouBook";
+import { dollars } from "@/components/landing/format";
+import { HeroBookingCard } from "@/components/landing/HeroBookingCard";
+import { HostsSection } from "@/components/landing/HostsSection";
+import { NovaVoice } from "@/components/landing/NovaVoice";
+import { PriceExplorer } from "@/components/landing/PriceExplorer";
+import { Faq, FinalCta, Guarantee, Plans, ProofStrip, faqJsonLd } from "@/components/landing/Sections";
+import { StickyMobileBar } from "@/components/landing/StickyMobileBar";
+import { WhatsIncluded } from "@/components/landing/WhatsIncluded";
+import { INBOUND_PHONE } from "@/config/brand-config";
+import { startingPrice, type LandingData } from "@/lib/landing/data";
 
-const TRUST_STATS = [
-  { label: "Homes Cleaned", value: 1200, suffix: "+", icon: RiCheckboxCircleLine },
-  { label: "5-Star Reviews", value: 500, suffix: "+", icon: RiStarLine },
-  { label: "Repeat Customers", value: 92, suffix: "%", icon: RiGroupLine },
-  { label: "On-Time Rate", value: 99, suffix: "%", icon: RiTimeLine },
-];
+function SectionHeading({ eyebrow, title, body, id }: { eyebrow: string; title: string; body?: string; id: string }) {
+  return (
+    <div className="mb-8 max-w-2xl space-y-2">
+      <p className="text-xs font-semibold uppercase tracking-wider text-primary">{eyebrow}</p>
+      <h2 id={id} className="font-heading text-3xl font-bold leading-tight text-foreground md:text-4xl [text-wrap:balance]">
+        {title}
+      </h2>
+      {body && <p className="text-muted-foreground">{body}</p>}
+    </div>
+  );
+}
 
-const HOW_IT_WORKS = [
-  {
-    step: "1",
-    title: "Enter Your ZIP",
-    description: "Check if we service your area and see instant pricing.",
-    icon: RiMapPinLine,
-  },
-  {
-    step: "2",
-    title: "Choose Your Service",
-    description: "Select from deep clean, standard, or recurring plans.",
-    icon: RiCalendarCheckLine,
-  },
-  {
-    step: "3",
-    title: "We Show Up",
-    description: "Our vetted, insured team arrives on time. Every time.",
-    icon: RiFlashlightLine,
-  },
-];
-
-const TESTIMONIALS = [
-  {
-    name: "Sarah M.",
-    location: "Bethesda, MD",
-    text: "Novara is the first cleaning service that actually shows up when they say they will. My home has never looked better.",
-    rating: 5,
-  },
-  {
-    name: "James R.",
-    location: "Rockville, MD",
-    text: "I signed up for the membership and it's been a game-changer. Same team every time, and they know exactly how I like things.",
-    rating: 5,
-  },
-  {
-    name: "Michelle T.",
-    location: "Silver Spring, MD",
-    text: "The deep clean exceeded my expectations. Every corner was spotless. Worth every penny.",
-    rating: 5,
-  },
-];
-
-const Index = () => {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const { signOut } = useAuth();
-  const { updateBookingData } = useBooking();
-  const fbclid = searchParams.get('fbclid');
-  const [zipCode, setZipCode] = useState("");
-  const [isValidating, setIsValidating] = useState(false);
-  const [zipValidated, setZipValidated] = useState(false);
-  const [cityState, setCityState] = useState("");
-
-  // Contact form state
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const handleZipSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (zipCode.length !== 5) return;
-    setIsValidating(true);
-
-    const { data: coverage } = await supabase
-      .from("service_coverage_zones")
-      .select("city, state")
-      .eq("zip_code", zipCode)
-      .eq("is_active", true)
-      .single();
-    if (coverage) {
-      setCityState(`${coverage.city}, ${coverage.state}`);
-    } else {
-      setCityState("your area");
-    }
-    setIsValidating(false);
-    setZipValidated(true);
-    updateBookingData({ zipCode });
-  };
-
-  const handleContactSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!firstName || !lastName || !email || !phone) return;
-    setIsSubmitting(true);
-    const formattedPhone = phone.replace(/\D/g, "");
-
-    updateBookingData({
-      firstName,
-      lastName,
-      email,
-      phone: formattedPhone,
-    });
-
-    // Send lead capture webhook with client-side duplicate guard
-    const capturedEmails: string[] = JSON.parse(localStorage.getItem('lead_captured_emails') || '[]');
-    if (!capturedEmails.includes(email.toLowerCase())) {
-      supabase.functions
-        .invoke("send-lead-capture-webhook", {
-          body: {
-            firstName,
-            lastName,
-            email,
-            phone: formattedPhone,
-            zipCode,
-            city: cityState.split(", ")[0] || "",
-            state: cityState.split(", ")[1] || "",
-            source: "Website",
-            landingPage: "/",
-            fbclid: fbclid || undefined,
-          },
-        })
-        .then(() => {
-          const updated = [...capturedEmails, email.toLowerCase()];
-          localStorage.setItem('lead_captured_emails', JSON.stringify(updated));
-        })
-        .catch((err) => console.error("Lead webhook error:", err));
-    }
-    router.push("/book/sqft");
-  };
-
-  const handleChangeZip = () => {
-    setZipValidated(false);
-    setZipCode("");
-    setFirstName("");
-    setLastName("");
-    setEmail("");
-    setPhone("");
-  };
-
-  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const formatted = formatPhoneNumber(e.target.value);
-    setPhone(formatted);
-  };
+export default function IndexPage({ data }: { data: LandingData }) {
+  const { prices, stats } = data;
+  const standardFrom = startingPrice(prices, "standard");
+  const deepFrom = startingPrice(prices, "deep");
+  const sampleBand = prices.bands.find((b) => b.id === "1000_1500") || prices.bands[0];
+  const sampleDeep = sampleBand ? prices.base[sampleBand.id]?.deep || deepFrom : deepFrom;
+  const oven = prices.addOns.find((a) => a.id === "oven");
 
   return (
-    <div className="min-h-screen bg-background">
-      <SEO
-        title="Professional Home Cleaning in Maryland & DMV"
-        description="Book top-rated home cleaning in the DMV area. Google Guaranteed cleaners, $99 first clean, transparent pricing, and 100% satisfaction guarantee. Book online in 60 seconds."
-        canonical="https://novaracleaning.com"
+    <div className="flex min-h-screen flex-col bg-background">
+      <script
+        type="application/ld+json"
+        // eslint-disable-next-line react/no-danger
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd()) }}
       />
-      {/* Navigation */}
-      <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-xl hairline-glow">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img
-              src={logo}
-              alt="Novara Cleaning"
-              className="w-9 h-9 rounded-xl"
-            />
-            <span className="text-lg font-bold tracking-tight font-heading">
+
+      {/* Offer bar */}
+      <div className="bg-brand-950 px-4 py-2 text-center text-sm text-white">
+        <RiSparklingLine className="mr-1.5 inline h-4 w-4 -translate-y-px text-brand-300" aria-hidden="true" />
+        New customers: <strong>15% off</strong> a standard clean, <strong>25% off</strong> a deep clean.
+      </div>
+
+      {/* Header */}
+      <header className="sticky top-0 z-50 border-b border-border/60 bg-background/90 backdrop-blur">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
+          <Link href="/" className="flex items-center gap-2.5" aria-label="Novara Cleaning home">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/novara-logo.png" alt="" width={36} height={36} className="h-9 w-9 rounded-xl" />
+            <span className="font-heading text-lg font-bold tracking-tight text-foreground">
               Novara<span className="text-primary">Cleaning</span>
             </span>
-          </div>
-          <div className="flex items-center gap-3">
+          </Link>
+          <nav className="flex items-center gap-1 sm:gap-4" aria-label="Main">
+            <a href="#pricing" className="hidden px-2 py-2 text-sm text-muted-foreground hover:text-foreground md:inline">
+              Pricing
+            </a>
+            <a href="#included" className="hidden px-2 py-2 text-sm text-muted-foreground hover:text-foreground md:inline">
+              What&rsquo;s included
+            </a>
+            <Link href="/str" className="hidden px-2 py-2 text-sm text-muted-foreground hover:text-foreground md:inline">
+              Airbnb hosts
+            </Link>
             <a
               href={INBOUND_PHONE.tel}
-              className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              className="hidden items-center gap-1.5 px-2 py-2 text-sm font-medium text-foreground sm:inline-flex"
             >
-              <RiPhoneLine className="w-4 h-4" />
+              <RiPhoneLine className="h-4 w-4 text-primary" aria-hidden="true" />
               {INBOUND_PHONE.display}
             </a>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-9"
-              onClick={() => router.push("/auth")}
+            <Link
+              href="/auth"
+              className="inline-flex h-9 items-center rounded-lg border border-border px-3 text-sm font-medium text-foreground hover:border-primary"
             >
-              Sign In
-            </Button>
-          </div>
+              Sign in
+            </Link>
+          </nav>
         </div>
       </header>
 
-      {/* Hero Section */}
-      <section className="relative overflow-hidden">
-        <Particles
-          className="absolute inset-0 z-0"
-          quantity={48}
-          color={BRAND.primary}
-          ease={80}
-          size={0.5}
-        />
-        <div className="absolute inset-0 bg-gradient-to-b from-primary/[0.03] via-background to-background" />
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-primary/[0.04] rounded-full blur-3xl" />
-
-        <div className="relative container mx-auto px-4 pt-16 pb-20 md:pt-24 md:pb-28">
-          <div className="max-w-3xl mx-auto text-center space-y-8">
-            <BlurFade delay={0.04} inView>
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-primary/20 bg-primary/[0.04] backdrop-blur-sm">
-                <RiShieldLine className="w-4 h-4 text-primary" />
-                <AnimatedShinyText className="mx-0 max-w-none text-sm font-medium text-primary">
-                  Google Guaranteed & Fully Insured
-                </AnimatedShinyText>
-              </div>
-            </BlurFade>
-
-            <BlurFade delay={0.1} inView>
-              <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight font-heading leading-[1.1]">
-                Stop Spending Your
-                <br />
-                <span className="text-gradient">
-                  One Day Off
-                </span>{" "}
-                Cleaning.
-              </h1>
-            </BlurFade>
-
-            <p className="mx-auto max-w-2xl text-base leading-relaxed text-muted-foreground md:text-lg">
-              <span className="font-heading text-xl font-bold text-foreground md:text-2xl">
-                <span className="text-gradient">Standard 15% off. Deep 25% off.</span>
-              </span>{" "}
-              Enter your ZIP code and we will show the price for your home. Most bookings take a 50% deposit.
-            </p>
-
-            {/* Booking Card */}
-            <Card className="relative max-w-md mx-auto overflow-hidden panel">
-              <ShineBorder borderWidth={1.5} duration={14} />
-              <CardContent className="relative z-10 p-6 md:p-8">
-                {/* ZIP Code Form */}
-                <div
-                  className={`transition-all duration-500 ease-out ${
-                    zipValidated
-                      ? "h-0 opacity-0 overflow-hidden"
-                      : "h-auto opacity-100"
-                  }`}
-                >
-                  <form onSubmit={handleZipSubmit} className="space-y-4">
-                    <div className="space-y-2">
-                      <label
-                        htmlFor="zipCode"
-                        className="text-sm font-semibold text-left block"
-                      >
-                        Enter Your ZIP Code
-                      </label>
-                      <Input
-                        id="zipCode"
-                        type="text"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        maxLength={5}
-                        placeholder="e.g. 20814"
-                        value={zipCode}
-                        onChange={(e) =>
-                          setZipCode(e.target.value.replace(/\D/g, ""))
-                        }
-                        className="h-14 text-lg text-center bg-background/50 border-border/60"
-                        autoFocus
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Check availability and see instant pricing
-                      </p>
-                    </div>
-
-                    <Button
-                      type="submit"
-                      size="lg"
-                      disabled={zipCode.length !== 5 || isValidating}
-                      className="w-full h-13 text-base font-semibold"
-                    >
-                      {isValidating ? "Checking..." : "Get My Price"}
-                      <RiArrowRightLine className="w-5 h-5 ml-2" />
-                    </Button>
-                  </form>
+      <main>
+        {/* Hero */}
+        <section className="relative overflow-hidden border-b border-border/60">
+          <div
+            className="pointer-events-none absolute inset-0 [background-image:radial-gradient(rgba(104,16,254,0.14)_1px,transparent_1.4px)] [background-size:18px_18px] [mask-image:radial-gradient(70%_80%_at_30%_30%,#000_20%,transparent_75%)]"
+            aria-hidden="true"
+          />
+          <div className="relative mx-auto grid max-w-6xl gap-x-10 gap-y-6 px-4 py-10 md:py-20 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
+            <h1 className="font-heading text-[2.35rem] font-extrabold leading-[1.08] tracking-tight text-foreground md:text-5xl lg:col-start-1 lg:row-start-1 lg:self-end lg:text-6xl [text-wrap:balance]">
+              A spotless home, with your exact price before you book.
+            </h1>
+            <div className="lg:col-start-2 lg:row-span-2 lg:row-start-1">
+              <HeroBookingCard />
+            </div>
+            <div className="space-y-6 lg:col-start-1 lg:row-start-2 lg:self-start">
+              <p className="max-w-xl text-lg leading-relaxed text-muted-foreground">
+                House cleaning across Maryland, DC and Northern Virginia. Every visit follows a written checklist, and
+                if anything&rsquo;s missed we re-clean it free within 48 hours.
+              </p>
+              <dl className="flex flex-wrap gap-x-8 gap-y-3">
+                <div>
+                  <dt className="text-xs text-muted-foreground">Standard clean</dt>
+                  <dd className="font-heading text-2xl font-bold text-foreground">from {dollars(standardFrom)}</dd>
                 </div>
-
-                {/* Contact Details Form */}
-                <div
-                  className={`transition-all duration-500 ease-out ${
-                    zipValidated
-                      ? "opacity-100 translate-y-0"
-                      : "opacity-0 translate-y-4 h-0 overflow-hidden"
-                  }`}
-                >
-                  <form
-                    onSubmit={handleContactSubmit}
-                    className="space-y-4"
-                  >
-                    {/* Success Message */}
-                    <div className="flex items-start gap-3 p-3 bg-primary/[0.06] rounded-xl border border-primary/10">
-                      <RiCheckboxCircleLine className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-                      <div className="text-left">
-                        <p className="font-semibold text-sm text-foreground">
-                          We service {cityState}!
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Enter your details to see your personalized quote
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <label
-                          htmlFor="firstName"
-                          className="text-xs font-semibold text-left block"
-                        >
-                          First Name
-                        </label>
-                        <Input
-                          id="firstName"
-                          type="text"
-                          placeholder="John"
-                          value={firstName}
-                          onChange={(e) => setFirstName(e.target.value)}
-                          className="h-11 bg-background/50"
-                          required
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label
-                          htmlFor="lastName"
-                          className="text-xs font-semibold text-left block"
-                        >
-                          Last Name
-                        </label>
-                        <Input
-                          id="lastName"
-                          type="text"
-                          placeholder="Smith"
-                          value={lastName}
-                          onChange={(e) => setLastName(e.target.value)}
-                          className="h-11 bg-background/50"
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label
-                        htmlFor="email"
-                        className="text-xs font-semibold text-left block"
-                      >
-                        Email
-                      </label>
-                      <Input
-                        id="email"
-                        type="email"
-                        placeholder="john@example.com"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        className="h-11 bg-background/50"
-                        required
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label
-                        htmlFor="phone"
-                        className="text-xs font-semibold text-left block"
-                      >
-                        Phone Number
-                      </label>
-                      <Input
-                        id="phone"
-                        type="tel"
-                        placeholder="(301) 555-0123"
-                        value={phone}
-                        onChange={handlePhoneChange}
-                        className="h-11 bg-background/50"
-                        required
-                      />
-                    </div>
-
-                    <Button
-                      type="submit"
-                      size="lg"
-                      disabled={
-                        !firstName ||
-                        !lastName ||
-                        !email ||
-                        phone.replace(/\D/g, "").length !== 10 ||
-                        isSubmitting
-                      }
-                      className="w-full h-13 text-base font-semibold"
-                    >
-                      {isSubmitting ? "Processing..." : "See My Quote"}
-                      <RiArrowRightLine className="w-5 h-5 ml-2" />
-                    </Button>
-
-                    <button
-                      type="button"
-                      onClick={handleChangeZip}
-                      className="text-xs text-primary hover:text-primary/80 font-medium transition-colors"
-                    >
-                      Change ZIP code ({zipCode})
-                    </button>
-                  </form>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Deep clean</dt>
+                  <dd className="font-heading text-2xl font-bold text-foreground">from {dollars(deepFrom)}</dd>
                 </div>
-              </CardContent>
-            </Card>
-
-            {/* Sub-text */}
-            <p className="text-xs text-muted-foreground">
-              No credit card required to see pricing. Cancel anytime.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* Social Proof Stats */}
-      <section className="border-y border-border/40 bg-muted/30">
-        <div className="container mx-auto px-4 py-10 md:py-14">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8">
-            {TRUST_STATS.map((stat, i) => (
-              <BlurFade key={stat.label} delay={0.04 * i} inView>
-                <div className="text-center space-y-2">
-                  <stat.icon className="w-6 h-6 text-primary mx-auto" />
-                  <p className="text-2xl md:text-3xl font-extrabold font-heading text-foreground">
-                    <NumberTicker value={stat.value} />
-                    {stat.suffix}
-                  </p>
-                  <p className="text-sm text-muted-foreground">{stat.label}</p>
-                </div>
-              </BlurFade>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* How It Works */}
-      <section className="container mx-auto px-4 py-16 md:py-24">
-        <div className="max-w-3xl mx-auto">
-          <div className="text-center mb-12 md:mb-16">
-            <Badge
-              variant="secondary"
-              className="mb-4 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider"
-            >
-              How It Works
-            </Badge>
-            <h2 className="text-3xl md:text-4xl font-bold font-heading">
-              Book in Under 2 Minutes
-            </h2>
-            <p className="text-muted-foreground mt-3 text-lg">
-              Simple, transparent, no-surprise pricing.
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-6 md:gap-8">
-            {HOW_IT_WORKS.map((item, i) => (
-              <BlurFade key={item.step} delay={0.08 * i} inView>
-                <Card className="relative overflow-hidden panel-hover group">
-                  <MagicCard className="rounded-2xl">
-                    <CardContent className="relative z-10 p-6 text-center space-y-4">
-                      <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/[0.08] group-hover:bg-primary/[0.12] transition-colors">
-                        <item.icon className="w-7 h-7 text-primary" />
-                      </div>
-                      <div className="space-y-2">
-                        <p className="text-xs font-bold text-primary uppercase tracking-wider">
-                          Step {item.step}
-                        </p>
-                        <h3 className="text-lg font-bold font-heading">
-                          {item.title}
-                        </h3>
-                        <p className="text-sm text-muted-foreground leading-relaxed">
-                          {item.description}
-                        </p>
-                      </div>
-                    </CardContent>
-                  </MagicCard>
-                </Card>
-              </BlurFade>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Why Novara */}
-      <section className="bg-muted/30 border-y border-border/40">
-        <div className="container mx-auto px-4 py-16 md:py-24">
-          <div className="max-w-3xl mx-auto">
-            <div className="text-center mb-12">
-              <Badge
-                variant="secondary"
-                className="mb-4 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider"
-              >
-                Why Novara
-              </Badge>
-              <h2 className="text-3xl md:text-4xl font-bold font-heading">
-                The Premium Standard
-              </h2>
-              <p className="text-muted-foreground mt-3 text-lg">
-                What sets us apart from every other cleaning service.
+              </dl>
+              <p className="text-sm text-muted-foreground">
+                Rather talk?{" "}
+                <a href={INBOUND_PHONE.tel} className="font-semibold text-foreground underline-offset-2 hover:underline">
+                  Call {INBOUND_PHONE.display}
+                </a>
+                . Nova, our AI assistant, answers 24/7.
               </p>
             </div>
-
-            <div className="grid sm:grid-cols-2 gap-4 md:gap-5">
-              {[
-                {
-                  icon: RiShieldLine,
-                  title: "Fully Insured & Bonded",
-                  description:
-                    "Every team is background-checked, insured, and bonded for your peace of mind.",
-                },
-                {
-                  icon: RiTimeLine,
-                  title: "Always On Time",
-                  description:
-                    "99% on-time arrival rate. If we're late, your next clean is on us.",
-                },
-                {
-                  icon: RiSparklingLine,
-                  title: "48-Hour Re-Clean Guarantee",
-                  description:
-                    "Not satisfied? We'll come back within 48 hours and re-clean for free.",
-                },
-                {
-                  icon: RiTrophyLine,
-                  title: "Google Guaranteed",
-                  description:
-                    "Backed by Google's $2,000 guarantee. Your home is in trusted hands.",
-                },
-                {
-                  icon: RiGroupLine,
-                  title: "Same Team Every Time",
-                  description:
-                    "Members get the same trusted cleaning team for every visit.",
-                },
-                {
-                  icon: RiCalendarCheckLine,
-                  title: "Flexible Scheduling",
-                  description:
-                    "Book, reschedule, or cancel anytime. No long-term contracts.",
-                },
-              ].map((feature) => (
-                <Card
-                  key={feature.title}
-                  className="border border-border/50 bg-card/80 backdrop-blur-sm hover:border-primary/20 transition-all duration-300"
-                >
-                  <CardContent className="p-5 flex gap-4">
-                    <div className="flex-shrink-0">
-                      <div className="w-10 h-10 rounded-xl bg-primary/[0.08] flex items-center justify-center">
-                        <feature.icon className="w-5 h-5 text-primary" />
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      <h3 className="font-semibold text-sm">{feature.title}</h3>
-                      <p className="text-xs text-muted-foreground leading-relaxed">
-                        {feature.description}
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
           </div>
+        </section>
+
+        <div className="mx-auto max-w-6xl space-y-20 px-4 py-14 md:space-y-28 md:py-20">
+          <ProofStrip stats={stats} />
+
+          <section id="pricing" aria-labelledby="pricing-h" className="scroll-mt-24">
+            <SectionHeading
+              id="pricing-h"
+              eyebrow="Pricing"
+              title="See what your clean costs, line by line."
+              body="These are the starting prices our booking system uses. Pick your home size and type of clean."
+            />
+            <PriceExplorer prices={prices} />
+          </section>
+
+          <section aria-labelledby="nova-h">
+            <SectionHeading
+              id="nova-h"
+              eyebrow="Answered day and night"
+              title="Call any time. Nova picks up."
+              body="Nova is our AI assistant. It quotes your home, answers questions about what's included, and books your visit, even at 11 PM."
+            />
+            {sampleBand && (
+              <NovaVoice
+                deepStartingPrice={dollars(sampleDeep)}
+                bandLabel={sampleBand.label}
+                ovenPrice={oven ? dollars(oven.cents) : null}
+              />
+            )}
+          </section>
+
+          <section aria-labelledby="after-h" className="grid gap-10 md:grid-cols-[0.9fr_1.1fr]">
+            <SectionHeading
+              id="after-h"
+              eyebrow="How it works"
+              title="What happens after you book."
+              body="Pricing, scheduling and cleaner matching run automatically, so you're booked in minutes and always know what's next."
+            />
+            <AfterYouBook />
+          </section>
+
+          <section id="included" aria-labelledby="included-h" className="scroll-mt-24">
+            <SectionHeading
+              id="included-h"
+              eyebrow="What's included"
+              title="The checklist your cleaner works from."
+            />
+            <WhatsIncluded />
+          </section>
+
+          <section aria-label="Airbnb and short-term rental hosts">
+            <HostsSection />
+          </section>
+
+          <section aria-labelledby="plans-h">
+            <SectionHeading id="plans-h" eyebrow="Plans" title="Book once, or keep it clean every two weeks." />
+            <Plans prices={prices} />
+          </section>
+
+          <section aria-label="Re-clean guarantee">
+            <Guarantee />
+          </section>
+
+          <section aria-labelledby="faq-h" className="grid gap-8 md:grid-cols-[0.8fr_1.2fr]">
+            <SectionHeading id="faq-h" eyebrow="Questions" title="Good to know before you book." />
+            <Faq />
+          </section>
+
+          <FinalCta standardFrom={standardFrom} />
         </div>
-      </section>
+      </main>
 
-      {/* Testimonials */}
-      <section className="container mx-auto px-4 py-16 md:py-24">
-        <div className="max-w-3xl mx-auto">
-          <div className="text-center mb-12">
-            <Badge
-              variant="secondary"
-              className="mb-4 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider"
-            >
-              Testimonials
-            </Badge>
-            <h2 className="text-3xl md:text-4xl font-bold font-heading">
-              Loved by Homeowners
-            </h2>
-          </div>
-
-          <div className="relative overflow-hidden">
-            <Marquee pauseOnHover className="[--duration:42s]">
-              {TESTIMONIALS.map((testimonial) => (
-                <Card
-                  key={testimonial.name}
-                  className="w-[280px] shrink-0"
-                >
-                  <CardContent className="p-5 space-y-4">
-                    <div className="flex gap-0.5">
-                      {Array.from({ length: testimonial.rating }).map((_, i) => (
-                        <RiStarLine
-                          key={i}
-                          className="w-4 h-4 fill-amber-400 text-amber-400"
-                        />
-                      ))}
-                    </div>
-                    <p className="text-sm text-muted-foreground leading-relaxed italic">
-                      "{testimonial.text}"
-                    </p>
-                    <div>
-                      <p className="text-sm font-semibold">{testimonial.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {testimonial.location}
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </Marquee>
-          </div>
-        </div>
-      </section>
-
-      {/* CTA Section */}
-      <section className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.06] to-accent/[0.04]" />
-        <div className="relative container mx-auto px-4 py-16 md:py-24">
-          <div className="relative max-w-2xl mx-auto overflow-hidden rounded-3xl panel p-10 sm:p-12 text-center space-y-6">
-            <BorderBeam size={120} duration={8} />
-            <h2 className="text-3xl md:text-4xl font-bold font-heading">
-              Ready for a Spotless Home?
-            </h2>
-            <p className="text-lg text-muted-foreground">
-              Join 1,200+ homeowners who trust Novara for their cleaning needs.
-              Book your first clean today.
-            </p>
-            <Button
-              size="lg"
-              className="h-14 px-10 text-base font-semibold"
-              onClick={() => {
-                window.scrollTo({ top: 0, behavior: "smooth" });
-              }}
-            >
-              Book Your Clean
-              <RiArrowRightLine className="w-5 h-5 ml-2" />
-            </Button>
-            <p className="text-xs text-muted-foreground">
-              Pay 50% deposit on total to book. No hidden fees.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <BookingFooter />
+      <BookingFooter clearMobileBar />
+      <StickyMobileBar />
     </div>
   );
-};
-
-export default Index;
+}

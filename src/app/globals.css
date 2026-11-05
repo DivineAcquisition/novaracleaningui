@@ -743,3 +743,13 @@
     animation: none !important;
   }
 }
+
+/* Landing: light travelling down the hosts turnover flow. */
+@keyframes landing-beam {
+  from { transform: translateY(-4rem); }
+  to { transform: translateY(28rem); }
+}
+.landing-beam { animation: landing-beam 3.2s linear infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .landing-beam { animation: none; display: none; }
+}
