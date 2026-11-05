@@ -234,12 +234,12 @@ export default function Account() {
   const getStatusConfig = (status: string) => {
     const configs: Record<string, { color: string; bg: string; label: string; dot: string }> = {
       confirmed: { color: "text-emerald-700 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800", label: "Confirmed", dot: "bg-emerald-500" },
-      pending_payment: { color: "text-amber-700 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800", label: "Pending Payment", dot: "bg-amber-500" },
+      pending_payment: { color: "text-amber-700 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800", label: "Pending payment", dot: "bg-amber-500" },
       // pending_details — payment cleared but the home-detail step was
       // skipped. The booking is NOT confirmed yet (no dispatch, no
       // confirmation email). Surface it just like pending_payment so the
       // customer is nudged back into /book/details to finish the job.
-      pending_details: { color: "text-amber-700 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800", label: "Details Needed", dot: "bg-amber-500" },
+      pending_details: { color: "text-amber-700 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800", label: "Details needed", dot: "bg-amber-500" },
       cancelled: { color: "text-red-600 dark:text-red-400", bg: "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800", label: "Cancelled", dot: "bg-red-500" },
       completed: { color: "text-primary", bg: "bg-primary/5 border-primary/20", label: "Completed", dot: "bg-primary" },
     };
@@ -269,7 +269,7 @@ export default function Account() {
   );
   // Surface bookings that paid but never finished the home-detail step
   // (pending_details) as well as bookings that never finished payment
-  // (pending_payment). The dashboard "Complete Your Booking" hero turns
+  // (pending_payment). The dashboard "Complete your booking" hero turns
   // into a one-tap path back into /book/details when the customer has
   // already paid but skipped the property questionnaire.
   const incompleteBookings = bookings
@@ -300,7 +300,7 @@ export default function Account() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-5 md:space-y-6">
-      <SEO title="My Account" description="Manage your bookings, membership credits, and account settings. View upcoming and past cleanings." noindex />
+      <SEO title="My account" description="Manage your bookings, membership credits, and account settings. View upcoming and past cleanings." noindex />
       <Panel className="p-5 md:p-6">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 md:gap-4 min-w-0">
@@ -552,7 +552,7 @@ export default function Account() {
                 <Button variant="outline" size="sm" className="justify-start text-xs h-10 rounded-lg"
                   onClick={handleManageSubscription}>
                   <RiBankCardLine className="w-4 h-4 mr-2 text-primary" />
-                  {subscription?.subscribed ? "Billing & Card" : "Payment Method"}
+                  {subscription?.subscribed ? "Billing & Card" : "Payment method"}
                 </Button>
                 <Button variant="outline" size="sm" className="justify-start text-xs h-10 rounded-lg"
                   onClick={handleChangePassword} disabled={isResettingPassword}>
@@ -695,7 +695,7 @@ export default function Account() {
           open={ratingDialogOpen}
           onOpenChange={setRatingDialogOpen}
           bookingId={ratingBooking.id}
-          cleanerName="Your Cleaner"
+          cleanerName="Your cleaner"
           onRatingSubmitted={handleRatingSubmitted}
         />
       )}

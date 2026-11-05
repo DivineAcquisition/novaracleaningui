@@ -727,7 +727,7 @@ export default function MemberBooking() {
               />
               <Card className="shadow-md">
                 <CardHeader>
-                  <CardTitle className="text-base">Special Instructions</CardTitle>
+                  <CardTitle className="text-base">Special instructions</CardTitle>
                   <CardDescription>Access codes, pets, areas to focus on</CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -824,7 +824,7 @@ export default function MemberBooking() {
                     <>
                       <Separator />
                       <div className="rounded-xl bg-muted/40 p-3">
-                        <p className="text-[11px] font-medium text-muted-foreground mb-1 uppercase tracking-wider">Special Instructions</p>
+                        <p className="text-[11px] font-medium text-muted-foreground mb-1 uppercase tracking-wider">Special instructions</p>
                         <p className="text-sm">{specialInstructions}</p>
                       </div>
                     </>

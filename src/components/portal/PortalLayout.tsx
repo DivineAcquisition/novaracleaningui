@@ -31,7 +31,9 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
       if (!(await isStaffCustomerEmail(user.email))) return;
       if (cancelled) return;
       setStaffBlocked(true);
-      toast.message("Staff accounts use the admin workspace, not the customer portal.");
+      toast.message(
+        "Staff accounts use the admin workspace, not the customer portal.",
+      );
       await signOut();
       window.location.assign(ADMIN_AUTH_URL);
     })();
@@ -57,8 +59,18 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
   };
 
   const navItems = [
-    { title: "Dashboard", url: "/account", icon: RiDashboardLine, description: "Bookings · credits" },
-    { title: "Membership", url: "/membership", icon: RiVipCrownLine, description: "Plans · pause · resume" },
+    {
+      title: "Dashboard",
+      url: "/account",
+      icon: RiDashboardLine,
+      description: "Bookings · credits",
+    },
+    {
+      title: "Membership",
+      url: "/membership",
+      icon: RiVipCrownLine,
+      description: "Plans · pause · resume",
+    },
     ...(hasCredits && credits
       ? [
           {
@@ -70,35 +82,47 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
           },
         ]
       : []),
-    { title: "Settings", url: "/account#settings", icon: RiSettings3Line, description: "Password · billing" },
+    {
+      title: "Settings",
+      url: "/account#settings",
+      icon: RiSettings3Line,
+      description: "Password · billing",
+    },
   ];
 
   if (staffBlocked) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 text-sm text-slate-500">
+      <div className="book-theme min-h-screen flex items-center justify-center bg-white text-sm text-[#5F5B6B]">
         Redirecting to the admin workspace…
       </div>
     );
   }
 
+  // The customer portal uses the booking theme (globals.css .book-theme) so it
+  // matches the public site; the contractor portal keeps WorkspaceShell's default look.
   return (
-    <WorkspaceShell
-      badge="Account"
-      navItems={navItems}
-      userLabel={userName}
-      userSub={user?.email}
-      onSignOut={handleSignOut}
-      cta={
-        <Button className="w-full justify-between" onClick={() => router.push("/portal/book")}>
-          <span className="inline-flex items-center gap-2">
-            <RiCalendarCheckLine className="w-4 h-4" />
-            Book a cleaning
-          </span>
-          <RiArrowRightLine className="w-4 h-4 opacity-70" />
-        </Button>
-      }
-    >
-      {children}
-    </WorkspaceShell>
+    <div className="book-theme">
+      <WorkspaceShell
+        badge="Account"
+        navItems={navItems}
+        userLabel={userName}
+        userSub={user?.email}
+        onSignOut={handleSignOut}
+        cta={
+          <Button
+            className="w-full justify-between"
+            onClick={() => router.push("/portal/book")}
+          >
+            <span className="inline-flex items-center gap-2">
+              <RiCalendarCheckLine className="w-4 h-4" />
+              Book a cleaning
+            </span>
+            <RiArrowRightLine className="w-4 h-4 opacity-70" />
+          </Button>
+        }
+      >
+        {children}
+      </WorkspaceShell>
+    </div>
   );
 }

@@ -84,7 +84,7 @@ function getStatusConfig(status: string) {
       dot: "bg-emerald-500",
     },
     pending_payment: {
-      label: "Pending Payment",
+      label: "Pending payment",
       class: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400",
       dot: "bg-amber-500",
     },
@@ -218,7 +218,7 @@ export default function ManageBooking() {
   return (
     <div className="min-h-screen bg-background">
       <SEO
-        title="Manage Your Booking"
+        title="Manage your booking"
         description="Look up, reschedule, or cancel your Novara Cleaning booking. Manage your membership and view booking history."
       />
 
@@ -253,7 +253,7 @@ export default function ManageBooking() {
                 <RiSearchLine className="w-8 h-8 text-white" />
               </div>
               <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
-                Manage Your Booking
+                Manage your booking
               </h1>
               <p className="text-muted-foreground text-sm">
                 Look up your booking to reschedule, cancel, or view details
@@ -325,7 +325,7 @@ export default function ManageBooking() {
                     ) : (
                       <>
                         <RiSearchLine className="mr-2 w-4 h-4" />
-                        Look Up Booking
+                        Look up booking
                       </>
                     )}
                   </Button>
@@ -366,7 +366,7 @@ export default function ManageBooking() {
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="text-xl md:text-2xl font-bold tracking-tight">
-                  {customerName ? `Hi, ${customerName.split(" ")[0]}` : "Your Bookings"}
+                  {customerName ? `Hi, ${customerName.split(" ")[0]}` : "Your bookings"}
                 </h1>
                 <p className="text-sm text-muted-foreground">
                   {bookings.length} booking{bookings.length !== 1 ? "s" : ""} found
