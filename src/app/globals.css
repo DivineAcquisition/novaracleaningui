@@ -744,12 +744,20 @@
   }
 }
 
-/* Landing: light travelling down the hosts turnover flow. */
-@keyframes landing-beam {
-  from { transform: translateY(-4rem); }
-  to { transform: translateY(28rem); }
+/* Landing: light travelling along the agent-flow beams. */
+.flow-light {
+  stroke-dasharray: 0.16 1;
+  stroke-dashoffset: 1.16;
+  animation: flow-light 2.8s linear infinite;
 }
-.landing-beam { animation: landing-beam 3.2s linear infinite; }
+@keyframes flow-light {
+  to { stroke-dashoffset: 0; }
+}
 @media (prefers-reduced-motion: reduce) {
-  .landing-beam { animation: none; display: none; }
+  .flow-light { animation: none; display: none; }
+}
+
+/* Landing page uses Inter for every heading, matching the body. */
+.landing :is(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--font-inter), Inter, system-ui, sans-serif;
 }

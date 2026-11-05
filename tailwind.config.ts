@@ -26,6 +26,8 @@ export default {
         mono: ['var(--font-mono)', 'ui-monospace', 'SFMono-Regular', 'monospace'],
       },
       colors: {
+        ink: { DEFAULT: "#0B0A11", muted: "#5F5B6B" },
+        line: "#E9E7EE",
         brand: {
           50: "#F6F2FF",
           100: "#EDE5FF",

@@ -2,12 +2,14 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import IndexPage from "@/views/Index";
 import { getLandingData } from "@/lib/landing/data";
+import { SITE } from "@/lib/landing/content";
 
 export const metadata: Metadata = {
-  title: "Novara Cleaning | House Cleaning in Maryland, DC & Virginia",
-  description:
-    "House cleaning across the DMV with your exact price before you book. Written checklists, a 48-hour re-clean guarantee, and an AI assistant that answers 24/7.",
+  title: { absolute: SITE.title },
+  description: SITE.description,
   alternates: { canonical: "https://novaracleaning.com" },
+  openGraph: { title: SITE.title, description: SITE.description },
+  twitter: { title: SITE.title, description: SITE.description },
 };
 
 export default async function Page() {

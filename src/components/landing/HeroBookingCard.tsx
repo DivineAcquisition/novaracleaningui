@@ -1,17 +1,24 @@
 "use client";
 
-// The hero's two-step card: ZIP, then contact details, then the booking flow
-// at /book/sqft. The lead webhook and BookingContext hand-off are unchanged
-// from the previous landing page so the booking funnel receives the same data.
+// The hero's booking form: ZIP first, then contact details, then the booking
+// flow at /book/sqft. The lead webhook and BookingContext hand-off are the
+// same as before, so the booking funnel receives the same data.
 
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { RiArrowRightLine, RiCheckboxCircleLine, RiMapPinLine } from "@remixicon/react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { RiArrowRightLine, RiCheckboxCircleFill, RiMapPin2Line } from "@remixicon/react";
 import { useBooking } from "@/contexts/BookingContext";
 import { supabase } from "@/integrations/supabase/client";
 import { formatPhoneNumber } from "@/lib/input-formatters";
+import { HERO } from "@/lib/landing/content";
+import { cn } from "@/lib/utils";
+import { btnPrimary } from "./primitives";
+
+const field =
+  "relative rounded-[10px] border border-line bg-white shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] transition-colors focus-within:border-[#6810FE]/50 focus-within:shadow-[0_0_0_3px_rgba(104,16,254,0.14)]";
+const control =
+  "block h-12 w-full border-0 bg-transparent px-4 text-[15px] font-medium tracking-tight text-ink placeholder:font-normal placeholder:text-ink-muted/70 focus:outline-none";
+const label = "mb-1.5 block text-[13px] font-medium text-ink";
 
 export function HeroBookingCard() {
   const router = useRouter();
@@ -51,17 +58,15 @@ export function HeroBookingCard() {
     if (!firstName || !lastName || !email || !phone) return;
     setIsSubmitting(true);
     const formattedPhone = phone.replace(/\D/g, "");
-
     updateBookingData({ firstName, lastName, email, phone: formattedPhone });
 
-    // Lead capture webhook with a client-side duplicate guard.
-    let capturedEmails: string[] = [];
+    let captured: string[] = [];
     try {
-      capturedEmails = JSON.parse(localStorage.getItem("lead_captured_emails") || "[]");
+      captured = JSON.parse(localStorage.getItem("lead_captured_emails") || "[]");
     } catch {
-      capturedEmails = [];
+      captured = [];
     }
-    if (!capturedEmails.includes(email.toLowerCase())) {
+    if (!captured.includes(email.toLowerCase())) {
       supabase.functions
         .invoke("send-lead-capture-webhook", {
           body: {
@@ -79,12 +84,9 @@ export function HeroBookingCard() {
         })
         .then(() => {
           try {
-            localStorage.setItem(
-              "lead_captured_emails",
-              JSON.stringify([...capturedEmails, email.toLowerCase()]),
-            );
+            localStorage.setItem("lead_captured_emails", JSON.stringify([...captured, email.toLowerCase()]));
           } catch {
-            /* storage unavailable — the server dedupes too */
+            /* storage unavailable; the server dedupes too */
           }
         })
         .catch((err) => console.error("Lead webhook error:", err));
@@ -92,7 +94,7 @@ export function HeroBookingCard() {
     router.push("/book/sqft");
   };
 
-  const handleChangeZip = () => {
+  const reset = () => {
     setZipValidated(false);
     setZipCode("");
     setFirstName("");
@@ -103,141 +105,96 @@ export function HeroBookingCard() {
 
   const phoneDigits = phone.replace(/\D/g, "").length;
 
-  return (
-    <div
-      id="get-price"
-      className="scroll-mt-24 rounded-2xl border border-border bg-card p-5 shadow-[0_24px_60px_-30px_rgba(22,4,63,0.35)] md:p-7"
-    >
-      {!zipValidated ? (
-        <form onSubmit={handleZipSubmit} className="space-y-4">
-          <div>
-            <p className="font-heading text-lg font-bold text-foreground">See your price</p>
-            <p className="text-sm text-muted-foreground">
-              Start with your ZIP code. No card needed to see pricing.
-            </p>
-          </div>
-          <div className="space-y-1.5">
-            <label htmlFor="zipCode" className="block text-sm font-semibold">
-              ZIP code
-            </label>
-            <div className="relative">
-              <RiMapPinLine
-                className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground"
-                aria-hidden="true"
-              />
-              <Input
-                id="zipCode"
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                autoComplete="postal-code"
-                maxLength={5}
-                placeholder="e.g. 20814"
-                value={zipCode}
-                onChange={(e) => setZipCode(e.target.value.replace(/\D/g, ""))}
-                className="h-14 pl-11 text-lg"
-              />
-            </div>
-          </div>
-          <Button
-            type="submit"
-            size="lg"
-            disabled={zipCode.length !== 5 || isValidating}
-            className="h-13 w-full text-base font-semibold"
-          >
-            {isValidating ? "Checking…" : "Get my price"}
-            <RiArrowRightLine className="ml-2 h-5 w-5" aria-hidden="true" />
-          </Button>
-        </form>
-      ) : (
-        <form onSubmit={handleContactSubmit} className="space-y-4">
-          <div className="flex items-start gap-3 rounded-xl border border-primary/10 bg-primary/[0.06] p-3">
-            <RiCheckboxCircleLine className="mt-0.5 h-5 w-5 flex-shrink-0 text-primary" aria-hidden="true" />
-            <div>
-              <p className="text-sm font-semibold text-foreground">
-                {cityState ? `We clean in ${cityState}.` : `Thanks. Next, your details for ${zipCode}.`}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Your quote is built for your home on the next screen.
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label htmlFor="firstName" className="block text-xs font-semibold">
-                First name
-              </label>
-              <Input
-                id="firstName"
-                autoComplete="given-name"
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
-                className="h-11"
-                required
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label htmlFor="lastName" className="block text-xs font-semibold">
-                Last name
-              </label>
-              <Input
-                id="lastName"
-                autoComplete="family-name"
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
-                className="h-11"
-                required
-              />
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <label htmlFor="email" className="block text-xs font-semibold">
-              Email
-            </label>
-            <Input
-              id="email"
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="h-11"
-              required
+  if (!zipValidated) {
+    return (
+      <form id="get-price" onSubmit={handleZipSubmit} className="scroll-mt-28" aria-label="Get your price">
+        <label htmlFor="zipCode" className={label}>
+          {HERO.zipLabel}
+        </label>
+        <div className="flex flex-col gap-2.5 sm:flex-row">
+          <div className={cn(field, "sm:w-56")}>
+            <RiMapPin2Line className="pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-ink-muted" aria-hidden="true" />
+            <input
+              id="zipCode"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              autoComplete="postal-code"
+              maxLength={5}
+              placeholder={HERO.zipPlaceholder}
+              value={zipCode}
+              onChange={(e) => setZipCode(e.target.value.replace(/\D/g, ""))}
+              className={cn(control, "pl-10")}
             />
           </div>
-          <div className="space-y-1.5">
-            <label htmlFor="phone" className="block text-xs font-semibold">
-              Mobile phone
-            </label>
-            <Input
+          <button type="submit" disabled={zipCode.length !== 5 || isValidating} className={btnPrimary}>
+            {isValidating ? "Checking…" : HERO.primaryCta}
+            <RiArrowRightLine className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
+      </form>
+    );
+  }
+
+  return (
+    <form
+      id="get-price"
+      onSubmit={handleContactSubmit}
+      className="scroll-mt-28 rounded-2xl border border-line bg-white p-5 shadow-[0_24px_50px_-30px_rgba(11,10,17,0.35)]"
+      aria-label="Your details"
+    >
+      <p className="flex items-start gap-2 text-[15px] font-medium text-ink">
+        <RiCheckboxCircleFill className="mt-0.5 h-5 w-5 flex-shrink-0 text-[#6810FE]" aria-hidden="true" />
+        {cityState ? `We clean in ${cityState}.` : `Got it: ${zipCode}.`} Where should we send your quote?
+      </p>
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <div>
+          <label htmlFor="firstName" className={label}>First name</label>
+          <div className={field}>
+            <input id="firstName" autoComplete="given-name" value={firstName} onChange={(e) => setFirstName(e.target.value)} className={control} required />
+          </div>
+        </div>
+        <div>
+          <label htmlFor="lastName" className={label}>Last name</label>
+          <div className={field}>
+            <input id="lastName" autoComplete="family-name" value={lastName} onChange={(e) => setLastName(e.target.value)} className={control} required />
+          </div>
+        </div>
+        <div className="col-span-2 sm:col-span-1">
+          <label htmlFor="email" className={label}>Email</label>
+          <div className={field}>
+            <input id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className={control} required />
+          </div>
+        </div>
+        <div className="col-span-2 sm:col-span-1">
+          <label htmlFor="phone" className={label}>Mobile phone</label>
+          <div className={field}>
+            <input
               id="phone"
               type="tel"
               autoComplete="tel"
               placeholder="(301) 555-0123"
               value={phone}
               onChange={(e) => setPhone(formatPhoneNumber(e.target.value))}
-              className="h-11"
+              className={control}
               required
             />
           </div>
-          <Button
-            type="submit"
-            size="lg"
-            disabled={!firstName || !lastName || !email || phoneDigits !== 10 || isSubmitting}
-            className="h-13 w-full text-base font-semibold"
-          >
-            {isSubmitting ? "Opening your quote…" : "See my quote"}
-            <RiArrowRightLine className="ml-2 h-5 w-5" aria-hidden="true" />
-          </Button>
-          <button
-            type="button"
-            onClick={handleChangeZip}
-            className="text-xs font-medium text-primary hover:text-primary/80"
-          >
-            Change ZIP code ({zipCode})
-          </button>
-        </form>
-      )}
-    </div>
+        </div>
+      </div>
+      <div className="mt-4 flex flex-wrap items-center gap-4">
+        <button
+          type="submit"
+          disabled={!firstName || !lastName || !email || phoneDigits !== 10 || isSubmitting}
+          className={btnPrimary}
+        >
+          {isSubmitting ? "Opening your quote…" : "See my quote"}
+          <RiArrowRightLine className="h-4 w-4" aria-hidden="true" />
+        </button>
+        <button type="button" onClick={reset} className="text-[13px] font-medium text-ink-muted underline-offset-4 hover:text-ink hover:underline">
+          Change ZIP ({zipCode})
+        </button>
+      </div>
+    </form>
   );
 }
