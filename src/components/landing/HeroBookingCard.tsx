@@ -20,7 +20,7 @@ const control =
   "block h-12 w-full border-0 bg-transparent px-4 text-[15px] font-medium tracking-tight text-ink placeholder:font-normal placeholder:text-ink-muted/70 focus:outline-none";
 const label = "mb-1.5 block text-[13px] font-medium text-ink";
 
-export function HeroBookingCard() {
+export function HeroBookingCard({ centered = false }: { centered?: boolean }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { updateBookingData } = useBooking();
@@ -107,12 +107,12 @@ export function HeroBookingCard() {
 
   if (!zipValidated) {
     return (
-      <form id="get-price" onSubmit={handleZipSubmit} className="scroll-mt-28" aria-label="Get your price">
-        <label htmlFor="zipCode" className={label}>
+      <form id="get-price" onSubmit={handleZipSubmit} className={cn("scroll-mt-28", centered && "w-full")} aria-label="Get your price">
+        <label htmlFor="zipCode" className={cn(label, centered && "text-center")}>
           {HERO.zipLabel}
         </label>
-        <div className="flex flex-col gap-2.5 sm:flex-row">
-          <div className={cn(field, "sm:w-56")}>
+        <div className={cn("flex flex-col gap-2.5 sm:flex-row", centered && "sm:justify-center")}>
+          <div className={cn(field, centered ? "sm:flex-1" : "sm:w-56")}>
             <RiMapPin2Line className="pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-ink-muted" aria-hidden="true" />
             <input
               id="zipCode"
@@ -140,7 +140,7 @@ export function HeroBookingCard() {
     <form
       id="get-price"
       onSubmit={handleContactSubmit}
-      className="scroll-mt-28 rounded-2xl border border-line bg-white p-5 shadow-[0_24px_50px_-30px_rgba(11,10,17,0.35)]"
+      className="scroll-mt-28 w-full rounded-2xl border border-line bg-white p-5 text-left shadow-[0_24px_50px_-30px_rgba(11,10,17,0.35)]"
       aria-label="Your details"
     >
       <p className="flex items-start gap-2 text-[15px] font-medium text-ink">

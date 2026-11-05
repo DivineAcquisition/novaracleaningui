@@ -29,7 +29,7 @@ export const HERO = {
   eyebrow: "Novara Cleaning",
   headline: "Know the price before anyone walks in.",
   supporting:
-    "House cleaning across Maryland, DC and Northern Virginia. Enter your ZIP and see what your clean costs. Then pick a time.",
+    "Enter your ZIP code and we will show the price for your home. Most bookings take a 50% deposit.",
   zipLabel: "Your ZIP code",
   zipPlaceholder: "e.g. 20814",
   primaryCta: "Get my price",

@@ -332,8 +332,8 @@ export default function BookingZip() {
           <div className="space-y-4">
             <h1 className="text-3xl md:text-4xl tracking-tight lg:text-6xl text-center font-extrabold font-jakarta mx-auto max-w-4xl">
               {formMode === 'waitlist-success'
-                ? "You're on the list."
-                : "Book your clean."}
+                ? "You're On The List! 🎉"
+                : "Book Your Cleaning Today"}
             </h1>
 
             {/* New-customer 50% off sub-headline — sits directly under

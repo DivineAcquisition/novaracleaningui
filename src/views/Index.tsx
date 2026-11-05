@@ -36,45 +36,54 @@ export default function IndexPage({ data }: { data: LandingData }) {
       <SiteHeader />
 
       <main id="main">
-        {/* Hero */}
+        {/* Hero — centered, with the original headline */}
         <section className={cn(gutter, "relative pb-16 pt-12 sm:pb-24 sm:pt-20")}>
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-x-0 top-0 h-[520px] bg-[radial-gradient(60%_60%_at_80%_0%,rgba(104,16,254,0.07),transparent_70%)]"
+            className="pointer-events-none absolute inset-x-0 top-0 h-[520px] bg-[radial-gradient(60%_60%_at_50%_0%,rgba(104,16,254,0.08),transparent_70%)]"
           />
-          <div className={cn(shell, "relative grid items-start gap-12 lg:grid-cols-[1.05fr_0.95fr]")}>
-            <div>
-              <Eyebrow>{HERO.eyebrow}</Eyebrow>
-              <h1 className={displayTitle}>{HERO.headline}</h1>
-              <p className={cn(subhead, "mt-6 max-w-xl")}>{HERO.supporting}</p>
-              <div className="mt-8">
-                <HeroBookingCard />
-              </div>
-              <p className="mt-4 max-w-xl text-[14px] leading-relaxed text-ink-muted">{HERO.trust}</p>
-              <p className="mt-3 text-[14px] text-ink-muted">
-                Rather talk?{" "}
-                <a href="#nova" className="font-medium text-ink underline-offset-4 hover:underline">
-                  {HERO.secondaryCta}
-                </a>{" "}
-                or call{" "}
-                <a href={INBOUND_PHONE.tel} className="font-medium text-ink underline-offset-4 hover:underline">
-                  {INBOUND_PHONE.display}
-                </a>
-                .
-              </p>
-              {proof.rating || proof.completedCleans ? (
-                <p className="mt-6 flex flex-wrap gap-x-6 gap-y-1 border-t border-line pt-5 text-[14px] text-ink">
-                  {proof.rating ? (
-                    <span>
-                      {proof.rating.average.toFixed(1)} average from {proof.rating.count} post-visit ratings
-                    </span>
-                  ) : null}
-                  {proof.completedCleans ? <span>{proof.completedCleans.toLocaleString("en-US")} cleans completed</span> : null}
-                </p>
-              ) : null}
+          <div className="relative mx-auto max-w-3xl text-center">
+            <Eyebrow className="text-center">{HERO.eyebrow}</Eyebrow>
+            <h1 className={cn(displayTitle, "mx-auto")}>
+              Stop Spending Your
+              <br />
+              <span className="bg-gradient-to-r from-[#6810FE] to-[#9A6BFF] bg-clip-text text-transparent">One Day Off</span>{" "}
+              Cleaning.
+            </h1>
+            <p className={cn(subhead, "mx-auto mt-6 max-w-2xl")}>
+              <span className="font-medium text-[#5A1FD6]">Standard 15% off. Deep 25% off.</span> {HERO.supporting}
+            </p>
+            <div className="mx-auto mt-8 flex max-w-xl justify-center">
+              <HeroBookingCard centered />
             </div>
-            {band ? <QuoteStudio baseCents={deep} extraCents={oven?.cents || 0} /> : null}
+            <p className="mx-auto mt-4 max-w-xl text-[14px] leading-relaxed text-ink-muted">{HERO.trust}</p>
+            <p className="mt-3 text-[14px] text-ink-muted">
+              Rather talk?{" "}
+              <a href="#nova" className="font-medium text-ink underline-offset-4 hover:underline">
+                {HERO.secondaryCta}
+              </a>{" "}
+              or call{" "}
+              <a href={INBOUND_PHONE.tel} className="font-medium text-ink underline-offset-4 hover:underline">
+                {INBOUND_PHONE.display}
+              </a>
+              .
+            </p>
+            {proof.rating || proof.completedCleans ? (
+              <p className="mx-auto mt-6 flex max-w-xl flex-wrap justify-center gap-x-6 gap-y-1 border-t border-line pt-5 text-[14px] text-ink">
+                {proof.rating ? (
+                  <span>
+                    {proof.rating.average.toFixed(1)} average from {proof.rating.count} post-visit ratings
+                  </span>
+                ) : null}
+                {proof.completedCleans ? <span>{proof.completedCleans.toLocaleString("en-US")} cleans completed</span> : null}
+              </p>
+            ) : null}
           </div>
+          {band ? (
+            <div className="relative mx-auto mt-14 max-w-xl text-left">
+              <QuoteStudio baseCents={deep} extraCents={oven?.cents || 0} />
+            </div>
+          ) : null}
         </section>
 
         <AgentFlow />
