@@ -13,6 +13,7 @@
 
 import { unstable_cache } from "next/cache";
 import { getAdminSupabase } from "@/lib/airtable/sources/admin-client";
+import { MEMBERSHIP_PRICES } from "@/lib/pricing";
 
 export type LandingServiceType = "standard" | "deep" | "moveInOut";
 export type LandingPlan = "monthly" | "biweekly" | "weekly";
@@ -168,12 +169,18 @@ function buildPrices(
       deep: num(row.deep),
       moveInOut: row.moveInOut != null ? num(row.moveInOut) : standard * 2,
     };
+    // Membership rates come from the table checkout charges
+    // (src/lib/pricing.ts, mirrored in supabase/functions/_shared/pricing.ts),
+    // not the dynamic config, so the page shows what the customer pays.
+    const charged = MEMBERSHIP_PRICES[id];
     const m = (membershipRaw[id] || {}) as Json;
-    membership[id] = {
-      monthly: m.monthly == null ? null : num(m.monthly),
-      biweekly: m.biweekly == null ? null : num(m.biweekly),
-      weekly: m.weekly == null ? null : num(m.weekly),
-    };
+    membership[id] = charged
+      ? { monthly: charged.monthly * 100, biweekly: charged.biweekly * 100, weekly: charged.weekly * 100 }
+      : {
+          monthly: m.monthly == null ? null : num(m.monthly),
+          biweekly: m.biweekly == null ? null : num(m.biweekly),
+          weekly: m.weekly == null ? null : num(m.weekly),
+        };
   }
   const addOns: LandingAddOn[] = ADD_ON_LABELS.filter(([id]) => addOnsCents[id] != null).map(
     ([id, label]) => ({

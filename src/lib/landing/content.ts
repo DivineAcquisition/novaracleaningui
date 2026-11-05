@@ -15,11 +15,11 @@ export const SITE = {
 
 export const NAV = {
   links: [
-    { href: "#how", label: "How it works" },
-    { href: "#nova", label: "Nova" },
-    { href: "#prices", label: "Prices" },
-    { href: "#hosts", label: "Airbnb hosts" },
-    { href: "#faq", label: "FAQ" },
+    { href: "/#how", label: "How it works" },
+    { href: "/#nova", label: "Nova" },
+    { href: "/#prices", label: "Prices" },
+    { href: "/checklist", label: "Checklists" },
+    { href: "/str", label: "Airbnb hosts" },
   ],
   signIn: "Sign in",
   cta: "Get my price",
@@ -351,9 +351,10 @@ export const FOOTER = {
     {
       title: "Company",
       links: [
-        { href: "#how", label: "How it works" },
-        { href: "#nova", label: "Nova" },
-        { href: "#faq", label: "FAQ" },
+        { href: "/#how", label: "How it works" },
+        { href: "/#nova", label: "Nova" },
+        { href: "/checklist", label: "Checklists" },
+        { href: "/#faq", label: "FAQ" },
         { href: "https://hiring.novaracleaning.com", label: "Work with us" },
         { href: "/auth", label: "Sign in" },
       ],

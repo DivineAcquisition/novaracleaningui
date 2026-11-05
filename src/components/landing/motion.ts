@@ -115,7 +115,10 @@ export function useAnimatedNumber(target: number, reduced: boolean, durationMs =
 /** Smooth-scrolls to the hero ZIP form and focuses it. */
 export function scrollToBooking() {
   const form = document.getElementById("get-price");
-  if (!form) return;
+  if (!form) {
+    window.location.assign("/#get-price");
+    return;
+  }
   form.scrollIntoView({ behavior: prefersStill() ? "auto" : "smooth", block: "center" });
   window.setTimeout(() => {
     const zip = document.getElementById("zipCode") || document.getElementById("firstName");
