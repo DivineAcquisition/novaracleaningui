@@ -5,7 +5,7 @@ import {
   RiErrorWarningLine,
   RiLoader4Line,
   RiRefreshLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useState, useEffect } from "react";
 import { PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { Button } from "@/components/ui/button";

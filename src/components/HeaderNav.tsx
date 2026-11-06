@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useMembershipCredits } from "@/hooks/use-membership-credits";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { RiUserLine, RiLogoutBoxRLine, RiCoupon3Line } from "@remixicon/react";
+import { RiUserLine, RiLogoutBoxRLine, RiCoupon3Line } from "@/components/icons";
 
 const logo = "/novara-logo.png";
 

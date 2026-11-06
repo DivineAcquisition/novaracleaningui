@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { RiLoader4Line, RiPlayLine } from "@remixicon/react";
+import { RiLoader4Line, RiPlayLine } from "@/components/icons";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { asErrorMessage, edgeResult } from "@/lib/edge-invoke";

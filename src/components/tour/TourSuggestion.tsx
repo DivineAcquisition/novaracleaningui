@@ -10,7 +10,7 @@
 // Dismissing it is remembered for the session, so nobody gets asked twice on
 // the way to doing something else.
 
-import { RiCloseLine, RiPlayCircleLine } from "@remixicon/react";
+import { RiCloseLine, RiPlayCircleLine } from "@/components/icons";
 
 import { Button } from "@/components/ui/button";
 import type { Tour } from "@/lib/tours/catalog";

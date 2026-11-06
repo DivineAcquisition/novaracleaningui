@@ -4,7 +4,7 @@
 // Email and SMS never use terminated / termination.
 
 import { useEffect, useState } from "react";
-import { RiLoader4Line, RiLogoutBoxRLine } from "@remixicon/react";
+import { RiLoader4Line, RiLogoutBoxRLine } from "@/components/icons";
 import { supabase } from "@/integrations/supabase/client";
 import { describeEdgeError } from "@/lib/edge-invoke";
 import { toast } from "sonner";

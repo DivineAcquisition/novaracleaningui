@@ -7,7 +7,7 @@
 // (manual_payouts is admin-only RLS, so the client can't read real pay itself).
 
 import { useState } from "react";
-import { RiInformationLine, RiArrowDownSLine, RiUser3Line, RiToolsLine } from "@remixicon/react";
+import { RiInformationLine, RiArrowDownSLine, RiUser3Line, RiToolsLine } from "@/components/icons";
 import { supabase } from "@/integrations/supabase/client";
 import { RecleanBadge, RecleanContractorNote } from "@/components/reclean/RecleanCallout";
 import { cn } from "@/lib/utils";

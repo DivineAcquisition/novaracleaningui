@@ -21,7 +21,7 @@ import {
   RiEdit2Line,
   RiLoader4Line,
   RiShieldCheckLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 

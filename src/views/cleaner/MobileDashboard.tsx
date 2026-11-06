@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { format } from "date-fns";
-import { RiArrowRightLine, RiNotification3Line } from "@remixicon/react";
+import { RiArrowRightLine, RiNotification3Line } from "@/components/icons";
 import { supabase } from "@/integrations/supabase/client";
 import { DashboardStats } from "@/components/cleaner/DashboardStats";
 import { OnboardingChecklist } from "@/components/cleaner/OnboardingChecklist";

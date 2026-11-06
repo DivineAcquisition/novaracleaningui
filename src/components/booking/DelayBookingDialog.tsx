@@ -8,7 +8,7 @@
 // different action (different day, different tone, different comms).
 
 import { useEffect, useMemo, useState } from "react";
-import { RiLoader4Line, RiTimeLine, RiArrowRightLine } from "@remixicon/react";
+import { RiLoader4Line, RiTimeLine, RiArrowRightLine } from "@/components/icons";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";

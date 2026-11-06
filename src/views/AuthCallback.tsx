@@ -16,7 +16,7 @@
 // Admin Google OAuth uses /admin/auth/callback (admin.*).
 // Those two callback pages handle their own portal — not this one.
 
-import { RiLoader4Line } from "@remixicon/react";
+import { RiLoader4Line } from "@/components/icons";
 import { useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 

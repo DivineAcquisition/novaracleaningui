@@ -7,7 +7,7 @@ import {
   RiPhoneLine,
   RiSearchLine,
   RiUserLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useState, useCallback, useRef, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

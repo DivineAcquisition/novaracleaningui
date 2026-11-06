@@ -8,7 +8,7 @@
 // Copy spans one unit through a full portfolio. It never switches persona.
 
 import { useEffect, useMemo, useState } from "react";
-import { RiPauseFill, RiPlayFill, RiVolumeMuteLine, RiVolumeUpLine } from "@remixicon/react";
+import { RiPauseFill, RiPlayFill, RiVolumeMuteLine, RiVolumeUpLine } from "@/components/icons";
 import { WistiaPlayer } from "@/components/cleaner/WistiaPlayer";
 import { Particles } from "@/components/magicui/particles";
 import { BRAND } from "@/lib/brand";

@@ -25,7 +25,7 @@ import {
   RiTicket2Line,
   RiUserStarLine,
   RiVipCrown2Line,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

@@ -13,7 +13,7 @@ import {
   RiPhoneLine,
   RiRepeatLine,
   RiSparkling2Fill,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { AGENT_FLOW } from "@/lib/landing/content";
 import { cn } from "@/lib/utils";
 import { useCycle, useOnScreen } from "./motion";

@@ -2,7 +2,7 @@
 
 import {
   RiArrowRightDownLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface SavingsComparisonProps {

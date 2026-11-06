@@ -5,7 +5,7 @@
 // completed work — so the cleaner stays logged in and sees exactly where
 // they stand: status + end date, per the accountability policy.
 
-import { RiPauseCircleLine } from "@remixicon/react";
+import { RiPauseCircleLine } from "@/components/icons";
 
 export default function SuspensionBanner({
   status,

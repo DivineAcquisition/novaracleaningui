@@ -6,7 +6,7 @@ import {
   RiFileCopyLine,
   RiFlashlightLine,
   RiLightbulbLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useSalesScripts } from "@/hooks/use-sales-data";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";

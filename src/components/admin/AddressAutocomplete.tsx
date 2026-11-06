@@ -20,7 +20,7 @@ import {
   RiLoader4Line,
   RiMapPinLine,
   RiTimeLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";

@@ -5,7 +5,7 @@ import {
   RiCheckboxCircleLine,
   RiLoader4Line,
   RiMailLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";

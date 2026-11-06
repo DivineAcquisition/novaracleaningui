@@ -4,7 +4,7 @@
 // last one waits on the customer. Sample values; the resting frame is finished.
 
 import { useRef } from "react";
-import { RiArrowRightLine, RiCheckboxCircleLine, RiLoader4Line, RiStarFill, RiTimeLine } from "@remixicon/react";
+import { RiArrowRightLine, RiCheckboxCircleLine, RiLoader4Line, RiStarFill, RiTimeLine } from "@/components/icons";
 import { HOW } from "@/lib/landing/content";
 import { cn } from "@/lib/utils";
 import { useInViewSequence } from "./motion";

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { RiCheckboxCircleLine, RiLoader4Line, RiErrorWarningLine, RiArrowRightLine } from "@remixicon/react";
+import { RiCheckboxCircleLine, RiLoader4Line, RiErrorWarningLine, RiArrowRightLine } from "@/components/icons";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";

@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { RiDownloadLine, RiShieldCheckLine } from "@remixicon/react";
+import { RiDownloadLine, RiShieldCheckLine } from "@/components/icons";
 
 import {
   COMPANY_COI_CARRIER,

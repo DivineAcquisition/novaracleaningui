@@ -12,7 +12,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   RiLink, RiFileCopyLine, RiExternalLinkLine, RiCheckLine, RiSparkling2Line,
-} from "@remixicon/react";
+} from "@/components/icons";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

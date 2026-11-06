@@ -22,7 +22,7 @@ import {
   RiSmartphoneLine,
   RiTimeLine,
   RiUserStarLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import Link from "next/link";
 import { AnimatedShinyText } from "@/components/magicui/animated-shiny-text";
 import { BlurFade } from "@/components/magicui/blur-fade";

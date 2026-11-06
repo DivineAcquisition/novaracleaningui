@@ -23,7 +23,7 @@ import {
   RiLoader4Line,
   RiPhoneLine,
   RiShieldCheckLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { MarketingShell, PageHero } from "@/components/landing/MarketingShell";
 import { Chip, Index, Section, btnOutline, btnPrimary } from "@/components/landing/primitives";
 import { AddressAutocomplete } from "@/components/booking/AddressAutocomplete";

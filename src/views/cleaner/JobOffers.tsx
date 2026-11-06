@@ -7,7 +7,7 @@ import {
   RiLoader4Line,
   RiMapPinLine,
   RiTimeLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";

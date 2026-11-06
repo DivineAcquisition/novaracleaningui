@@ -4,7 +4,7 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { RiArrowLeftLine, RiCheckLine } from "@remixicon/react";
+import { RiArrowLeftLine, RiCheckLine } from "@/components/icons";
 import { cn } from "@/lib/utils";
 
 export const authField =
@@ -42,7 +42,7 @@ export function CustomerAuthShell({
           <Link href="/" className="flex items-center gap-2.5" aria-label="Novara Cleaning home">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/novara-logo.png" alt="" width={34} height={34} className="h-[34px] w-[34px] rounded-[9px]" />
-            <span className="text-[16px] font-medium tracking-[-0.02em]">Novara</span>
+            <span className="text-[16px] font-semibold tracking-[-0.02em]">Novara Cleaning</span>
           </Link>
           <Link href="/" className="inline-flex items-center gap-1.5 text-[14px] text-[#5F5B6B] hover:text-[#0B0A11]">
             <RiArrowLeftLine className="h-4 w-4" aria-hidden="true" />

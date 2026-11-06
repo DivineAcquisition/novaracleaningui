@@ -34,7 +34,7 @@ import {
   RiRefreshLine,
   RiSearch2Line,
   RiShieldCheckLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { format } from "date-fns";
 import { toast } from "sonner";
 

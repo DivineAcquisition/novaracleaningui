@@ -19,7 +19,7 @@ import {
   RiSparklingLine,
   RiStarLine,
   RiTimeLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useBooking } from "@/contexts/BookingContext";

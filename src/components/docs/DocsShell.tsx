@@ -6,7 +6,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { RiCloseLine, RiMenuLine, RiBookOpenLine } from "@remixicon/react";
+import { RiCloseLine, RiMenuLine, RiBookOpenLine } from "@/components/icons";
 
 import { cn } from "@/lib/utils";
 import { DOCS_HOME, DOCS_SIGN_OUT } from "@/lib/docs/paths";

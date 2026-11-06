@@ -4,7 +4,7 @@ import {
   RiArrowLeftSLine,
   RiArrowRightSLine,
   RiMoreLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import * as React from "react";
 
 import { cn } from "@/lib/utils";

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { RiFileTextLine, RiLoader4Line } from "@remixicon/react";
+import { RiFileTextLine, RiLoader4Line } from "@/components/icons";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";

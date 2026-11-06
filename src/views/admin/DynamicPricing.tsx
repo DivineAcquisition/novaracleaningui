@@ -38,7 +38,7 @@ import {
   RiScales3Line,
   RiShieldCheckLine,
   RiTableLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";

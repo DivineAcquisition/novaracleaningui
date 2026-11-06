@@ -31,7 +31,7 @@ import {
   RiRulerLine,
   RiSearch2Line,
   RiCameraLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { format } from "date-fns";
 import { toast } from "sonner";
 

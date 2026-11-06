@@ -4,7 +4,7 @@
 // Persists to app_settings.focused_same_day_settings.checklists — no deploy needed.
 
 import { useCallback, useEffect, useState } from "react";
-import { RiAddLine, RiDeleteBinLine, RiLoader4Line, RiSaveLine } from "@remixicon/react";
+import { RiAddLine, RiDeleteBinLine, RiLoader4Line, RiSaveLine } from "@/components/icons";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";

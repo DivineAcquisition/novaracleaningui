@@ -7,7 +7,7 @@ import {
   RiCheckboxCircleLine,
   RiMapPinLine,
   RiTimeLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useState, useCallback } from "react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";

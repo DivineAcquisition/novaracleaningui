@@ -6,7 +6,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { RiLoader4Line } from "@remixicon/react";
+import { RiLoader4Line } from "@/components/icons";
 import { SEO } from "@/components/SEO";
 
 export default function PartnerAuthCallback() {

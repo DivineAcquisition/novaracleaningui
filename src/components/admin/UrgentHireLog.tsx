@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { RiFlashlightLine, RiLoader4Line, RiRefreshLine } from "@remixicon/react";
+import { RiFlashlightLine, RiLoader4Line, RiRefreshLine } from "@/components/icons";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";

@@ -8,7 +8,7 @@
 import {
   RiCheckboxCircleFill,
   RiLoader4Line,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useState } from "react";
 
 import { SignaturePad } from "@/components/booking/SignaturePad";

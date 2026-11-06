@@ -31,7 +31,7 @@ import {
   RiCloseCircleLine, RiDeleteBin6Line, RiPhoneLine, RiFileCopyLine,
   RiLineChartLine, RiAlertLine, RiShieldCheckLine, RiUserSmileLine,
   RiExternalLinkLine, RiRefreshLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

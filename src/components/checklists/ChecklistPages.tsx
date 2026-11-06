@@ -17,7 +17,7 @@ import {
   RiSparklingLine,
   RiSunLine,
   RiTimeLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { INBOUND_PHONE, SUPPORT_PHONE } from "@/config/brand-config";
 import { cn } from "@/lib/utils";
 

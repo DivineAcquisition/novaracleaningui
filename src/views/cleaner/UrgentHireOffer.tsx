@@ -15,7 +15,7 @@ import {
   RiLoader4Line,
   RiMapPin2Line,
   RiTimeLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 
 import { Button } from "@/components/ui/button";
 import { asErrorMessage } from "@/lib/edge-invoke";

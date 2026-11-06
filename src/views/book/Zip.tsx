@@ -6,8 +6,8 @@ import {
   RiMapPinLine,
   RiTimeLine,
   RiVipCrownLine
-} from "@remixicon/react";
-import { useState, useEffect } from "react";
+} from "@/components/icons";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -58,7 +58,8 @@ export default function BookingZip() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [membershipParam, homeSizeParam]);
   
-  const [zipCode, setZipCode] = useState("");
+  // ?zip= from the marketing site's ZIP box prefills this step.
+  const [zipCode, setZipCode] = useState(() => (searchParams.get("zip") || "").replace(/\D/g, "").slice(0, 5));
   const [isValidating, setIsValidating] = useState(false);
   const [formMode, setFormMode] = useState<FormMode>('zip');
   const [cityState, setCityState] = useState("");
@@ -140,6 +141,16 @@ export default function BookingZip() {
       setFormMode('waitlist');
     }
   };
+
+  // Coming from the marketing site with ?zip=, check it straight away so the
+  // visitor lands on the contact step (or the waitlist) without retyping.
+  const autoZipChecked = useRef(false);
+  useEffect(() => {
+    if (autoZipChecked.current || zipCode.length !== 5 || !searchParams.get("zip")) return;
+    autoZipChecked.current = true;
+    void handleZipSubmit({ preventDefault() {} } as React.FormEvent);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleContactSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

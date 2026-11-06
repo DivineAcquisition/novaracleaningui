@@ -26,7 +26,7 @@ import {
   RiSettings3Line,
   RiTimeLine,
   RiUserSearchLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 

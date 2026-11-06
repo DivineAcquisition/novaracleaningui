@@ -2,7 +2,7 @@
 
 import {
   RiCheckLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 

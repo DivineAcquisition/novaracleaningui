@@ -1,7 +1,7 @@
 // "What you get" and the 48-hour guarantee: the service itself, in plain
 // outcomes, near the top of the page. Server-rendered.
 
-import { RiArrowRightLine, RiCalendarCheckLine, RiFileList3Line, RiRefreshLine, RiShoppingBasket2Line } from "@remixicon/react";
+import { RiArrowRightLine, RiCalendarCheckLine, RiFileList3Line, RiRefreshLine, RiShoppingBasket2Line } from "@/components/icons";
 import { GUARANTEE, VALUE } from "@/lib/landing/content";
 import { PriceButton } from "./Chrome";
 import { Section, gutter, shell } from "./primitives";

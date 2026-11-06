@@ -5,7 +5,7 @@ import {
   RiHomeLine,
   RiMoneyDollarCircleLine,
   RiUserLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useRouter, usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useNativeHaptics } from "@/hooks/use-native-haptics";

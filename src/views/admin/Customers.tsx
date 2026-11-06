@@ -38,7 +38,7 @@ import {
   RiBankCardLine,
   RiLoginBoxLine,
   RiSubtractLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 

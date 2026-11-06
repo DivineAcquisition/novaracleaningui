@@ -10,7 +10,7 @@
 // distinction is the whole point: a source outage should look like a source
 // outage, not like a VA who did nothing.
 
-import { RiCheckboxCircleFill, RiInformationLine, RiWifiOffLine } from "@remixicon/react";
+import { RiCheckboxCircleFill, RiInformationLine, RiWifiOffLine } from "@/components/icons";
 
 import { cn } from "@/lib/utils";
 import {

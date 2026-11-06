@@ -2,7 +2,7 @@
 
 import {
   RiCloseLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 

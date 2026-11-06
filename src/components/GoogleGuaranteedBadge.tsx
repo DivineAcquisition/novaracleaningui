@@ -5,7 +5,7 @@ import {
   RiCheckboxCircleLine,
   RiShieldCheckLine,
   RiShieldLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import { cn } from "@/lib/utils";
 
 interface GoogleGuaranteedBadgeProps {

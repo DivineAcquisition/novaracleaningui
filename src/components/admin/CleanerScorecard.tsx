@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { RiAlertLine, RiShieldCheckLine, RiCalendarLine, RiTrophyLine, RiCloseCircleLine, RiUserUnfollowLine, RiUserFollowLine, RiLogoutBoxRLine } from "@remixicon/react";
+import { RiAlertLine, RiShieldCheckLine, RiCalendarLine, RiTrophyLine, RiCloseCircleLine, RiUserUnfollowLine, RiUserFollowLine, RiLogoutBoxRLine } from "@/components/icons";
 import TerminateCleanerDialog from "@/components/admin/TerminateCleanerDialog";
 import LogResignationDialog from "@/components/admin/LogResignationDialog";
 

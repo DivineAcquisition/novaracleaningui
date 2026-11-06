@@ -2,7 +2,7 @@
 // each with its live starting price where one exists. Server-rendered.
 
 import Link from "next/link";
-import { RiArrowRightUpLine } from "@remixicon/react";
+import { RiArrowRightUpLine } from "@/components/icons";
 import { SERVICES } from "@/lib/landing/content";
 import { startingOnlinePrice, type LandingPrices } from "@/lib/landing/prices";
 import { cn } from "@/lib/utils";

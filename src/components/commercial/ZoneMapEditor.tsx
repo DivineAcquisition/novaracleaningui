@@ -4,7 +4,7 @@
 // admin corrections (rename / split / merge / add) without a re-walkthrough.
 
 import { useState } from "react";
-import { RiAddLine, RiDeleteBinLine, RiGitMergeLine, RiScissorsCutLine } from "@remixicon/react";
+import { RiAddLine, RiDeleteBinLine, RiGitMergeLine, RiScissorsCutLine } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";

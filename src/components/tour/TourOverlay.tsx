@@ -25,7 +25,7 @@ import {
   RiCheckLine,
   RiCloseLine,
   RiInformationLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 
 import { Button } from "@/components/ui/button";
 import { findAnchor } from "@/lib/tours/anchors";

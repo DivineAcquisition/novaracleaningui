@@ -9,7 +9,7 @@ import {
   RiCheckboxCircleFill,
   RiDownloadLine,
   RiLoader4Line,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";

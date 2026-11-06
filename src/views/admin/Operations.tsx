@@ -18,7 +18,7 @@
 // Dispatch's ?job= parameter still lands on the right card, because those URLs
 // are in sent emails and Discord alerts that we don't get to edit.
 
-import { RiAlarmWarningLine, RiMapPin2Line, RiRefreshLine, RiRocket2Line } from "@remixicon/react";
+import { RiAlarmWarningLine, RiMapPin2Line, RiRefreshLine, RiRocket2Line } from "@/components/icons";
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 

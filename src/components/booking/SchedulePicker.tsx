@@ -9,7 +9,7 @@ import {
   RiSunFoggyLine,
   RiSunLine,
   RiTimeLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";

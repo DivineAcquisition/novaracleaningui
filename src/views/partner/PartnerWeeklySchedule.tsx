@@ -14,7 +14,7 @@ import { format } from "date-fns";
 import {
   RiLoader4Line, RiAddLine, RiDeleteBin6Line, RiArrowLeftLine, RiRepeatLine,
   RiCalendarEventLine, RiCloseLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

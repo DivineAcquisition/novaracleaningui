@@ -323,9 +323,31 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(canonical, 308);
   }
 
-  // Apex novaracleaning.com / www.novaracleaning.com → treat as try.*
-  // (marketing root). No redirect to keep apex SEO-canonical working.
+  // Apex novaracleaning.com / www.novaracleaning.com is the public marketing
+  // site (the landing page, checklists, membership, hosts). try.* is the
+  // customer booking flow. Both are served by this app.
+  const isMarketingHost = hostname === "novaracleaning.com" || hostname === "www.novaracleaning.com";
   const currentSubdomain: SubdomainKey = subdomainOf(hostname) ?? "try";
+
+  // The marketing site's root is the landing page. The booking flow root on
+  // try.* starts the booking at its first step, keeping any query string
+  // (?ref=, ?fbclid=, ?zip=) for attribution and prefill.
+  if (pathname === "/" && isMarketingHost) {
+    return response;
+  }
+  if (pathname === "/" && currentSubdomain === "try") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/book/zip";
+    return NextResponse.redirect(url, 307);
+  }
+
+  // Booking steps live on try.* only, so saved progress stays on one origin.
+  if (isMarketingHost && (pathname === "/book" || pathname.startsWith("/book/"))) {
+    const url = request.nextUrl.clone();
+    url.protocol = "https:";
+    url.host = HOSTS.try;
+    return NextResponse.redirect(url, 308);
+  }
 
   // Special-case the root path: every subdomain owns its own root, and we
   // immediately redirect it to that subdomain's default landing. Without

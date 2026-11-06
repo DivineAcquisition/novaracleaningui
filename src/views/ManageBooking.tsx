@@ -25,7 +25,7 @@ import {
   RiVipCrownLine,
   RiPhoneLine,
   RiMailLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { format, isFuture } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";

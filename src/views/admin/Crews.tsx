@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import {
   RiLoader4Line, RiGroup2Line, RiAddLine, RiCloseLine, RiUserAddLine,
   RiDeleteBinLine, RiStarLine, RiUserUnfollowLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

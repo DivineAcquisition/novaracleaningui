@@ -12,7 +12,7 @@ import {
   RiErrorWarningLine,
   RiMapPinLine,
   RiTimeLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

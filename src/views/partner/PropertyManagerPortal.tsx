@@ -21,7 +21,7 @@ import {
   RiKey2Line,
   RiLoader4Line,
   RiTimeLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";

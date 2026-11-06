@@ -15,7 +15,7 @@ import {
   RiHandCoinLine,
   RiShieldCheckLine,
   RiToolsLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";

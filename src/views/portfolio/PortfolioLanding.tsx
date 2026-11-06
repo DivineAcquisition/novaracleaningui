@@ -22,7 +22,7 @@ import {
   RiPhoneLine,
   RiShieldCheckLine,
   RiStarLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { SEO } from "@/components/SEO";
 import { BrandAtmosphere } from "@/components/brand/atmosphere";
 import { Button } from "@/components/ui/button";

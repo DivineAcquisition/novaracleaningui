@@ -22,7 +22,7 @@ import {
   RiArrowRightSLine,
   RiCheckLine,
   RiVideoLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 
 import { Badge } from "@/components/ui/badge";
 import {

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { RiMoneyDollarCircleLine, RiGift2Line } from "@remixicon/react";
+import { RiMoneyDollarCircleLine, RiGift2Line } from "@/components/icons";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 

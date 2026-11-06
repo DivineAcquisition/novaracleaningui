@@ -26,7 +26,7 @@ import {
   RiLoader4Line,
   RiSendPlaneLine,
   RiUserSharedLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useState } from "react";
 import { toast } from "sonner";
 

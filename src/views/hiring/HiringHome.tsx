@@ -6,7 +6,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { RiArrowRightLine, RiMapPin2Line } from "@remixicon/react";
+import { RiArrowRightLine, RiMapPin2Line } from "@/components/icons";
 import { SEO } from "@/components/SEO";
 import { HIRING_ROLES, type HiringRole, type HiringRoleGroup } from "@/lib/hiring/roles";
 import { RoleHiringCards } from "@/components/hiring/RoleHiringCards";

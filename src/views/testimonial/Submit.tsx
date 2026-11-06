@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { RiCheckLine, RiLoader4Line, RiVideoLine } from "@remixicon/react";
+import { RiCheckLine, RiLoader4Line, RiVideoLine } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";

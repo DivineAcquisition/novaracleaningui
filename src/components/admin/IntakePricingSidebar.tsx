@@ -4,7 +4,7 @@ import {
   RiArrowRightDownLine,
   RiMoneyDollarCircleLine,
   RiUserLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";

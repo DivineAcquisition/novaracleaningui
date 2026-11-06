@@ -13,7 +13,7 @@ import {
   RiStarLine,
   RiTimeLine,
   RiUserLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/integrations/supabase/client";

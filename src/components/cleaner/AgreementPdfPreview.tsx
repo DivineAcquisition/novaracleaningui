@@ -6,7 +6,7 @@
 // template through our origin and render it with pdf.js — this is that
 // pattern for cleaners.
 
-import { RiExternalLinkLine } from "@remixicon/react";
+import { RiExternalLinkLine } from "@/components/icons";
 
 import { PdfViewer } from "@/components/PdfViewer";
 

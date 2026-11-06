@@ -7,7 +7,7 @@ import {
   RiCloseCircleLine,
   RiExternalLinkLine,
   RiPhoneLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useState, useEffect } from "react";
 
 import { Card } from "@/components/ui/card";

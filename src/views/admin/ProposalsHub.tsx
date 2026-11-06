@@ -9,7 +9,7 @@ import {
   RiMailSendLine,
   RiRulerLine,
   RiUserStarLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { DEFAULT_CHECKLISTS, DEFAULT_PROPOSAL_SETTINGS, type ProposalChecklists, type ProposalRequestSettings } from "@/lib/proposal-request";

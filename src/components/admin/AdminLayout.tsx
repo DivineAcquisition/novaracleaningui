@@ -47,7 +47,7 @@ import {
   RiMailLine,
   RiMailSendLine,
   RiSparklingLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { ReactNode, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";

@@ -16,7 +16,7 @@ import {
   RiErrorWarningLine,
   RiImage2Line,
   RiLoader4Line,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 

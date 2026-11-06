@@ -1,6 +1,6 @@
 "use client";
 
-import { RiAlarmWarningLine, RiLoader4Line, RiPlayLine, RiRefreshLine, RiSendPlaneLine } from "@remixicon/react";
+import { RiAlarmWarningLine, RiLoader4Line, RiPlayLine, RiRefreshLine, RiSendPlaneLine } from "@/components/icons";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 

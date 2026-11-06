@@ -11,7 +11,7 @@
 // which proxies DocuSeal PDFs for exactly this reason).
 
 import { useEffect, useRef, useState } from "react";
-import { RiErrorWarningLine, RiExternalLinkLine, RiLoader4Line } from "@remixicon/react";
+import { RiErrorWarningLine, RiExternalLinkLine, RiLoader4Line } from "@/components/icons";
 
 interface PdfViewerProps {
   url: string;

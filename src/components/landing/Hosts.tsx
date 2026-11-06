@@ -5,7 +5,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { RiArrowRightLine, RiCheckLine } from "@remixicon/react";
+import { RiArrowRightLine, RiCheckLine } from "@/components/icons";
 import { HOSTS } from "@/lib/landing/content";
 import { cn } from "@/lib/utils";
 import { Section, btnOutline, btnPrimary } from "./primitives";

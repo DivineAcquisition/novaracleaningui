@@ -4,7 +4,7 @@
 // Sets expectations: no pricing shown; the team reviews and reaches out.
 
 import { useSearchParams } from "next/navigation";
-import { RiCheckboxCircleFill, RiTimeLine, RiFileList3Line, RiTeamLine } from "@remixicon/react";
+import { RiCheckboxCircleFill, RiTimeLine, RiFileList3Line, RiTeamLine } from "@/components/icons";
 import { SEO } from "@/components/SEO";
 import { CompanyCoiDownloadLink } from "@/components/commercial/CompanyCoiDownloadLink";
 import { SUPPORT_PHONE } from "@/config/brand-config";

@@ -1,6 +1,6 @@
 "use client";
 
-import { RiFacebookFill, RiInstagramLine } from "@remixicon/react";
+import { RiFacebookFill, RiInstagramLine } from "@/components/icons";
 import { openCookieSettings } from "@/components/compliance/CookieNotice";
 import { INBOUND_PHONE, SUPPORT_PHONE } from "@/config/brand-config";
 import { cn } from "@/lib/utils";

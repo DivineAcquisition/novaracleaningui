@@ -11,7 +11,7 @@
 // rendered consistently.
 
 import * as React from "react";
-import { RiCloseLine } from "@remixicon/react";
+import { RiCloseLine } from "@/components/icons";
 import { Drawer as DrawerPrimitive } from "vaul";
 import {
   Dialog,

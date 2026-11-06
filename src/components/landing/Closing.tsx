@@ -1,7 +1,7 @@
 // Pricing, FAQ, final call to action, and footer. Server-rendered.
 
 import Link from "next/link";
-import { RiArrowDownSLine, RiArrowRightLine, RiPhoneLine } from "@remixicon/react";
+import { RiArrowDownSLine, RiArrowRightLine, RiPhoneLine } from "@/components/icons";
 import { INBOUND_PHONE } from "@/config/brand-config";
 import { FAQ, FINAL_CTA, PRICING } from "@/lib/landing/content";
 import { startingOnlinePrice, type LandingPrices } from "@/lib/landing/prices";

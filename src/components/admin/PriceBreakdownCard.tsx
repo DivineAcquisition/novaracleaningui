@@ -18,7 +18,7 @@ import {
   RiLock2Line,
   RiMapPin2Line,
   RiShieldCheckLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 
 import { cn } from "@/lib/utils";
 import type { QuoteBreakdown, BreakdownLine } from "@/lib/dynamic-pricing";

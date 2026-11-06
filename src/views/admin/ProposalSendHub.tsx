@@ -6,7 +6,7 @@ import {
   RiHotelLine,
   RiMailSendLine,
   RiUserStarLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { cn } from "@/lib/utils";
 import {
   PROPOSAL_SEND_FLOW_DEFS,

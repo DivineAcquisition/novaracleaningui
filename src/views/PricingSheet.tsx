@@ -12,7 +12,7 @@ import {
   RiSparklingLine,
   RiStarLine,
   RiVipCrownLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";

@@ -26,7 +26,7 @@ import {
   RiRefreshLine,
   RiAlertLine,
   RiTrophyLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { loadGooglePlaces } from "@/lib/google-places-loader";

@@ -3,7 +3,7 @@
 import {
   RiArrowLeftLine,
   RiArrowRightLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import { Button } from "@/components/ui/button";
 
 import { cn } from "@/lib/utils";

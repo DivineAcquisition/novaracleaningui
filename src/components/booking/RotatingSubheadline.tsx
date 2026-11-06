@@ -5,7 +5,7 @@ import {
   RiFlashlightLine,
   RiPhoneFill,
   RiCalendarCheckLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 
 // Three value-prop messages that rotate under the main headline on the
 // zip entry page. The order matches the brief — "no call required" is the

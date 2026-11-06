@@ -12,7 +12,7 @@
 //     send; whatever is sent is archived on the action.
 
 import { useCallback, useEffect, useState } from "react";
-import { RiAlertLine, RiLoader4Line, RiMailSendLine } from "@remixicon/react";
+import { RiAlertLine, RiLoader4Line, RiMailSendLine } from "@/components/icons";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";

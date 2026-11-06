@@ -6,7 +6,7 @@ import {
   RiCheckLine,
   RiCloseLine,
   RiExternalLinkLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { cn } from "@/lib/utils";
 import {
   COMMERCIAL_COMPARISON,

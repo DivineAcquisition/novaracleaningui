@@ -7,7 +7,7 @@
 // agreement. The page is unauthenticated on purpose: the emails that point
 // here are meant to open without a login.
 
-import { RiDownloadLine, RiExternalLinkLine } from "@remixicon/react";
+import { RiDownloadLine, RiExternalLinkLine } from "@/components/icons";
 
 import { PdfViewer } from "@/components/PdfViewer";
 import { SEO } from "@/components/SEO";

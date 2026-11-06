@@ -4,7 +4,7 @@ import {
   RiArrowDownSLine,
   RiArrowUpSLine,
   RiCheckLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import * as React from "react";
 import * as SelectPrimitive from "@radix-ui/react-select";
 

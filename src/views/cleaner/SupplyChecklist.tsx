@@ -1,6 +1,6 @@
 "use client";
 
-import { RiLoader4Line } from "@remixicon/react";
+import { RiLoader4Line } from "@/components/icons";
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 

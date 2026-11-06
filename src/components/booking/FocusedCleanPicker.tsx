@@ -1,6 +1,6 @@
 "use client";
 
-import { RiCheckLine, RiSubtractLine, RiAddLine } from "@remixicon/react";
+import { RiCheckLine, RiSubtractLine, RiAddLine } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";

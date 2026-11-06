@@ -5,7 +5,7 @@ import {
   RiLoader4Line,
   RiPauseCircleLine,
   RiPlayCircleLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {

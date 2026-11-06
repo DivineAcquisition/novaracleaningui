@@ -19,7 +19,7 @@ import {
   RiMailLine,
   RiScales3Line,
   RiSettings3Line,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";

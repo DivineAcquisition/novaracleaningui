@@ -45,7 +45,7 @@ import {
   RiShieldCheckLine,
   RiTimeLine,
   RiUserSharedLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";

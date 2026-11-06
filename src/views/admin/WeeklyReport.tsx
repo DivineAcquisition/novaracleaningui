@@ -12,7 +12,7 @@ import {
   RiPlayLine,
   RiRefreshLine,
   RiSettings3Line,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 

@@ -3,7 +3,7 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { RiArrowLeftLine } from "@remixicon/react";
+import { RiArrowLeftLine } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { SiteHeader, StickyMobileBar } from "./Chrome";
 import { SiteFooter } from "./Footer";

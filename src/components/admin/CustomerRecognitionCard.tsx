@@ -4,7 +4,7 @@ import {
   RiCheckboxCircleLine,
   RiSparklingLine,
   RiVipCrownLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import { Card } from "@/components/ui/card";
 
 export interface CustomerStatus {

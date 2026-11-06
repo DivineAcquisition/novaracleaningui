@@ -8,7 +8,7 @@
 // so this is always optional and says so.
 
 import { useEffect, useMemo, useState } from "react";
-import { RiCheckLine, RiSearchLine } from "@remixicon/react";
+import { RiCheckLine, RiSearchLine } from "@/components/icons";
 
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";

@@ -4,7 +4,7 @@
 // type, TIN, and a street address. Stored on cleaner_w9 by the nec-1099
 // function. The response comes back with the last four digits only.
 
-import { RiLoader4Line } from "@remixicon/react";
+import { RiLoader4Line } from "@/components/icons";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";

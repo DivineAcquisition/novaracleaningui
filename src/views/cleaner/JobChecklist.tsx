@@ -28,7 +28,7 @@ import {
   RiProhibitedLine,
   RiSparklingLine,
   RiTimeLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { supabase } from "@/integrations/supabase/client";
 import { describeEdgeError } from "@/lib/edge-invoke";
 import { Button } from "@/components/ui/button";

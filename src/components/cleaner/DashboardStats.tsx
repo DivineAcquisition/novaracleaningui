@@ -5,7 +5,7 @@ import {
   RiBriefcaseLine,
   RiMoneyDollarCircleLine,
   RiStarLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import { Card } from "@/components/ui/card";
 import { TOUR, tourAnchor, type TourAnchor } from "@/lib/tours/anchors";
 

@@ -9,7 +9,7 @@
 // sweep so the panel is always truthful.
 
 import { useCallback, useEffect, useState } from "react";
-import { RiAlarmWarningLine, RiLoader4Line, RiPauseCircleLine, RiRepeatLine } from "@remixicon/react";
+import { RiAlarmWarningLine, RiLoader4Line, RiPauseCircleLine, RiRepeatLine } from "@/components/icons";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";

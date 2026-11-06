@@ -22,7 +22,7 @@ import {
   RiLoader4Line,
   RiLockLine,
   RiSendPlaneFill,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 

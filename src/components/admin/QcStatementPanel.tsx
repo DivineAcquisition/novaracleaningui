@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { RiExternalLinkLine, RiLoader4Line } from "@remixicon/react";
+import { RiExternalLinkLine, RiLoader4Line } from "@/components/icons";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";

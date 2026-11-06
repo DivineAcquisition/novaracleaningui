@@ -7,7 +7,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { RiHeart3Fill, RiLoader4Line, RiErrorWarningLine } from "@remixicon/react";
+import { RiHeart3Fill, RiLoader4Line, RiErrorWarningLine } from "@/components/icons";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { RiLoader4Line } from "@remixicon/react";
+import { RiLoader4Line } from "@/components/icons";
 import { z } from "zod";
 import { SEO } from "@/components/SEO";
 import { GoogleIcon } from "@/components/auth/AuthScaffold";

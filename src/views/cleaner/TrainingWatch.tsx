@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { RiGraduationCapLine, RiLoader4Line, RiPlayCircleLine } from "@remixicon/react";
+import { RiGraduationCapLine, RiLoader4Line, RiPlayCircleLine } from "@/components/icons";
 
 import { WistiaPlayer } from "@/components/cleaner/WistiaPlayer";
 import { Button } from "@/components/ui/button";

@@ -4,7 +4,7 @@ import type { ComponentType, ReactNode } from "react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { RiCloseLine, RiLogoutBoxRLine, RiMenuLine } from "@remixicon/react";
+import { RiCloseLine, RiLogoutBoxRLine, RiMenuLine } from "@/components/icons";
 
 import { BrandAtmosphere } from "@/components/brand/atmosphere";
 import { Button } from "@/components/ui/button";

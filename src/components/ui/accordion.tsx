@@ -2,7 +2,7 @@
 
 import {
   RiArrowDownSLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import * as React from "react";
 import * as AccordionPrimitive from "@radix-ui/react-accordion";
 

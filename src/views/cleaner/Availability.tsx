@@ -5,7 +5,7 @@ import {
   RiCalendarLine,
   RiCheckboxCircleLine,
   RiLoader4Line
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/integrations/supabase/client";

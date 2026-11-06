@@ -4,7 +4,7 @@ import {
   RiArrowLeftLine,
   RiCheckboxCircleLine,
   RiLoader4Line
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useState } from "react";
 import Link from "next/link";
 import { CustomerAuthShell, authField, authLabel, authOutline, authPrimary } from "@/components/auth/CustomerAuthShell";

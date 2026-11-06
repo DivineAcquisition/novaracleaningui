@@ -7,7 +7,7 @@
 // impact. The performer is always paid; the customer is never charged.
 
 import { useCallback, useEffect, useState } from "react";
-import { RiLoader4Line, RiShieldCheckLine, RiCameraLine } from "@remixicon/react";
+import { RiLoader4Line, RiShieldCheckLine, RiCameraLine } from "@/components/icons";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { edgeResult } from "@/lib/edge-invoke";

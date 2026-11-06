@@ -2,7 +2,7 @@
 
 import {
   RiLoader4Line
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useState, useRef, ReactNode } from "react";
 
 import { useNativeHaptics } from "@/hooks/use-native-haptics";

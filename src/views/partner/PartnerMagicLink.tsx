@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { RiLoader4Line, RiMailLine, RiShieldCheckLine } from "@remixicon/react";
+import { RiLoader4Line, RiMailLine, RiShieldCheckLine } from "@/components/icons";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

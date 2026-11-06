@@ -5,7 +5,7 @@ import {
   RiMapPinLine,
   RiMoneyDollarCircleLine,
   RiStarLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import { Card } from "@/components/ui/card";
 
 import { format } from "date-fns";

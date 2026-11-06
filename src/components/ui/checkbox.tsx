@@ -2,7 +2,7 @@
 
 import {
   RiCheckLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import * as React from "react";
 import * as CheckboxPrimitive from "@radix-ui/react-checkbox";
 

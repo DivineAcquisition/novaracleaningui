@@ -4,7 +4,7 @@
 // The free-text note stays internal and is never put in the notice.
 
 import { useEffect, useState } from "react";
-import { RiLoader4Line, RiCloseCircleLine } from "@remixicon/react";
+import { RiLoader4Line, RiCloseCircleLine } from "@/components/icons";
 import { supabase } from "@/integrations/supabase/client";
 import { describeEdgeError } from "@/lib/edge-invoke";
 import { FOR_CAUSE_GROUNDS, TERMINATION_BASES } from "@/lib/engagement-end";

@@ -19,7 +19,7 @@ import {
   RiLoader4Line,
   RiMapPin2Line,
   RiShieldCheckLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 
 import { SignaturePad } from "@/components/booking/SignaturePad";
 import { AddressAutocomplete } from "@/components/booking/AddressAutocomplete";

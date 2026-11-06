@@ -3,7 +3,7 @@
 import {
   RiArrowLeftSLine,
   RiArrowRightSLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import * as React from "react";
 
 import { DayPicker } from "react-day-picker";

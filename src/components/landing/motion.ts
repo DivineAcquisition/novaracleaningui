@@ -4,6 +4,7 @@
 // for reduced motion.
 
 import { useEffect, useRef, useState, type RefObject } from "react";
+import { BOOK_PATH, bookingHref } from "@/lib/landing/links";
 
 export function prefersStill(): boolean {
   if (typeof window === "undefined") return true;
@@ -116,7 +117,7 @@ export function useAnimatedNumber(target: number, reduced: boolean, durationMs =
 export function scrollToBooking() {
   const form = document.getElementById("get-price");
   if (!form) {
-    window.location.assign("/#get-price");
+    window.location.assign(bookingHref(BOOK_PATH));
     return;
   }
   form.scrollIntoView({ behavior: prefersStill() ? "auto" : "smooth", block: "center" });

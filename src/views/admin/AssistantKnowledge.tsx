@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { RiLoader4Line, RiSaveLine, RiDeleteBinLine } from "@remixicon/react";
+import { RiLoader4Line, RiSaveLine, RiDeleteBinLine } from "@/components/icons";
 import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";

@@ -13,7 +13,7 @@ import {
   RiTicketLine,
   RiTimeLine,
   RiUserLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';

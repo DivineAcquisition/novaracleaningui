@@ -8,7 +8,7 @@ import {
   RiDeleteBinLine,
   RiLoader4Line,
   RiSaveLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

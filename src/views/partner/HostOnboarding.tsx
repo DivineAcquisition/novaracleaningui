@@ -18,7 +18,7 @@ import {
   RiHome4Line, RiAddLine, RiDeleteBinLine, RiArrowRightLine, RiArrowLeftLine,
   RiCheckboxCircleLine, RiShieldCheckLine, RiKey2Line,
   RiSparklingLine, RiFlashlightFill,
-} from "@remixicon/react";
+} from "@/components/icons";
 
 import { Button } from "@/components/ui/button";
 import { AcceptanceChecklist, type AcceptanceGateState } from "@/components/compliance/AcceptanceChecklist";

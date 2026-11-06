@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { RiCheckLine, RiExternalLinkLine, RiSparklingLine } from "@remixicon/react";
+import { RiCheckLine, RiExternalLinkLine, RiSparklingLine } from "@/components/icons";
 import {
   CHECKLIST_INDEX_PATH,
   VALUE_STACK_HEADLINES,

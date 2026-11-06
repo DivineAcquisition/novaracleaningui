@@ -6,7 +6,7 @@ import {
   RiStarLine,
   RiTrophyLine,
   RiUserLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';

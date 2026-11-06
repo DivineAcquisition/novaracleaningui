@@ -3,7 +3,7 @@
 
 import {
   RiDraggable
-} from "@remixicon/react";
+} from "@/components/icons";
 import * as ResizablePrimitive from "react-resizable-panels";
 
 import { cn } from "@/lib/utils";

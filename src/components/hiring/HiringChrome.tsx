@@ -6,7 +6,7 @@
 // site structure (nav → hero → open roles) without the black theme.
 
 import Link from "next/link";
-import { RiArrowRightLine } from "@remixicon/react";
+import { RiArrowRightLine } from "@/components/icons";
 import { BRAND } from "@/lib/brand";
 import { DEFAULT_INTAKE_SETTINGS } from "@/lib/contractor-intake/settings";
 import { SUPPORT_PHONE } from "@/config/brand-config";

@@ -5,7 +5,7 @@ import {
   RiCircleLine,
   RiLoader4Line,
   RiShieldCheckLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";

@@ -13,7 +13,10 @@ export function SiteFooter() {
         <div className="grid gap-10 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
           <div>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/novara-logo.png" alt="Novara Cleaning" width={40} height={40} className="h-10 w-10 rounded-[10px]" />
+            <span className="flex items-center gap-2.5">
+              <img src="/novara-logo.png" alt="" width={40} height={40} className="h-10 w-10 rounded-[10px]" />
+              <span className="text-[17px] font-semibold tracking-[-0.02em] text-ink">Novara Cleaning</span>
+            </span>
             <p className="mt-4 text-[14.5px] text-ink-muted">{FOOTER.tagline}</p>
             <p className="mt-3 text-[12.5px] leading-relaxed text-ink-muted">{FOOTER.company}</p>
             <p className="mt-3 space-y-1 text-[13px] text-ink-muted">

@@ -4,7 +4,7 @@
 import {
   RiMenuLine,
   RiNotification3Line
-} from "@remixicon/react";
+} from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { useNativeHaptics } from "@/hooks/use-native-haptics";
 

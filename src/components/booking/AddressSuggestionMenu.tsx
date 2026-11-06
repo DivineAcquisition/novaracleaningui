@@ -1,6 +1,6 @@
 "use client";
 
-import { RiMapPinLine } from "@remixicon/react";
+import { RiMapPinLine } from "@/components/icons";
 import type { AddressSuggestion } from "@/lib/google-places-loader";
 
 /** Suggestion list shared by every address field. Novara purple, not the browser default. */

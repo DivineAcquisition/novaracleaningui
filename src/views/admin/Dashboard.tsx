@@ -21,7 +21,7 @@ import {
   RiAlertLine,
   RiTimeLine,
   RiLineChartLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { supabase } from "@/integrations/supabase/client";
 import { Bar, BarChart, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";

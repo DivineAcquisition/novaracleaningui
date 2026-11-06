@@ -5,7 +5,7 @@
 // stay distinct under one identity. No cleaner/crew contact. No passwords.
 
 import { useEffect, useState } from "react";
-import { RiLoader4Line, RiLogoutBoxRLine } from "@remixicon/react";
+import { RiLoader4Line, RiLogoutBoxRLine } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { SEO } from "@/components/SEO";
 import { cn } from "@/lib/utils";

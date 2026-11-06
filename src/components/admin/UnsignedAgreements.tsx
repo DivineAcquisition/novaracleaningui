@@ -11,7 +11,7 @@
 // is exactly where these signatures were being lost. The panel hides itself
 // when the backlog is empty; a permanent empty card teaches people to ignore it.
 
-import { RiFileWarningLine, RiLoader4Line, RiMailSendLine } from "@remixicon/react";
+import { RiFileWarningLine, RiLoader4Line, RiMailSendLine } from "@/components/icons";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 

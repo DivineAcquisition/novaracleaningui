@@ -3,7 +3,7 @@
 import {
   RiGroupLine,
   RiSendPlaneLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";

@@ -15,7 +15,7 @@ import {
   RiCheckboxCircleFill,
   RiExternalLinkLine,
   RiLoader4Line,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";

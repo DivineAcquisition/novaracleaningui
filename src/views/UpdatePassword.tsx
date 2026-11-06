@@ -8,7 +8,7 @@ import {
   RiLockLine,
   RiShieldKeyholeLine,
   RiBankCardLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";

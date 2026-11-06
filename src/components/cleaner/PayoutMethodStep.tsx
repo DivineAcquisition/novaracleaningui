@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { RiArrowRightLine, RiBankCardLine, RiLoader4Line } from "@remixicon/react";
+import { RiArrowRightLine, RiBankCardLine, RiLoader4Line } from "@/components/icons";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";

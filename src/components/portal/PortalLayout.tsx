@@ -9,7 +9,7 @@ import {
   RiDashboardLine,
   RiSettings3Line,
   RiVipCrownLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 
 import { WorkspaceShell } from "@/components/chrome/WorkspaceShell";
 import { Button } from "@/components/ui/button";

@@ -8,7 +8,7 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { RiRepeatLine, RiLoader4Line, RiPauseLine, RiPlayLine, RiSkipForwardLine, RiUserStarLine } from "@remixicon/react";
+import { RiRepeatLine, RiLoader4Line, RiPauseLine, RiPlayLine, RiSkipForwardLine, RiUserStarLine } from "@/components/icons";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";

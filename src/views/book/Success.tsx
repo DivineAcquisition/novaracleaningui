@@ -14,7 +14,7 @@ import {
   RiShareLine,
   RiTimeLine,
   RiUserAddLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useBooking } from "@/contexts/BookingContext";

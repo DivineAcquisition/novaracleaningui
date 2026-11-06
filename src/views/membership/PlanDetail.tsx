@@ -7,7 +7,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { RiArrowRightLine, RiArrowRightUpLine, RiCheckLine } from "@remixicon/react";
+import { RiArrowRightLine, RiArrowRightUpLine, RiCheckLine } from "@/components/icons";
 import { HOME_SIZES } from "@/config/brand-config";
 import { MarketingShell, PageHero } from "@/components/landing/MarketingShell";
 import { Chip, Index, Section, btnOutline, btnPrimary } from "@/components/landing/primitives";

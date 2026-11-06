@@ -15,7 +15,7 @@ import {
   RiLoader4Line, RiPriceTag3Line, RiTeamLine, RiAlarmWarningLine, RiCalendarCheckLine,
   RiSearchLine, RiStarFill, RiImage2Line, RiMoneyDollarCircleLine, RiCheckboxCircleLine,
   RiFileTextLine, RiRepeatLine, RiUserStarLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";

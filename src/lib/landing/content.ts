@@ -414,3 +414,48 @@ export const GUARANTEE = {
  * Images can be public URLs or files in /public.
  */
 export const BEFORE_AFTER: Array<{ room: string; service: string; before: string; after: string }> = [];
+
+/** Site-wide promo banner, shown on the marketing site and the booking flow. */
+export const PROMO = {
+  active: true,
+  text: "Get your Thanksgiving special",
+  cta: "Book now",
+} as const;
+
+/** Header dropdowns. `icon` names a Lucide icon, rendered in Chrome.tsx. */
+export const MENUS = [
+  {
+    label: "Home cleaning",
+    items: [
+      { href: "/checklist/standard-clean", title: "Standard clean", body: "Regular upkeep for a tidy home", icon: "sparkles" },
+      { href: "/checklist/deep-clean", title: "Deep clean", body: "The detail work. Best for a first clean", icon: "spray" },
+      { href: "/checklist/move-in-out", title: "Move-in / move-out", body: "An empty home, cleaned inside everything", icon: "truck" },
+      { href: "/membership", title: "Memberships", body: "Monthly, every two weeks, or weekly", icon: "repeat" },
+      { href: "/checklist", title: "What's included", body: "The checklist for every service", icon: "list" },
+    ],
+  },
+  {
+    label: "Airbnb & rentals",
+    items: [
+      { href: "/str", title: "Turnover cleaning", body: "A price per property, in seconds", icon: "bed" },
+      { href: "https://partner.novaracleaning.com", title: "Host sign in", body: "Request turnovers and see photos", icon: "key" },
+    ],
+  },
+  {
+    label: "Commercial",
+    items: [
+      { href: "https://commercial.novaracleaning.com", title: "Offices and facilities", body: "Scheduled cleaning, priced per visit", icon: "building" },
+      { href: "/checklist#commercial", title: "Commercial checklists", body: "Light, standard, detailed, and office scopes", icon: "clipboard" },
+    ],
+  },
+  {
+    label: "Company",
+    items: [
+      { href: "/#how", title: "How it works", body: "From price to a checked clean", icon: "route" },
+      { href: "/#guarantee", title: "Our guarantee", body: "Missed something? We come back free", icon: "shield" },
+      { href: "/#nova", title: "Call Nova", body: "Our assistant answers day and night", icon: "phone" },
+      { href: "/#faq", title: "FAQ", body: "Prices, cancellations, and more", icon: "help" },
+      { href: "https://hiring.novaracleaning.com", title: "Work with us", body: "Join the cleaning team", icon: "briefcase" },
+    ],
+  },
+] as const;

@@ -18,7 +18,7 @@ import {
   RiLoader4Line, RiMapPinLine, RiTimeLine, RiKey2Line,
   RiCheckboxCircleLine, RiCameraLine, RiInformationLine,
   RiCheckLine, RiPlayCircleLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";

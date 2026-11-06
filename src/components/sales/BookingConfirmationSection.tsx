@@ -8,7 +8,7 @@ import {
   RiLoader4Line,
   RiMapPinLine,
   RiTimeLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

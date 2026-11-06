@@ -12,7 +12,7 @@ import {
   RiCheckLine,
   RiCheckboxCircleFill,
   RiLoader4Line,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { SEO } from "@/components/SEO";
 import {
   AGE_18_COPY,

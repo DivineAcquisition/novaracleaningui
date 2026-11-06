@@ -2,7 +2,7 @@
 
 import { PaymentElement, Elements, useElements, useStripe } from "@stripe/react-stripe-js";
 import { useState } from "react";
-import { RiBankCardLine, RiLoader4Line } from "@remixicon/react";
+import { RiBankCardLine, RiLoader4Line } from "@/components/icons";
 
 import { getStripePromise } from "@/lib/stripe-client";
 

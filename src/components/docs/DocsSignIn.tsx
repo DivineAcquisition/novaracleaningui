@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
-import { RiArrowRightLine, RiLoader4Line, RiLockLine, RiMailLine } from "@remixicon/react";
+import { RiArrowRightLine, RiLoader4Line, RiLockLine, RiMailLine } from "@/components/icons";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

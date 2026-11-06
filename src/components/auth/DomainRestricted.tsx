@@ -3,7 +3,7 @@
 import {
   RiErrorWarningLine,
   RiExternalLinkLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import { ReactNode, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';

@@ -10,7 +10,7 @@
 // contribution. Logging something as Paid before the money moves is how the
 // books drift.
 
-import { RiCheckboxCircleFill, RiLoader4Line } from "@remixicon/react";
+import { RiCheckboxCircleFill, RiLoader4Line } from "@/components/icons";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 

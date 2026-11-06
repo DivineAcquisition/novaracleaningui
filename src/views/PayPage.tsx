@@ -27,7 +27,7 @@ import {
   RiQuillPenLine,
   RiShieldCheckLine,
   RiSparklingLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";

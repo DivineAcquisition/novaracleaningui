@@ -12,7 +12,7 @@ import {
   RiLineChartLine,
   RiLoader4Line,
   RiRefreshLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";

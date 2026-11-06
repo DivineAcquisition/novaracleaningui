@@ -5,7 +5,7 @@
 // booking flow's price tables (src/lib/landing/data.ts), which do not vary by ZIP.
 
 import { useEffect, useMemo, useState } from "react";
-import { RiArrowRightLine, RiTimeLine, RiUserLine } from "@remixicon/react";
+import { RiArrowRightLine, RiTimeLine, RiUserLine } from "@/components/icons";
 import { onlineDiscountPct, type LandingPlan, type LandingPrices, type LandingServiceType } from "@/lib/landing/prices";
 import { QUOTE_REPORT } from "@/lib/landing/content";
 import { cn } from "@/lib/utils";

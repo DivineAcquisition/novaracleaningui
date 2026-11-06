@@ -41,7 +41,7 @@ import {
   RiSmartphoneLine,
   RiFileCopyLine,
   RiExternalLinkLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useAdminRole } from "@/hooks/use-admin-role";
 import { useOpsAssistantRecord } from "@/components/ops-assistant/OpsAssistantProvider";
 import imageCompression from "browser-image-compression";

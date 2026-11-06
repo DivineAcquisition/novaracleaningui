@@ -35,7 +35,7 @@ import {
   RiTimeLine,
   RiExternalLinkLine,
   RiFileTextLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 
 import { SignaturePad } from "@/components/booking/SignaturePad";
 import { CompanyCoiDownloadLink } from "@/components/commercial/CompanyCoiDownloadLink";

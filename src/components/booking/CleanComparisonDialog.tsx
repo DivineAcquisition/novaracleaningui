@@ -7,7 +7,7 @@ import {
   RiSparklingLine,
   RiTimeLine,
   RiTeamLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import {
   Dialog,
   DialogContent,

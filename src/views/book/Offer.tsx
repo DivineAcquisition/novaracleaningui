@@ -9,7 +9,7 @@ import {
   RiSparklingLine,
   RiStarLine,
   RiVipCrownLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { trackViewContent } from "@/lib/meta-pixel";

@@ -11,7 +11,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   RiLoader4Line, RiCalendarCheckLine, RiCheckLine, RiMailSendLine,
   RiArrowRightLine, RiShieldCheckLine, RiHome3Line, RiAddLine, RiCloseLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { AddressAutocomplete } from "@/components/booking/AddressAutocomplete";
 
 interface Property { id: string; nickname: string | null; address: string | null; turnover_price: number | null; }

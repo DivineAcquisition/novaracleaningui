@@ -1,6 +1,6 @@
 "use client";
 
-import { RiCheckLine, RiLoader4Line, RiMegaphoneLine } from "@remixicon/react";
+import { RiCheckLine, RiLoader4Line, RiMegaphoneLine } from "@/components/icons";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 

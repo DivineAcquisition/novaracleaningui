@@ -3,7 +3,7 @@
 
 import {
   RiMoneyDollarCircleLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 

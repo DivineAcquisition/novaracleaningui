@@ -6,7 +6,7 @@
 
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
-import { RiArrowRightLine, RiArrowRightUpLine, RiCheckLine, RiPauseCircleLine, RiPlayCircleLine } from "@remixicon/react";
+import { RiArrowRightLine, RiArrowRightUpLine, RiCheckLine, RiPauseCircleLine, RiPlayCircleLine } from "@/components/icons";
 import { useAuth } from "@/contexts/AuthContext";
 import { PauseResumeDialog } from "@/components/membership/PauseResumeDialog";
 import { MarketingShell, PageHero } from "@/components/landing/MarketingShell";

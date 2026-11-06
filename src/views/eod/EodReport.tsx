@@ -16,7 +16,7 @@ import {
   RiShieldCheckLine,
   RiSpeedUpLine,
   RiTimerFlashLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import type { Session } from "@supabase/supabase-js";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";

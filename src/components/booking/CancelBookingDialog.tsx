@@ -1,6 +1,6 @@
 "use client";
 
-import { RiAlertLine, RiCheckboxCircleLine, RiLoader4Line } from "@remixicon/react";
+import { RiAlertLine, RiCheckboxCircleLine, RiLoader4Line } from "@/components/icons";
 import { useState } from "react";
 import { format, differenceInHours } from "date-fns";
 import { Button } from "@/components/ui/button";

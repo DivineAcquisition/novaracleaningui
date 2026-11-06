@@ -4,7 +4,7 @@ import {
   RiCheckboxCircleLine,
   RiHomeLine as HomeIcon,
   RiPhoneLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useRouter } from "next/navigation";
 import { useBooking } from "@/contexts/BookingContext";
 import { Button } from "@/components/ui/button";

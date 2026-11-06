@@ -7,7 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   RiLoader4Line, RiSendPlaneLine, RiRefreshLine, RiAlertLine, RiCheckboxCircleFill,
   RiBankCardLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";

@@ -5,7 +5,7 @@ import {
   RiCheckboxCircleLine,
   RiLoader4Line,
   RiSendPlaneLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

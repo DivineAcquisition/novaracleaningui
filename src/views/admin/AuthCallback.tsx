@@ -11,7 +11,7 @@
 //     - admin → /admin/dashboard
 //     - not admin → toast "Access denied" + sign-out + back to /admin/auth.
 
-import { RiLoader4Line } from "@remixicon/react";
+import { RiLoader4Line } from "@/components/icons";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 

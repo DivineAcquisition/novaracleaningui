@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { RiCameraLine, RiCloseCircleLine, RiLoader4Line, RiPlayCircleLine } from "@remixicon/react";
+import { RiCameraLine, RiCloseCircleLine, RiLoader4Line, RiPlayCircleLine } from "@/components/icons";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { MediaThumb } from "@/components/job-media/MediaThumb";

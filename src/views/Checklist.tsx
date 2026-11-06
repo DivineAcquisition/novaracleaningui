@@ -2,7 +2,7 @@
 // style. Every line comes from src/lib/checklists.ts, the list the crews use.
 
 import Link from "next/link";
-import { RiAddLine, RiArrowRightLine, RiArrowRightUpLine, RiPhoneLine } from "@remixicon/react";
+import { RiAddLine, RiArrowRightLine, RiArrowRightUpLine, RiPhoneLine } from "@/components/icons";
 import { INBOUND_PHONE } from "@/config/brand-config";
 import { MarketingShell, PageHero } from "@/components/landing/MarketingShell";
 import { Chip, Index, Section, btnOutline, btnPrimary, gutter, shell } from "@/components/landing/primitives";

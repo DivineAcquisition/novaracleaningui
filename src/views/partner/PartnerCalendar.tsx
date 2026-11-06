@@ -19,7 +19,7 @@ import { format } from "date-fns";
 import {
   RiLoader4Line, RiArrowLeftLine, RiArrowLeftSLine, RiArrowRightSLine,
   RiCalendarEventLine, RiCloseLine, RiDeleteBin6Line, RiRepeatLine, RiCheckLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

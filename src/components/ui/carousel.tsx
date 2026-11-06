@@ -3,7 +3,7 @@
 import {
   RiArrowLeftLine,
   RiArrowRightLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import * as React from "react";
 import useEmblaCarousel, { type UseEmblaCarouselType } from "embla-carousel-react";
 

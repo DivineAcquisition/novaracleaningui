@@ -42,7 +42,7 @@ import {
   RiVipCrownLine,
   RiErrorWarningLine,
   RiHandCoinLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog,

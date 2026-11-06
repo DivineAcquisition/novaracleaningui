@@ -9,7 +9,7 @@ import {
   RiMailSendLine,
   RiSearch2Line,
   RiUserStarLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

@@ -14,7 +14,7 @@
 // Brackets are data, not code: splitting "2+" into "2" and "3+" is an insert
 // here, with no deploy.
 
-import { RiAddLine, RiDeleteBin6Line, RiInformationLine, RiLoader4Line } from "@remixicon/react";
+import { RiAddLine, RiDeleteBin6Line, RiInformationLine, RiLoader4Line } from "@/components/icons";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 

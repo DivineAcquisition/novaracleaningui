@@ -20,7 +20,7 @@ import {
   RiMoneyDollarCircleLine,
   RiNotification3Line,
   RiTimeLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { format } from "date-fns";
 
 import { supabase } from "@/integrations/supabase/client";

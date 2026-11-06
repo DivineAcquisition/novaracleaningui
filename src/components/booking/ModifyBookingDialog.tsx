@@ -12,7 +12,7 @@ import {
   RiLoader4Line,
   RiSparklingLine,
   RiSubtractLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { ResponsiveModal } from "@/components/booking/ResponsiveModal";

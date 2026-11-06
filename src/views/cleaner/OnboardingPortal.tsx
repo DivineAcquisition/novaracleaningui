@@ -14,7 +14,7 @@ import {
   RiRoadMapLine,
   RiSparklingLine,
   RiTShirtLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/integrations/supabase/client";

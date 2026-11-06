@@ -21,7 +21,7 @@ import {
   RiMapPinLine,
   RiPlayCircleLine,
   RiSparklingLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SEO } from "@/components/SEO";

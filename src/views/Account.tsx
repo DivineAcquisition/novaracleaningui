@@ -16,7 +16,7 @@ import {
   RiAlertLine, RiHomeLine, RiCloseLine, RiArrowDownSLine, RiArrowUpSLine,
   RiStarLine, RiSparklingLine, RiArrowRightLine, RiSettings3Line, RiNotification3Line,
   RiGiftLine, RiShieldCheckLine, RiCoupon3Line, RiExternalLinkLine, RiStarFill
-} from "@remixicon/react";
+} from "@/components/icons";
 import { ReferralSection } from "@/components/ReferralSection";
 import { CreditWallet } from "@/components/CreditWallet";
 import { toast } from "sonner";

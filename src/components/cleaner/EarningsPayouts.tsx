@@ -3,7 +3,7 @@
 import {
   RiExternalLinkLine,
   RiMoneyDollarCircleLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import { Card } from "@/components/ui/card";
 import {
   Table,

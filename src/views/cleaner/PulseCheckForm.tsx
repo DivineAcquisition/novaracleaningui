@@ -9,7 +9,7 @@ import {
   RiMapPin2Line,
   RiMoneyDollarCircleLine,
   RiTimeLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 
 import { TokenPageShell, TokenPanel } from "@/components/token/TokenPageShell";
 import { Button } from "@/components/ui/button";

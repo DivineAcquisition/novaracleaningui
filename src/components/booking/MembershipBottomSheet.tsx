@@ -6,7 +6,7 @@ import {
   RiSparklingLine,
   RiTimeLine,
   RiVipCrownLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import { 
   Drawer,
   DrawerClose,

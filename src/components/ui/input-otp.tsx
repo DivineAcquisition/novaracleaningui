@@ -2,7 +2,7 @@
 
 import {
   RiRadioButtonLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import * as React from "react";
 import { OTPInput, OTPInputContext } from "input-otp";
 

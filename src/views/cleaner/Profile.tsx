@@ -11,7 +11,7 @@ import {
   RiPhoneLine,
   RiSaveLine,
   RiUserLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";

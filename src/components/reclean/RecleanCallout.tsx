@@ -4,7 +4,7 @@
 // contractor dashboard, and the job-offer page all need the same "this is a
 // paid re-clean, customer is not charged" signal.
 
-import { RiShieldCheckLine } from "@remixicon/react";
+import { RiShieldCheckLine } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 

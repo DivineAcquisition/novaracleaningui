@@ -4,7 +4,7 @@ import {
   RiArrowRightSLine,
   RiCheckLine,
   RiCircleLine
-} from "@remixicon/react";
+} from "@/components/icons";
 import * as React from "react";
 import * as MenubarPrimitive from "@radix-ui/react-menubar";
 

@@ -7,7 +7,7 @@ import {
   RiLoginCircleLine,
   RiCheckboxCircleLine,
   RiLoader4Line,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PayChip, JobDetails, type PortalJob } from "@/components/cleaner/portal-enrichment";

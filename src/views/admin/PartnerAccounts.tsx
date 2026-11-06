@@ -19,7 +19,7 @@ import {
   RiLoader4Line, RiRefreshLine, RiSearchLine, RiAlertLine, RiPriceTag3Line,
   RiBankCard2Line, RiFileTextLine, RiErrorWarningLine, RiTimerFlashLine,
   RiZzzLine, RiMoneyDollarCircleLine, RiHotelLine, RiBuilding2Line, RiArrowRightLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

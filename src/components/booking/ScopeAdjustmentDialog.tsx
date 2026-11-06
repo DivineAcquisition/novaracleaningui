@@ -23,7 +23,7 @@ import {
   RiLoader4Line,
   RiPriceTag3Line,
   RiShieldCheckLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";

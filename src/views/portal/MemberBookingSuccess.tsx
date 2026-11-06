@@ -9,7 +9,7 @@ import {
   RiErrorWarningLine,
   RiLoader4Line,
   RiUserLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";

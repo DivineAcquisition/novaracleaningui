@@ -1,4 +1,4 @@
-import { RiLockLine } from "@remixicon/react";
+import { RiLockLine } from "@/components/icons";
 
 import { DocsSignIn } from "@/components/docs/DocsSignIn";
 import type { DocsDenialReason } from "@/lib/docs/auth";

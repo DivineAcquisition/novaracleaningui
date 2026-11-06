@@ -8,7 +8,7 @@ import {
   RiHome4Line,
   RiNotification3Line,
   RiUserLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 
 import { WorkspaceShell } from "@/components/chrome/WorkspaceShell";
 import { TourLauncher } from "@/components/tour/TourLauncher";

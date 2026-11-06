@@ -18,7 +18,7 @@ import {
   RiMoneyDollarCircleLine,
   RiCalendarScheduleLine,
   RiShieldCheckLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { SEO } from "@/components/SEO";
 import { WistiaPlayer } from "@/components/cleaner/WistiaPlayer";
 import { roleById, type HiringRoleId } from "@/lib/hiring/roles";

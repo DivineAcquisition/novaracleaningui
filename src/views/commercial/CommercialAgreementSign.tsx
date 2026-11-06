@@ -26,7 +26,7 @@ import {
   RiFileTextLine,
   RiLoader4Line,
   RiMailLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AcceptanceChecklist, type AcceptanceGateState } from "@/components/compliance/AcceptanceChecklist";
 import { submitAcceptances, submitSignedCopy } from "@/lib/compliance/record-client";

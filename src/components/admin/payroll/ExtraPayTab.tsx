@@ -15,7 +15,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   RiLoader4Line, RiRefreshLine, RiSendPlaneLine, RiMoneyDollarCircleLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";

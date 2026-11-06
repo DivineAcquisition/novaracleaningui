@@ -28,7 +28,7 @@ import {
   RiPlayCircleLine,
   RiRefreshLine,
   RiSearch2Line,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";

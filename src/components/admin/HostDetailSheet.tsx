@@ -20,7 +20,7 @@ import {
   RiBankCard2Line, RiPriceTag3Line, RiAddLine, RiSaveLine, RiHistoryLine,
   RiMoneyDollarCircleLine, RiStickyNoteLine, RiUser3Line, RiBuilding2Line,
   RiCalendarCheckLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle,

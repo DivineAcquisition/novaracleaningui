@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { RiCheckLine, RiLoader4Line, RiUpload2Line } from "@remixicon/react";
+import { RiCheckLine, RiLoader4Line, RiUpload2Line } from "@/components/icons";
 
 import { TokenPageShell, TokenPanel } from "@/components/token/TokenPageShell";
 import { Button } from "@/components/ui/button";

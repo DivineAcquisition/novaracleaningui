@@ -27,7 +27,7 @@ import {
   RiShieldCheckLine,
   RiTeamLine,
   RiTimeLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { PdfViewer } from "@/components/PdfViewer";
 import { toast } from "sonner";
 import { SignaturePad } from "@/components/booking/SignaturePad";
@@ -37,7 +37,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { SEO } from "@/components/SEO";
-import { RiDiscordFill } from "@remixicon/react";
+import { RiDiscordFill } from "@/components/icons";
 
 type Step = "no-invite" | "expired" | "agreement" | "form" | "pending";
 

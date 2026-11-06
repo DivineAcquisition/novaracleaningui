@@ -31,7 +31,7 @@ import {
   RiLoader4Line,
   RiPlayCircleLine,
   RiVideoLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

@@ -16,7 +16,7 @@ import {
   RiRepeatLine,
   RiShieldCheckLine,
   RiUserStarLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { cn } from "@/lib/utils";
 import AdminBookings from "@/views/admin/Bookings";
 import CommercialBooking from "@/views/admin/CommercialBooking";

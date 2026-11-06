@@ -31,7 +31,7 @@ import {
   RiTimeLine,
   RiLoader4Line,
   RiArrowGoBackLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";

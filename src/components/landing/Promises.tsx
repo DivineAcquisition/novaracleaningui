@@ -4,7 +4,7 @@
 // of a re-clean request. The sample sends nothing.
 
 import { useState } from "react";
-import { RiCheckboxCircleFill, RiRefreshLine } from "@remixicon/react";
+import { RiCheckboxCircleFill, RiRefreshLine } from "@/components/icons";
 import { PROMISES } from "@/lib/landing/content";
 import { cn } from "@/lib/utils";
 import { Chip, Section, btnPrimary } from "./primitives";

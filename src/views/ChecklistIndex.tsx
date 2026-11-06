@@ -1,7 +1,7 @@
 // Public checklist index (/checklist). Server component in the landing style.
 
 import Link from "next/link";
-import { RiArrowRightLine, RiArrowRightUpLine, RiCheckLine } from "@remixicon/react";
+import { RiArrowRightLine, RiArrowRightUpLine, RiCheckLine } from "@/components/icons";
 import { MarketingShell, PageHero } from "@/components/landing/MarketingShell";
 import { Chip, Frame, Index, Section } from "@/components/landing/primitives";
 import {

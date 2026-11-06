@@ -4,7 +4,7 @@
 // /hiring/apply so it can take the full screen, Typeform-style.
 
 import Link from "next/link";
-import { RiArrowRightLine, RiCheckboxCircleLine, RiFileTextLine, RiMapPin2Line } from "@remixicon/react";
+import { RiArrowRightLine, RiCheckboxCircleLine, RiFileTextLine, RiMapPin2Line } from "@/components/icons";
 import { type HiringRoleId } from "@/lib/hiring/roles";
 import { hiringApplyUrl } from "@/lib/site-hosts";
 import { HIRING_GRADIENT } from "@/components/hiring/HiringChrome";

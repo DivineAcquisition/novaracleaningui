@@ -20,7 +20,7 @@ import {
   RiFileCopyLine,
   RiCalendarCheckLine,
   RiVipCrownLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";

@@ -2,7 +2,7 @@
 
 import { useRef, useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { RiEraserLine } from "@remixicon/react";
+import { RiEraserLine } from "@/components/icons";
 
 interface SignaturePadProps {
   onChange: (dataUrl: string | null) => void;

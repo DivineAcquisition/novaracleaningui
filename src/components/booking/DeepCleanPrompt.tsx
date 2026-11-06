@@ -1,6 +1,6 @@
 "use client";
 
-import { RiAlertLine, RiSparklingLine } from "@remixicon/react";
+import { RiAlertLine, RiSparklingLine } from "@/components/icons";
 import { cn } from "@/lib/utils";
 
 export type DeepCleanedBefore = "yes" | "no" | "";

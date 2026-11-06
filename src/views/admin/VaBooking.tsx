@@ -51,7 +51,7 @@ import {
   RiMailLine,
   RiFileList3Line,
   RiCalendarScheduleLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import {
   addDays,
   addMonths,

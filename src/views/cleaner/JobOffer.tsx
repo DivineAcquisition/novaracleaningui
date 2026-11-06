@@ -27,7 +27,7 @@ import {
   RiLoader4Line,
   RiAlertLine,
   RiArrowLeftLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";

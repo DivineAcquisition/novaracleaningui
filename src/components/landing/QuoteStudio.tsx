@@ -4,7 +4,7 @@
 // passed in from the pricing config; the ZIP and home are sample values and
 // the frame says so.
 
-import { RiLoader4Line, RiSearchLine, RiTimeLine } from "@remixicon/react";
+import { RiLoader4Line, RiSearchLine, RiTimeLine } from "@/components/icons";
 import { HERO, QUOTE_STUDIO } from "@/lib/landing/content";
 import { cn } from "@/lib/utils";
 import { dollars } from "./format";

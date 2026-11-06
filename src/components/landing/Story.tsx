@@ -10,7 +10,7 @@ import {
   RiPhoneLine,
   RiPriceTag3Line,
   RiQuestionLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { CHECKLISTS } from "@/lib/checklists";
 import { PROBLEM, STANDARD } from "@/lib/landing/content";
 import { Index, Section, lead, panel } from "./primitives";

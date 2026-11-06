@@ -20,7 +20,7 @@
 // launcher can never disagree about where someone stands.
 
 import { useEffect, useState } from "react";
-import { RiInformationLine, RiLoader4Line } from "@remixicon/react";
+import { RiInformationLine, RiLoader4Line } from "@/components/icons";
 
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";

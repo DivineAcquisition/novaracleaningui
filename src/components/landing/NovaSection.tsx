@@ -5,7 +5,7 @@
 // is a labelled sample that quotes real starting prices passed in as props.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { RiPauseFill, RiPhoneLine, RiPlayFill } from "@remixicon/react";
+import { RiPauseFill, RiPhoneLine, RiPlayFill } from "@/components/icons";
 import { INBOUND_PHONE } from "@/config/brand-config";
 import { NOVA } from "@/lib/landing/content";
 import { cn } from "@/lib/utils";

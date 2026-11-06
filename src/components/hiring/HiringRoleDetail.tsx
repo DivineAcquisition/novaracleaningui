@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { RiArrowLeftLine } from "@remixicon/react";
+import { RiArrowLeftLine } from "@/components/icons";
 import { SEO } from "@/components/SEO";
 import { HiringFooter, HiringNav, HiringShell, HIRING_GRADIENT } from "@/components/hiring/HiringChrome";
 import { hiringApplyUrl } from "@/lib/site-hosts";

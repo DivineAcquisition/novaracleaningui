@@ -17,7 +17,7 @@ import {
   RiLoader4Line,
   RiPriceTag3Line,
   RiSearchEyeLine,
-} from "@remixicon/react";
+} from "@/components/icons";
 import { useState } from "react";
 import { toast } from "sonner";
 
