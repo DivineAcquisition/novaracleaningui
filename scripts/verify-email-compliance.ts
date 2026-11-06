@@ -3,6 +3,7 @@
 //   Run:  npx tsx scripts/verify-email-compliance.ts
 
 import { readFileSync } from "node:fs";
+import { contractorCopy } from "../src/lib/email-compliance/deliver";
 import { createHash } from "node:crypto";
 import {
   EMAIL_CATALOG,
@@ -362,6 +363,17 @@ assert("the log stores the footer version", record.footerVersion === promo.foote
 const excerpt = asEvidenceExcerpt(record);
 assert("the dispute packet can quote the sent text", Boolean(excerpt && excerpt.body.includes("100 King St")));
 check("kept for 24 months by default", retentionCutoff("2026-10-15T00:00:00.000Z", mergeBusinessIdentity(null).retentionMonths).slice(0, 7), "2024-10");
+
+console.log("\nContractor copy:");
+check("contractor mail is copied to contact@", contractorCopy("contractor_operational", "a@b.com"), ["contact@novaracleaning.com"]);
+check("tax mail is copied to contact@", contractorCopy("contractor_tax", "a@b.com", ["x@y.com"]), ["x@y.com", "contact@novaracleaning.com"]);
+check("copy is not added twice", contractorCopy("contractor_operational", "a@b.com", ["Contact@NovaraCleaning.com"]), ["Contact@NovaraCleaning.com"]);
+check("no copy when it is the recipient", contractorCopy("contractor_operational", "contact@novaracleaning.com"), []);
+check("customer mail is not copied", contractorCopy("customer_service", "a@b.com"), undefined);
+const edgeSend = readFileSync("supabase/functions/_shared/email-compliance-send.ts", "utf8");
+const appSend = readFileSync("src/lib/email-compliance/deliver.ts", "utf8");
+const copyFn = (src: string) => src.slice(src.indexOf("export function contractorCopy"), src.indexOf("}\n\nexport interface"));
+check("edge sender copies contractors the same way", copyFn(edgeSend), copyFn(appSend));
 
 console.log("\nEngine copies:");
 const app = readFileSync("src/lib/email-compliance/engine.ts");

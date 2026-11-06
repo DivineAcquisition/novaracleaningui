@@ -27,6 +27,7 @@ export function indeedApplicationEmail(input: { firstName: string; url: string }
     <p style="margin:0 0 16px;color:#475569">Hi ${escapeHtml(name)},</p>
     <p style="margin:0 0 16px;color:#475569">You applied to clean with Novara. This link opens your Field Cleaner application. It asks one question at a time and saves as you go.</p>
     <p style="margin:24px 0;text-align:center"><a href="${escapeHtml(input.url)}" style="display:inline-block;background:#5C0FFE;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600">Start your application</a></p>
+    <p style="margin:0;color:#475569;font-size:13px;word-break:break-all">Button not working? Open this link: <a href="${escapeHtml(input.url)}" style="color:#5C0FFE">${escapeHtml(input.url)}</a></p>
   </div>`;
   return { subject, html, text };
 }
@@ -86,7 +87,10 @@ export async function sendIndeedApplicationLink(
   const { data: secret } = await supabase.from("app_secrets").select("value").eq("key", "RESEND_API_KEY").maybeSingle();
   const apiKey = String(secret?.value || "").trim();
   if (!apiKey) return "failed";
-  const { firstName } = splitPersonName(applicant.fullName);
+  const { firstName: rawFirstName } = splitPersonName(applicant.fullName);
+  const firstName = /^[^a-z]+$/.test(rawFirstName)
+    ? rawFirstName.charAt(0) + rawFirstName.slice(1).toLowerCase()
+    : rawFirstName;
   const mail = indeedApplicationEmail({ firstName, url: hiringApplyUrl(token) });
   const sent = await deliverCompliantEmail(supabase, {
     to: applicant.email,

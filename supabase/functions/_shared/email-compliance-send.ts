@@ -68,6 +68,18 @@ async function ensureToken(supabase: SB, email: string): Promise<string> {
   return value;
 }
 
+/** Every contractor email is copied here so the team can see what contractors are sent. */
+export const CONTRACTOR_COMMS_CC = "contact@novaracleaning.com";
+
+export function contractorCopy(type: string, to: string, cc?: string[]): string[] | undefined {
+  const isContractor = type === "contractor_operational" || type === "contractor_tax";
+  const list = (cc || []).map((a) => String(a || "").trim()).filter(Boolean);
+  if (!isContractor) return list.length ? list : undefined;
+  const lower = new Set([to.toLowerCase(), ...list.map((a) => a.toLowerCase())]);
+  if (!lower.has(CONTRACTOR_COMMS_CC)) list.push(CONTRACTOR_COMMS_CC);
+  return list;
+}
+
 export interface EdgeDeliverInput extends Omit<PrepareInput, "identity" | "claims" | "consent" | "suppressed" | "unsubscribeUrl" | "preferencesUrl" | "oneClickUrl" | "taxElectronicConsentAt"> {
   to: string;
   cc?: string[];
@@ -169,6 +181,7 @@ export async function deliverCompliantEmail(supabase: SB, input: EdgeDeliverInpu
     return { ok: false, blocked: true, id: "", error: result.blockReasons[0] || "This email cannot be sent.", warnings: result.warnings, type: result.type };
   }
 
+  const copy = contractorCopy(result.type, to, input.cc);
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -185,7 +198,7 @@ export async function deliverCompliantEmail(supabase: SB, input: EdgeDeliverInpu
       reply_to: result.replyTo,
       headers: result.headers,
       tags: [{ name: "stream", value: result.stream }, { name: "email_type", value: result.type }],
-      ...(input.cc?.length ? { cc: input.cc } : {}),
+      ...(copy?.length ? { cc: copy } : {}),
       ...(input.attachments?.length ? { attachments: input.attachments } : {}),
     }),
   });
