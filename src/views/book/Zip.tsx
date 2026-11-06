@@ -16,6 +16,7 @@ import { useBooking } from "@/contexts/BookingContext";
 
 import { BookingHeader } from "@/components/booking/BookingHeader";
 import { BookingFooter } from "@/components/booking/BookingFooter";
+import { TrustChips } from "@/components/booking/TrustChips";
 import { ZipGallery } from "@/components/booking/ZipGallery";
 import { supabase } from "@/integrations/supabase/client";
 import { formatPhoneNumber } from "@/lib/input-formatters";
@@ -353,7 +354,7 @@ export default function BookingZip() {
             {formMode !== 'waitlist-success' && (
               <p className="mx-auto max-w-xl text-sm leading-relaxed text-[#2c2c2c] md:text-base">
                 <span className="font-jakarta text-lg font-bold text-foreground md:text-2xl">
-                  <span className="bg-gradient-primary bg-clip-text text-transparent">Standard 15% off. Deep 25% off.</span>
+                  <span className="text-[#6810FE]">Standard 15% off. Deep 25% off.</span>
                 </span>{" "}
                 {formMode === 'waitlist'
                   ? "We are not in your area yet, and we are expanding soon."
@@ -657,6 +658,8 @@ export default function BookingZip() {
               )}
             </CardContent>
           </Card>
+
+          {(formMode === 'zip' || formMode === 'contact') && <TrustChips />}
 
           {/* Membership Promo Card - Only show when not on waitlist success */}
           {formMode !== 'waitlist-success' && (

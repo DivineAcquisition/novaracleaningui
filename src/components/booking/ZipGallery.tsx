@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Carousel,
   CarouselContent,
@@ -19,7 +19,17 @@ const IMAGES = [
 
 export function ZipGallery() {
   const [broken, setBroken] = useState<Record<string, boolean>>({});
-  const images = IMAGES.filter((img) => !broken[img.src]);
+  // Only show photos that actually load. A 404 can fire before hydration,
+  // when onError is not attached yet, so probe each file once on mount.
+  const [loaded, setLoaded] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    for (const img of IMAGES) {
+      const probe = new Image();
+      probe.onload = () => setLoaded((l) => ({ ...l, [img.src]: true }));
+      probe.src = img.src;
+    }
+  }, []);
+  const images = IMAGES.filter((img) => loaded[img.src] && !broken[img.src]);
 
   if (images.length === 0) return null;
 

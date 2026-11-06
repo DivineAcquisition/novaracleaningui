@@ -355,7 +355,7 @@ export default function PricingSheet() {
                     </span>
                   </h3>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Same trusted team, every visit. Cancel or pause anytime.
+                    A dedicated cleaner on bi-weekly and weekly plans. Cancel with 14 days' notice.
                   </p>
                 </div>
 

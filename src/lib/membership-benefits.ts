@@ -51,7 +51,7 @@ export const HERO_BENEFITS: BenefitSection[] = [
       "The portal remembers who has cleaned for you and routes them back to you",
       "Same trusted team learns your home, your products, and your standards",
       "If your regular is ever out, we brief the backup on your preferences first",
-      "Every cleaner is vetted, background-checked, and insured",
+      "Novara Cleaning is an insured company",
     ],
   },
 ];
@@ -85,7 +85,7 @@ export const MORE_BENEFITS: BenefitSection[] = [
     items: [
       "48-hour re-clean guarantee on every visit",
       "Insured and bonded professional teams",
-      "Eco-friendly products and HEPA vacuums, supplies included",
+      "All supplies and equipment included",
     ],
   },
   {

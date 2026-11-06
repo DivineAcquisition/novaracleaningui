@@ -1,4 +1,5 @@
 "use client";
+import { WhatHappensNext } from "@/components/booking/WhatHappensNext";
 import {
   RiArrowDownSLine,
   RiArrowLeftLine,
@@ -1420,6 +1421,8 @@ export default function BookingCheckout() {
               </CollapsibleContent>
             </Card>
           </Collapsible>}
+
+          <WhatHappensNext mode={isFocused ? "full" : isNewMembershipSignup ? "membership" : isGlowPlan ? "credit" : "deposit"} />
 
           {/* Payment Section */}
           <Card className="border-primary/20 shadow-lg">

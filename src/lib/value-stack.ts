@@ -15,7 +15,7 @@ export const VALUE_STACK_HEADLINES = [
   "Before & After Photo Report",
   "$15 Off Your Next Clean",
   "Customer Portal Access",
-  "Cleaners we send are background-checked",
+  "Written checklist on every visit",
 ] as const;
 
 export const VALUE_STACK_ITEMS: ValueStackItem[] = [
@@ -32,15 +32,14 @@ export const VALUE_STACK_ITEMS: ValueStackItem[] = [
     tagline: "Your own dashboard",
   },
   {
-    headline: "Cleaners we send are background-checked",
-    tagline: "The people who come to the home are background-checked",
+    headline: "Written checklist on every visit",
+    tagline: "Your cleaner works from the checklist for your service",
   },
 ];
 
 /** Existing premium / trust lines that already appear on checkout. */
 export const CHECKOUT_PREMIUM_FEATURES = [
-  "Insured 2-person team",
-  "Eco-friendly products & HEPA vacuums",
+  "Insured company",
   "All supplies and equipment included",
   "48-hour re-clean guarantee",
   ...VALUE_STACK_HEADLINES,

@@ -37,7 +37,7 @@ export function BookingFooter({
         <div className="flex items-center gap-3">
           <img src="/novara-logo.png" alt="Novara Cleaning" className="h-10 w-10 rounded-lg object-contain" />
           <div className="text-left">
-            <p className="text-sm font-semibold leading-tight text-foreground">NovaraCleaning</p>
+            <p className="text-sm font-semibold leading-tight text-foreground">Novara Cleaning</p>
             <p className="text-xs text-zinc-600">Novara Cleaning LLC</p>
           </div>
         </div>

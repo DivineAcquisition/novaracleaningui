@@ -74,7 +74,7 @@ const COMPARISON: Group[] = [
     rows: [
       { label: "Trash removal",                             standard: true,  deep: true  },
       { label: "General tidy + put-away",                   standard: true,  deep: true  },
-      { label: "Eco-friendly products & HEPA vacuums",      standard: true,  deep: true  },
+      { label: "All supplies & equipment included",         standard: true,  deep: true  },
       { label: "Detailed switch plates + door handles",     standard: false, deep: true  },
       { label: "Vent cover dusting + AC return wipe",       standard: false, deep: true  },
       { label: "48-hour re-clean guarantee",                standard: true,  deep: true  },

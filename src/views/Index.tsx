@@ -16,7 +16,7 @@ import {
   RiPriceTag3Line,
   RiUserLine,
 } from "@/components/icons";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { SEO } from "@/components/SEO";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -27,16 +27,15 @@ import { useBooking } from "@/contexts/BookingContext";
 
 import { supabase } from "@/integrations/supabase/client";
 import { formatPhoneNumber } from "@/lib/input-formatters";
-import { SiteHeader } from "@/components/landing/Chrome";
+import { SiteHeader, StickyMobileBar } from "@/components/landing/Chrome";
+import { INBOUND_PHONE } from "@/config/brand-config";
 import { SiteFooter } from "@/components/landing/Footer";
 import { AnimatedShinyText } from "@/components/magicui/animated-shiny-text";
 import { BlurFade } from "@/components/magicui/blur-fade";
 import { BorderBeam } from "@/components/magicui/border-beam";
 import { MagicCard } from "@/components/magicui/magic-card";
 import { NumberTicker } from "@/components/magicui/number-ticker";
-import { Particles } from "@/components/magicui/particles";
 import { ShineBorder } from "@/components/magicui/shine-border";
-import { BRAND } from "@/lib/brand";
 
 // True, checkable facts from the booking code: online discounts, the re-clean
 // window, and the deposit most bookings take.
@@ -68,7 +67,15 @@ const HOW_IT_WORKS = [
   },
 ];
 
-const Index = () => {
+type IndexProps = {
+  /** "Standard from $X" after the online discount, from the checkout tables. */
+  standardFrom?: string | null;
+  /** Sections rendered after How it works and after Why Novara. */
+  afterHow?: ReactNode;
+  afterWhy?: ReactNode;
+};
+
+const Index = ({ standardFrom = null, afterHow = null, afterWhy = null }: IndexProps) => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { updateBookingData } = useBooking();
@@ -171,15 +178,7 @@ const Index = () => {
 
       {/* Hero Section */}
       <section className="relative overflow-hidden">
-        <Particles
-          className="absolute inset-0 z-0"
-          quantity={48}
-          color={BRAND.primary}
-          ease={80}
-          size={0.5}
-        />
         <div className="absolute inset-0 bg-gradient-to-b from-primary/[0.03] via-background to-background" />
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-primary/[0.04] rounded-full blur-3xl" />
 
         <div className="relative container mx-auto px-4 pt-16 pb-20 md:pt-24 md:pb-28">
           <div className="max-w-3xl mx-auto text-center space-y-8">
@@ -193,26 +192,24 @@ const Index = () => {
               </div>
             </BlurFade>
 
-            <BlurFade delay={0.1} inView>
-              <h1 className="text-[2.05rem] sm:text-5xl lg:text-6xl !font-bold tracking-tight font-heading leading-[1.1]">
-                Stop Spending Your
-                <br />
-                <span className="text-gradient">
-                  One Day Off
-                </span>{" "}
-                Cleaning.
-              </h1>
-            </BlurFade>
+            <h1 className="text-[2.05rem] sm:text-5xl lg:text-6xl !font-bold tracking-tight font-heading leading-[1.1]">
+              Stop Spending Your
+              <br />
+              <span className="text-[#6810FE]">
+                One Day Off
+              </span>{" "}
+              Cleaning.
+            </h1>
 
             <p className="mx-auto max-w-2xl text-base leading-relaxed text-muted-foreground md:text-lg">
               <span className="font-heading text-xl font-bold text-foreground md:text-2xl">
-                <span className="text-gradient">Standard 15% off. Deep 25% off.</span>
+                <span className="text-[#6810FE]">Standard 15% off. Deep 25% off.</span>
               </span>{" "}
               Enter your ZIP code and we will show the price for your home. Most bookings take a 50% deposit.
             </p>
 
             {/* Booking Card */}
-            <Card className="relative max-w-md mx-auto overflow-hidden panel">
+            <Card id="get-price" className="relative max-w-md mx-auto overflow-hidden panel scroll-mt-28">
               <ShineBorder borderWidth={1.5} duration={14} />
               <CardContent className="relative z-10 p-6 md:p-8">
                 {/* ZIP Code Form */}
@@ -389,8 +386,28 @@ const Index = () => {
             </Card>
 
             {/* Sub-text */}
-            <p className="text-xs text-muted-foreground">
-              No credit card required to see pricing.
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              {standardFrom ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-xs font-medium text-foreground">
+                  <RiPriceTag3Line className="h-3.5 w-3.5 text-primary" />
+                  Standard clean from {standardFrom} online
+                </span>
+              ) : null}
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-xs font-medium text-foreground">
+                <RiShieldLine className="h-3.5 w-3.5 text-primary" />
+                48-hour re-clean guarantee
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-xs font-medium text-foreground">
+                <RiListCheck2 className="h-3.5 w-3.5 text-primary" />
+                Written checklist every visit
+              </span>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              No credit card required to see pricing. Prefer to talk?{" "}
+              <a href={INBOUND_PHONE.tel} className="inline-flex items-center gap-1 font-medium text-foreground underline-offset-4 hover:underline">
+                <RiPhoneLine className="h-4 w-4 text-primary" />
+                {INBOUND_PHONE.display}
+              </a>
             </p>
           </div>
         </div>
@@ -462,6 +479,8 @@ const Index = () => {
           </div>
         </div>
       </section>
+
+      {afterHow}
 
       {/* Why Novara */}
       <section id="why" className="scroll-mt-20 bg-muted/30 border-y border-border/40">
@@ -545,6 +564,8 @@ const Index = () => {
         </div>
       </section>
 
+      {afterWhy}
+
       {/* CTA Section */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.06] to-accent/[0.04]" />
@@ -576,6 +597,7 @@ const Index = () => {
       </section>
 
       <SiteFooter />
+      <StickyMobileBar />
     </div>
   );
 };

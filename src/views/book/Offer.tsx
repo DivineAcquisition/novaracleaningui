@@ -61,9 +61,9 @@ const BOOKING_STEPS = [
 
 // Membership features
 const MEMBERSHIP_FEATURES = [
-  "Same trusted cleaning team",
+  "Dedicated cleaner on bi-weekly & weekly plans",
   "Priority scheduling & member perks",
-  "Cancel or pause anytime",
+  "Cancel with 14 days' notice",
   "48-hour re-clean guarantee",
   ...VALUE_STACK_HEADLINES,
 ];
@@ -646,7 +646,7 @@ export default function BookingOffer() {
                           "Everything in Standard Clean",
                           "Inside cabinet cleaning & baseboards",
                           "Interior windows & sills",
-                          "Eco-friendly products & HEPA vacuums",
+                          "All supplies & equipment included",
                           "48-hour re-clean guarantee",
                           ...VALUE_STACK_HEADLINES,
                         ].map((line) => (
@@ -776,7 +776,7 @@ export default function BookingOffer() {
                         "Visit 2 — Standard maintenance clean within 14 days",
                         "Same team both visits when possible",
                         "Inside cabinet cleaning & baseboards on visit 1",
-                        "Eco-friendly products & HEPA vacuums",
+                        "All supplies & equipment included",
                         "48-hour re-clean guarantee on both visits",
                         ...VALUE_STACK_HEADLINES,
                       ].map((line) => (
@@ -1117,10 +1117,9 @@ export default function BookingOffer() {
 
               <div className="grid gap-3">
                 {[
-                  "Same trusted cleaning team every visit",
+                  "Dedicated cleaner on bi-weekly & weekly plans",
                   "Priority scheduling",
-                  "Free add-ons included",
-                  "Cancel or pause anytime",
+                  "Cancel with 14 days' notice",
                   "48-hour re-clean guarantee",
                   "No long-term contracts",
                   ...VALUE_STACK_HEADLINES,
