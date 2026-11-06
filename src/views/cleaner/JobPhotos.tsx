@@ -13,6 +13,7 @@
 // phone in the field. Photos and short videos are both accepted: this
 // is the contractor's proof of work if a customer later disputes quality.
 
+import { TokenFrame } from "@/components/token/TokenFrame";
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import imageCompression from "browser-image-compression";
@@ -255,17 +256,17 @@ export default function CleanerJobPhotosPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background p-4 max-w-md mx-auto space-y-4">
+      <TokenFrame label="Job photos" audience="cleaner" width="sm" className="space-y-4">
         <Skeleton className="h-24 w-full rounded-2xl" />
         <Skeleton className="h-40 w-full rounded-2xl" />
         <Skeleton className="h-40 w-full rounded-2xl" />
-      </div>
+      </TokenFrame>
     );
   }
 
   if (loadErr || !info) {
     return (
-      <div className="min-h-screen bg-background p-4 max-w-md mx-auto">
+      <TokenFrame label="Job photos" audience="cleaner" width="sm">
         <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-900">
           <p className="font-semibold">This upload link isn't valid anymore.</p>
           <p className="text-xs mt-1">
@@ -273,7 +274,7 @@ export default function CleanerJobPhotosPage() {
             dispatcher and they'll send you a fresh link.
           </p>
         </div>
-      </div>
+      </TokenFrame>
     );
   }
 
@@ -294,7 +295,7 @@ export default function CleanerJobPhotosPage() {
 
   if (!submitted && alreadyDoneForPhase && !forceForm) {
     return (
-      <div className="min-h-screen bg-background p-4 max-w-md mx-auto">
+      <TokenFrame label="Job photos" audience="cleaner" width="sm">
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-center">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-emerald-600 text-white mb-3">
             <RiCheckLine className="w-6 h-6" />
@@ -315,13 +316,13 @@ export default function CleanerJobPhotosPage() {
             <RiCameraLine className="w-4 h-4 mr-1.5" /> Add more photos or videos
           </Button>
         </div>
-      </div>
+      </TokenFrame>
     );
   }
 
   if (submitted) {
     return (
-      <div className="min-h-screen bg-background p-4 max-w-md mx-auto">
+      <TokenFrame label="Job photos" audience="cleaner" width="sm">
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-center">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-emerald-600 text-white mb-3">
             <RiCheckLine className="w-6 h-6" />
@@ -345,14 +346,14 @@ export default function CleanerJobPhotosPage() {
             <RiCameraLine className="w-4 h-4 mr-1.5" /> Add more photos or videos
           </Button>
         </div>
-      </div>
+      </TokenFrame>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background pb-32">
+    <TokenFrame label="Job photos" audience="cleaner" width="sm">
       <div className="max-w-md mx-auto p-4 space-y-4">
-        <header className="rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-500 p-5 text-white shadow-md">
+        <header className="token-hero">
           <div className="flex items-center gap-2">
             <RiSparklingLine className="w-5 h-5" />
             <p className="text-sm font-semibold">
@@ -365,7 +366,7 @@ export default function CleanerJobPhotosPage() {
             </p>
           </div>
           {phase && (
-            <p className="mt-1 text-[11px] text-emerald-50/90">
+            <p className="mt-1 text-[11px] text-white/80">
               {phase === "before"
                 ? "Snap a few before shots — and a short video walkthrough — when you arrive, before you start cleaning."
                 : "Snap the after shots and a short walkthrough now that the clean is done — these go on file with the job."}
@@ -477,7 +478,7 @@ export default function CleanerJobPhotosPage() {
           </Button>
         </div>
       </div>
-    </div>
+    </TokenFrame>
   );
 }
 

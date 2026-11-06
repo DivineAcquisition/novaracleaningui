@@ -14,6 +14,7 @@
 // decision. Accept does an overlap check against the cleaner's other
 // active assignments and rejects on conflict.
 
+import { TokenFrame } from "@/components/token/TokenFrame";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -238,24 +239,18 @@ export default function CleanerJobOfferPage() {
   const isExpired = expiresAt != null && expiresAt < now && outcome == null;
 
   return (
-    <div className="min-h-screen bg-background">
-      <div
-        className="border-b border-emerald-200 bg-gradient-to-br from-emerald-50 to-white"
-        style={{
-          backgroundImage:
-            "radial-gradient(circle at top left, rgba(22,163,74,0.10), transparent 60%)",
-        }}
-      >
-        <div className="max-w-2xl mx-auto px-4 py-5 sm:py-6">
+    <TokenFrame label="Job offer" audience="cleaner" width="md">
+      <div className="token-hero">
+        <div>
           <div className="flex items-center gap-3">
-            <span className="w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center shadow-sm">
+            <span className="w-11 h-11 rounded-xl bg-white/15 ring-1 ring-white/20 flex items-center justify-center">
               <RiCalendarCheckLine className="w-6 h-6 text-white" />
             </span>
             <div>
-              <p className="text-[11px] uppercase tracking-wider font-semibold text-emerald-700">
+              <p className="text-[11px] uppercase tracking-wider font-semibold text-white/70">
                 Novara · Job offer
               </p>
-              <h1 className="text-lg font-bold text-slate-900">
+              <h1 className="text-lg font-semibold tracking-tight text-white">
                 Hi {offer.cleaner.first_name || "there"}, we've got a job for you
               </h1>
             </div>
@@ -263,7 +258,7 @@ export default function CleanerJobOfferPage() {
         </div>
       </div>
 
-      <div className="max-w-2xl mx-auto px-4 py-5 space-y-4">
+      <div className="mt-4 space-y-4">
         {/* Outcome banner */}
         {outcome === "accepted" && (
           <BannerCard
@@ -473,7 +468,7 @@ export default function CleanerJobOfferPage() {
           Tap secure link · Powered by Novara dispatch
         </p>
       </div>
-    </div>
+    </TokenFrame>
   );
 }
 
@@ -481,9 +476,9 @@ export default function CleanerJobOfferPage() {
 
 function CenterShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-background flex items-start justify-center p-4">
+    <TokenFrame label="Job offer" audience="cleaner" width="md">
       <div className="w-full max-w-2xl space-y-4 mt-6">{children}</div>
-    </div>
+    </TokenFrame>
   );
 }
 

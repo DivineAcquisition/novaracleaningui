@@ -5,6 +5,7 @@
 // first to accept wins. Losers see a clear "no longer available" message
 // and keep whatever progress they made.
 
+import { TokenFrame } from "@/components/token/TokenFrame";
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import {
@@ -66,15 +67,11 @@ type LoadState =
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-background px-4 py-8">
+    <TokenFrame label="Urgent job" audience="cleaner" width="sm">
       <div className="mx-auto w-full max-w-lg space-y-4">
-        <div className="text-center">
-          <p className="text-sm font-semibold tracking-tight text-slate-900">Novara Cleaning</p>
-          <p className="text-xs text-slate-500">Urgent Hire</p>
-        </div>
         {children}
       </div>
-    </div>
+    </TokenFrame>
   );
 }
 

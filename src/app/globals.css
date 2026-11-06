@@ -548,17 +548,17 @@
     color: hsl(var(--foreground));
   }
 
+  /* Summary banner on tokenized pages (pay, photos, tips, proposals).
+     Deep ink-to-purple with a quiet grid, so white text reads clearly. */
   .token-hero {
     position: relative;
     overflow: hidden;
-    border-radius: 1rem;
-    padding: 1.25rem;
+    border-radius: 1.25rem;
+    padding: 1.35rem;
     color: #fff;
-    background-image: linear-gradient(135deg, #6810FE 0%, #6810fe 48%, #8E5BFF 100%);
-    border: 1px solid rgba(255, 255, 255, 0.16);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.22),
-      0 16px 40px -18px rgba(104, 16, 254, 0.45);
+    background-image: linear-gradient(150deg, #16043F 0%, #3A0BA8 55%, #6810FE 100%);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 24px 50px -26px rgba(22, 4, 63, 0.65);
   }
 
   .token-hero::before {
@@ -566,7 +566,11 @@
     position: absolute;
     inset: 0;
     pointer-events: none;
-    background: radial-gradient(120% 80% at 100% 0%, rgba(255, 255, 255, 0.28), transparent 55%);
+    background-image:
+      radial-gradient(90% 70% at 100% 0%, rgba(142, 91, 255, 0.45), transparent 60%),
+      linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+    background-size: auto, 22px 22px, 22px 22px;
   }
 
   .token-hero > * {
@@ -574,14 +578,11 @@
   }
 
   .token-card {
-    border-radius: 1rem;
-    padding: 1rem;
-    background:
-      linear-gradient(180deg, rgba(104, 16, 254, 0.03) 0%, #ffffff 42%);
-    border: 1px solid var(--hairline);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.92),
-      0 1px 2px rgba(26, 16, 64, 0.04);
+    border-radius: 1.25rem;
+    padding: 1.15rem;
+    background: #ffffff;
+    border: 1px solid #e9e7ee;
+    box-shadow: 0 1px 2px rgba(11, 10, 17, 0.04), 0 14px 34px -28px rgba(11, 10, 17, 0.35);
   }
 
   .choice-chip {

@@ -1,5 +1,6 @@
 "use client";
 
+import { TokenFrame } from "@/components/token/TokenFrame";
 import { useEffect, useState } from "react";
 import { RiLoader4Line } from "@/components/icons";
 import { Button } from "@/components/ui/button";
@@ -46,21 +47,21 @@ export default function WelcomeOfferPage({ token }: { token: string }) {
 
   if (!offer && !missing) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <TokenFrame label="Welcome offer" audience="customer" width="md">
         <RiLoader4Line className="w-8 h-8 animate-spin text-primary" />
-      </div>
+      </TokenFrame>
     );
   }
 
   if (missing || !offer) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-6">
+      <TokenFrame label="Welcome offer" audience="customer" width="md">
         <Card className="max-w-md w-full">
           <CardContent className="pt-6 text-center text-muted-foreground">
             This offer link is not valid.
           </CardContent>
         </Card>
-      </div>
+      </TokenFrame>
     );
   }
 
@@ -69,7 +70,7 @@ export default function WelcomeOfferPage({ token }: { token: string }) {
     : null;
 
   return (
-    <div className="min-h-screen bg-gradient-hero flex items-center justify-center p-6">
+    <TokenFrame label="Welcome offer" audience="customer" width="md">
       <Card className="max-w-lg w-full">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-jakarta">
@@ -101,6 +102,6 @@ export default function WelcomeOfferPage({ token }: { token: string }) {
           </CardContent>
         )}
       </Card>
-    </div>
+    </TokenFrame>
   );
 }

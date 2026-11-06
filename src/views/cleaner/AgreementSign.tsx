@@ -11,6 +11,7 @@
 // people abandon it. So this page shows exactly one action at a time and ends
 // with a thank-you rather than a "next step".
 
+import { TokenFrame } from "@/components/token/TokenFrame";
 import {
   RiAlertLine,
   RiCheckboxCircleFill,
@@ -53,16 +54,12 @@ type LoadState =
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-background px-4 py-8">
+    <TokenFrame label="Agreement" audience="cleaner" width="lg">
       <div className="mx-auto w-full max-w-lg space-y-4">
-        <div className="text-center">
-          <p className="text-sm font-semibold tracking-tight text-slate-900">Novara Cleaning</p>
-          <p className="text-xs text-slate-500">Independent Contractor Agreement</p>
-        </div>
         {children}
         <UrgentHireReturnLink />
       </div>
-    </div>
+    </TokenFrame>
   );
 }
 

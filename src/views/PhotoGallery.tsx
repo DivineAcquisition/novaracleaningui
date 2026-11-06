@@ -28,7 +28,7 @@ import { SEO } from "@/components/SEO";
 import { MediaThumb } from "@/components/job-media/MediaThumb";
 import { isVideoUrl } from "@/lib/job-media";
 import { cn } from "@/lib/utils";
-import { BrandAtmosphere } from "@/components/brand/atmosphere";
+import { TokenFrame } from "@/components/token/TokenFrame";
 
 interface GalleryData {
   kind: "booking" | "turnover";
@@ -125,17 +125,12 @@ export default function PhotoGalleryPage() {
   const totalPhotos = data.beforePhotos.length + data.afterPhotos.length;
 
   return (
-    <div className="relative min-h-screen bg-background pb-16">
-      <BrandAtmosphere />
-      <SEO title="Your cleaning photos" description="Before & after photos from your Novara clean." noindex />
+    <TokenFrame label="Photo report" audience="customer" width="lg">
+            <SEO title="Your cleaning photos" description="Before & after photos from your Novara clean." noindex />
 
-      <header className="token-hero rounded-none relative z-10">
-        <div className="max-w-3xl mx-auto px-4 py-6">
-          <div className="flex items-center gap-2">
-            <img src="/novara-logo.png" alt="Novara" className="h-8 w-8 rounded-lg shadow-sm" />
-            <span className="text-sm font-semibold tracking-wide">Novara Cleaning</span>
-          </div>
-          <div className="mt-4 flex items-start gap-2">
+      <header className="token-hero relative z-10">
+        <div>
+          <div className="flex items-start gap-2">
             <RiSparklingLine className="mt-0.5 h-5 w-5 flex-shrink-0" />
             <div>
               <h1 className="text-lg font-bold leading-tight">{data.title}</h1>
@@ -159,7 +154,7 @@ export default function PhotoGalleryPage() {
         </div>
       </header>
 
-      <div className="relative z-10 max-w-3xl mx-auto px-4 py-6 space-y-8">
+      <div className="relative z-10 mt-6 space-y-8">
         {totalPhotos === 0 ? (
           <div className="token-card border-dashed p-10 text-center">
             <RiImage2Line className="mx-auto mb-2 h-8 w-8 text-muted-foreground/50" />
@@ -202,7 +197,7 @@ export default function PhotoGalleryPage() {
           }
         />
       )}
-    </div>
+    </TokenFrame>
   );
 }
 

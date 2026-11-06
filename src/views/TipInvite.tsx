@@ -14,7 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { BrandAtmosphere } from "@/components/brand/atmosphere";
+import { TokenFrame } from "@/components/token/TokenFrame";
 import { supabase } from "@/integrations/supabase/client";
 
 const TIP_PRESETS = [500, 1000, 2000, 3000, 5000];
@@ -252,9 +252,8 @@ export default function TipInvite({ token }: { token: string }) {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="relative min-h-screen bg-background flex items-center justify-center p-6">
-      <BrandAtmosphere />
-      <div className="relative z-10 w-full max-w-md">{children}</div>
-    </div>
+    <TokenFrame label="Tip" audience="customer" width="md">
+            <div className="relative z-10 w-full max-w-md">{children}</div>
+    </TokenFrame>
   );
 }

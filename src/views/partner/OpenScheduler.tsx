@@ -7,6 +7,7 @@
 // a payment option, and submit — we invoice each turnover via Stripe (the card
 // is saved on payment; the turnover books + lands on the calendar once paid).
 
+import { TokenFrame } from "@/components/token/TokenFrame";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   RiLoader4Line, RiCalendarCheckLine, RiCheckLine, RiMailSendLine,
@@ -137,21 +138,21 @@ export default function OpenScheduler({ token }: { token: string }) {
   // ── Loading / error / sent states ──────────────────────────────────────────
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <TokenFrame label="Schedule" audience="partner" width="lg">
         <RiLoader4Line className="w-8 h-8 animate-spin text-[#6810FE]" />
-      </div>
+      </TokenFrame>
     );
   }
   if (error && properties.length === 0) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-6 text-center text-slate-600 bg-slate-50">{error}</div>
+      <TokenFrame label="Schedule" audience="partner" width="lg" className="text-center">{error}</TokenFrame>
     );
   }
 
   if (sent) {
     const okInvoices = sent.filter((s) => !s.error);
     return (
-      <div className="min-h-screen bg-background">
+      <TokenFrame label="Schedule" audience="partner" width="lg">
         <Hero hostName={hostName} weekStart={weekStart} />
         <div className="max-w-2xl mx-auto px-4 mt-4">
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm text-center">
@@ -182,13 +183,13 @@ export default function OpenScheduler({ token }: { token: string }) {
             </button>
           </div>
         </div>
-      </div>
+      </TokenFrame>
     );
   }
 
   // ── Main scheduler ──────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-background pb-40">
+    <TokenFrame label="Schedule" audience="partner" width="lg">
       <Hero hostName={hostName} weekStart={weekStart} />
 
       <div className="max-w-2xl mx-auto px-4 mt-4 space-y-4">
@@ -376,7 +377,7 @@ export default function OpenScheduler({ token }: { token: string }) {
           </div>
         </div>
       )}
-    </div>
+    </TokenFrame>
   );
 }
 

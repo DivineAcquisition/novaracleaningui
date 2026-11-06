@@ -1,5 +1,6 @@
 "use client";
 
+import { TokenFrame } from "@/components/token/TokenFrame";
 import { RiLoader4Line } from "@/components/icons";
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
@@ -23,16 +24,12 @@ type LoadState =
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-background px-4 py-8">
+    <TokenFrame label="Supply kit" audience="cleaner" width="sm">
       <div className="mx-auto w-full max-w-lg space-y-4">
-        <div className="text-center">
-          <p className="text-sm font-semibold tracking-tight text-foreground">Novara Cleaning</p>
-          <p className="text-xs text-muted-foreground">Supply checklist</p>
-        </div>
         {children}
         <UrgentHireReturnLink />
       </div>
-    </div>
+    </TokenFrame>
   );
 }
 

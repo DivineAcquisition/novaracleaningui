@@ -34,7 +34,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
-import { BrandAtmosphere } from "@/components/brand/atmosphere";
+import { TokenFrame } from "@/components/token/TokenFrame";
 
 // ─── Types ───────────────────────────────────────────────────────────────
 
@@ -624,13 +624,12 @@ export default function JobFeedbackPage({ token }: { token: string }) {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="relative min-h-screen bg-background py-10 px-4">
-      <BrandAtmosphere />
-      <div className="relative z-10 max-w-md mx-auto space-y-6">
+    <TokenFrame label="Feedback" audience="customer" width="md">
+            <div className="relative z-10 max-w-md mx-auto space-y-6">
         {children}
         <p className="text-center text-xs text-muted-foreground">Novara Cleaning · novaracleaning.com</p>
       </div>
-    </div>
+    </TokenFrame>
   );
 }
 

@@ -25,7 +25,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { StripePaymentForm } from "@/components/booking/StripePaymentForm";
 import { getStripePromise } from "@/lib/stripe-client";
 import { cn } from "@/lib/utils";
-import { BrandAtmosphere } from "@/components/brand/atmosphere";
+import { PaymentTrustRow, TokenFrame } from "@/components/token/TokenFrame";
 
 const money = (cents: number | null | undefined) =>
   cents == null ? "—" : `$${(cents / 100).toFixed(2)}`;
@@ -153,19 +153,17 @@ export default function BalancePayPage() {
 
   if (loading) {
     return (
-      <main className="relative mx-auto max-w-lg p-4 space-y-4">
-        <BrandAtmosphere />
-        <Skeleton className="h-40 w-full rounded-2xl" />
+      <TokenFrame label="Balance" audience="customer" width="sm" className="space-y-4">
+                <Skeleton className="h-40 w-full rounded-2xl" />
         <Skeleton className="h-64 w-full rounded-2xl" />
-      </main>
+      </TokenFrame>
     );
   }
 
   if (loadError || !summary) {
     return (
-      <main className="relative mx-auto max-w-lg p-4">
-        <BrandAtmosphere />
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-5">
+      <TokenFrame label="Balance" audience="customer" width="sm">
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 p-5">
           <p className="flex items-center gap-2 font-semibold text-rose-900">
             <RiErrorWarningLine className="h-5 w-5" />
             We couldn&apos;t open this link
@@ -179,16 +177,15 @@ export default function BalancePayPage() {
             .
           </p>
         </div>
-      </main>
+      </TokenFrame>
     );
   }
 
   const b = summary.booking;
 
   return (
-    <main className="relative mx-auto max-w-lg p-4 space-y-4 pb-16">
-      <BrandAtmosphere />
-      {/* What was done, and what it comes to */}
+    <TokenFrame label="Balance" audience="customer" width="sm" className="space-y-4">
+            {/* What was done, and what it comes to */}
       <header className="token-hero">
         <p className="text-xs uppercase tracking-wide text-white/70">{b.ref}</p>
         <h1 className="mt-1 font-jakarta text-xl font-bold leading-tight">
@@ -384,8 +381,9 @@ export default function BalancePayPage() {
             </a>{" "}
             before paying and we&apos;ll walk through it with you.
           </p>
+          <PaymentTrustRow lines={["Secure payment by Stripe", "Charged after your clean", "24-hour re-clean guarantee"]} />
         </section>
       )}
-    </main>
+    </TokenFrame>
   );
 }

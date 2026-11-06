@@ -1,5 +1,6 @@
 "use client";
 
+import { TokenFrame } from "@/components/token/TokenFrame";
 import { useEffect, useState } from "react";
 import { RiCheckLine, RiLoader4Line, RiVideoLine } from "@/components/icons";
 import { Button } from "@/components/ui/button";
@@ -108,27 +109,27 @@ export default function TestimonialSubmitPage({ token }: { token: string }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <TokenFrame label="Testimonial" audience="customer" width="md">
         <RiLoader4Line className="w-8 h-8 animate-spin text-primary" />
-      </div>
+      </TokenFrame>
     );
   }
 
   if (!meta?.ok) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-6">
+      <TokenFrame label="Testimonial" audience="customer" width="md">
         <Card className="max-w-md w-full">
           <CardContent className="pt-6 text-center text-muted-foreground">
             This testimonial link is invalid or has expired. Contact hello@novaracleaning.com if you need help.
           </CardContent>
         </Card>
-      </div>
+      </TokenFrame>
     );
   }
 
   if (meta.status === "submitted" || meta.promoCode) {
     return (
-      <div className="min-h-screen bg-gradient-hero flex items-center justify-center p-6">
+      <TokenFrame label="Testimonial" audience="customer" width="md">
         <Card className="max-w-lg w-full border-primary/30">
           <CardHeader className="text-center">
             <RiCheckLine className="w-12 h-12 text-green-600 mx-auto mb-2" />
@@ -144,14 +145,14 @@ export default function TestimonialSubmitPage({ token }: { token: string }) {
             </Button>
           </CardContent>
         </Card>
-      </div>
+      </TokenFrame>
     );
   }
 
   const questions = meta.questions || [];
 
   return (
-    <div className="min-h-screen bg-gradient-hero py-10 px-4">
+    <TokenFrame label="Testimonial" audience="customer" width="md">
       <div className="max-w-xl mx-auto space-y-6">
         <div className="text-center space-y-2">
           <h1 className="text-2xl font-bold font-jakarta">
@@ -228,6 +229,6 @@ export default function TestimonialSubmitPage({ token }: { token: string }) {
           </CardContent>
         </Card>
       </div>
-    </div>
+    </TokenFrame>
   );
 }

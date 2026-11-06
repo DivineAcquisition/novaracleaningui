@@ -13,6 +13,7 @@
 // those wait for admin approval in the Dispatch console before the
 // customer is charged and the cleaner's pay visibly increases.
 
+import { TokenFrame } from "@/components/token/TokenFrame";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import {
@@ -1573,9 +1574,9 @@ export default function CleanerJobChecklistPage() {
 // ─── Shells ────────────────────────────────────────────────────────────────
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-violet-50 via-background to-background dark:from-background">
+    <TokenFrame label="Job checklist" audience="cleaner" width="md">
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">{children}</div>
-    </div>
+    </TokenFrame>
   );
 }
 

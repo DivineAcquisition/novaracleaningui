@@ -40,7 +40,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { SEO } from "@/components/SEO";
 import { SUPPORT_PHONE } from "@/config/brand-config";
 import { IncludedValueStack } from "@/components/booking/IncludedValueStack";
-import { BrandAtmosphere } from "@/components/brand/atmosphere";
+import { PaymentTrustRow, TokenFrame } from "@/components/token/TokenFrame";
+import { WhatHappensNext } from "@/components/booking/WhatHappensNext";
 
 interface MembershipSummary {
   scheduleId: string;
@@ -183,19 +184,17 @@ export default function MembershipPayPage() {
   // ── Render states ────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="relative min-h-screen bg-background p-4 max-w-md mx-auto space-y-4">
-        <BrandAtmosphere />
-        <Skeleton className="h-28 w-full rounded-2xl" />
+      <TokenFrame label="Membership" audience="customer" width="sm" className="space-y-4">
+                <Skeleton className="h-28 w-full rounded-2xl" />
         <Skeleton className="h-64 w-full rounded-2xl" />
-      </div>
+      </TokenFrame>
     );
   }
 
   if (loadErr || !summary) {
     return (
-      <div className="relative min-h-screen bg-background p-4 max-w-md mx-auto">
-        <BrandAtmosphere />
-        <SEO title="Membership link" noindex />
+      <TokenFrame label="Membership" audience="customer" width="sm">
+                <SEO title="Membership link" noindex />
         <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-900 mt-8">
           <p className="font-semibold flex items-center gap-1.5">
             <RiErrorWarningLine className="w-4 h-4" />
@@ -206,14 +205,13 @@ export default function MembershipPayPage() {
             <a href={SUPPORT_PHONE.tel} className="underline">{SUPPORT_PHONE.display}</a> and we&apos;ll sort it out.
           </p>
         </div>
-      </div>
+      </TokenFrame>
     );
   }
 
   return (
-    <div className="relative min-h-screen bg-background pb-16">
-      <BrandAtmosphere />
-      <SEO title="Sign and pay for your membership — Novara Cleaning" noindex />
+    <TokenFrame label="Membership" audience="customer" width="md">
+            <SEO title="Sign and pay for your membership — Novara Cleaning" noindex />
       <div className="relative z-10 max-w-md mx-auto p-4 space-y-4">
         {/* Membership summary */}
         <header className="token-hero">
@@ -356,10 +354,9 @@ export default function MembershipPayPage() {
           </div>
         )}
 
-        <p className="text-center text-[11px] text-muted-foreground">
-          Questions? Call <a href={SUPPORT_PHONE.tel} className="underline">{SUPPORT_PHONE.display}</a> — Novara Cleaning
-        </p>
+        <PaymentTrustRow lines={["Secure payment by Stripe", "Cancel with 14 days’ notice", "24-hour re-clean guarantee"]} />
+        <WhatHappensNext mode="membership" />
       </div>
-    </div>
+    </TokenFrame>
   );
 }

@@ -46,7 +46,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { SEO } from "@/components/SEO";
 import { SUPPORT_PHONE } from "@/config/brand-config";
 import { IncludedValueStack } from "@/components/booking/IncludedValueStack";
-import { BrandAtmosphere } from "@/components/brand/atmosphere";
+import { PaymentTrustRow, TokenFrame } from "@/components/token/TokenFrame";
+import { WhatHappensNext } from "@/components/booking/WhatHappensNext";
 
 interface PaySummary {
   bookingId: string;
@@ -374,18 +375,16 @@ export default function PayPage() {
   // ── Render states ────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="relative min-h-screen bg-background p-4 max-w-md mx-auto space-y-4">
-        <BrandAtmosphere />
+      <TokenFrame label="Deposit" width="sm" className="space-y-4">
         <Skeleton className="h-28 w-full rounded-2xl" />
         <Skeleton className="h-64 w-full rounded-2xl" />
-      </div>
+      </TokenFrame>
     );
   }
 
   if (loadErr || !summary) {
     return (
-      <div className="relative min-h-screen bg-background p-4 max-w-md mx-auto">
-        <BrandAtmosphere />
+      <TokenFrame label="Deposit" width="sm">
         <SEO title="Payment link" noindex />
         <div className="relative z-10 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-900 mt-8">
           <p className="font-semibold flex items-center gap-1.5">
@@ -397,17 +396,16 @@ export default function PayPage() {
             <a href={SUPPORT_PHONE.tel} className="underline">{SUPPORT_PHONE.display}</a> and we&apos;ll sort it out.
           </p>
         </div>
-      </div>
+      </TokenFrame>
     );
   }
 
   const paid = paidNow || summary.paid;
 
   return (
-    <div className="relative min-h-screen bg-background pb-16">
-      <BrandAtmosphere />
+    <TokenFrame label="Deposit" width="sm">
       <SEO title="Pay your deposit to confirm — Novara Cleaning" noindex />
-      <div className="relative z-10 max-w-md mx-auto p-4 space-y-4">
+      <div className="space-y-4">
         {/* Booking summary */}
         <header className="token-hero">
           <div className="flex items-center gap-2">
@@ -658,10 +656,13 @@ export default function PayPage() {
           </>
         )}
 
-        <p className="text-center text-[11px] text-muted-foreground">
-          Questions? Call <a href={SUPPORT_PHONE.tel} className="underline">{SUPPORT_PHONE.display}</a> — Novara Cleaning
-        </p>
+        {!paid ? (
+          <>
+            <PaymentTrustRow lines={["Secure payment by Stripe", "24-hour re-clean guarantee", "Balance only after the clean"]} />
+            <WhatHappensNext mode="deposit" />
+          </>
+        ) : null}
       </div>
-    </div>
+    </TokenFrame>
   );
 }

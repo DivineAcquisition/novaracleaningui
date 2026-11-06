@@ -1,5 +1,6 @@
 "use client";
 
+import { TokenFrame } from "@/components/token/TokenFrame";
 import { RiCheckLine, RiLoader4Line, RiMegaphoneLine } from "@/components/icons";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -83,22 +84,22 @@ export default function AdSpendForm({ token }: { token: string }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center text-sm text-slate-500">
+      <TokenFrame label="Ad spend" audience="team" width="sm" className="text-sm">
         Loading this month’s ad spend form…
-      </div>
+      </TokenFrame>
     );
   }
 
   if (!boot?.ok) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+      <TokenFrame label="Ad spend" audience="team" width="sm">
         <Card className="max-w-md p-6 text-sm text-slate-600">{boot?.error || "This link is invalid."}</Card>
-      </div>
+      </TokenFrame>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <TokenFrame label="Ad spend" audience="team" width="sm">
       <div className="bg-gradient-to-br from-[#6810FE] to-[#8E5BFF] text-white px-5 py-8">
         <div className="max-w-2xl mx-auto">
           <p className="text-[11px] uppercase tracking-[0.14em] font-semibold text-white/80">Novara Cleaning</p>
@@ -185,6 +186,6 @@ export default function AdSpendForm({ token }: { token: string }) {
           Save to sheet &amp; Airtable
         </Button>
       </div>
-    </div>
+    </TokenFrame>
   );
 }

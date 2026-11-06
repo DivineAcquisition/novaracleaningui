@@ -36,7 +36,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { SEO } from "@/components/SEO";
 import { cn } from "@/lib/utils";
-import { BrandAtmosphere } from "@/components/brand/atmosphere";
+import { TokenFrame } from "@/components/token/TokenFrame";
 
 interface ManageState {
   ok: boolean;
@@ -500,10 +500,9 @@ function ActionRow({
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="relative min-h-screen bg-background">
-      <BrandAtmosphere />
-      <div className="relative z-10 max-w-xl mx-auto px-4 py-5 space-y-4">{children}</div>
-    </div>
+    <TokenFrame label="Your plan" audience="customer" width="md">
+            <div className="relative z-10 max-w-xl mx-auto px-4 py-5 space-y-4">{children}</div>
+    </TokenFrame>
   );
 }
 
