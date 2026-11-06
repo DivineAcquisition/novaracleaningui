@@ -4,7 +4,7 @@
 // for reduced motion.
 
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { BOOK_PATH, bookingHref } from "@/lib/landing/links";
+import { TRY_URL, bookingHref } from "@/lib/landing/links";
 
 export function prefersStill(): boolean {
   if (typeof window === "undefined") return true;
@@ -113,11 +113,14 @@ export function useAnimatedNumber(target: number, reduced: boolean, durationMs =
   return value;
 }
 
-/** Smooth-scrolls to the hero ZIP form and focuses it. */
+/**
+ * Smooth-scrolls to the hero ZIP form and focuses it. Pages without the form
+ * (the main novaracleaning.com home page) send the visitor to the try site.
+ */
 export function scrollToBooking() {
   const form = document.getElementById("get-price");
   if (!form) {
-    window.location.assign(bookingHref(BOOK_PATH));
+    window.location.assign(bookingHref(TRY_URL));
     return;
   }
   form.scrollIntoView({ behavior: prefersStill() ? "auto" : "smooth", block: "center" });

@@ -331,6 +331,17 @@ export async function middleware(request: NextRequest) {
   // immediately redirect it to that subdomain's default landing. Without
   // this, `/` would always be "owned" by `try` and we'd kick visitors of
   // admin.* off to try.*.
+  // The main domain (novaracleaning.com, www) shows the company home page at
+  // its root. try.* keeps the booking landing page with the ZIP form.
+  const isMainDomain = hostname === "novaracleaning.com" || hostname === "www.novaracleaning.com";
+  if (pathname === "/" && isMainDomain) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/home";
+    const rewritten = NextResponse.rewrite(url, { request });
+    for (const cookie of response.cookies.getAll()) rewritten.cookies.set(cookie);
+    return rewritten;
+  }
+
   if (pathname === "/") {
     const landing = DEFAULT_LANDING[currentSubdomain];
     if (landing !== "/") {

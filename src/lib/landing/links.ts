@@ -19,5 +19,8 @@ export function bookingHref(path = "/", extra: Record<string, string> = {}): str
   return `${base}${q ? `?${q}` : ""}${hash ? `#${hash}` : ""}`;
 }
 
-/** Where every "Book now" button on the marketing site goes. */
+/** Where every "Book now" button on the try site goes: its ZIP form. */
 export const BOOK_PATH = "/#get-price";
+
+/** The booking site. The main novaracleaning.com home page sends homeowners here. */
+export const TRY_URL = "https://try.novaracleaning.com/";

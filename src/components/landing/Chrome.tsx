@@ -115,8 +115,12 @@ function MenuItemLink({ item, onNavigate }: { item: (typeof MENUS)[number]["item
   );
 }
 
-/** Site header. `withMenus` adds the dropdown nav; only the main landing page passes it. */
-export function SiteHeader({ withMenus = false }: { withMenus?: boolean }) {
+/**
+ * Site header. `withMenus` adds the dropdown nav. `bookHref` is where "Book
+ * now" goes: the ZIP form on try by default, the try site from the main
+ * novaracleaning.com home page.
+ */
+export function SiteHeader({ withMenus = false, bookHref = BOOK_PATH }: { withMenus?: boolean; bookHref?: string }) {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [openSection, setOpenSection] = useState<string | null>(MENUS[0].label);
@@ -194,7 +198,7 @@ export function SiteHeader({ withMenus = false }: { withMenus?: boolean }) {
             <Link href="/auth" className="hidden px-2 py-1.5 text-[14px] text-ink-muted hover:text-ink sm:inline">
               {NAV.signIn}
             </Link>
-            <a href={BOOK_PATH} className={cn(btnPrimary, "hidden h-10 px-4 text-[14px] sm:inline-flex")}>
+            <a href={bookHref} className={cn(btnPrimary, "hidden h-10 px-4 text-[14px] sm:inline-flex")}>
               Book now
             </a>
             {withMenus ? (
@@ -246,7 +250,7 @@ export function SiteHeader({ withMenus = false }: { withMenus?: boolean }) {
               })}
             </ul>
             <div className="mt-4 grid gap-2">
-              <a href={BOOK_PATH} className={cn(btnPrimary, "w-full")}>
+              <a href={bookHref} className={cn(btnPrimary, "w-full")}>
                 Book now
               </a>
               <div className="grid grid-cols-2 gap-2">

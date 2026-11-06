@@ -76,7 +76,7 @@ const Index = ({ standardFrom = null, afterHow = null, afterWhy = null }: IndexP
       <SEO
         title="Professional Home Cleaning in Maryland & DMV"
         description="Book home cleaning in Maryland, DC and Northern Virginia. See the exact price for your home, a written checklist on every visit, and a 48-hour re-clean guarantee."
-        canonical="https://novaracleaning.com"
+        canonical="https://try.novaracleaning.com/"
       />
       <SiteHeader withMenus />
 
