@@ -86,7 +86,7 @@ export default function EodReport({ token }: { token?: string }) {
   if (checkingSession) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#FAFAFC]">
-        <RiLoader4Line className="h-6 w-6 animate-spin text-[#5C0FFE]" />
+        <RiLoader4Line className="h-6 w-6 animate-spin text-[#6810FE]" />
       </div>
     );
   }
@@ -183,7 +183,7 @@ function SignIn() {
           <Button
             type="submit"
             disabled={busy}
-            className="h-11 w-full font-semibold text-white shadow-lg shadow-[#5C0FFE]/25 transition hover:opacity-95"
+            className="h-11 w-full font-semibold text-white shadow-lg shadow-[#6810FE]/25 transition hover:opacity-95"
             style={{ background: AUTH_GRADIENT }}
           >
             {busy ? (
@@ -202,7 +202,7 @@ function SignIn() {
 
         <p className="mt-4 text-center text-xs text-slate-500">
           Same login as the workspace. Lost access?{" "}
-          <a className="text-[#5C0FFE] hover:underline" href="mailto:support@novaracleaning.com">
+          <a className="text-[#6810FE] hover:underline" href="mailto:support@novaracleaning.com">
             support@novaracleaning.com
           </a>
         </p>

@@ -22,7 +22,7 @@ import { CompanyCoiDownloadLink } from "@/components/commercial/CompanyCoiDownlo
 import { EmbeddedCardForm } from "@/components/token/EmbeddedCardForm";
 import { cn } from "@/lib/utils";
 
-const PURPLE = "linear-gradient(135deg,#5C0FFE 0%,#8F7BFD 100%)";
+const PURPLE = "linear-gradient(135deg,#6810FE 0%,#8E5BFF 100%)";
 
 interface Site {
   id: string;
@@ -183,7 +183,7 @@ export default function CommercialPortal() {
   if (loading && !data) {
     return (
       <div className="flex justify-center py-16">
-        <RiLoader4Line className="h-8 w-8 animate-spin text-[#5C0FFE]" />
+        <RiLoader4Line className="h-8 w-8 animate-spin text-[#6810FE]" />
       </div>
     );
   }
@@ -236,7 +236,7 @@ export default function CommercialPortal() {
             onClick={() => setTab(id)}
             className={cn(
               "whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-medium",
-              tab === id ? "bg-[#5C0FFE] text-white" : "bg-white text-slate-600 border border-slate-200",
+              tab === id ? "bg-[#6810FE] text-white" : "bg-white text-slate-600 border border-slate-200",
             )}
           >
             {label}
@@ -263,7 +263,7 @@ export default function CommercialPortal() {
                   className="rounded-xl border border-slate-200 bg-white p-4 text-left hover:border-violet-300"
                 >
                   <p className="font-semibold flex items-center gap-1.5">
-                    <RiBuilding2Line className="h-4 w-4 text-[#5C0FFE]" />
+                    <RiBuilding2Line className="h-4 w-4 text-[#6810FE]" />
                     {s.nickname}
                   </p>
                   <p className="mt-1 text-xs text-slate-500">
@@ -319,7 +319,7 @@ export default function CommercialPortal() {
           {data.sites.length > 1 && (
             <div className="flex flex-wrap gap-2">
               <button
-                className={cn("rounded-full px-3 py-1 text-xs", !siteId ? "bg-[#5C0FFE] text-white" : "border")}
+                className={cn("rounded-full px-3 py-1 text-xs", !siteId ? "bg-[#6810FE] text-white" : "border")}
                 onClick={() => setSiteId(null)}
               >
                 All sites
@@ -327,7 +327,7 @@ export default function CommercialPortal() {
               {data.sites.map((s) => (
                 <button
                   key={s.id}
-                  className={cn("rounded-full px-3 py-1 text-xs", siteId === s.id ? "bg-[#5C0FFE] text-white" : "border")}
+                  className={cn("rounded-full px-3 py-1 text-xs", siteId === s.id ? "bg-[#6810FE] text-white" : "border")}
                   onClick={() => setSiteId(s.id)}
                 >
                   {s.nickname}
@@ -336,7 +336,7 @@ export default function CommercialPortal() {
             </div>
           )}
           <h2 className="font-bold flex items-center gap-1.5">
-            <RiCalendarCheckLine className="h-4 w-4 text-[#5C0FFE]" /> Upcoming (already scheduled)
+            <RiCalendarCheckLine className="h-4 w-4 text-[#6810FE]" /> Upcoming (already scheduled)
           </h2>
           {upcoming.length === 0 && (
             <Card>
@@ -360,7 +360,7 @@ export default function CommercialPortal() {
           <Card>
             <CardContent className="p-5">
               <p className="font-semibold flex items-center gap-1.5">
-                <RiMoneyDollarCircleLine className="h-4 w-4 text-[#5C0FFE]" />
+                <RiMoneyDollarCircleLine className="h-4 w-4 text-[#6810FE]" />
                 {data.billing.method === "invoiced" ? "Invoiced account" : "Stripe Pre-Auth"}
               </p>
               {data.billing.method === "auto_pay" ? (
@@ -447,7 +447,7 @@ export default function CommercialPortal() {
                     {row.status}
                   </Badge>
                   {row.url && (
-                    <a href={row.url} className="text-xs font-semibold text-[#5C0FFE]" target="_blank" rel="noreferrer">
+                    <a href={row.url} className="text-xs font-semibold text-[#6810FE]" target="_blank" rel="noreferrer">
                       {data.billing.method === "invoiced" ? "Invoice" : "Receipt"}
                     </a>
                   )}
@@ -463,10 +463,10 @@ export default function CommercialPortal() {
           {data.documents.map((d, i) => (
             <Card key={i}>
               <CardContent className="flex items-center gap-3 p-4">
-                <RiFileTextLine className="h-4 w-4 text-[#5C0FFE]" />
+                <RiFileTextLine className="h-4 w-4 text-[#6810FE]" />
                 <span className="text-sm">{d.label}</span>
                 {d.url && (
-                  <a href={d.url} className="ml-auto text-xs font-semibold text-[#5C0FFE]" target="_blank" rel="noreferrer">
+                  <a href={d.url} className="ml-auto text-xs font-semibold text-[#6810FE]" target="_blank" rel="noreferrer">
                     Download
                   </a>
                 )}
@@ -551,7 +551,7 @@ function VisitRow({ v }: { v: Visit }) {
         {v.isRecurring && <p className="mt-1 text-xs text-slate-400">Generated from agreement frequency ({v.frequency})</p>}
         {photos > 0 && <p className="mt-2 text-xs text-slate-500">{photos} documentation photo{photos === 1 ? "" : "s"} on file</p>}
         {v.invoiceUrl && (
-          <a href={v.invoiceUrl} className="mt-2 inline-block text-xs font-semibold text-[#5C0FFE]" target="_blank" rel="noreferrer">
+          <a href={v.invoiceUrl} className="mt-2 inline-block text-xs font-semibold text-[#6810FE]" target="_blank" rel="noreferrer">
             Invoice
           </a>
         )}
@@ -637,7 +637,7 @@ function CommercialRequests({ sites, onDone }: { sites: Site[]; onDone: () => vo
             <button
               key={id}
               onClick={() => setKind(id)}
-              className={cn("rounded-full px-3 py-1 text-xs", kind === id ? "bg-[#5C0FFE] text-white" : "border")}
+              className={cn("rounded-full px-3 py-1 text-xs", kind === id ? "bg-[#6810FE] text-white" : "border")}
             >
               {label}
             </button>

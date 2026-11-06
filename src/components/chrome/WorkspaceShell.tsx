@@ -6,9 +6,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { RiCloseLine, RiLogoutBoxRLine, RiMenuLine } from "@/components/icons";
 
-import { BrandAtmosphere } from "@/components/brand/atmosphere";
 import { Button } from "@/components/ui/button";
-import { BRAND } from "@/lib/brand";
 import { cn } from "@/lib/utils";
 
 export type WorkspaceNavItem = {
@@ -75,9 +73,8 @@ export function WorkspaceShell({
   }, [pathname]);
 
   return (
-    <div className="relative min-h-screen flex w-full bg-background text-foreground font-sans">
-      <BrandAtmosphere />
-      <aside className="relative z-10 hidden lg:flex w-64 flex-col border-r border-[color:var(--hairline)] bg-card/70 backdrop-blur-xl shrink-0">
+    <div className="relative min-h-screen flex w-full bg-[#FAFAFC] text-foreground font-sans antialiased">
+      <aside className="sticky top-0 z-10 hidden h-screen lg:flex w-64 flex-col border-r border-[color:var(--hairline)] bg-card shrink-0">
         <SidebarBrand badge={badge} />
         <SidebarNav pathname={pathname} hash={hash} items={navItems} label={navLabel} cta={cta} />
         <SidebarFooter userLabel={userLabel} userSub={userSub} onSignOut={onSignOut} />
@@ -91,7 +88,7 @@ export function WorkspaceShell({
       )}
       <aside
         className={cn(
-          "lg:hidden fixed inset-y-0 left-0 z-50 w-72 flex-col bg-card/95 backdrop-blur-xl border-r border-[color:var(--hairline)] transition-transform",
+          "lg:hidden fixed inset-y-0 left-0 z-50 w-72 flex-col bg-card border-r border-[color:var(--hairline)] shadow-[0_24px_60px_-20px_rgba(11,10,17,0.35)] transition-transform",
           mobileOpen ? "translate-x-0 flex" : "-translate-x-full flex",
         )}
       >
@@ -106,31 +103,27 @@ export function WorkspaceShell({
       </aside>
 
       <main className="relative z-10 flex-1 flex flex-col min-w-0">
-        <header className="h-14 flex items-center gap-3 px-4 sm:px-6 border-b border-[color:var(--hairline)] bg-background/80 backdrop-blur-xl sticky top-0 z-30 hairline-glow">
-          <Button variant="ghost" size="sm" className="lg:hidden text-foreground" onClick={() => setMobileOpen(true)}>
+        <header className="h-14 flex items-center gap-2.5 px-4 sm:px-6 border-b border-[color:var(--hairline)] bg-card/90 backdrop-blur-md sticky top-0 z-30">
+          <Button variant="ghost" size="sm" className="lg:hidden text-foreground" onClick={() => setMobileOpen(true)} aria-label="Open navigation">
             <RiMenuLine className="w-5 h-5" />
           </Button>
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-2.5 min-w-0">
             {active ? (
               <>
-                <span className="w-7 h-7 rounded-lg text-primary inline-flex items-center justify-center shrink-0 bg-brand-50">
+                <span className="w-7 h-7 rounded-lg text-[#6810FE] inline-flex items-center justify-center shrink-0 bg-[#F3EEFF]">
                   <active.icon className="w-4 h-4" />
                 </span>
-                <h1 className="font-heading text-sm font-semibold text-foreground truncate tracking-tight">
-                  {title || active.title}
-                </h1>
+                <h1 className="text-[14px] font-semibold text-foreground truncate tracking-tight">{title || active.title}</h1>
                 {(description || active.description) && (
-                  <span className="hidden sm:inline text-xs text-muted-foreground truncate">
-                    · {description || active.description}
-                  </span>
+                  <span className="hidden sm:inline text-[12.5px] text-muted-foreground truncate">{description || active.description}</span>
                 )}
               </>
             ) : (
-              <h1 className="font-heading text-sm font-semibold text-foreground">{title || badge}</h1>
+              <h1 className="text-[14px] font-semibold text-foreground">{title || badge}</h1>
             )}
           </div>
         </header>
-        <div className="flex-1 overflow-auto p-4 sm:p-6">{children}</div>
+        <div className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">{children}</div>
       </main>
     </div>
   );
@@ -138,23 +131,10 @@ export function WorkspaceShell({
 
 function SidebarBrand({ badge, compact = false }: { badge: string; compact?: boolean }) {
   return (
-    <div
-      className={cn(
-        "relative flex items-center gap-2 overflow-hidden px-5 py-5 border-b border-[color:var(--hairline)]",
-        compact && "border-0 py-0",
-      )}
-    >
-      {!compact && (
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0"
-          style={{ background: "radial-gradient(120% 100% at 0% 0%, rgba(92,15,254,0.08), transparent 70%)" }}
-        />
-      )}
-      <img src="/novara-email-logo.png" alt="Novara" className="relative h-[22px] w-auto" />
-      <span className="relative rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-primary bg-brand-50">
-        {badge}
-      </span>
+    <div className={cn("flex items-center gap-2 px-4 h-16 border-b border-[color:var(--hairline)]", compact && "h-auto border-0 px-0")}>
+      <img src="/novara-logo.png" alt="" className="h-8 w-8 rounded-[9px]" />
+      <span className="whitespace-nowrap text-[14.5px] font-semibold tracking-[-0.02em] text-foreground">Novara Cleaning</span>
+      <span className="rounded-md bg-[#F3EEFF] px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-[0.12em] text-[#5A1FD6]">{badge}</span>
     </div>
   );
 }
@@ -174,7 +154,7 @@ function SidebarNav({
 }) {
   return (
     <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
-      <p className="px-3 pb-2 text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-semibold">{label}</p>
+      <p className="px-3 pb-2 text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground font-semibold">{label}</p>
       {items.map((item) => {
         const isActive = isWorkspaceNavActive(pathname, item.url, hash);
         return (
@@ -182,26 +162,21 @@ function SidebarNav({
             key={item.url}
             href={item.url}
             data-tour={item.tourAnchor}
+            aria-current={isActive ? "page" : undefined}
             className={cn(
-              "group relative flex items-center gap-3 px-3 py-2 rounded-xl transition-all duration-150 text-sm",
-              isActive
-                ? "bg-brand-50 text-primary font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] ring-1 ring-primary/10"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/70",
+              "group relative flex items-center gap-3 rounded-[10px] px-2.5 py-2 text-[13.5px] transition-colors duration-150",
+              isActive ? "bg-[#F3EEFF] text-[#0B0A11] font-semibold" : "text-muted-foreground hover:bg-[#F6F5F9] hover:text-foreground",
             )}
           >
-            {isActive && (
-              <span aria-hidden className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-full" style={{ background: BRAND.gradient }} />
-            )}
             <span
               className={cn(
-                "w-8 h-8 rounded-md flex items-center justify-center transition-all",
+                "grid h-8 w-8 shrink-0 place-items-center rounded-lg transition-colors",
                 isActive
-                  ? "text-white shadow-[0_2px_6px_-1px_rgba(92,15,254,0.5)]"
-                  : "bg-muted text-muted-foreground group-hover:bg-brand-50 group-hover:text-primary",
+                  ? "bg-gradient-to-b from-[#7A2BFF] to-[#5A0BE6] text-white shadow-[0_6px_14px_-6px_rgba(104,16,254,0.7)]"
+                  : "bg-[#F3F2F7] text-[#5F5B6B] group-hover:bg-[#F3EEFF] group-hover:text-[#6810FE]",
               )}
-              style={isActive ? { background: BRAND.gradient } : undefined}
             >
-              <item.icon className="w-4 h-4" />
+              <item.icon className="w-[17px] h-[17px]" />
             </span>
             <div className="flex-1 min-w-0">
               <p className="leading-tight tracking-tight">{item.title}</p>
@@ -209,7 +184,7 @@ function SidebarNav({
                 <p
                   className={cn(
                     "text-[11px] leading-tight truncate",
-                    isActive ? "text-primary/70" : "text-muted-foreground/80 group-hover:text-muted-foreground",
+                    isActive ? "text-[#5A1FD6]/80 font-normal" : "text-muted-foreground/80 group-hover:text-muted-foreground",
                   )}
                 >
                   {item.description}
@@ -242,7 +217,7 @@ function SidebarFooter({
   return (
     <div className="border-t border-[color:var(--hairline)] p-3 space-y-2">
       {userLabel && (
-        <div className="px-3 py-2 rounded-lg surface-sunken">
+        <div className="px-3 py-2 rounded-lg surface-sunken border">
           <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-bold">Signed in</p>
           <p className="text-sm text-foreground font-medium truncate">{userLabel}</p>
           {userSub && <p className="text-[11px] text-muted-foreground truncate">{userSub}</p>}

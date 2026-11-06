@@ -214,7 +214,7 @@ export default function SyncHealth() {
     return (
       <div className="py-24 text-center text-sm text-slate-500">
         Couldn&apos;t load sync health.{" "}
-        <button className="text-[#5C0FFE] underline" onClick={() => void load()}>
+        <button className="text-[#6810FE] underline" onClick={() => void load()}>
           Retry
         </button>
       </div>

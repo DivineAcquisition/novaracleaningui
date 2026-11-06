@@ -284,7 +284,7 @@ export default function CommercialIntake() {
       <header className="sticky top-0 z-40 border-b border-[color:var(--hairline)] bg-background/85 backdrop-blur-xl hairline-glow">
         <div className="relative z-10 mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
           <div className="flex items-center gap-2">
-            <img src="/novara-email-logo.png" alt="Novara Cleaning" className="h-[22px] w-auto" />
+            <span className="flex items-center gap-2"><img src="/novara-logo.png" alt="" className="h-8 w-8 rounded-[9px]" /><span className="whitespace-nowrap text-[15px] font-semibold tracking-[-0.02em] text-[#0B0A11]">Novara Cleaning</span></span>
             <span className="hidden rounded-md bg-brand-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-primary sm:inline">
               Commercial
             </span>
@@ -364,7 +364,7 @@ export default function CommercialIntake() {
                   >
                     <div className="flex items-start gap-4">
                       <div
-                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl shadow-[0_2px_8px_-2px_rgba(92,15,254,0.45)]"
+                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl shadow-[0_2px_8px_-2px_rgba(104, 16, 254,0.45)]"
                         style={{ background: PURPLE_GRADIENT }}
                       >
                         <t.icon className="h-5 w-5 text-white" />
@@ -476,7 +476,7 @@ export default function CommercialIntake() {
                 </p>
                 <a
                   href="#request"
-                  className="mt-5 inline-flex h-11 items-center justify-center gap-2 rounded-xl px-6 text-sm font-semibold text-white shadow-[0_2px_10px_-2px_rgba(92,15,254,0.5)]"
+                  className="mt-5 inline-flex h-11 items-center justify-center gap-2 rounded-xl px-6 text-sm font-semibold text-white shadow-[0_2px_10px_-2px_rgba(104, 16, 254,0.5)]"
                   style={{ background: PURPLE_GRADIENT }}
                 >
                   Start your request

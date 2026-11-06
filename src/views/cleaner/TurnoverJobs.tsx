@@ -239,7 +239,7 @@ function JobCard({ job, onChanged }: { job: TurnoverJob; onChanged: () => void }
         {/* Lifecycle actions */}
         <div className="flex flex-wrap gap-2 pt-1">
           {job.status === "assigned" && (
-            <Button size="sm" disabled={!!busy} onClick={confirm} style={{ background: "#5C0FFE" }}>
+            <Button size="sm" disabled={!!busy} onClick={confirm} style={{ background: "#6810FE" }}>
               {busy === "cleaner.confirm" ? <RiLoader4Line className="w-3.5 h-3.5 animate-spin" /> : <><RiCheckLine className="w-3.5 h-3.5 mr-1" /> Confirm job</>}
             </Button>
           )}
@@ -248,7 +248,7 @@ function JobCard({ job, onChanged }: { job: TurnoverJob; onChanged: () => void }
               label={<><RiPlayCircleLine className="w-3.5 h-3.5 mr-1" /> Check in</>}
               busy={busy === "cleaner.checkin" || uploading === "before"}
               onFiles={checkin}
-              style={{ background: "#5C0FFE" }}
+              style={{ background: "#6810FE" }}
             />
           )}
           {job.status === "in_progress" && (
@@ -258,7 +258,7 @@ function JobCard({ job, onChanged }: { job: TurnoverJob; onChanged: () => void }
                 label={<><RiCheckboxCircleLine className="w-3.5 h-3.5 mr-1" /> Complete + photos</>}
                 busy={busy === "cleaner.complete" || uploading === "after"}
                 onFiles={complete}
-                style={{ background: "#5C0FFE" }}
+                style={{ background: "#6810FE" }}
               />
             </>
           )}

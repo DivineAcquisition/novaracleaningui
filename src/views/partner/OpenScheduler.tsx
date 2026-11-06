@@ -20,7 +20,7 @@ interface Existing { property_id: string; requested_date: string; status: string
 interface InvoiceResult { turnoverId: string; date: string; property: string; amountCents?: number; url?: string | null; error?: string }
 
 const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const RAMP = "linear-gradient(135deg,#5C0FFE 0%,#8F7BFD 100%)";
+const RAMP = "linear-gradient(135deg,#6810FE 0%,#8E5BFF 100%)";
 
 function addDays(ymd: string, n: number): string {
   const d = new Date(`${ymd}T00:00:00Z`);
@@ -138,7 +138,7 @@ export default function OpenScheduler({ token }: { token: string }) {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <RiLoader4Line className="w-8 h-8 animate-spin text-[#5C0FFE]" />
+        <RiLoader4Line className="w-8 h-8 animate-spin text-[#6810FE]" />
       </div>
     );
   }
@@ -155,8 +155,8 @@ export default function OpenScheduler({ token }: { token: string }) {
         <Hero hostName={hostName} weekStart={weekStart} />
         <div className="max-w-2xl mx-auto px-4 mt-4">
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm text-center">
-            <div className="mx-auto w-12 h-12 rounded-full flex items-center justify-center mb-3" style={{ background: "rgba(92,15,254,0.1)" }}>
-              <RiMailSendLine className="w-6 h-6 text-[#5C0FFE]" />
+            <div className="mx-auto w-12 h-12 rounded-full flex items-center justify-center mb-3" style={{ background: "rgba(104, 16, 254,0.1)" }}>
+              <RiMailSendLine className="w-6 h-6 text-[#6810FE]" />
             </div>
             <h2 className="text-xl font-bold">{okInvoices.length} invoice{okInvoices.length === 1 ? "" : "s"} sent</h2>
             <p className="text-sm text-slate-500 mt-1">
@@ -177,7 +177,7 @@ export default function OpenScheduler({ token }: { token: string }) {
                 </div>
               ))}
             </div>
-            <button onClick={() => { setSent(null); setSelected({}); }} className="mt-5 text-sm font-medium text-[#5C0FFE] hover:underline">
+            <button onClick={() => { setSent(null); setSelected({}); }} className="mt-5 text-sm font-medium text-[#6810FE] hover:underline">
               Schedule more
             </button>
           </div>
@@ -201,8 +201,8 @@ export default function OpenScheduler({ token }: { token: string }) {
               className="w-full flex items-center justify-between gap-2 p-4 text-left hover:bg-slate-50 transition-colors"
             >
               <span className="flex items-center gap-2.5">
-                <span className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: "rgba(92,15,254,0.08)" }}>
-                  <RiAddLine className="w-5 h-5 text-[#5C0FFE]" />
+                <span className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: "rgba(104, 16, 254,0.08)" }}>
+                  <RiAddLine className="w-5 h-5 text-[#6810FE]" />
                 </span>
                 <span>
                   <span className="block font-semibold leading-tight">Add a property</span>
@@ -263,15 +263,15 @@ export default function OpenScheduler({ token }: { token: string }) {
             <div key={p.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <span className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: "rgba(92,15,254,0.08)" }}>
-                    <RiHome3Line className="w-5 h-5 text-[#5C0FFE]" />
+                  <span className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: "rgba(104, 16, 254,0.08)" }}>
+                    <RiHome3Line className="w-5 h-5 text-[#6810FE]" />
                   </span>
                   <div className="min-w-0">
                     <p className="font-semibold truncate leading-tight">{p.nickname || "Property"}</p>
                     <p className="text-xs text-slate-500 truncate">{p.address}</p>
                   </div>
                 </div>
-                <span className="text-sm font-bold text-[#5C0FFE] shrink-0">{money(Number(p.turnover_price))}</span>
+                <span className="text-sm font-bold text-[#6810FE] shrink-0">{money(Number(p.turnover_price))}</span>
               </div>
               <div className="grid grid-cols-7 gap-1.5">
                 {days.map((date, i) => {
@@ -288,8 +288,8 @@ export default function OpenScheduler({ token }: { token: string }) {
                         already
                           ? "bg-emerald-50 border-emerald-200 text-emerald-700 cursor-default"
                           : on
-                            ? "border-transparent text-white shadow-[0_4px_12px_-2px_rgba(92,15,254,0.5)]"
-                            : "bg-white border-slate-200 hover:border-[#5C0FFE]/40 text-slate-600"
+                            ? "border-transparent text-white shadow-[0_4px_12px_-2px_rgba(104, 16, 254,0.5)]"
+                            : "bg-white border-slate-200 hover:border-[#6810FE]/40 text-slate-600"
                       }`}
                       style={on && !already ? { background: RAMP } : undefined}
                     >
@@ -352,7 +352,7 @@ export default function OpenScheduler({ token }: { token: string }) {
                   key={o.key}
                   type="button"
                   onClick={() => setPayOption(o.key)}
-                  className={`rounded-xl border p-2.5 text-left transition-colors ${payOption === o.key ? "border-[#5C0FFE] bg-[#5C0FFE]/5" : "border-slate-200"}`}
+                  className={`rounded-xl border p-2.5 text-left transition-colors ${payOption === o.key ? "border-[#6810FE] bg-[#6810FE]/5" : "border-slate-200"}`}
                 >
                   <span className="block text-sm font-semibold">{o.title}</span>
                   <span className="block text-[11px] text-slate-500">{o.sub}</span>
@@ -363,7 +363,7 @@ export default function OpenScheduler({ token }: { token: string }) {
             <button
               onClick={submit}
               disabled={submitting || chosen.length === 0}
-              className="w-full h-12 rounded-xl text-white font-semibold disabled:opacity-50 flex items-center justify-center gap-2 shadow-[0_6px_18px_-4px_rgba(92,15,254,0.55)]"
+              className="w-full h-12 rounded-xl text-white font-semibold disabled:opacity-50 flex items-center justify-center gap-2 shadow-[0_6px_18px_-4px_rgba(104, 16, 254,0.55)]"
               style={{ background: RAMP }}
             >
               {submitting

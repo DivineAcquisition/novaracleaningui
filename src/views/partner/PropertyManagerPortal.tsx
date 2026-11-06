@@ -32,7 +32,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { AddressAutocomplete } from "@/components/booking/AddressAutocomplete";
 import { cn } from "@/lib/utils";
 
-const PURPLE = "linear-gradient(135deg,#5C0FFE 0%,#8F7BFD 100%)";
+const PURPLE = "linear-gradient(135deg,#6810FE 0%,#8E5BFF 100%)";
 const API = "/api/partner-portal/property-manager";
 
 type Tab = "portfolio" | "turnovers" | "invoices" | "documents" | "issue";
@@ -232,7 +232,7 @@ export default function PropertyManagerPortal() {
   if (loading || !data) {
     return (
       <div className="flex justify-center py-16">
-        <RiLoader4Line className="h-8 w-8 animate-spin text-[#5C0FFE]" />
+        <RiLoader4Line className="h-8 w-8 animate-spin text-[#6810FE]" />
       </div>
     );
   }
@@ -258,7 +258,7 @@ export default function PropertyManagerPortal() {
             onClick={() => setTab(t.id)}
             className={cn(
               "whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-medium",
-              tab === t.id ? "bg-[#5C0FFE] text-white" : "border border-slate-200 bg-white text-slate-600",
+              tab === t.id ? "bg-[#6810FE] text-white" : "border border-slate-200 bg-white text-slate-600",
             )}
           >
             {t.label}
@@ -425,7 +425,7 @@ export default function PropertyManagerPortal() {
                     <div className="text-right">
                       <p className="font-bold">{money(row.amountCents)}</p>
                       {row.url && (
-                        <a href={row.url} className="text-xs font-semibold text-[#5C0FFE]" target="_blank" rel="noreferrer">
+                        <a href={row.url} className="text-xs font-semibold text-[#6810FE]" target="_blank" rel="noreferrer">
                           Receipt
                         </a>
                       )}
@@ -446,12 +446,12 @@ export default function PropertyManagerPortal() {
           {data.documents.map((d, i) => (
             <Card key={i}>
               <CardContent className="flex items-center gap-3 p-4">
-                <RiFileTextLine className="h-4 w-4 shrink-0 text-[#5C0FFE]" />
+                <RiFileTextLine className="h-4 w-4 shrink-0 text-[#6810FE]" />
                 <span className="text-sm">{d.label}</span>
                 {d.url && (
                   <a
                     href={d.url}
-                    className="ml-auto shrink-0 text-xs font-semibold text-[#5C0FFE]"
+                    className="ml-auto shrink-0 text-xs font-semibold text-[#6810FE]"
                     target="_blank"
                     rel="noreferrer"
                   >
@@ -537,7 +537,7 @@ function UnitCard({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="flex items-center gap-1.5 font-semibold">
-              <RiBuilding2Line className="h-4 w-4 text-[#5C0FFE]" />
+              <RiBuilding2Line className="h-4 w-4 text-[#6810FE]" />
               {unit.label}
             </p>
             <p className="text-xs text-slate-500">
@@ -563,7 +563,7 @@ function UnitCard({
             {unit.rates.map((r) => (
               <div key={r.service} className="flex items-center justify-between py-1.5">
                 <span className="text-xs text-slate-600">{r.label}</span>
-                <span className="text-sm font-bold text-[#5C0FFE]">{money(r.standingCents)}</span>
+                <span className="text-sm font-bold text-[#6810FE]">{money(r.standingCents)}</span>
               </div>
             ))}
           </div>
@@ -701,7 +701,7 @@ function InvoiceCard({ invoice }: { invoice: Invoice }) {
           </div>
         </div>
         <div className="mt-3 flex flex-wrap gap-3">
-          <button className="text-xs font-semibold text-[#5C0FFE]" onClick={() => setOpen((v) => !v)}>
+          <button className="text-xs font-semibold text-[#6810FE]" onClick={() => setOpen((v) => !v)}>
             {open ? "Hide" : "See it itemized by unit"}
           </button>
           {invoice.url && (
@@ -709,7 +709,7 @@ function InvoiceCard({ invoice }: { invoice: Invoice }) {
               href={invoice.url}
               target="_blank"
               rel="noreferrer"
-              className="text-xs font-semibold text-[#5C0FFE]"
+              className="text-xs font-semibold text-[#6810FE]"
             >
               Open invoice
             </a>
@@ -810,14 +810,14 @@ function BookModal({
               onClick={() => setService(s.key)}
               className={cn(
                 "flex w-full items-start justify-between gap-3 rounded-xl border p-3 text-left",
-                service === s.key ? "border-[#5C0FFE] bg-violet-50" : "border-slate-200",
+                service === s.key ? "border-[#6810FE] bg-violet-50" : "border-slate-200",
               )}
             >
               <span>
                 <span className="block text-sm font-semibold">{s.label}</span>
                 <span className="block text-xs text-slate-500">{s.summary}</span>
               </span>
-              <span className="shrink-0 text-sm font-bold text-[#5C0FFE]">{money(cents)}</span>
+              <span className="shrink-0 text-sm font-bold text-[#6810FE]">{money(cents)}</span>
             </button>
           );
         })}
@@ -1146,13 +1146,13 @@ function IssueForm({
   };
 
   const selectCls =
-    "w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#5C0FFE]";
+    "w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#6810FE]";
 
   return (
     <Card>
       <CardContent className="space-y-3 p-5">
         <p className="flex items-center gap-1.5 font-semibold">
-          <RiAlertLine className="h-4 w-4 text-[#5C0FFE]" /> Report an issue
+          <RiAlertLine className="h-4 w-4 text-[#6810FE]" /> Report an issue
         </p>
         <p className="text-sm text-slate-500">
           This feeds the same QC queue as every other complaint channel. Tag the unit so it lands

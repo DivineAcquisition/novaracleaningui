@@ -4,7 +4,7 @@
 //
 // One design language for every Novara auth surface (customer, cleaner,
 // admin, partner, password recovery). A split-screen layout: an aurora
-// brand panel (brand purple #5C0FFE → #8F7BFD, glass value-prop chips,
+// brand panel (brand purple #6810FE → #8E5BFF, glass value-prop chips,
 // tabular-mono trust stats, one signature aurora-drift motion that honors
 // prefers-reduced-motion) beside a clean light form surface.
 //
@@ -14,12 +14,12 @@
 import { ShineBorder } from "@/components/magicui/shine-border";
 
 // Brand tokens — purple used as a scalpel, not a flood.
-export const AUTH_GRADIENT = "linear-gradient(135deg,#5C0FFE 0%,#8F7BFD 100%)";
+export const AUTH_GRADIENT = "linear-gradient(135deg,#6810FE 0%,#8E5BFF 100%)";
 export const AUTH_INPUT_CLS =
   "h-11 pl-10 bg-background border-border text-foreground placeholder:text-muted-foreground " +
   "focus-visible:border-primary focus-visible:ring-4 focus-visible:ring-primary/15";
 
-const LOGO_SRC = "/novara-email-logo.png";
+const LOGO_SRC = "/novara-logo.png";
 
 export interface AuthFeature {
   icon: React.ComponentType<{ className?: string }>;
@@ -77,13 +77,13 @@ function BrandPanel({
           className="absolute inset-0"
           style={{
             background:
-              "radial-gradient(55% 45% at 16% 12%, rgba(143,123,253,.55), transparent 60%)," +
+              "radial-gradient(55% 45% at 16% 12%, rgba(142, 91, 255,.55), transparent 60%)," +
               "radial-gradient(45% 40% at 90% 18%, rgba(171,158,253,.32), transparent 60%)," +
-              "radial-gradient(70% 65% at 78% 98%, rgba(92,15,254,.55), transparent 62%)",
+              "radial-gradient(70% 65% at 78% 98%, rgba(104, 16, 254,.55), transparent 62%)",
           }}
         />
-        <div className="nv-auth-a absolute -left-24 top-8 h-80 w-80 rounded-full blur-3xl" style={{ background: "rgba(143,123,253,.45)" }} />
-        <div className="nv-auth-b absolute -bottom-10 right-0 h-96 w-96 rounded-full blur-3xl" style={{ background: "rgba(92,15,254,.45)" }} />
+        <div className="nv-auth-a absolute -left-24 top-8 h-80 w-80 rounded-full blur-3xl" style={{ background: "rgba(142, 91, 255,.45)" }} />
+        <div className="nv-auth-b absolute -bottom-10 right-0 h-96 w-96 rounded-full blur-3xl" style={{ background: "rgba(104, 16, 254,.45)" }} />
         <div
           className="absolute inset-0 opacity-[0.05]"
           style={{
@@ -96,7 +96,7 @@ function BrandPanel({
 
       {/* Logo */}
       <div className="relative">
-        <img src={LOGO_SRC} alt="Novara Cleaning" className="h-8 w-auto" style={{ filter: "brightness(0) invert(1)" }} />
+        <span className="flex items-center gap-2.5"><img src={LOGO_SRC} alt="" className="h-9 w-9 rounded-[10px]" /><span className="text-[17px] font-semibold tracking-[-0.02em] text-white">Novara Cleaning</span></span>
       </div>
 
       {/* Headline + value props */}
@@ -164,11 +164,11 @@ export function AuthScaffold({
         <div
           aria-hidden
           className="pointer-events-none absolute inset-x-0 top-0 h-40 lg:hidden"
-          style={{ background: "radial-gradient(80% 100% at 50% 0%, rgba(92,15,254,.10), transparent 70%)" }}
+          style={{ background: "radial-gradient(80% 100% at 50% 0%, rgba(104, 16, 254,.10), transparent 70%)" }}
         />
         <div className="relative w-full max-w-[400px] space-y-8">
           <div className="flex flex-col items-center gap-2 lg:hidden">
-            <img src={LOGO_SRC} alt="Novara Cleaning" className="h-7 w-auto" />
+            <span className="flex items-center gap-2"><img src={LOGO_SRC} alt="" className="h-8 w-8 rounded-[9px]" /><span className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Novara Cleaning</span></span>
             <span className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground">{eyebrow}</span>
           </div>
           {children}

@@ -9,7 +9,7 @@ import { SEO } from "@/components/SEO";
 import { CompanyCoiDownloadLink } from "@/components/commercial/CompanyCoiDownloadLink";
 import { SUPPORT_PHONE } from "@/config/brand-config";
 
-const PURPLE_GRADIENT = "linear-gradient(135deg,#5C0FFE 0%,#8F7BFD 100%)";
+const PURPLE_GRADIENT = "linear-gradient(135deg,#6810FE 0%,#8E5BFF 100%)";
 
 export default function CommercialSuccess() {
   const params = useSearchParams();
@@ -27,7 +27,7 @@ export default function CommercialSuccess() {
       <SEO title="Request received — Novara Cleaning Partnerships" description="Your partnership request has been received. Our team will reach out with next steps." />
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-slate-200">
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center">
-          <img src="/novara-email-logo.png" alt="Novara Cleaning" className="h-[22px] w-auto" />
+          <span className="flex items-center gap-2"><img src="/novara-logo.png" alt="" className="h-8 w-8 rounded-[9px]" /><span className="whitespace-nowrap text-[15px] font-semibold tracking-[-0.02em] text-[#0B0A11]">Novara Cleaning</span></span>
         </div>
       </header>
       <main className="max-w-2xl mx-auto px-4 py-12 text-center space-y-8">

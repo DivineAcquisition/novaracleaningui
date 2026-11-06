@@ -21,8 +21,8 @@ export default {
     extend: {
       fontFamily: {
         sans: ['var(--font-inter)', 'Inter', 'system-ui', 'sans-serif'],
-        jakarta: ['var(--font-jakarta)', 'Plus Jakarta Sans', 'Inter', 'sans-serif'],
-        heading: ['var(--font-jakarta)', 'Plus Jakarta Sans', 'Inter', 'sans-serif'],
+        jakarta: ['var(--font-inter)', 'Inter', 'system-ui', 'sans-serif'],
+        heading: ['var(--font-inter)', 'Inter', 'system-ui', 'sans-serif'],
         mono: ['var(--font-mono)', 'ui-monospace', 'SFMono-Regular', 'monospace'],
       },
       colors: {
@@ -33,9 +33,9 @@ export default {
           100: "#EDE5FF",
           200: "#D4C4FE",
           300: "#B49AFE",
-          400: "#8F7BFD",
+          400: "#8E5BFF",
           500: "#6810FE",
-          600: "#5C0FFE",
+          600: "#5A0BE6",
           700: "#4A0CD0",
           800: "#3809A0",
           900: "#26066E",

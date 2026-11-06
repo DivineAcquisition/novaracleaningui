@@ -74,7 +74,7 @@ function RoleMeta({ role }: { role: HiringRole }) {
 
 function RoleRow({ role }: { role: HiringRole }) {
   const body = (
-    <article className="rounded-2xl border border-slate-200 bg-white p-5 transition group-hover:border-[#8E5BFF]/50 group-hover:shadow-[0_16px_40px_-28px_rgba(92,15,254,0.45)] sm:p-6">
+    <article className="rounded-2xl border border-slate-200 bg-white p-5 transition group-hover:border-[#8E5BFF]/50 group-hover:shadow-[0_16px_40px_-28px_rgba(104, 16, 254,0.45)] sm:p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -153,7 +153,7 @@ export default function HiringHome() {
           className="pointer-events-none absolute inset-0"
           style={{
             background:
-              "radial-gradient(60% 50% at 50% -8%, rgba(143,123,253,0.22), transparent 58%), linear-gradient(180deg, #FFFFFF 0%, #FAFAFC 100%)",
+              "radial-gradient(60% 50% at 50% -8%, rgba(142, 91, 255,0.22), transparent 58%), linear-gradient(180deg, #FFFFFF 0%, #FAFAFC 100%)",
           }}
         />
         <div className="relative mx-auto max-w-3xl text-center">

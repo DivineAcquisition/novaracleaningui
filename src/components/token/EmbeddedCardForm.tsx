@@ -30,7 +30,7 @@ export function EmbeddedCardForm({
       stripe={getStripePromise()}
       options={{
         clientSecret,
-        appearance: { theme: "stripe", variables: { colorPrimary: "#5C0FFE" } },
+        appearance: { theme: "stripe", variables: { colorPrimary: "#6810FE" } },
       }}
     >
       <CardFormInner

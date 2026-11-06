@@ -11,7 +11,7 @@ export function BrandAtmosphere({ className }: { className?: string }) {
         className="absolute -top-[22%] left-1/2 h-[520px] w-[820px] -translate-x-1/2"
         style={{
           background:
-            "radial-gradient(ellipse at center, rgba(92,15,254,0.10) 0%, transparent 70%)",
+            "radial-gradient(ellipse at center, rgba(104, 16, 254,0.10) 0%, transparent 70%)",
           filter: "blur(64px)",
         }}
       />

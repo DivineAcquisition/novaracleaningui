@@ -26,7 +26,7 @@ export function indeedApplicationEmail(input: { firstName: string; url: string }
     <h2 style="margin:0 0 8px;font-size:20px">Your Field Cleaner application</h2>
     <p style="margin:0 0 16px;color:#475569">Hi ${escapeHtml(name)},</p>
     <p style="margin:0 0 16px;color:#475569">You applied to clean with Novara. This link opens your Field Cleaner application. It asks one question at a time and saves as you go.</p>
-    <p style="margin:24px 0;text-align:center"><a href="${escapeHtml(input.url)}" style="display:inline-block;background:#5C0FFE;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600">Start your application</a></p>
+    <p style="margin:24px 0;text-align:center"><a href="${escapeHtml(input.url)}" style="display:inline-block;background:#6810FE;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600">Start your application</a></p>
   </div>`;
   return { subject, html, text };
 }

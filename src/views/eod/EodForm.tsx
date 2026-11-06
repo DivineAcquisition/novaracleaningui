@@ -319,8 +319,8 @@ export default function EodForm({
             <Button
               onClick={submit}
               disabled={submitting}
-              className="h-10 shrink-0 font-semibold text-white shadow-lg shadow-[#5C0FFE]/25"
-              style={{ background: "linear-gradient(135deg,#5C0FFE 0%,#8F7BFD 100%)" }}
+              className="h-10 shrink-0 font-semibold text-white shadow-lg shadow-[#6810FE]/25"
+              style={{ background: "linear-gradient(135deg,#6810FE 0%,#8E5BFF 100%)" }}
             >
               {submitting ? (
                 <>
@@ -520,7 +520,7 @@ function SelectRow({
                 active
                   ? isUrgentOption
                     ? "border-rose-400 bg-rose-50 font-semibold text-rose-700"
-                    : "border-[#5C0FFE] bg-[#5C0FFE]/[0.07] font-semibold text-[#5C0FFE]"
+                    : "border-[#6810FE] bg-[#6810FE]/[0.07] font-semibold text-[#6810FE]"
                   : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900",
               )}
             >

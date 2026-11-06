@@ -15,7 +15,7 @@ export function AddressSuggestionMenu({
   return (
     <ul
       role="listbox"
-      className="absolute z-[10000] left-0 right-0 mt-1 max-h-64 overflow-auto rounded-xl border bg-white shadow-[0_8px_24px_rgba(92,15,254,0.14)]"
+      className="absolute z-[10000] left-0 right-0 mt-1 max-h-64 overflow-auto rounded-xl border bg-white shadow-[0_8px_24px_rgba(104, 16, 254,0.14)]"
       style={{ borderColor: "rgba(var(--brand-rgb), 0.22)" }}
     >
       {suggestions.map((s) => (

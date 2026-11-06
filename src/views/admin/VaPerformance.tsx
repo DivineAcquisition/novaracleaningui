@@ -780,7 +780,7 @@ function PerVaTab({ vas, onSaved }: { vas: Va[]; onSaved: () => Promise<void> })
                         href={s.driveUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-[#5C0FFE] hover:underline"
+                        className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-[#6810FE] hover:underline"
                       >
                         <RiExternalLinkLine className="h-3 w-3" />
                         EOD report PDF

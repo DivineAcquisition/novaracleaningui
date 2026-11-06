@@ -536,7 +536,7 @@ export default function PortfolioLanding() {
                   <label className="flex items-start gap-2 text-sm text-muted-foreground">
                     <input
                       type="checkbox"
-                      className="mt-1 h-4 w-4 accent-[#5C0FFE]"
+                      className="mt-1 h-4 w-4 accent-[#6810FE]"
                       checked={flaggedAtypical}
                       onChange={(e) => setFlaggedAtypical(e.target.checked)}
                     />

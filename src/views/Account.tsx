@@ -304,7 +304,7 @@ export default function Account() {
       <Panel className="p-5 md:p-6">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 md:gap-4 min-w-0">
-            <div className="w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center text-primary-foreground font-bold text-lg shadow-[0_8px_20px_-8px_rgba(92,15,254,0.55)]" style={{ background: "var(--gradient-primary)" }}>
+            <div className="w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center text-primary-foreground font-bold text-lg shadow-[0_8px_20px_-8px_rgba(104, 16, 254,0.55)]" style={{ background: "var(--gradient-primary)" }}>
               {userInitials}
             </div>
             <div className="min-w-0">

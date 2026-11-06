@@ -805,7 +805,7 @@ export default function ContractorJobs() {
           <div className="max-w-md mx-auto space-y-8 animate-fade-in">
             <div className="text-center space-y-2">
               <div
-                className="mx-auto w-16 h-16 rounded-2xl flex items-center justify-center shadow-[0_12px_28px_-12px_rgba(92,15,254,0.55)] mb-4"
+                className="mx-auto w-16 h-16 rounded-2xl flex items-center justify-center shadow-[0_12px_28px_-12px_rgba(104, 16, 254,0.55)] mb-4"
                 style={{ background: BRAND.gradient }}
               >
                 <RiSearchLine className="w-8 h-8 text-white" />
@@ -869,7 +869,7 @@ export default function ContractorJobs() {
             <SuspensionBanner status={cleanerStatus} suspendedUntil={suspendedUntil} />
 
             {/* ── Hero: identity + real earnings from the pay ledgers ── */}
-            <div className="rounded-3xl p-5 md:p-6 text-white shadow-[0_18px_40px_-18px_rgba(92,15,254,0.55)]" style={{ background: BRAND.gradient }}>
+            <div className="rounded-3xl p-5 md:p-6 text-white shadow-[0_18px_40px_-18px_rgba(104, 16, 254,0.55)]" style={{ background: BRAND.gradient }}>
               <div className="flex items-center gap-3.5">
                 <div className="w-12 h-12 rounded-2xl bg-white/15 ring-1 ring-white/25 flex items-center justify-center font-bold text-lg">
                   {initials || <RiVipCrownLine className="w-6 h-6" />}
@@ -946,7 +946,7 @@ export default function ContractorJobs() {
 
             {/* ── New job OFFERS — missed the SMS? They're here too. ── */}
             {offers.length > 0 && (
-              <section className="rounded-3xl p-4 text-white shadow-[0_18px_40px_-18px_rgba(92,15,254,0.55)] space-y-2.5" style={{ background: BRAND.gradient }}>
+              <section className="rounded-3xl p-4 text-white shadow-[0_18px_40px_-18px_rgba(104, 16, 254,0.55)] space-y-2.5" style={{ background: BRAND.gradient }}>
                 <div className="flex items-center justify-between px-1">
                   <h2 className="text-[11px] font-bold uppercase tracking-[0.16em]">
                     🔔 New job offer{offers.length === 1 ? "" : "s"} — respond before they expire

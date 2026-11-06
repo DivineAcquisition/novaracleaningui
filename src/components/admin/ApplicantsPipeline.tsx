@@ -780,7 +780,7 @@ export default function ApplicantsPipeline() {
                     <button
                       type="button"
                       onClick={() => openApplicantId(selected)}
-                      className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#5C0FFE] hover:underline"
+                      className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#6810FE] hover:underline"
                     >
                       <RiFileTextLine className="h-4 w-4" />
                       View photo ID

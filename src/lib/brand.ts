@@ -4,13 +4,13 @@
  * motion — but the action colour stays Novara purple.
  */
 export const BRAND = {
-  primary: "#5C0FFE",
+  primary: "#6810FE",
   primaryMid: "#6810FE",
-  primaryLight: "#8F7BFD",
-  rgb: "92, 15, 254",
-  lightRgb: "143, 123, 253",
-  gradient: "linear-gradient(135deg, #5C0FFE 0%, #8F7BFD 100%)",
+  primaryLight: "#8E5BFF",
+  rgb: "104, 16, 254",
+  lightRgb: "142, 91, 255",
+  gradient: "linear-gradient(180deg, #7A2BFF 0%, #5A0BE6 100%)",
 } as const;
 
-export const MAGIC_SPOTLIGHT = "rgba(92, 15, 254, 0.16)";
-export const MAGIC_SHINE = ["#5C0FFE", "#8F7BFD"] as const;
+export const MAGIC_SPOTLIGHT = "rgba(104, 16, 254, 0.16)";
+export const MAGIC_SHINE = ["#6810FE", "#8E5BFF"] as const;

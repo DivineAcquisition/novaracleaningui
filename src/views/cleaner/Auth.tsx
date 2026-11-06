@@ -28,13 +28,13 @@ import { CONTRACTOR_HOST, CONTRACTOR_ORIGIN } from "@/lib/site-hosts";
 
 const CLEANER_FEATURES = [
   { icon: RiBriefcaseLine, label: "Steady work", desc: "Get matched to cleaning jobs near you." },
-  { icon: RiWallet3Line, label: "Fast payouts", desc: "Stripe direct deposit after every job." },
+  { icon: RiWallet3Line, label: "Paid for completed work", desc: "Payouts go to the account you connect during onboarding." },
   { icon: RiCalendarCheckLine, label: "Your schedule", desc: "Accept the jobs that fit your week." },
 ];
 const CLEANER_STATS = [
-  { value: "45%", label: "Top tier share" },
-  { value: "24h", label: "Payouts" },
-  { value: "4.9", label: "Crew rating" },
+  { value: "35–45%", label: "Share of each job" },
+  { value: "1099", label: "Independent contractor" },
+  { value: "DMV", label: "MD · DC · VA" },
 ];
 
 const emailSchema = z.string().email("Please enter a valid email address");
@@ -287,7 +287,7 @@ export default function CleanerAuth() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#FAFAFC]">
         <div className="text-center">
-          <RiLoader4Line className="mx-auto mb-4 h-8 w-8 animate-spin text-[#5C0FFE]" />
+          <RiLoader4Line className="mx-auto mb-4 h-8 w-8 animate-spin text-[#6810FE]" />
           <p className="text-sm text-slate-500">Checking session…</p>
         </div>
       </div>
@@ -329,8 +329,8 @@ export default function CleanerAuth() {
           </div>
 
           {inviteToken && (
-            <div className="rounded-xl border border-[#5C0FFE]/20 bg-[rgba(92,15,254,0.04)] px-3.5 py-3 text-sm text-slate-700">
-              <p className="font-semibold text-[#5C0FFE]">
+            <div className="rounded-xl border border-[#6810FE]/20 bg-[rgba(104, 16, 254,0.04)] px-3.5 py-3 text-sm text-slate-700">
+              <p className="font-semibold text-[#6810FE]">
                 {inviteName ? `You're invited, ${inviteName}` : "You're invited"}
               </p>
               <p className="mt-0.5 text-xs text-slate-500">
@@ -357,19 +357,19 @@ export default function CleanerAuth() {
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <Label htmlFor="signin-password" className="text-slate-700">Password</Label>
-                    <Link href="/cleaner/reset-password" className="text-xs font-medium text-[#5C0FFE] hover:underline">Forgot password?</Link>
+                    <Link href="/cleaner/reset-password" className="text-xs font-medium text-[#6810FE] hover:underline">Forgot password?</Link>
                   </div>
                   <div className="relative">
                     <RiLockLine className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                     <Input id="signin-password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} className={AUTH_INPUT_CLS} disabled={isLoading} required />
                   </div>
                 </div>
-                <Button type="submit" className="h-11 w-full font-semibold text-white shadow-lg shadow-[#5C0FFE]/25 transition hover:opacity-95" style={{ background: AUTH_GRADIENT }} disabled={isLoading}>
+                <Button type="submit" className="h-11 w-full font-semibold text-white shadow-lg shadow-[#6810FE]/25 transition hover:opacity-95" style={{ background: AUTH_GRADIENT }} disabled={isLoading}>
                   {isLoading ? <><RiLoader4Line className="mr-2 h-4 w-4 animate-spin" />Signing in…</> : "Sign In"}
                 </Button>
                 <p className="text-center text-xs text-slate-500">
                   Joined via invite link?{" "}
-                  <Link href="/cleaner/reset-password" className="text-[#5C0FFE] hover:underline">Set your password</Link>{" "}or use Google.
+                  <Link href="/cleaner/reset-password" className="text-[#6810FE] hover:underline">Set your password</Link>{" "}or use Google.
                 </p>
               </form>
             </TabsContent>
@@ -391,7 +391,7 @@ export default function CleanerAuth() {
                   </div>
                   <p className="text-xs text-slate-400">Must be at least 6 characters</p>
                 </div>
-                <Button type="submit" className="h-11 w-full font-semibold text-white shadow-lg shadow-[#5C0FFE]/25 transition hover:opacity-95" style={{ background: AUTH_GRADIENT }} disabled={isLoading}>
+                <Button type="submit" className="h-11 w-full font-semibold text-white shadow-lg shadow-[#6810FE]/25 transition hover:opacity-95" style={{ background: AUTH_GRADIENT }} disabled={isLoading}>
                   {isLoading ? <><RiLoader4Line className="mr-2 h-4 w-4 animate-spin" />Creating account…</> : <><RiSparklingLine className="mr-2 h-4 w-4" />Join Our Team</>}
                 </Button>
                 <p className="text-center text-xs text-slate-500">
@@ -407,7 +407,7 @@ export default function CleanerAuth() {
 
       <p className="text-center text-xs text-slate-500">
         Looking to book a cleaning?{" "}
-        <Link href="/auth" className="font-medium text-[#5C0FFE] hover:underline">Customer Portal →</Link>
+        <Link href="/auth" className="font-medium text-[#6810FE] hover:underline">Customer Portal →</Link>
       </p>
     </AuthScaffold>
   );

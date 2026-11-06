@@ -332,7 +332,7 @@ export default function ProposalRequestIntake({
       </div>
 
       <aside className="lg:sticky lg:top-4 space-y-3">
-        <div className="rounded-2xl p-4 text-white shadow-sm" style={{ background: "linear-gradient(135deg,#5C0FFE,#6810FE)" }}>
+        <div className="rounded-2xl p-4 text-white shadow-sm" style={{ background: "linear-gradient(135deg,#6810FE,#6810FE)" }}>
           <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-white/80">Proposal request</p>
           <p className="text-lg font-bold mt-1">{type ? type.label : "Pick a type"}</p>
           <p className="text-xs text-white/80 mt-1 min-h-[2.5rem]">{addressPreview || "Address will show here"}</p>

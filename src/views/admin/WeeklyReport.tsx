@@ -171,7 +171,7 @@ export default function WeeklyReport() {
     <div className="max-w-5xl mx-auto space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-[11px] uppercase tracking-[0.12em] font-bold text-[#5C0FFE]">Reporting</p>
+          <p className="text-[11px] uppercase tracking-[0.12em] font-bold text-[#6810FE]">Reporting</p>
           <h2 className="font-jakarta text-xl font-semibold text-slate-900 mt-0.5">
             Weekly Sales, Retention &amp; Growth
           </h2>
@@ -193,7 +193,7 @@ export default function WeeklyReport() {
           <Button
             size="sm"
             disabled={busy}
-            className="bg-[#5C0FFE] hover:bg-[#4c0cd4] text-white"
+            className="bg-[#6810FE] hover:bg-[#4c0cd4] text-white"
             onClick={() => void invoke({ action: "generate", force: true }, "Report generated")}
           >
             {busy ? <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" /> : <RiPlayLine className="w-4 h-4 mr-1.5" />}
@@ -316,7 +316,7 @@ export default function WeeklyReport() {
                   className="w-full text-left p-4 flex items-start gap-3"
                   onClick={() => setOpenId(open ? null : row.id)}
                 >
-                  <span className="w-9 h-9 rounded-lg bg-[#5C0FFE]/10 text-[#5C0FFE] inline-flex items-center justify-center shrink-0">
+                  <span className="w-9 h-9 rounded-lg bg-[#6810FE]/10 text-[#6810FE] inline-flex items-center justify-center shrink-0">
                     <RiFileChartLine className="w-4 h-4" />
                   </span>
                   <div className="flex-1 min-w-0">
@@ -351,7 +351,7 @@ export default function WeeklyReport() {
                           href={row.drive_url}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-sm text-[#5C0FFE] underline self-center"
+                          className="text-sm text-[#6810FE] underline self-center"
                         >
                           Drive copy
                         </a>

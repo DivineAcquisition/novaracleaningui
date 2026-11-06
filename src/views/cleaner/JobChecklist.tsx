@@ -715,7 +715,7 @@ export default function CleanerJobChecklistPage() {
       <div className="rounded-2xl overflow-hidden border border-violet-200 bg-white shadow-sm">
         <div
           className="px-5 py-4"
-          style={{ background: "linear-gradient(135deg,#5C0FFE 0%,#8F7BFD 100%)" }}
+          style={{ background: "linear-gradient(135deg,#6810FE 0%,#8E5BFF 100%)" }}
         >
           <p className="text-[11px] uppercase tracking-wider font-semibold text-white/70">
             Novara · Job checklist{booking ? ` · ${booking.ref}` : ""}
@@ -789,7 +789,7 @@ export default function CleanerJobChecklistPage() {
           </div>
           <div className="h-3 rounded-full bg-slate-100 overflow-hidden">
             <div
-              className={cn("h-full rounded-full transition-all duration-500", progress === 100 ? "bg-emerald-500" : "bg-gradient-to-r from-[#5C0FFE] to-[#8F7BFD]")}
+              className={cn("h-full rounded-full transition-all duration-500", progress === 100 ? "bg-emerald-500" : "bg-gradient-to-r from-[#6810FE] to-[#8E5BFF]")}
               style={{ width: `${progress}%` }}
             />
           </div>
@@ -813,7 +813,7 @@ export default function CleanerJobChecklistPage() {
             {state.checkIn?.at ? `Checked in ${clockInNewYork(state.checkIn.at)}` : "Check in"}
           </Button>
           <Button
-            className="h-12 text-base bg-[#5C0FFE] hover:bg-[#4b0ad4] text-white"
+            className="h-12 text-base bg-[#6810FE] hover:bg-[#4b0ad4] text-white"
             disabled={!state.canWrite || checkingOut || !state.checkIn?.at || Boolean(state.checkOut?.at)}
             onClick={() => void checkOut()}
           >

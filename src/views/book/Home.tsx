@@ -63,7 +63,7 @@ export default function BookingHome() {
     <PageTransition direction="forward">
       <div className="min-h-screen bg-muted/30 md:pb-8" {...swipeHandlers}>
         <SEO title="Select Home Size" description="Choose your home size to see instant pricing for professional deep cleaning." />
-        <BookingHeader currentStep={currentStep} totalSteps={6} stepLabel="Home Size" />
+        <BookingHeader currentStep={2} totalSteps={6} stepLabel="Home Size" />
       
         <div className="container max-w-3xl mx-auto px-4 md:px-6 py-8 md:py-12">
           {/* Header */}

@@ -312,7 +312,7 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
       className="book-theme landing flex min-h-dvh flex-col text-slate-900"
       style={{
         background:
-          "radial-gradient(80% 46% at 50% -12%, rgba(143,123,253,0.22), transparent 58%), linear-gradient(180deg, #FFFFFF 0%, #F7F5FC 100%)",
+          "radial-gradient(80% 46% at 50% -12%, rgba(142, 91, 255,0.22), transparent 58%), linear-gradient(180deg, #FFFFFF 0%, #F7F5FC 100%)",
       }}
     >
       <SEO
@@ -699,7 +699,7 @@ function Question({
                 className={cn(
                   "rounded-2xl border px-3 py-4 text-left transition",
                   on
-                    ? "border-[#6810FE] bg-[#6810FE]/8 text-slate-900 shadow-[0_10px_24px_-18px_rgba(92,15,254,0.9)]"
+                    ? "border-[#6810FE] bg-[#6810FE]/8 text-slate-900 shadow-[0_10px_24px_-18px_rgba(104, 16, 254,0.9)]"
                     : "border-slate-200 bg-white text-slate-700 hover:border-slate-300",
                 )}
               >
@@ -1112,7 +1112,7 @@ function ChoiceList({
               choice.disabled
                 ? "cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400"
                 : on
-                  ? "border-[#6810FE] bg-white shadow-[0_14px_30px_-20px_rgba(92,15,254,0.85)]"
+                  ? "border-[#6810FE] bg-white shadow-[0_14px_30px_-20px_rgba(104, 16, 254,0.85)]"
                   : "border-slate-200 bg-white/80 hover:border-[#8E5BFF]/60 hover:bg-white",
             )}
           >

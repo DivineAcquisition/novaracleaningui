@@ -94,7 +94,7 @@ export default function HiringFieldTech() {
           className="pointer-events-none absolute inset-0"
           style={{
             background:
-              "radial-gradient(60% 50% at 20% 0%, rgba(143,123,253,0.18), transparent 55%)," +
+              "radial-gradient(60% 50% at 20% 0%, rgba(142, 91, 255,0.18), transparent 55%)," +
               "linear-gradient(180deg, #FFFFFF, #FAFAFC)",
           }}
         />
@@ -188,7 +188,7 @@ export default function HiringFieldTech() {
               </ul>
             </section>
 
-            <section className="rounded-2xl border border-[#6810FE]/20 bg-[rgba(92,15,254,0.04)] p-5 sm:p-6">
+            <section className="rounded-2xl border border-[#6810FE]/20 bg-[rgba(104, 16, 254,0.04)] p-5 sm:p-6">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
                 <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-white shadow-sm" style={{ background: HIRING_GRADIENT }}>
                   <RiFileTextLine className="h-6 w-6" />

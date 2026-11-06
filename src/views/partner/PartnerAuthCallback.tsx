@@ -19,7 +19,7 @@ export default function PartnerAuthCallback() {
     <div className="min-h-screen bg-gradient-to-br from-brand-50 to-background flex items-center justify-center">
       <SEO title="Signing you in…" noindex />
       <div className="text-center space-y-4">
-        <RiLoader4Line className="w-10 h-10 animate-spin mx-auto" style={{ color: "#5C0FFE" }} />
+        <RiLoader4Line className="w-10 h-10 animate-spin mx-auto" style={{ color: "#6810FE" }} />
         <p className="text-muted-foreground">Taking you to the partner portal…</p>
       </div>
     </div>

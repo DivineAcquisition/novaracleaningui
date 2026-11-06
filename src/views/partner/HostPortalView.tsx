@@ -21,7 +21,7 @@ import { AddressAutocomplete } from "@/components/booking/AddressAutocomplete";
 import { EmbeddedCardForm } from "@/components/token/EmbeddedCardForm";
 import { cn } from "@/lib/utils";
 
-const PURPLE = "linear-gradient(135deg,#5C0FFE 0%,#8F7BFD 100%)";
+const PURPLE = "linear-gradient(135deg,#6810FE 0%,#8E5BFF 100%)";
 
 type Tab = "overview" | "properties" | "turnovers" | "payment" | "documents" | "issue";
 
@@ -163,7 +163,7 @@ export default function HostPortalView() {
   if (loading || !data) {
     return (
       <div className="flex justify-center py-16">
-        <RiLoader4Line className="h-8 w-8 animate-spin text-[#5C0FFE]" />
+        <RiLoader4Line className="h-8 w-8 animate-spin text-[#6810FE]" />
       </div>
     );
   }
@@ -188,7 +188,7 @@ export default function HostPortalView() {
             onClick={() => setTab(t.id)}
             className={cn(
               "whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-medium",
-              tab === t.id ? "bg-[#5C0FFE] text-white" : "bg-white text-slate-600 border border-slate-200",
+              tab === t.id ? "bg-[#6810FE] text-white" : "bg-white text-slate-600 border border-slate-200",
             )}
           >
             {t.label}
@@ -245,7 +245,7 @@ export default function HostPortalView() {
               <CardContent className="flex flex-wrap items-start justify-between gap-3 p-4">
                 <div>
                   <p className="font-semibold flex items-center gap-1.5">
-                    <RiHome4Line className="h-4 w-4 text-[#5C0FFE]" />
+                    <RiHome4Line className="h-4 w-4 text-[#6810FE]" />
                     {p.nickname || "Property"}
                   </p>
                   <p className="text-xs text-slate-500">{p.address}</p>
@@ -255,7 +255,7 @@ export default function HostPortalView() {
                 </div>
                 <div className="text-right">
                   {p.turnoverPrice != null ? (
-                    <p className="font-bold text-[#5C0FFE]">
+                    <p className="font-bold text-[#6810FE]">
                       ${Number(p.turnoverPrice).toFixed(0)}
                       <span className="text-[11px] font-medium text-slate-400">/turnover</span>
                     </p>
@@ -311,7 +311,7 @@ export default function HostPortalView() {
           <Card>
             <CardContent className="p-5">
               <p className="font-semibold flex items-center gap-1.5">
-                <RiMoneyDollarCircleLine className="h-4 w-4 text-[#5C0FFE]" /> Section 6.2 payment option
+                <RiMoneyDollarCircleLine className="h-4 w-4 text-[#6810FE]" /> Section 6.2 payment option
               </p>
               <p className="mt-1 text-sm text-slate-600">{payLabel(data.host.paymentOption)}</p>
               <p className="mt-2 text-sm text-slate-500">Payment method: {cardLabel(data.host)}</p>
@@ -358,7 +358,7 @@ export default function HostPortalView() {
                   <span className="text-sm">
                     {t.requestedDate} · {nameOf(t.propertyId)} · ${t.price}
                   </span>
-                  <a href={t.invoiceUrl!} className="text-sm font-semibold text-[#5C0FFE]" target="_blank" rel="noreferrer">
+                  <a href={t.invoiceUrl!} className="text-sm font-semibold text-[#6810FE]" target="_blank" rel="noreferrer">
                     Receipt
                   </a>
                 </CardContent>
@@ -373,10 +373,10 @@ export default function HostPortalView() {
           {data.documents.map((d, i) => (
             <Card key={i}>
               <CardContent className="flex items-center gap-3 p-4">
-                <RiFileTextLine className="h-4 w-4 text-[#5C0FFE]" />
+                <RiFileTextLine className="h-4 w-4 text-[#6810FE]" />
                 <span className="text-sm">{d.label}</span>
                 {d.url && (
-                  <a href={d.url} className="ml-auto text-xs font-semibold text-[#5C0FFE]" target="_blank" rel="noreferrer">
+                  <a href={d.url} className="ml-auto text-xs font-semibold text-[#6810FE]" target="_blank" rel="noreferrer">
                     Download
                   </a>
                 )}
@@ -464,7 +464,7 @@ function TurnoverRow({
             </Button>
           )}
           {t.invoiceUrl && (
-            <a href={t.invoiceUrl} target="_blank" rel="noreferrer" className="text-xs font-semibold text-[#5C0FFE] self-center">
+            <a href={t.invoiceUrl} target="_blank" rel="noreferrer" className="text-xs font-semibold text-[#6810FE] self-center">
               Invoice
             </a>
           )}
@@ -688,7 +688,7 @@ function IssueForm({ onDone }: { onDone: () => void }) {
     <Card>
       <CardContent className="space-y-3 p-5">
         <p className="font-semibold flex items-center gap-1.5">
-          <RiAlertLine className="h-4 w-4 text-[#5C0FFE]" /> Report an issue
+          <RiAlertLine className="h-4 w-4 text-[#6810FE]" /> Report an issue
         </p>
         <p className="text-sm text-slate-500">This feeds the same QC system as every other complaint channel.</p>
         <Input placeholder="Short title" value={title} onChange={(e) => setTitle(e.target.value)} />

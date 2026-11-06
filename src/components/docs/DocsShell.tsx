@@ -62,7 +62,7 @@ function DocsShellInner({
     <>
       <div className="px-4 pt-5 pb-3">
         <Link href={DOCS_HOME} className="flex items-center gap-2">
-          <img src="/novara-email-logo.png" alt="Novara" className="h-[20px] w-auto" />
+          <span className="flex items-center gap-2"><img src="/novara-logo.png" alt="" className="h-7 w-7 rounded-[8px]" /><span className="whitespace-nowrap text-[14px] font-semibold tracking-[-0.02em] text-foreground">Novara Cleaning</span></span>
           <span className="rounded-md bg-brand-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-primary">
             Guides
           </span>

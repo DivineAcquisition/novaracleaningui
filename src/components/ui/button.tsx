@@ -12,7 +12,7 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "btn-coss btn-trail border border-white/20 bg-gradient-primary text-white shadow-[0_4px_14px_-3px_rgba(92,15,254,0.45)] hover:shadow-[0_8px_22px_-4px_rgba(92,15,254,0.55)] active:shadow-[0_2px_8px_-3px_rgba(92,15,254,0.4)]",
+          "btn-coss btn-trail border border-white/20 bg-gradient-primary text-white shadow-[0_4px_14px_-3px_rgba(104, 16, 254,0.45)] hover:shadow-[0_8px_22px_-4px_rgba(104, 16, 254,0.55)] active:shadow-[0_2px_8px_-3px_rgba(104, 16, 254,0.4)]",
         destructive:
           "btn-coss btn-trail border border-white/20 bg-destructive text-destructive-foreground shadow-[0_4px_14px_-3px_hsl(0_84%_60%/0.45)] hover:shadow-[0_8px_22px_-4px_hsl(0_84%_60%/0.55)]",
         outline:

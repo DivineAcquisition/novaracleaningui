@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SEO } from "@/components/SEO";
 
-const PURPLE_GRADIENT = "linear-gradient(135deg,#5C0FFE 0%,#8F7BFD 100%)";
+const PURPLE_GRADIENT = "linear-gradient(135deg,#6810FE 0%,#8E5BFF 100%)";
 
 export default function PartnerMagicLink({ notice }: { notice?: string | null }) {
   const [email, setEmail] = useState("");
@@ -60,7 +60,7 @@ export default function PartnerMagicLink({ notice }: { notice?: string | null })
               If we have a partnership on this address, a short-lived sign-in link is on its way — optionally by text
               as well. The link signs you in without a password.
             </p>
-            <button className="text-sm font-medium text-[#5C0FFE]" onClick={() => setSent(false)}>
+            <button className="text-sm font-medium text-[#6810FE]" onClick={() => setSent(false)}>
               Use a different email
             </button>
           </div>

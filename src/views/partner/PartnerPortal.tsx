@@ -70,7 +70,7 @@ export default function PartnerPortal() {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <RiLoader4Line className="h-8 w-8 animate-spin text-[#5C0FFE]" />
+        <RiLoader4Line className="h-8 w-8 animate-spin text-[#6810FE]" />
       </div>
     );
   }
@@ -84,15 +84,21 @@ export default function PartnerPortal() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-[#FAFAFC]">
       <SEO title="Partner portal" noindex />
-      <header className="sticky top-0 z-30 text-white" style={{ background: "linear-gradient(120deg,#5C0FFE 0%,#7A3BFF 55%,#9F7BFF 100%)" }}>
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
-          <div>
-            <p className="text-xs uppercase tracking-wide text-white/70">Novara partner portal</p>
-            <p className="font-bold">{me.displayName || me.email}</p>
+      <header className="sticky top-0 z-30 border-b border-[#E9E7EE] bg-white/90 backdrop-blur-md">
+        <div className="mx-auto flex max-w-4xl items-center justify-between gap-3 px-4 py-3">
+          <div className="flex min-w-0 items-center gap-2.5">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/novara-logo.png" alt="" className="h-9 w-9 shrink-0 rounded-[10px]" />
+            <div className="min-w-0">
+              <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#5A1FD6]">
+                Novara Cleaning · Partner portal
+              </p>
+              <p className="truncate text-[15px] font-semibold tracking-[-0.01em] text-[#0B0A11]">{me.displayName || me.email}</p>
+            </div>
           </div>
-          <Button variant="ghost" size="sm" className="text-white hover:bg-white/15" onClick={() => void signOut()}>
+          <Button variant="outline" size="sm" onClick={() => void signOut()}>
             <RiLogoutBoxRLine className="mr-1 h-4 w-4" /> Sign out
           </Button>
         </div>
@@ -103,8 +109,8 @@ export default function PartnerPortal() {
                 key={kind}
                 onClick={() => setView(kind)}
                 className={cn(
-                  "rounded-full px-4 py-1.5 text-sm font-medium",
-                  view === kind ? "bg-white text-[#5C0FFE]" : "bg-white/15 text-white",
+                  "rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
+                  view === kind ? "bg-[#6810FE] text-white" : "bg-[#F3F2F7] text-[#5F5B6B] hover:bg-[#F3EEFF] hover:text-[#6810FE]",
                 )}
               >
                 {KIND_LABELS[kind] || kind}

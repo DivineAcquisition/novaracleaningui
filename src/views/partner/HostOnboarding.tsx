@@ -185,7 +185,7 @@ export default function HostOnboarding() {
       <div className="relative flex min-h-screen items-start justify-center px-5 py-10 sm:px-10 sm:py-14">
         <div className="relative w-full max-w-[480px] space-y-6">
           <div className="flex flex-col items-center gap-2 lg:hidden">
-            <img src="/novara-email-logo.png" alt="Novara Cleaning" className="h-7 w-auto" />
+            <span className="flex items-center gap-2"><img src="/novara-logo.png" alt="" className="h-8 w-8 rounded-[9px]" /><span className="whitespace-nowrap text-[15px] font-semibold tracking-[-0.02em] text-[#0B0A11]">Novara Cleaning</span></span>
             <span className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-400">Host Onboarding</span>
           </div>
 
@@ -523,7 +523,7 @@ function BrandPanel() {
         />
       </div>
       <div className="relative">
-        <img src="/novara-email-logo.png" alt="Novara Cleaning" className="h-8 w-auto" style={{ filter: "brightness(0) invert(1)" }} />
+        <span className="flex items-center gap-2.5"><img src="/novara-logo.png" alt="" className="h-9 w-9 rounded-[10px]" /><span className="text-[17px] font-semibold tracking-[-0.02em] text-white">Novara Cleaning</span></span>
       </div>
       <div className="relative max-w-md">
         <h2 className="font-jakarta text-3xl font-bold leading-[1.15] tracking-tight xl:text-[2.6rem]">

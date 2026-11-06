@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * Shared chrome for tokenized partner / commercial / walkthrough pages.
- * Cream field, Novara glow only at the top — no particle field.
+ * White page with a soft Novara purple wash at the top, matching the site.
  */
 export function TokenPageShell({
   eyebrow,
@@ -38,7 +38,10 @@ export function TokenPageShell({
       {(eyebrow || title || subtitle) && (
         <BlurFade delay={0.04} className="mb-6 text-center">
           {!embedded && (
-            <img src="/novara-logo.png" alt="Novara Cleaning" className="mx-auto mb-4 h-8" />
+            <div className="mb-5 flex items-center justify-center gap-2">
+              <img src="/novara-logo.png" alt="" className="h-8 w-8 rounded-[9px]" />
+              <span className="text-[15px] font-semibold tracking-[-0.02em] text-[#0B0A11]">Novara Cleaning</span>
+            </div>
           )}
           {eyebrow && (
             <div className="mb-3 inline-flex items-center rounded-full border border-primary/20 bg-primary/[0.04] px-4 py-1.5 backdrop-blur-sm">
@@ -48,12 +51,12 @@ export function TokenPageShell({
             </div>
           )}
           {title && (
-            <h1 className="font-heading text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+            <h1 className="text-[1.65rem] font-semibold tracking-[-0.03em] text-[#0B0A11] sm:text-[2rem]">
               {title}
             </h1>
           )}
           {subtitle && (
-            <p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-slate-600">{subtitle}</p>
+            <p className="mx-auto mt-2 max-w-xl text-[15px] leading-relaxed text-[#5F5B6B]">{subtitle}</p>
           )}
         </BlurFade>
       )}
@@ -67,9 +70,8 @@ export function TokenPageShell({
   if (embedded) return inner;
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#FBF6EE] font-sans text-slate-900">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-[320px] bg-gradient-to-b from-primary/[0.10] via-primary/[0.04] to-transparent" />
-      <div className="pointer-events-none absolute left-1/2 top-0 h-[240px] w-[560px] -translate-x-1/2 rounded-full bg-primary/[0.10] blur-3xl" />
+    <div className="relative min-h-screen overflow-hidden bg-[#FAFAFC] font-sans text-[#0B0A11] antialiased">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-[320px] bg-gradient-to-b from-[#F3EEFF] to-transparent" />
       {inner}
     </div>
   );

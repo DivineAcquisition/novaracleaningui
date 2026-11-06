@@ -145,7 +145,7 @@ export default function AdminPnl() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-[11px] uppercase tracking-[0.12em] font-bold text-[#5C0FFE]">Reporting</p>
+          <p className="text-[11px] uppercase tracking-[0.12em] font-bold text-[#6810FE]">Reporting</p>
           <h1 className="font-jakarta text-2xl font-bold text-slate-900 tracking-tight">Profit &amp; Loss</h1>
           <p className="text-sm text-slate-500 mt-1 max-w-2xl">
             Collected jobs, still-booked pipeline, ad spend, and contribution — Eastern Time, from
@@ -183,7 +183,7 @@ export default function AdminPnl() {
               </a>
             </Button>
           ) : null}
-          <Button size="sm" className="bg-[#5C0FFE] hover:bg-[#4c0cd4] text-white" disabled={syncing} onClick={() => void syncSheet()}>
+          <Button size="sm" className="bg-[#6810FE] hover:bg-[#4c0cd4] text-white" disabled={syncing} onClick={() => void syncSheet()}>
             {syncing ? <RiLoader4Line className="w-4 h-4 mr-1.5 animate-spin" /> : <RiLineChartLine className="w-4 h-4 mr-1.5" />}
             Sync sheet
           </Button>

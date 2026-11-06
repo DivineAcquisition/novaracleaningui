@@ -48,7 +48,7 @@ const WISTIA_ID = (process.env.NEXT_PUBLIC_PORTFOLIO_VSL_WISTIA_ID || "").trim()
 export function PortfolioVsl({ className }: { className?: string }) {
   if (WISTIA_ID) {
     return (
-      <div className={cn("overflow-hidden rounded-2xl border border-white/10 shadow-[0_20px_60px_-24px_rgba(92,15,254,0.55)]", className)}>
+      <div className={cn("overflow-hidden rounded-2xl border border-white/10 shadow-[0_20px_60px_-24px_rgba(104, 16, 254,0.55)]", className)}>
         <WistiaPlayer mediaId={WISTIA_ID} aspect={16 / 9} placeholderPaddingTop="56.25%" autoPlay muted />
       </div>
     );
@@ -75,7 +75,7 @@ function AnimatedVsl({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-2xl border border-white/10 bg-[#12062b] text-white shadow-[0_20px_60px_-24px_rgba(92,15,254,0.55)]",
+        "relative overflow-hidden rounded-2xl border border-white/10 bg-[#12062b] text-white shadow-[0_20px_60px_-24px_rgba(104, 16, 254,0.55)]",
         className,
       )}
       style={{ aspectRatio: "16 / 9" }}
@@ -85,11 +85,11 @@ function AnimatedVsl({ className }: { className?: string }) {
       <Particles className="absolute inset-0 z-0" quantity={36} color={BRAND.primaryLight} ease={80} size={0.45} />
       <div
         className="absolute inset-0 opacity-80"
-        style={{ background: "radial-gradient(ellipse at 20% 20%, rgba(92,15,254,0.45), transparent 55%)" }}
+        style={{ background: "radial-gradient(ellipse at 20% 20%, rgba(104, 16, 254,0.45), transparent 55%)" }}
       />
       <div
         className="absolute -right-10 -bottom-16 h-56 w-56 rounded-full blur-3xl"
-        style={{ background: "rgba(143,123,253,0.35)" }}
+        style={{ background: "rgba(142, 91, 255,0.35)" }}
       />
 
       <div className="relative z-10 flex h-full flex-col justify-between p-5 sm:p-8">

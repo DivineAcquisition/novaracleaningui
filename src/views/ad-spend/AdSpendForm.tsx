@@ -99,7 +99,7 @@ export default function AdSpendForm({ token }: { token: string }) {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="bg-gradient-to-br from-[#5C0FFE] to-[#8F7BFD] text-white px-5 py-8">
+      <div className="bg-gradient-to-br from-[#6810FE] to-[#8E5BFF] text-white px-5 py-8">
         <div className="max-w-2xl mx-auto">
           <p className="text-[11px] uppercase tracking-[0.14em] font-semibold text-white/80">Novara Cleaning</p>
           <h1 className="font-jakarta text-2xl font-bold mt-1">Monthly ad spend log</h1>
@@ -125,7 +125,7 @@ export default function AdSpendForm({ token }: { token: string }) {
         {entries.map((row) => (
           <Card key={row.platform} className="p-4 space-y-3 border-slate-200">
             <div className="flex items-start gap-2">
-              <span className="w-8 h-8 rounded-lg bg-[#5C0FFE]/10 text-[#5C0FFE] inline-flex items-center justify-center shrink-0">
+              <span className="w-8 h-8 rounded-lg bg-[#6810FE]/10 text-[#6810FE] inline-flex items-center justify-center shrink-0">
                 <RiMegaphoneLine className="w-4 h-4" />
               </span>
               <div>
@@ -177,7 +177,7 @@ export default function AdSpendForm({ token }: { token: string }) {
         </div>
 
         <Button
-          className="w-full bg-[#5C0FFE] hover:bg-[#4c0cd4] text-white h-11"
+          className="w-full bg-[#6810FE] hover:bg-[#4c0cd4] text-white h-11"
           disabled={saving}
           onClick={() => void submit()}
         >

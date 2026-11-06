@@ -4324,7 +4324,7 @@ function BookingChecklist({ booking }: { booking: BookingRow }) {
               <div
                 className={cn(
                   "h-full rounded-full transition-all",
-                  pct === 100 ? "bg-emerald-500" : "bg-[#5C0FFE]",
+                  pct === 100 ? "bg-emerald-500" : "bg-[#6810FE]",
                 )}
                 style={{ width: `${pct}%` }}
               />
@@ -4440,7 +4440,7 @@ function BookingChecklist({ booking }: { booking: BookingRow }) {
                     href={contractorUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-block text-xs font-medium text-[#5C0FFE] underline decoration-dotted"
+                    className="inline-block text-xs font-medium text-[#6810FE] underline decoration-dotted"
                   >
                     Open the contractor&apos;s view
                   </a>

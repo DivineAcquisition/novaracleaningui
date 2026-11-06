@@ -50,7 +50,7 @@ export function HiringApplyForm({ defaultRole = "field-tech", className, compact
       </ul>
       <Link
         href={hiringApplyUrl(`?role=${defaultRole}`)}
-        className="mt-6 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full text-sm font-semibold text-white shadow-[0_12px_28px_-14px_rgba(92,15,254,0.65)] transition hover:opacity-95"
+        className="mt-6 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full text-sm font-semibold text-white shadow-[0_12px_28px_-14px_rgba(104, 16, 254,0.65)] transition hover:opacity-95"
         style={{ background: HIRING_GRADIENT }}
       >
         Start application

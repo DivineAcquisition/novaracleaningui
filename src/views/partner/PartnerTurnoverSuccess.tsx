@@ -45,16 +45,16 @@ export default function PartnerTurnoverSuccess() {
     <div className="min-h-screen bg-gradient-to-br from-brand-50 to-background flex items-center justify-center px-4">
       <SEO title="Turnover Confirmed" noindex />
       <Card className="w-full max-w-md shadow-xl border-0">
-        <div className="h-1.5 w-full" style={{ background: "linear-gradient(90deg,#5C0FFE,#8F7BFD)" }} />
+        <div className="h-1.5 w-full" style={{ background: "linear-gradient(90deg,#6810FE,#8E5BFF)" }} />
         <CardContent className="pt-10 pb-8 text-center space-y-5">
           {state === "verifying" && (
-            <><RiLoader4Line className="w-10 h-10 animate-spin mx-auto" style={{ color: "#5C0FFE" }} />
+            <><RiLoader4Line className="w-10 h-10 animate-spin mx-auto" style={{ color: "#6810FE" }} />
               <h1 className="text-xl font-bold">Confirming your turnover…</h1>
               <p className="text-sm text-muted-foreground">Verifying your payment.</p></>
           )}
           {(state === "ok" || state === "pending") && (
             <>
-              <div className="mx-auto w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: "#5C0FFE" }}>
+              <div className="mx-auto w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: "#6810FE" }}>
                 <RiCheckboxCircleLine className="w-8 h-8 text-white" />
               </div>
               <h1 className="text-2xl font-bold">Turnover confirmed!</h1>

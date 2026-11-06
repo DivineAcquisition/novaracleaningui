@@ -1263,7 +1263,7 @@ export function emailToHtml(body: string): string {
     .replace(/>/g, "&gt;");
   const withLinks = escaped.replace(
     /(https?:\/\/[^\s<]+)/g,
-    '<a href="$1" style="color:#5C0FFE">$1</a>',
+    '<a href="$1" style="color:#6810FE">$1</a>',
   );
   const paragraphs = withLinks
     .split(/\n{2,}/)

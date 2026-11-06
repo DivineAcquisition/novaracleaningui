@@ -33,7 +33,7 @@ interface Placed { id: string; propertyId: string; date: string; ws: string; we:
 
 // Per-property color ramp (chips + selector). Index by position in priced list.
 const PALETTE = [
-  { bg: "#5C0FFE", soft: "rgba(92,15,254,0.12)", text: "#5C0FFE" },
+  { bg: "#6810FE", soft: "rgba(104, 16, 254,0.12)", text: "#6810FE" },
   { bg: "#0EA5E9", soft: "rgba(14,165,233,0.12)", text: "#0369A1" },
   { bg: "#10B981", soft: "rgba(16,185,129,0.12)", text: "#047857" },
   { bg: "#F59E0B", soft: "rgba(245,158,11,0.14)", text: "#B45309" },
@@ -287,7 +287,7 @@ export default function PartnerCalendar() {
                     >
                       <span className={cn(
                         "inline-flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-semibold",
-                        isToday ? "bg-[#5C0FFE] text-white" : past ? "text-slate-300" : "text-slate-600",
+                        isToday ? "bg-[#6810FE] text-white" : past ? "text-slate-300" : "text-slate-600",
                       )}>
                         {format(parseYmd(date), "d")}
                       </span>
@@ -327,9 +327,9 @@ export default function PartnerCalendar() {
             </div>
 
             <p className="text-[11px] text-slate-400 flex flex-wrap gap-x-4 gap-y-1">
-              <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-[#5C0FFE]" /> New (this booking)</span>
-              <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded" style={{ background: "rgba(92,15,254,0.12)" }} /> Booked</span>
-              <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded border border-dashed border-[#5C0FFE]" /> Auto-coming (recurring)</span>
+              <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-[#6810FE]" /> New (this booking)</span>
+              <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded" style={{ background: "rgba(104, 16, 254,0.12)" }} /> Booked</span>
+              <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded border border-dashed border-[#6810FE]" /> Auto-coming (recurring)</span>
             </p>
           </>
         )}
@@ -343,7 +343,7 @@ export default function PartnerCalendar() {
               <p className="text-xs text-muted-foreground">{placed.length} turnover{placed.length === 1 ? "" : "s"} placed</p>
               <p className="text-xl font-bold">${total.toFixed(0)}</p>
             </div>
-            <Button onClick={() => setReviewing(true)} disabled={placed.length === 0} className="h-11 px-6" style={{ background: "#5C0FFE" }}>
+            <Button onClick={() => setReviewing(true)} disabled={placed.length === 0} className="h-11 px-6" style={{ background: "#6810FE" }}>
               <RiCalendarEventLine className="w-4 h-4 mr-1.5" /> Review &amp; book
             </Button>
           </div>
@@ -359,13 +359,13 @@ export default function PartnerCalendar() {
           </div>
           <label className="flex items-center gap-2 text-sm mt-3">
             <input type="checkbox" checked={editing.repeat} onChange={(e) => { updatePlaced(editing.id, { repeat: e.target.checked }); setEditing({ ...editing, repeat: e.target.checked }); }} />
-            <RiRepeatLine className="w-4 h-4 text-[#5C0FFE]" /> Repeat weekly (auto-schedule every {format(parseYmd(editing.date), "EEEE")})
+            <RiRepeatLine className="w-4 h-4 text-[#6810FE]" /> Repeat weekly (auto-schedule every {format(parseYmd(editing.date), "EEEE")})
           </label>
           <div className="flex items-center justify-between mt-4">
             <Button variant="ghost" size="sm" className="text-rose-600" onClick={() => removePlaced(editing.id)}>
               <RiDeleteBin6Line className="w-4 h-4 mr-1" /> Remove
             </Button>
-            <Button size="sm" onClick={() => setEditing(null)} style={{ background: "#5C0FFE" }}><RiCheckLine className="w-4 h-4 mr-1" /> Done</Button>
+            <Button size="sm" onClick={() => setEditing(null)} style={{ background: "#6810FE" }}><RiCheckLine className="w-4 h-4 mr-1" /> Done</Button>
           </div>
         </Overlay>
       )}
@@ -377,7 +377,7 @@ export default function PartnerCalendar() {
             {placed.slice().sort((a, b) => a.date.localeCompare(b.date)).map((p) => (
               <div key={p.id} className="flex items-center justify-between gap-2 py-2 text-sm">
                 <div className="min-w-0">
-                  <p className="font-medium truncate">{nameOf(p.propertyId)}{p.repeat && <RiRepeatLine className="inline w-3 h-3 ml-1 text-[#5C0FFE]" />}</p>
+                  <p className="font-medium truncate">{nameOf(p.propertyId)}{p.repeat && <RiRepeatLine className="inline w-3 h-3 ml-1 text-[#6810FE]" />}</p>
                   <p className="text-xs text-muted-foreground">{format(parseYmd(p.date), "EEE, MMM d")} · {p.ws}–{p.we}</p>
                 </div>
                 <span className="font-semibold shrink-0">${priceOf(p.propertyId).toFixed(0)}</span>
@@ -389,7 +389,7 @@ export default function PartnerCalendar() {
               <p className="text-xs text-muted-foreground">{placed.length} turnover{placed.length === 1 ? "" : "s"}</p>
               <p className="text-lg font-bold">${total.toFixed(0)}</p>
             </div>
-            <Button onClick={book} disabled={submitting} className="h-11 px-6" style={{ background: "#5C0FFE" }}>
+            <Button onClick={book} disabled={submitting} className="h-11 px-6" style={{ background: "#6810FE" }}>
               {submitting ? <RiLoader4Line className="w-4 h-4 animate-spin" /> : <>Book &amp; pay ${total.toFixed(0)}</>}
             </Button>
           </div>
