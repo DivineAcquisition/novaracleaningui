@@ -54,7 +54,7 @@ export function HiringRoleDetail({ roleId }: { roleId: ContractorRoleId }) {
           <RiArrowLeftLine className="h-4 w-4" aria-hidden />
           All roles
         </Link>
-        <p className="mt-6 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#5C0FFE]">{card.tag}</p>
+        <p className="mt-6 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#6810FE]">{card.tag}</p>
         <h1 className="mt-3 font-heading text-4xl font-extrabold tracking-tight text-slate-900 sm:text-5xl">{card.name}</h1>
         <p className="mt-4 text-lg leading-relaxed text-slate-600">{card.shortDescription}</p>
         {card.applyQuery ? (

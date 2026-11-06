@@ -37,7 +37,7 @@ import { ShineBorder } from "@/components/magicui/shine-border";
 const FACTS = [
   { label: "Off a standard clean booked online", value: 15, suffix: "%", icon: RiPriceTag3Line },
   { label: "Off a deep clean booked online", value: 25, suffix: "%", icon: RiSparklingLine },
-  { label: "Free re-clean window", value: 48, suffix: " hr", icon: RiTimeLine },
+  { label: "Free re-clean window", value: 24, suffix: " hr", icon: RiTimeLine },
   { label: "Deposit to book most cleans", value: 50, suffix: "%", icon: RiCheckboxCircleLine },
 ];
 
@@ -75,7 +75,7 @@ const Index = ({ standardFrom = null, afterHow = null, afterWhy = null }: IndexP
     <div className="book-theme landing min-h-screen bg-background">
       <SEO
         title="Professional Home Cleaning in Maryland & DMV"
-        description="Book home cleaning in Maryland, DC and Northern Virginia. See the exact price for your home, a written checklist on every visit, and a 48-hour re-clean guarantee."
+        description="Book home cleaning in Maryland, DC and Northern Virginia. See the exact price for your home, a written checklist on every visit, and a 24-hour re-clean guarantee."
         canonical="https://try.novaracleaning.com/"
       />
       <SiteHeader withMenus />
@@ -130,7 +130,7 @@ const Index = ({ standardFrom = null, afterHow = null, afterWhy = null }: IndexP
               ) : null}
               <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-xs font-medium text-foreground">
                 <RiShieldLine className="h-3.5 w-3.5 text-primary" />
-                48-hour re-clean guarantee
+                24-hour re-clean guarantee
               </span>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-xs font-medium text-foreground">
                 <RiListCheck2 className="h-3.5 w-3.5 text-primary" />
@@ -252,9 +252,9 @@ const Index = ({ standardFrom = null, afterHow = null, afterWhy = null }: IndexP
                 },
                 {
                   icon: RiSparklingLine,
-                  title: "48-Hour Re-Clean Guarantee",
+                  title: "24-Hour Re-Clean Guarantee",
                   description:
-                    "Missed something? Tell us within 48 hours and we come back to re-clean it free.",
+                    "Missed something? Tell us within 24 hours and we come back to re-clean it free.",
                 },
                 {
                   icon: RiShoppingBasket2Line,

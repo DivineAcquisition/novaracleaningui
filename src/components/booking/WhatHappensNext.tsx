@@ -31,7 +31,7 @@ export function WhatHappensNext({ mode = "deposit" }: { mode?: PayMode }) {
     mode !== "deposit"
       ? { title: "Nothing else to pay", body: "There is no balance after this visit.", icon: RiCalendarCheckLine }
       : { title: "Balance after the clean", body: "The other 50% is charged to your saved card after the visit.", icon: RiCalendarCheckLine },
-    { title: "48 hours to flag anything", body: "Missed a spot? Tell us within 48 hours and we come back to re-clean it free.", icon: RiRefreshLine },
+    { title: "24 hours to flag anything", body: "Missed a spot? Tell us within 24 hours and we come back to re-clean it free.", icon: RiRefreshLine },
   ];
 
   const lit = useInViewSequence(ref, steps.length, 450);

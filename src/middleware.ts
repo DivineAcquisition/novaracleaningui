@@ -342,6 +342,16 @@ export async function middleware(request: NextRequest) {
     return rewritten;
   }
 
+  // hiring.novaracleaning.com/policies/* is the short address for the hiring
+  // policies, which live at /hiring/policies/* like the rest of the careers site.
+  if (currentSubdomain === "hiring" && (pathname === "/policies" || pathname.startsWith("/policies/"))) {
+    const url = request.nextUrl.clone();
+    url.pathname = `/hiring${pathname}`;
+    const rewritten = NextResponse.rewrite(url, { request });
+    for (const cookie of response.cookies.getAll()) rewritten.cookies.set(cookie);
+    return rewritten;
+  }
+
   if (pathname === "/") {
     const landing = DEFAULT_LANDING[currentSubdomain];
     if (landing !== "/") {

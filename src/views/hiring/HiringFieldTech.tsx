@@ -106,7 +106,7 @@ export default function HiringFieldTech() {
             <RiArrowLeftLine className="h-4 w-4" />
             All roles
           </Link>
-          <p className="nv-hire-rise mt-6 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#5C0FFE]">
+          <p className="nv-hire-rise mt-6 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#6810FE]">
             Open role
           </p>
           <h1 className="nv-hire-rise nv-hire-rise-d1 mt-3 font-jakarta text-3xl font-extrabold tracking-tight text-slate-900 sm:text-5xl">
@@ -119,7 +119,7 @@ export default function HiringFieldTech() {
           </p>
           <div className="nv-hire-rise nv-hire-rise-d3 mt-5 flex flex-wrap gap-x-5 gap-y-2 text-sm font-medium text-slate-500">
             <span className="inline-flex items-center gap-1.5">
-              <RiMapPin2Line className="h-4 w-4 text-[#8F7BFD]" />
+              <RiMapPin2Line className="h-4 w-4 text-[#8E5BFF]" />
               {field.location}
             </span>
             <span>{field.type}</span>
@@ -158,7 +158,7 @@ export default function HiringFieldTech() {
                 {HIGHLIGHTS.map((h) => (
                   <div key={h.title} className="rounded-xl border border-slate-200 bg-white p-4">
                     <div className="flex gap-3">
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#5C0FFE]/10 text-[#5C0FFE]">
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#6810FE]/10 text-[#6810FE]">
                         <h.icon className="h-5 w-5" />
                       </span>
                       <div>
@@ -181,14 +181,14 @@ export default function HiringFieldTech() {
               <ul className="mt-4 space-y-2">
                 {EXPECTATIONS.map((e) => (
                   <li key={e} className="flex items-start gap-2.5 text-sm text-slate-700">
-                    <RiCheckboxCircleFill className="mt-0.5 h-4 w-4 shrink-0 text-[#5C0FFE]" />
+                    <RiCheckboxCircleFill className="mt-0.5 h-4 w-4 shrink-0 text-[#6810FE]" />
                     <span>{e}</span>
                   </li>
                 ))}
               </ul>
             </section>
 
-            <section className="rounded-2xl border border-[#5C0FFE]/20 bg-[rgba(92,15,254,0.04)] p-5 sm:p-6">
+            <section className="rounded-2xl border border-[#6810FE]/20 bg-[rgba(92,15,254,0.04)] p-5 sm:p-6">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
                 <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-white shadow-sm" style={{ background: HIRING_GRADIENT }}>
                   <RiFileTextLine className="h-6 w-6" />
@@ -245,7 +245,7 @@ export default function HiringFieldTech() {
                   <p className="mt-2 text-sm leading-relaxed text-slate-600">{role.summary}</p>
                   <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs font-medium text-slate-500">
                     <span className="inline-flex items-center gap-1">
-                      <RiMapPin2Line className="h-3.5 w-3.5 text-[#8F7BFD]" />
+                      <RiMapPin2Line className="h-3.5 w-3.5 text-[#8E5BFF]" />
                       {role.location}
                     </span>
                     <span>{role.type}</span>

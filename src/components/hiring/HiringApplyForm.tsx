@@ -31,7 +31,7 @@ export function HiringApplyForm({ defaultRole = "field-tech", className, compact
         className,
       )}
     >
-      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#5C0FFE]">Apply</p>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#6810FE]">Apply</p>
       <h3 className="mt-1 font-heading text-xl font-bold text-slate-900 sm:text-2xl">
         One question at a time
       </h3>
@@ -43,7 +43,7 @@ export function HiringApplyForm({ defaultRole = "field-tech", className, compact
       <ul className="mt-5 space-y-2.5">
         {REQUIREMENTS.map((item) => (
           <li key={item.label} className="flex items-start gap-2.5 text-sm text-slate-600">
-            <item.icon className="mt-0.5 h-4 w-4 shrink-0 text-[#8F7BFD]" />
+            <item.icon className="mt-0.5 h-4 w-4 shrink-0 text-[#8E5BFF]" />
             <span>{item.label}</span>
           </li>
         ))}

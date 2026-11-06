@@ -90,7 +90,7 @@ export function MembershipBottomSheet({
                     </li>
                     <li className="flex items-start gap-2 text-xs">
                       <RiCheckLine className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
-                      <span>Cancel anytime, no hassle</span>
+                      <span>Cancel online with 14 days’ notice</span>
                     </li>
                   </ul>
                 </div>

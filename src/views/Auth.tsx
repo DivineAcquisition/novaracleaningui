@@ -22,12 +22,12 @@ import { ADMIN_AUTH_URL, isStaffCustomerEmail, looksLikeNovaraStaffEmail, STAFF_
 const CUSTOMER_FEATURES = [
   { icon: RiShieldCheckLine, label: "Price first", desc: "See the price for your home before you book." },
   { icon: RiStarLine, label: "Written checklist", desc: "Every visit follows the checklist for your service." },
-  { icon: RiCheckboxCircleLine, label: "48-hour re-clean", desc: "Missed something? We come back and re-clean free." },
+  { icon: RiCheckboxCircleLine, label: "24-hour re-clean", desc: "Missed something? We come back and re-clean free." },
 ];
 const CUSTOMER_STATS = [
   { value: "15%", label: "Off standard online" },
   { value: "25%", label: "Off deep online" },
-  { value: "48 hr", label: "Re-clean window" },
+  { value: "24 hr", label: "Re-clean window" },
 ];
 
 const emailSchema = z.string().email("Please enter a valid email address");

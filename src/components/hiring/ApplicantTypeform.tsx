@@ -309,7 +309,7 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
 
   return (
     <div
-      className="flex min-h-dvh flex-col text-slate-900"
+      className="book-theme landing flex min-h-dvh flex-col text-slate-900"
       style={{
         background:
           "radial-gradient(80% 46% at 50% -12%, rgba(143,123,253,0.22), transparent 58%), linear-gradient(180deg, #FFFFFF 0%, #F7F5FC 100%)",
@@ -518,7 +518,7 @@ function Question({
             type="checkbox"
             checked={answers.answersAccurate}
             onChange={(e) => onPatch({ answersAccurate: e.target.checked })}
-            className="mt-1 h-5 w-5 rounded border-slate-300 text-[#5C0FFE] focus:ring-[#8F7BFD]"
+            className="mt-1 h-5 w-5 rounded border-slate-300 text-[#6810FE] focus:ring-[#8E5BFF]"
           />
           <span>{TRUTHFULNESS_COPY}</span>
         </label>
@@ -565,9 +565,14 @@ function Question({
             type="checkbox"
             checked={answers.smsConsent}
             onChange={(e) => onPatch({ smsConsent: e.target.checked })}
-            className="mt-0.5 h-5 w-5 rounded border-slate-300 text-[#5C0FFE] focus:ring-[#8F7BFD]"
+            className="mt-0.5 h-5 w-5 rounded border-slate-300 text-[#6810FE] focus:ring-[#8E5BFF]"
           />
-          <span>{SMS_CONSENT_COPY}</span>
+          <span>
+            {SMS_CONSENT_COPY}{" "}
+            <a href="/hiring/policies/text-messages" target="_blank" rel="noreferrer" className="font-semibold text-[#6810FE] underline-offset-2 hover:underline">
+              Text message terms
+            </a>
+          </span>
         </label>
       </TextStep>
     );
@@ -608,7 +613,7 @@ function Question({
               <select
                 value={answers.state}
                 onChange={(e) => onPatch({ state: e.target.value })}
-                className="h-12 w-full rounded-xl border border-slate-200 bg-white px-3 text-base text-slate-900 outline-none transition focus:border-[#5C0FFE] focus:ring-4 focus:ring-[#5C0FFE]/10"
+                className="h-12 w-full rounded-xl border border-slate-200 bg-white px-3 text-base text-slate-900 outline-none transition focus:border-[#6810FE] focus:ring-4 focus:ring-[#6810FE]/10"
               >
                 <option value="">Select a state</option>
                 {APPLICANT_STATES.map((s) => (
@@ -694,7 +699,7 @@ function Question({
                 className={cn(
                   "rounded-2xl border px-3 py-4 text-left transition",
                   on
-                    ? "border-[#5C0FFE] bg-[#5C0FFE]/8 text-slate-900 shadow-[0_10px_24px_-18px_rgba(92,15,254,0.9)]"
+                    ? "border-[#6810FE] bg-[#6810FE]/8 text-slate-900 shadow-[0_10px_24px_-18px_rgba(92,15,254,0.9)]"
                     : "border-slate-200 bg-white text-slate-700 hover:border-slate-300",
                 )}
               >
@@ -721,6 +726,7 @@ function Question({
         label: CONSENT_1099_LABEL,
         checked: answers.consent1099,
         key: "consent1099" as const,
+        policy: { href: "/hiring/policies/contractor-terms", label: "Read the Independent Contractor Terms" },
       },
       consentBg: {
         title: "Background check disclosure",
@@ -729,6 +735,7 @@ function Question({
         label: BACKGROUND_CONSENT_COPY,
         checked: answers.backgroundCheckConsent,
         key: "backgroundCheckConsent" as const,
+        policy: { href: "/hiring/policies/background-check", label: "Read the full Background Check Disclosure" },
       },
       consentPay: {
         title: "Are you comfortable with how pay works?",
@@ -737,6 +744,7 @@ function Question({
         label: PAY_CONSENT_COPY,
         checked: answers.payConsent,
         key: "payConsent" as const,
+        policy: { href: "/hiring/policies/contractor-terms", label: "See pay in the Independent Contractor Terms" },
       },
     }[step];
     return (
@@ -754,12 +762,15 @@ function Question({
           </div>
         )}
         {step === "consentPay" && <PayExample />}
+        <a href={spec.policy.href} target="_blank" rel="noreferrer" className="mt-4 inline-block text-sm font-semibold text-[#6810FE] underline-offset-2 hover:underline">
+          {spec.policy.label}
+        </a>
         <label className="mt-8 flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-base text-slate-800 shadow-sm">
           <input
             type="checkbox"
             checked={spec.checked}
             onChange={(e) => onPatch({ [spec.key]: e.target.checked })}
-            className="mt-1 h-5 w-5 rounded border-slate-300 text-[#5C0FFE] focus:ring-[#8F7BFD]"
+            className="mt-1 h-5 w-5 rounded border-slate-300 text-[#6810FE] focus:ring-[#8E5BFF]"
           />
           <span>{spec.label}</span>
         </label>
@@ -801,7 +812,7 @@ function Question({
             type="checkbox"
             checked={answers.age18}
             onChange={(e) => onPatch({ age18: e.target.checked })}
-            className="mt-1 h-5 w-5 rounded border-slate-300 text-[#5C0FFE] focus:ring-[#8F7BFD]"
+            className="mt-1 h-5 w-5 rounded border-slate-300 text-[#6810FE] focus:ring-[#8E5BFF]"
           />
           <span>{AGE_18_COPY}</span>
         </label>
@@ -856,7 +867,7 @@ function Question({
                 type="checkbox"
                 checked={answers.validDriversLicense}
                 onChange={(e) => onPatch({ validDriversLicense: e.target.checked })}
-                className="mt-1 h-5 w-5 rounded border-slate-300 text-[#5C0FFE] focus:ring-[#8F7BFD]"
+                className="mt-1 h-5 w-5 rounded border-slate-300 text-[#6810FE] focus:ring-[#8E5BFF]"
               />
               <span>{LICENSE_COPY}</span>
             </label>
@@ -865,7 +876,7 @@ function Question({
                 type="checkbox"
                 checked={answers.autoInsured}
                 onChange={(e) => onPatch({ autoInsured: e.target.checked })}
-                className="mt-1 h-5 w-5 rounded border-slate-300 text-[#5C0FFE] focus:ring-[#8F7BFD]"
+                className="mt-1 h-5 w-5 rounded border-slate-300 text-[#6810FE] focus:ring-[#8E5BFF]"
               />
               <span>{AUTO_INSURED_COPY}</span>
             </label>
@@ -1101,14 +1112,14 @@ function ChoiceList({
               choice.disabled
                 ? "cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400"
                 : on
-                  ? "border-[#5C0FFE] bg-white shadow-[0_14px_30px_-20px_rgba(92,15,254,0.85)]"
-                  : "border-slate-200 bg-white/80 hover:border-[#8F7BFD]/60 hover:bg-white",
+                  ? "border-[#6810FE] bg-white shadow-[0_14px_30px_-20px_rgba(92,15,254,0.85)]"
+                  : "border-slate-200 bg-white/80 hover:border-[#8E5BFF]/60 hover:bg-white",
             )}
           >
             <span
               className={cn(
                 "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border text-xs font-bold",
-                on ? "border-[#5C0FFE] bg-[#5C0FFE] text-white" : "border-slate-200 text-slate-500",
+                on ? "border-[#6810FE] bg-[#6810FE] text-white" : "border-slate-200 text-slate-500",
               )}
             >
               {on ? <RiCheckLine className="h-4 w-4" /> : letter}
@@ -1173,7 +1184,7 @@ function IdStep({
       </p>
       <p className="mt-3 max-w-xl text-base leading-relaxed text-slate-600">
         {ID_PURPOSE_COPY}{" "}
-        <a href={PRIVACY_POLICY_URL} target="_blank" rel="noreferrer" className="font-semibold text-[#5C0FFE] underline-offset-2 hover:underline">
+        <a href={PRIVACY_POLICY_URL} target="_blank" rel="noreferrer" className="font-semibold text-[#6810FE] underline-offset-2 hover:underline">
           Privacy policy
         </a>
       </p>
@@ -1191,7 +1202,7 @@ function IdStep({
         }}
         className={cn(
           "mt-8 flex min-h-40 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-4 py-8 text-center transition",
-          dragOver ? "border-[#5C0FFE] bg-[#5C0FFE]/5" : "border-slate-300 bg-white hover:border-[#8F7BFD]",
+          dragOver ? "border-[#6810FE] bg-[#6810FE]/5" : "border-slate-300 bg-white hover:border-[#8E5BFF]",
         )}
       >
         {preview ? (
@@ -1214,7 +1225,7 @@ function IdStep({
           type="checkbox"
           checked={answers.idConfirmed}
           onChange={(e) => onPatch({ idConfirmed: e.target.checked })}
-          className="mt-0.5 h-5 w-5 rounded border-slate-300 text-[#5C0FFE] focus:ring-[#8F7BFD]"
+          className="mt-0.5 h-5 w-5 rounded border-slate-300 text-[#6810FE] focus:ring-[#8E5BFF]"
         />
         <span>{ID_CONFIRM_COPY}</span>
       </label>
@@ -1318,7 +1329,7 @@ function AddressSearchField({
             e.preventDefault();
             if (open && suggestions[0]) void pick(suggestions[0]);
           }}
-          className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-base text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-[#5C0FFE] focus:ring-4 focus:ring-[#5C0FFE]/10"
+          className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-base text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-[#6810FE] focus:ring-4 focus:ring-[#6810FE]/10"
         />
       </label>
       {open && suggestions.length > 0 && (
@@ -1368,7 +1379,7 @@ function Field({
             onEnter();
           }
         }}
-        className="h-14 w-full rounded-2xl border border-slate-200 bg-white px-4 text-lg text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-[#5C0FFE] focus:ring-4 focus:ring-[#5C0FFE]/10"
+        className="h-14 w-full rounded-2xl border border-slate-200 bg-white px-4 text-lg text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-[#6810FE] focus:ring-4 focus:ring-[#6810FE]/10"
       />
     </label>
   );
@@ -1389,7 +1400,7 @@ function Area({
       placeholder={placeholder}
       rows={4}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full resize-y rounded-2xl border border-slate-200 bg-white px-4 py-3 text-lg text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-[#5C0FFE] focus:ring-4 focus:ring-[#5C0FFE]/10"
+      className="w-full resize-y rounded-2xl border border-slate-200 bg-white px-4 py-3 text-lg text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-[#6810FE] focus:ring-4 focus:ring-[#6810FE]/10"
     />
   );
 }
@@ -1487,7 +1498,7 @@ function OkButton({ onClick, label = "OK", busy = false }: { onClick: () => void
       type="button"
       onClick={onClick}
       disabled={busy}
-      background="#5C0FFE"
+      background="#6810FE"
       borderRadius="0.75rem"
       className="h-11 px-5 text-sm font-semibold disabled:opacity-60"
     >
@@ -1513,7 +1524,7 @@ function ReviewRow({ label, value, onEdit }: { label: string; value: string | nu
         <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</dt>
         <dd className="mt-0.5 whitespace-pre-wrap text-sm font-medium text-slate-800">{value || "—"}</dd>
       </div>
-      <button type="button" onClick={onEdit} className="shrink-0 text-xs font-semibold text-[#5C0FFE] hover:underline">
+      <button type="button" onClick={onEdit} className="shrink-0 text-xs font-semibold text-[#6810FE] hover:underline">
         Edit
       </button>
     </div>
@@ -1526,7 +1537,7 @@ function ChecklistLink() {
       href="/NovaraCleaning_Supply_Checklist_dd14.pdf"
       target="_blank"
       rel="noopener noreferrer"
-      className="mt-3 inline-flex text-sm font-semibold text-[#5C0FFE] underline-offset-4 hover:underline"
+      className="mt-3 inline-flex text-sm font-semibold text-[#6810FE] underline-offset-4 hover:underline"
     >
       See the starter supply checklist
     </a>

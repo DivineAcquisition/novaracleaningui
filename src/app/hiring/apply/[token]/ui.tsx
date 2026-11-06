@@ -43,7 +43,7 @@ export function TokenizedApply({ token }: { token: string }) {
       <div className="flex min-h-dvh flex-col items-center justify-center bg-[#F7F5FC] px-6 text-center">
         <h1 className="font-heading text-3xl font-extrabold text-slate-900">Link unavailable</h1>
         <p className="mt-3 max-w-md text-slate-600">{error}</p>
-        <Link href="/hiring" className="mt-6 text-sm font-semibold text-[#5C0FFE]">
+        <Link href="/hiring" className="mt-6 text-sm font-semibold text-[#6810FE]">
           Back to careers
         </Link>
       </div>

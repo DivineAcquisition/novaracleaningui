@@ -72,7 +72,7 @@ export const SEEDED_WORDING: WordingVersion[] = [
   seed(
     "card_authorization",
     "Card on file and payment authorization",
-    "I authorize Novara Cleaning to charge the card I provide {{dueNowWhen}}. The amount due now is {{dueNowLabel}}. {{balanceSentence}} The amount is determined like this: {{amountBasis}}. The card will be saved {{savedFor}}. I can cancel a visit or change the card online from my booking or membership page, or by emailing hello@novaracleaning.com. I do not have to call. [Refund Policy](https://novaracleaning.com/refund-policy). [Cancellation Policy](https://novaracleaning.com/cancellation-policy).",
+    "I authorize Novara Cleaning to charge the card I provide {{dueNowWhen}}. The amount due now is {{dueNowLabel}}. {{balanceSentence}} The amount is determined like this: {{amountBasis}}. The card will be saved {{savedFor}}. I can cancel a visit or change the card online from my booking or membership page, or by emailing support@novaracleaning.com. I do not have to call. [Refund Policy](https://novaracleaning.com/refund-policy). [Cancellation Policy](https://novaracleaning.com/cancellation-policy).",
   ),
   seed(
     "membership_terms",

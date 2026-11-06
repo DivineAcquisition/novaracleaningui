@@ -50,7 +50,7 @@ function LevelMeter({ level }: { level: number }) {
           <span
             key={step}
             style={{ height: `${5 + step * 2.5}px` }}
-            className={cn("w-[3px] rounded-full", step <= level ? "bg-[#5C0FFE]" : "bg-slate-200")}
+            className={cn("w-[3px] rounded-full", step <= level ? "bg-[#6810FE]" : "bg-slate-200")}
           />
         ))}
       </span>
@@ -63,24 +63,24 @@ function RoleMeta({ role }: { role: HiringRole }) {
   return (
     <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs font-medium text-slate-500">
       <span className="inline-flex items-center gap-1.5">
-        <RiMapPin2Line className="h-3.5 w-3.5 text-[#8F7BFD]" aria-hidden />
+        <RiMapPin2Line className="h-3.5 w-3.5 text-[#8E5BFF]" aria-hidden />
         {role.location}
       </span>
       <span>{role.type}</span>
-      <span className="font-semibold text-[#5C0FFE]">{role.pay}</span>
+      <span className="font-semibold text-[#6810FE]">{role.pay}</span>
     </div>
   );
 }
 
 function RoleRow({ role }: { role: HiringRole }) {
   const body = (
-    <article className="rounded-2xl border border-slate-200 bg-white p-5 transition group-hover:border-[#8F7BFD]/50 group-hover:shadow-[0_16px_40px_-28px_rgba(92,15,254,0.45)] sm:p-6">
+    <article className="rounded-2xl border border-slate-200 bg-white p-5 transition group-hover:border-[#8E5BFF]/50 group-hover:shadow-[0_16px_40px_-28px_rgba(92,15,254,0.45)] sm:p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="font-heading text-lg font-bold text-slate-900">{role.title}</h3>
             {role.evergreen ? <EvergreenBadge /> : (
-              <span className="rounded-full bg-[#5C0FFE]/8 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-[#5C0FFE]">
+              <span className="rounded-full bg-[#6810FE]/8 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-[#6810FE]">
                 Open
               </span>
             )}
@@ -91,7 +91,7 @@ function RoleRow({ role }: { role: HiringRole }) {
         <div className="flex items-center justify-between gap-4 sm:justify-end">
           <LevelMeter level={role.level} />
           {!role.evergreen && (
-            <span className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition group-hover:border-[#5C0FFE] group-hover:bg-[#5C0FFE] group-hover:text-white">
+            <span className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition group-hover:border-[#6810FE] group-hover:bg-[#6810FE] group-hover:text-white">
               <RiArrowRightLine className="h-4 w-4" aria-hidden />
             </span>
           )}
@@ -157,10 +157,10 @@ export default function HiringHome() {
           }}
         />
         <div className="relative mx-auto max-w-3xl text-center">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#5C0FFE]">Now open</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#6810FE]">Now open</p>
           <h1 className="mt-4 font-heading text-4xl font-extrabold leading-[1.05] tracking-tight text-slate-900 sm:text-6xl">
             Clean the homes.
-            <span className="mt-1 block text-[#5C0FFE]">Run your own work.</span>
+            <span className="mt-1 block text-[#6810FE]">Run your own work.</span>
           </h1>
           <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-slate-600 sm:text-lg">
             Independent contractor roles across the DMV. You accept the jobs. Novara handles the schedule, the clients, and the payout.
@@ -194,7 +194,7 @@ export default function HiringHome() {
           {VALUES.map((value) => (
             <div key={value.name} className="rounded-2xl border border-slate-200 bg-white px-5 py-4 text-left">
               <p className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#5C0FFE]" aria-hidden />
+                <span className="h-1.5 w-1.5 rounded-full bg-[#6810FE]" aria-hidden />
                 {value.name}
               </p>
               <p className="mt-1.5 text-xs leading-relaxed text-slate-600">{value.detail}</p>
@@ -206,7 +206,7 @@ export default function HiringHome() {
       <main id="positions" className="scroll-mt-24 mx-auto max-w-6xl px-5 pb-20 sm:px-6">
         <div className="mb-8 flex flex-col gap-2 border-t border-slate-200 pt-10 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#5C0FFE]">Open positions</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#6810FE]">Open positions</p>
             <h2 className="mt-2 font-heading text-3xl font-bold text-slate-900">Find where you fit</h2>
           </div>
           <p className="text-sm text-slate-500">
@@ -234,7 +234,7 @@ export default function HiringHome() {
                       onClick={() => setGroup(filter.id)}
                       className={cn(
                         "flex shrink-0 items-center justify-between gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium",
-                        on ? "bg-[#5C0FFE]/10 text-[#5C0FFE] ring-1 ring-[#5C0FFE]/30" : "text-slate-600 hover:bg-slate-50",
+                        on ? "bg-[#6810FE]/10 text-[#6810FE] ring-1 ring-[#6810FE]/30" : "text-slate-600 hover:bg-slate-50",
                       )}
                     >
                       {filter.label}

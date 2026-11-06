@@ -9,7 +9,7 @@ import { getLandingData } from "@/lib/landing/data";
 
 const TITLE = "Novara Cleaning | Home, Airbnb & Office Cleaning in MD, DC & VA";
 const DESCRIPTION =
-  "House cleaning, Airbnb turnovers, and office cleaning across Maryland, Washington DC, and Northern Virginia. Prices shown before you book, a written checklist every visit, and a 48-hour re-clean guarantee.";
+  "House cleaning, Airbnb turnovers, and office cleaning across Maryland, Washington DC, and Northern Virginia. Prices shown before you book, a written checklist every visit, and a 24-hour re-clean guarantee.";
 
 export const metadata: Metadata = {
   title: { absolute: TITLE },

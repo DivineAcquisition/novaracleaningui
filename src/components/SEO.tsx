@@ -10,7 +10,7 @@ interface SEOProps {
 }
 
 const BRAND = "Novara Cleaning";
-const DEFAULT_DESCRIPTION = "Book top-rated home cleaning in the DMV area. Exact prices before you book, written checklists, flexible scheduling, and a 48-hour re-clean guarantee.";
+const DEFAULT_DESCRIPTION = "Book top-rated home cleaning in the DMV area. Exact prices before you book, written checklists, flexible scheduling, and a 24-hour re-clean guarantee.";
 
 export function SEO({ title, description, canonical, noindex }: SEOProps) {
   const fullTitle = title ? `${title} | ${BRAND}` : `${BRAND} | Professional Home Cleaning in Maryland & DMV`;

@@ -274,7 +274,7 @@ export const MEMBERSHIP_PLANS: MembershipPlanConfig[] = [
       "1 clean per month",
       "Up to 18% off one-time price",
       "Priority scheduling",
-      "Cancel anytime",
+      "Cancel with 14 days’ notice",
     ],
   },
   {

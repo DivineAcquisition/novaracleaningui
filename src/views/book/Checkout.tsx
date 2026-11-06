@@ -1144,7 +1144,7 @@ export default function BookingCheckout() {
                         <span className="font-bold text-base">Pay now</span>
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        Then ${membershipMonthlyDollars.toFixed(2)}/month · cancel anytime
+                        Then ${membershipMonthlyDollars.toFixed(2)}/month · cancel with 14 days’ notice
                       </p>
                     </div>
                     <span className="text-2xl md:text-3xl font-extrabold bg-gradient-primary bg-clip-text text-transparent">

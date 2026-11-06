@@ -175,7 +175,7 @@ export default function HomePage({ data, coverage }: { data: LandingData; covera
               standardFrom > 0
                 ? { icon: RiPriceTag3Line, big: dollars(standardFrom), small: "Standard clean, from (online price)" }
                 : { icon: RiPriceTag3Line, big: "15% off", small: "Standard cleans booked online" },
-              { icon: RiRefreshLine, big: "48 hours", small: "To flag anything for a free re-clean" },
+              { icon: RiRefreshLine, big: "24 hours", small: "To flag anything for a free re-clean" },
               proof.completedCleans
                 ? { icon: RiSparklingLine, big: `${proof.completedCleans.toLocaleString()}+`, small: "Cleans completed" }
                 : { icon: RiListCheck2, big: "Written", small: "Checklist on every visit" },
@@ -339,7 +339,7 @@ export default function HomePage({ data, coverage }: { data: LandingData; covera
                   icon: RiShieldCheckLine,
                   photo: PHOTO.quartz,
                   alt: "Quartz counter wiped down after a Novara clean",
-                  body: "Missed something? Tell us within 48 hours and we come back to re-clean it free. Novara Cleaning is insured.",
+                  body: "Missed something? Tell us within 24 hours and we come back to re-clean it free. Novara Cleaning is insured.",
                   link: { href: "#guarantee", label: "Our guarantee" },
                 },
               ].map((p) => (

@@ -64,7 +64,7 @@ const MEMBERSHIP_FEATURES = [
   "Dedicated cleaner on bi-weekly & weekly plans",
   "Priority scheduling & member perks",
   "Cancel with 14 days' notice",
-  "48-hour re-clean guarantee",
+  "24-hour re-clean guarantee",
   ...VALUE_STACK_HEADLINES,
 ];
 
@@ -647,7 +647,7 @@ export default function BookingOffer() {
                           "Inside cabinet cleaning & baseboards",
                           "Interior windows & sills",
                           "All supplies & equipment included",
-                          "48-hour re-clean guarantee",
+                          "24-hour re-clean guarantee",
                           ...VALUE_STACK_HEADLINES,
                         ].map((line) => (
                           <li key={line} className="flex items-start gap-2 text-xs md:text-sm">
@@ -777,7 +777,7 @@ export default function BookingOffer() {
                         "Same team both visits when possible",
                         "Inside cabinet cleaning & baseboards on visit 1",
                         "All supplies & equipment included",
-                        "48-hour re-clean guarantee on both visits",
+                        "24-hour re-clean guarantee on both visits",
                         ...VALUE_STACK_HEADLINES,
                       ].map((line) => (
                         <li
@@ -1120,7 +1120,7 @@ export default function BookingOffer() {
                   "Dedicated cleaner on bi-weekly & weekly plans",
                   "Priority scheduling",
                   "Cancel with 14 days' notice",
-                  "48-hour re-clean guarantee",
+                  "24-hour re-clean guarantee",
                   "No long-term contracts",
                   ...VALUE_STACK_HEADLINES,
                 ].map((item, idx) => (

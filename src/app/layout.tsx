@@ -26,7 +26,7 @@ const jetbrains = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "Novara Cleaning | Professional Home Cleaning in Maryland & DMV",
   description:
-    "Book top-rated home cleaning in the DMV area. Exact prices before you book, written checklists, flexible scheduling, and a 48-hour re-clean guarantee.",
+    "Book top-rated home cleaning in the DMV area. Exact prices before you book, written checklists, flexible scheduling, and a 24-hour re-clean guarantee.",
   authors: [{ name: "Novara Cleaning" }],
   metadataBase: new URL("https://novaracleaning.com"),
   openGraph: {
@@ -34,7 +34,7 @@ export const metadata: Metadata = {
     siteName: "Novara Cleaning",
     title: "Novara Cleaning | Professional Home Cleaning in Maryland & DMV",
     description:
-      "Book top-rated home cleaning in the DMV area. Exact prices before you book, written checklists, flexible scheduling, and a 48-hour re-clean guarantee.",
+      "Book top-rated home cleaning in the DMV area. Exact prices before you book, written checklists, flexible scheduling, and a 24-hour re-clean guarantee.",
     url: "https://novaracleaning.com",
     images: [
       {
@@ -50,7 +50,7 @@ export const metadata: Metadata = {
     site: "@NovaraCleaning",
     title: "Novara Cleaning | Professional Home Cleaning in Maryland & DMV",
     description:
-      "Book top-rated home cleaning in the DMV area. Exact prices before you book and a 48-hour re-clean guarantee.",
+      "Book top-rated home cleaning in the DMV area. Exact prices before you book and a 24-hour re-clean guarantee.",
     images: [
       "https://sxdraeptzuamsgjcvfeg.supabase.co/storage/v1/object/public/assets/novara-og-image.png",
     ],

@@ -33,7 +33,7 @@ export const HERO = {
   zipPlaceholder: "e.g. 20814",
   primaryCta: "Get my price",
   secondaryCta: "Hear Nova take a call",
-  trust: "No card to see a price. A written checklist on every visit. Missed something? We come back within 48 hours.",
+  trust: "No card to see a price. A written checklist on every visit. Missed something? We come back within 24 hours.",
   offer: "Book online: 15% off a standard clean, 25% off a deep clean.",
   exampleLabel: "Example with sample data",
 } as const;
@@ -107,7 +107,7 @@ export const STANDARD = {
   headline: "Every room, on a written list.",
   paragraphs: [
     "A clean is easy to promise and hard to check. So we write it down first: the price, the time, and every task on the list.",
-    "Your cleaner works from that list room by room. If something on it was missed, you tell us within 48 hours and we come back to do it. No forms.",
+    "Your cleaner works from that list room by room. If something on it was missed, you tell us within 24 hours and we come back to do it. No forms.",
   ],
   tenets: [
     { id: "price", title: "Price before the visit", body: "You see the exact total before you pay. It does not change at the door." },
@@ -130,7 +130,7 @@ export const HOW = {
     { id: "schedule", title: "Schedule", body: "Pick an open time. Reschedule later from your confirmation text.", note: "Thu 9:00 AM" },
     { id: "match", title: "Match", body: "A cleaner is matched by location, availability, and ratings.", note: "Maria R. assigned" },
     { id: "clean", title: "Clean", body: "Your cleaner works from the written checklist for your service.", note: "Checklist complete" },
-    { id: "check", title: "Check", body: "Rate the visit. Anything missed is re-cleaned free within 48 hours.", note: "Rate within 48 hours" },
+    { id: "check", title: "Check", body: "Rate the visit. Anything missed is re-cleaned free within 24 hours.", note: "Rate within 24 hours" },
   ],
 } as const;
 
@@ -259,7 +259,7 @@ export const PROMISES = {
   items: [
     "You see the exact price before you pay.",
     "Every visit follows the written checklist for your service.",
-    "Anything missed is re-cleaned free if you tell us within 48 hours.",
+    "Anything missed is re-cleaned free if you tell us within 24 hours.",
     "Cancel more than 24 hours ahead for a full refund. Inside 24 hours the fee is $50.",
     "Nova always says it is an AI. Ask for a person and our team follows up.",
     "Airbnb turnovers include 8–12 photos of the finished property.",
@@ -287,7 +287,7 @@ export const PRICING = {
     includes: [
       "Standard, deep, or move-in/out",
       "Written checklist on every visit",
-      "48-hour re-clean if something is missed",
+      "24-hour re-clean if something is missed",
       "15% off standard and 25% off deep, online",
     ],
     note: "Prices include the online discount. You see the exact total before you pay.",
@@ -315,7 +315,7 @@ export const FAQ = {
     { q: "How is my price set?", a: "Your home's size and the type of clean set the price, and any extras are listed line by line. Your ZIP code tells us you are in our area. You see the exact total before you pay." },
     { q: "Do I need to be home?", a: "No. Many customers leave a door code or a key. You get text updates about your visit." },
     { q: "Is Nova a person?", a: "No. Nova is an AI assistant, and it tells you so. It can price your home and book a time. If you ask for a person, our team follows up with you." },
-    { q: "What if something is missed?", a: "Tell us within 48 hours and a cleaner comes back to re-clean those areas. There is no charge." },
+    { q: "What if something is missed?", a: "Tell us within 24 hours and a cleaner comes back to re-clean those areas. There is no charge." },
     { q: "Can I cancel?", a: "Yes. Cancel more than 24 hours before your visit for a full refund. Inside 24 hours there is a $50 short-notice fee." },
     { q: "Where do you clean?", a: "Homes across Maryland, Washington DC and Northern Virginia. Enter your ZIP code to check yours. If we don't serve it yet, we'll add you to the waitlist." },
     { q: "What do I need to provide?", a: "Nothing. Your cleaner brings the supplies and equipment for your service." },
@@ -393,7 +393,7 @@ export const VALUE = {
     {
       id: "reclean",
       title: "Missed a spot? We come back",
-      body: "Tell us within 48 hours and a cleaner returns to re-clean it at no charge.",
+      body: "Tell us within 24 hours and a cleaner returns to re-clean it at no charge.",
     },
   ],
 } as const;
@@ -401,7 +401,7 @@ export const VALUE = {
 export const GUARANTEE = {
   id: "guarantee",
   headline: "If something is missed, we come back. Free.",
-  body: "Every clean is checked against its written list. If a task on it was missed, tell us within 48 hours of your visit and we send a cleaner back to re-clean those areas. No forms and no extra charge.",
+  body: "Every clean is checked against its written list. If a task on it was missed, tell us within 24 hours of your visit and we send a cleaner back to re-clean those areas. No forms and no extra charge.",
   points: ["Report it by reply text or a call", "A cleaner returns to fix it", "No charge, ever"],
 } as const;
 
@@ -450,7 +450,7 @@ export const MENUS = [
     label: "Company",
     items: [
       { href: "/#how", title: "How it works", body: "Book in under two minutes", icon: "route" },
-      { href: "/#why", title: "Why Novara", body: "Checklists, supplies, and a 48-hour re-clean", icon: "shield" },
+      { href: "/#why", title: "Why Novara", body: "Checklists, supplies, and a 24-hour re-clean", icon: "shield" },
       { href: "tel:+18337002611", title: "Call us", body: "(833) 700-2611 for booking", icon: "phone" },
       { href: "https://hiring.novaracleaning.com", title: "Work with us", body: "Join the cleaning team", icon: "briefcase" },
     ],

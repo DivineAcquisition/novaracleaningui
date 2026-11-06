@@ -83,7 +83,7 @@ export const MORE_BENEFITS: BenefitSection[] = [
     tagline: "If it's not right, we make it right.",
     icon: "shield",
     items: [
-      "48-hour re-clean guarantee on every visit",
+      "24-hour re-clean guarantee on every visit",
       "Insured and bonded professional teams",
       "All supplies and equipment included",
     ],
@@ -104,7 +104,7 @@ export const MORE_BENEFITS: BenefitSection[] = [
     icon: "flex",
     items: [
       "Free rescheduling — life happens, your plan flexes",
-      "Pause or cancel anytime from the portal",
+      "Pause or cancel from the portal with 14 days’ notice",
       "Switch plans as your needs change",
     ],
   },

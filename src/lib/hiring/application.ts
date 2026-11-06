@@ -36,9 +36,10 @@ export const TRANSPORTATION_CAR = "Yes (Own A Vehicle)";
 export const TRANSPORTATION_NONE = "No Transportation";
 
 /** Bump when the wording on the application changes. Stored with every submission. */
-export const CONSENT_VERSION = "2026-10-15";
+export const CONSENT_VERSION = "2026-11-06";
 
-export const PRIVACY_POLICY_URL = "https://novaracleaning.com/privacy";
+/** Applicant Privacy Notice on the careers site (hiring.novaracleaning.com/policies). */
+export const PRIVACY_POLICY_URL = "/hiring/policies/applicant-privacy";
 
 export const AGE_18_COPY = "I am 18 or older.";
 

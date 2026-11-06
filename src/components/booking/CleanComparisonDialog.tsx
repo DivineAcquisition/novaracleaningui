@@ -77,7 +77,7 @@ const COMPARISON: Group[] = [
       { label: "All supplies & equipment included",         standard: true,  deep: true  },
       { label: "Detailed switch plates + door handles",     standard: false, deep: true  },
       { label: "Vent cover dusting + AC return wipe",       standard: false, deep: true  },
-      { label: "48-hour re-clean guarantee",                standard: true,  deep: true  },
+      { label: "24-hour re-clean guarantee",                standard: true,  deep: true  },
     ],
   },
 ];

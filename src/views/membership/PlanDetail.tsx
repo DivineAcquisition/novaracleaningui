@@ -34,12 +34,10 @@ const PLAN_META = {
     tagline: "One professional clean every month — your home stays fresh effortlessly.",
     icon: RiCalendarCheckLine,
     credits: 1,
-    includedHours: "up to 2 hrs",
     benefits: [
-      { icon: RiStarLine, text: "1 cleaning credit per month (up to 2 hrs)" },
-      { icon: RiShieldLine, text: "48-hour reclean guarantee" },
+      { icon: RiStarLine, text: "1 cleaning credit per month" },
+      { icon: RiShieldLine, text: "24-hour re-clean guarantee" },
       { icon: RiGroupLine, text: "Priority customer support" },
-      { icon: RiSparklingLine, text: "20% off extra hours & add-ons" },
     ],
   },
   biweekly: {
@@ -47,12 +45,10 @@ const PLAN_META = {
     tagline: "Two cleans a month — the sweet spot for a consistently clean home.",
     icon: RiRepeatLine,
     credits: 2,
-    includedHours: "up to 3 hrs each",
     popular: true,
     benefits: [
-      { icon: RiStarLine, text: "2 cleaning credits per month (up to 3 hrs each)" },
+      { icon: RiStarLine, text: "2 cleaning credits per month" },
       { icon: RiGroupLine, text: "Dedicated cleaner match" },
-      { icon: RiSparklingLine, text: "25% off deep cleans & add-ons" },
       { icon: RiShieldLine, text: "Satisfaction guarantee" },
     ],
   },
@@ -61,12 +57,10 @@ const PLAN_META = {
     tagline: "Four cleans a month — premium care for busy households.",
     icon: RiVipCrownLine,
     credits: 4,
-    includedHours: "up to 3 hrs each",
     benefits: [
-      { icon: RiStarLine, text: "4 cleaning credits per month (up to 3 hrs each)" },
+      { icon: RiStarLine, text: "4 cleaning credits per month" },
       { icon: RiGroupLine, text: "Dedicated cleaner & preferred time slot" },
       { icon: RiSparklingLine, text: "Free deep clean every 6 months" },
-      { icon: RiShieldLine, text: "30% off extra hours & add-ons" },
     ],
   },
 } as const;
@@ -140,7 +134,7 @@ export default function PlanDetail() {
             <span className="text-sm font-normal text-muted-foreground">/month</span>
           </p>
           <p className="text-xs text-muted-foreground">
-            {plan.credits} credit{plan.credits > 1 ? "s" : ""}/month &middot; {plan.includedHours}
+            {plan.credits} credit{plan.credits > 1 ? "s" : ""}/month &middot; priced by home size
           </p>
         </div>
       </section>
@@ -288,7 +282,7 @@ export default function PlanDetail() {
               <RiArrowRightLine className="w-5 h-5 ml-2" />
             </Button>
             <p className="text-[11px] text-center text-muted-foreground">
-              First month is billed at checkout. Recurring monthly after that. Cancel anytime with 14 days&apos; notice.
+              First month is billed at checkout. Recurring monthly after that. Cancel with 14 days&apos; notice before your next billing date.
             </p>
           </CardContent>
         </Card>

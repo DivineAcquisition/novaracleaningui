@@ -778,7 +778,7 @@ export const APPROVED_CLAIMS: ApprovedClaim[] = [
   },
   {
     id: "reclean",
-    text: "48-hour re-clean if you are not satisfied",
+    text: "24-hour re-clean if you are not satisfied",
     scope: "company",
     live: true,
   },

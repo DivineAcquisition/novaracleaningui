@@ -27,10 +27,9 @@ const MEMBERSHIP_TIERS = [
     discount: '20%',
     icon: RiCalendarLine,
     features: [
-      '1 cleaning credit per month (up to 2 hrs)',
-      '48-hour reclean guarantee',
+      '1 cleaning credit per month',
+      '24-hour re-clean guarantee',
       'Priority customer support',
-      '20% off extra hours & add-ons',
     ],
     popular: false,
   },
@@ -42,9 +41,8 @@ const MEMBERSHIP_TIERS = [
     discount: '25%',
     icon: RiGiftLine,
     features: [
-      '2 cleaning credits per month (up to 3 hrs each)',
+      '2 cleaning credits per month',
       'Dedicated cleaner match',
-      '25% off deep cleans & add-ons',
       'Satisfaction guarantee',
       'Free rescheduling',
     ],
@@ -58,10 +56,9 @@ const MEMBERSHIP_TIERS = [
     discount: '30%',
     icon: RiVipCrownLine,
     features: [
-      '4 cleaning credits per month (up to 3 hrs each)',
+      '4 cleaning credits per month',
       'Dedicated cleaner & preferred time slot',
       'Free deep clean every 6 months',
-      '30% off extra hours & add-ons',
       'VIP scheduling',
     ],
     popular: false,
@@ -76,7 +73,7 @@ export default function Membership() {
   return (
     <div className={user ? "book-theme mx-auto max-w-6xl" : "book-theme landing min-h-screen bg-background"}>
       {!user && <SiteHeader />}
-      <SEO title="Membership Plans" description="Save up to 30% with a Novara Glow membership. Choose from monthly, bi-weekly, or weekly plans with dedicated cleaners and priority scheduling." />
+      <SEO title="Membership Plans" description="Glow memberships priced by home size. Choose from monthly, bi-weekly, or weekly plans with dedicated cleaners and priority scheduling." />
       {!user && (
       <div className="border-b border-border/50 hairline-glow">
         <div className="container max-w-7xl mx-auto px-4 py-3">
@@ -244,7 +241,7 @@ export default function Membership() {
 
                   <Badge variant="secondary" className="text-xs px-3 py-1 rounded-lg">
                     <RiFlashlightLine className="w-3 h-3 mr-1" />
-                    {tier.credits} {tier.credits === 1 ? 'Credit' : 'Credits'}/Month &middot; Save {tier.discount}
+                    {tier.credits} {tier.credits === 1 ? 'Credit' : 'Credits'}/Month
                   </Badge>
                 </CardHeader>
 
@@ -269,7 +266,7 @@ export default function Membership() {
                   </Button>
 
                   <p className="text-[11px] text-center text-muted-foreground">
-                    +$75 first-month deep clean &middot; Cancel anytime
+                    +$75 first-month deep clean &middot; Cancel with 14 days&rsquo; notice
                   </p>
                 </CardContent>
               </Card>
@@ -290,7 +287,7 @@ export default function Membership() {
             <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
               {[
                 { icon: RiGiftLine, title: "Monthly Credits", desc: "Use your credits for professional cleaning services, anytime you need them" },
-                { icon: RiFlashlightLine, title: "Exclusive Discounts", desc: "Save up to 30% on all add-ons, upgrades, and extra cleaning hours" },
+                { icon: RiFlashlightLine, title: "Pause When You Need To", desc: "Pause for up to 60 days a year with 14 days' notice before your billing date" },
                 { icon: RiCalendarLine, title: "Flexible Scheduling", desc: "Priority booking windows and easy rescheduling with no fees" },
               ].map((item, i) => (
                 <div key={i} className="text-center space-y-3">

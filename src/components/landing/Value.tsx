@@ -1,4 +1,4 @@
-// "What you get" and the 48-hour guarantee: the service itself, in plain
+// "What you get" and the 24-hour guarantee: the service itself, in plain
 // outcomes, near the top of the page. Server-rendered.
 
 import { ArrowsClockwise, CalendarCheck, ListChecks, SprayBottle } from "@phosphor-icons/react/dist/ssr";
@@ -40,7 +40,7 @@ export function GuaranteeBand() {
     <section id={GUARANTEE.id} aria-labelledby="guarantee-title" className={`${gutter} scroll-mt-20 border-t border-line py-16 sm:py-20`}>
       <div className={shell}>
         <div className="grid items-center gap-8 rounded-3xl bg-[#16043F] p-7 text-white sm:p-10 md:grid-cols-[auto_1fr]">
-          <svg viewBox="0 0 120 120" className="mx-auto h-32 w-32 md:h-40 md:w-40" role="img" aria-label="48-hour re-clean guarantee">
+          <svg viewBox="0 0 120 120" className="mx-auto h-32 w-32 md:h-40 md:w-40" role="img" aria-label="24-hour re-clean guarantee">
             <defs>
               <path id="g-seal" d="M60,60 m-44,0 a44,44 0 1,1 88,0 a44,44 0 1,1 -88,0" />
             </defs>
@@ -50,7 +50,7 @@ export function GuaranteeBand() {
               <textPath href="#g-seal">RE-CLEAN GUARANTEE · FREE · NO FORMS ·</textPath>
             </text>
             <text x="60" y="63" textAnchor="middle" fontSize="27" fontWeight="800" fill="#fff" fontFamily="var(--font-inter), Inter, sans-serif">
-              48
+              24
             </text>
             <text x="60" y="77" textAnchor="middle" fontSize="9" fontWeight="700" fill="#fff" fontFamily="var(--font-inter), Inter, sans-serif">
               HOURS

@@ -153,7 +153,7 @@ export const MEMBERSHIP_PLANS = {
     cleansPerMonth: 1, monthlyPrice: 0, includedHours: 0, overtimeDiscount: 0.15,
     discount: 0.15,
     description: "1 clean/month • members get our best per-clean rates",
-    features: ["1 clean per month", "Priority scheduling", "Cancel anytime"],
+    features: ["1 clean per month", "Priority scheduling", "Cancel with 14 days’ notice"],
   },
   biweekly: {
     id: "biweekly", label: "Glow Bi-Weekly", frequency: "biweekly",

@@ -45,7 +45,7 @@ export const RECEPTIONIST_KNOWLEDGE = {
     ],
     claimsYouMayMake: [
       "Novara Cleaning maintains commercial general liability insurance.",
-      "A 48-hour re-clean is offered if the customer is not satisfied.",
+      "A 24-hour re-clean is offered if the customer is not satisfied.",
       "Supplies and equipment are included unless a commercial client asks us to use theirs.",
     ],
     claimsYouMustNotMake: [
@@ -75,7 +75,7 @@ export const RECEPTIONIST_KNOWLEDGE = {
           "Make beds on request",
           "Trash removed and a general tidy",
           "Supplies included",
-          "48-hour re-clean if they are not satisfied",
+          "24-hour re-clean if they are not satisfied",
         ],
         notIncluded: [
           "Inside fridge or oven, unless added",
@@ -227,7 +227,7 @@ export const RECEPTIONIST_KNOWLEDGE = {
   },
 
   policies: {
-    reclean: "If they are not satisfied, they tell us within 48 hours and we come back to put it right at no charge.",
+    reclean: "If they are not satisfied, they tell us within 24 hours and we come back to put it right at no charge.",
     residentialCancel: "More than 24 hours before the service date, a residential cancellation is a full refund. Inside 24 hours, a $50 short-notice fee applies and the rest is refunded. If the visit was paid with a membership credit, the credit is restored and there is no cash refund.",
     residentialReschedule: "Rescheduling inside 24 hours of the service date adds a $25 short-notice fee.",
     hostCancel: "Short-term rental host visits use a different rule: 48 hours or more out, no fee and the amount is credit-eligible; 24 to 48 hours, a 50% fee; under 24 hours, the full visit rate. Do not use this rule for a normal home cleaning.",
@@ -247,7 +247,7 @@ export const RECEPTIONIST_KNOWLEDGE = {
     { q: "How many people come?", a: "Homes up to 2,500 sq ft are planned as one cleaner. Larger homes are planned as two. Do not promise a two-person crew for a small home." },
     { q: "Can you come today?", a: "Same-day is a $50 add-on, only if a crew is actually free, and the request has to be in before 2:00 PM Eastern. A person confirms it. Do not promise the slot." },
     { q: "Do you do Sundays?", a: "Offer only a date the booking calendar shows as open. Do not invent a day." },
-    { q: "What if I am not happy?", a: "Tell us within 48 hours and we come back and fix it at no charge." },
+    { q: "What if I am not happy?", a: "Tell us within 24 hours and we come back and fix it at no charge." },
     { q: "How do I cancel?", a: "They can cancel from the booking page or by emailing support@novaracleaning.com. More than 24 hours out, the residential visit is fully refunded. Inside 24 hours, the short-notice fee is $50." },
     { q: "Can I get a discount?", a: "Do not create a discount. You can change the service, the frequency, or the add-ons so the job fits the budget. Membership is a published rate, not a coupon you invent." },
     { q: "I found someone cheaper.", a: "Acknowledge it. Offer a single clean so they can compare the work. Do not match a price on the call." },

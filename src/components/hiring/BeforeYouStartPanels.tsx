@@ -323,5 +323,5 @@ export function StartDecision({
 }
 
 export function BeforeYouStartFrame({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("min-h-screen bg-muted/30 text-foreground", className)}>{children}</div>;
+  return <div className={cn("book-theme landing min-h-screen bg-muted/30 text-foreground", className)}>{children}</div>;
 }

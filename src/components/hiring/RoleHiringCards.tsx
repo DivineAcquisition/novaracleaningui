@@ -31,7 +31,7 @@ export function RoleHiringCards({ cards }: { cards: PublicRoleCard[] }) {
               </ul>
             </div>
           </div>
-          <p className="mt-5 text-sm font-semibold text-[#5C0FFE]">Pay: {card.payLine}</p>
+          <p className="mt-5 text-sm font-semibold text-[#6810FE]">Pay: {card.payLine}</p>
           <div className="mt-5 flex flex-wrap items-center gap-3">
             <Link href={card.detailPath} className="inline-flex h-11 items-center rounded-full border border-slate-200 px-5 text-sm font-semibold text-slate-800">
               Read {card.name}

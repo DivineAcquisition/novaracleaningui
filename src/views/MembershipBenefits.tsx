@@ -125,7 +125,7 @@ export default function MembershipBenefits() {
             <MetaCard
               icon={RiHeartsLine}
               label="Commitment"
-              value="Free rescheduling · pause or cancel anytime"
+              value="Reschedule with 48 hours’ notice · pause or cancel with 14 days’ notice"
             />
           </div>
         </div>

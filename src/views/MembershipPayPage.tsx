@@ -240,7 +240,7 @@ export default function MembershipPayPage() {
             </div>
           )}
           <p className="mt-2 text-[11px] text-white/80 leading-snug">
-            Sign, then submit payment to start this membership. Cancel anytime.
+            Sign, then submit payment to start this membership. Cancel with 14 days’ notice before your next billing date.
           </p>
         </header>
 

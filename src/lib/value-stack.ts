@@ -41,7 +41,7 @@ export const VALUE_STACK_ITEMS: ValueStackItem[] = [
 export const CHECKOUT_PREMIUM_FEATURES = [
   "Insured company",
   "All supplies and equipment included",
-  "48-hour re-clean guarantee",
+  "24-hour re-clean guarantee",
   ...VALUE_STACK_HEADLINES,
 ] as const;
 

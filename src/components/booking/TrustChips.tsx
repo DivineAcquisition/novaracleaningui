@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 const CHIPS = [
   { icon: RiPriceTag3Line, label: "The price shown is the price charged" },
   { icon: RiListCheck2, label: "Written checklist every visit" },
-  { icon: RiRefreshLine, label: "48-hour re-clean guarantee" },
+  { icon: RiRefreshLine, label: "24-hour re-clean guarantee" },
 ];
 
 export function TrustChips({ className, call = true }: { className?: string; call?: boolean }) {

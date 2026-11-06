@@ -94,7 +94,7 @@ export async function GET(req: Request): Promise<NextResponse> {
     ready: readyItemsForRole(String(data.role || "")),
     contactEmail: settings.applicantEmail,
     contactPhone: settings.applicantPhone,
-    privacyUrl: "https://novaracleaning.com/privacy",
+    privacyUrl: "/hiring/policies/applicant-privacy",
   });
 }
 
