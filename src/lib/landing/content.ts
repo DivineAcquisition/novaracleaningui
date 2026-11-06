@@ -417,7 +417,7 @@ export const BEFORE_AFTER: Array<{ room: string; service: string; before: string
 
 /** Site-wide promo banner, shown on the marketing site and the booking flow. */
 export const PROMO = {
-  active: true,
+  active: false,
   text: "Get your Thanksgiving special",
   cta: "Book now",
 } as const;

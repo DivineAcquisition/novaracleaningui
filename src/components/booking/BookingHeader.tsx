@@ -5,7 +5,6 @@
 
 import { RiArrowRightUpLine, RiPhoneLine } from "@/components/icons";
 import { INBOUND_PHONE } from "@/config/brand-config";
-import { PromoBanner } from "@/components/landing/Chrome";
 
 interface BookingHeaderProps {
   currentStep: number;
@@ -18,7 +17,6 @@ export function BookingHeader({ currentStep, totalSteps, stepLabel }: BookingHea
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-[#E9E7EE] bg-white/90 backdrop-blur-md">
-      <PromoBanner showCta={false} />
       <div className="container mx-auto max-w-6xl px-4 py-3 sm:py-4">
         <div className="flex items-center justify-between gap-3">
           <a href="/" target="_blank" rel="noopener" className="flex items-center gap-2.5" aria-label="Novara Cleaning website (opens in a new tab)">
