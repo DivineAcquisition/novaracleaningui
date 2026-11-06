@@ -938,7 +938,7 @@ export default function BookingCheckout() {
             : "Complete your booking with a secure 50% deposit. Balance auto-charged after service."}
           noindex
         />
-        <BookingHeader currentStep={currentStep} totalSteps={6} stepLabel="Checkout" runningTotal={isNewMembershipSignup ? membershipDueDollars : isGlowPlan ? null : depositPricing.total} runningLabel={isNewMembershipSignup ? "First month" : "Your price"} />
+        <BookingHeader currentStep={currentStep} totalSteps={6} stepLabel="Checkout" />
         
         <div ref={checkoutCaptureRef} className="container max-w-2xl mx-auto px-4 py-6 space-y-6">
           
