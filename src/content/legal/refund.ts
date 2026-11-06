@@ -4,7 +4,7 @@
 const text = `
 This Refund Policy supplements and incorporates by reference the NovaraCleaning Terms of Service available at novaracleaning.com/terms. In the event of any conflict between this Refund Policy and the Terms of Service, the Terms of Service control. Capitalized terms not defined here have the meaning given in the Terms of Service.
 
-IMPORTANT LEGAL NOTICE: This Refund Policy contains strict limitations on refund eligibility and binding anti-fraud provisions. By booking services, submitting payment, or using our services, you agree to be bound by this Refund Policy in conjunction with our Terms of Service. Unauthorized chargebacks and bad-faith payment disputes are governed by Section 9 of our Terms of Service and will result in the consequences described therein and herein.
+IMPORTANT LEGAL NOTICE: This Refund Policy contains strict limitations on refund eligibility and binding anti-fraud provisions. By booking services, submitting payment, or using our services, you agree to be bound by this Refund Policy in conjunction with our Terms of Service. Unauthorized chargebacks and bad-faith payment disputes are governed by Section 10 of our Terms of Service and will result in the consequences described therein and herein.
 
 ## 1. GOVERNING PRINCIPLE — ALL SALES FINAL AFTER SERVICE
 
@@ -36,7 +36,7 @@ No refund of any kind will be considered unless ALL of the following conditions 
 
 3.2 Specific, Itemized Concerns. You must identify the specific areas and specific checklist items you allege were not completed, with reasonable detail. General statements such as "it wasn't clean" or "I'm not happy" do not satisfy this requirement.
 
-3.3 Photographic Documentation. You must provide clear, timestamped photographs of each alleged deficiency. We compare your photographs against our contractor's timestamped before-and-after photographs and GPS service records retained under Section 12 of our Terms of Service.
+3.3 Photographic Documentation. You must provide clear, timestamped photographs of each alleged deficiency. We compare your photographs against our contractor's timestamped before-and-after photographs and GPS service records retained under Section 13 of our Terms of Service.
 
 3.4 Undisturbed Property. The property must not have been occupied, used, or disturbed since the original service, consistent with Section 7.1 of our Terms of Service. Once a property is re-occupied, we cannot verify the condition at time of service and no refund will be issued.
 
@@ -50,7 +50,7 @@ Full refunds are strictly limited to the following circumstances, each requiring
 
 4.1 Total Non-Performance. Service was charged but not performed at all — not partially, not at the wrong scope, but entirely not performed — and our own records confirm no contractor attended the property.
 
-4.2 Contractor No-Show With No Makeup. Our contractor failed to attend and we were unable to provide a replacement or reschedule within seven (7) days at your reasonable convenience. (Note: per Section 11 of our Terms of Service, where the failure is our error, you are not charged in the first instance.)
+4.2 Contractor No-Show With No Makeup. Our contractor failed to attend and we were unable to provide a replacement or reschedule within seven (7) days at your reasonable convenience. (Note: per Section 11 of our Cancellation Policy, where the failure is our error, you are not charged in the first instance.)
 
 4.3 Duplicate or Erroneous Charge. You were charged more than once for the same service, or charged due to a verified billing system error, with no service rendered for the duplicate charge.
 
@@ -70,7 +70,7 @@ The following are never refundable under any circumstances, consistent with Sect
 
 5.4 Same-day cancellations and no-shows, which forfeit 100% of payment per Section 6.1 of our Terms of Service.
 
-5.5 Failed-payment administrative fees ($15 per attempt, per Section 5.6 of our Terms of Service) and chargeback administrative fees ($150 per dispute, per Section 9.4 of our Terms of Service).
+5.5 Failed-payment administrative fees ($15 per attempt, per Section 5.6 of our Terms of Service) and chargeback administrative fees ($150 per dispute, per Section 10.4 of our Terms of Service).
 
 5.6 Lockouts, denied access, incorrect access codes, or any access failure caused by the Customer.
 
@@ -112,13 +112,13 @@ Consistent with our Terms of Service, the following statements and claims do not
 
 "I'll dispute the charge if you don't refund me"
 
-Personal dissatisfaction absent documented service failure, verified against our retained evidence, is not a refundable event. Threats to initiate a chargeback do not alter refund eligibility and are addressed in Section 8 below and Section 9 of our Terms of Service.
+Personal dissatisfaction absent documented service failure, verified against our retained evidence, is not a refundable event. Threats to initiate a chargeback do not alter refund eligibility and are addressed in Section 8 below and Section 10 of our Terms of Service.
 
 ## 7. REFUND REQUEST PROCEDURE
 
 7.1 Submission. Submit all refund requests in writing to refunds@novaracleaning.com within 24 hours of service. Include your booking confirmation number, date of service, itemized concerns, and timestamped photographs. Verbal requests and voicemails do not constitute valid notice.
 
-7.2 Evidence Review. We review your submission against our retained documentation under Section 12 of our Terms of Service, including timestamped before-and-after photographs, GPS arrival and departure data, the completed service checklist, and all communication logs.
+7.2 Evidence Review. We review your submission against our retained documentation under Section 13 of our Terms of Service, including timestamped before-and-after photographs, GPS arrival and departure data, the completed service checklist, and all communication logs.
 
 7.3 Re-Clean Offer. Where the concern is legitimate, we will offer the Tier One re-clean remedy. You must accept the re-clean or provide a documented valid reason for declining.
 
@@ -130,27 +130,27 @@ Personal dissatisfaction absent documented service failure, verified against our
 
 ## 8. CHARGEBACKS — MANDATORY PROCESS AND CONSEQUENCES
 
-8.1 This Section operates in conjunction with Section 9 of our Terms of Service. Nothing in this Refund Policy limits, reduces, or waives any right or remedy available to NovaraCleaning under Section 9 of the Terms of Service.
+8.1 This Section operates in conjunction with Section 10 of our Terms of Service. Nothing in this Refund Policy limits, reduces, or waives any right or remedy available to NovaraCleaning under Section 10 of the Terms of Service.
 
-8.2 Mandatory Pre-Chargeback Resolution. Before initiating any chargeback, bank dispute, or payment reversal, you are contractually required to complete the dispute resolution process in Section 9.1 of our Terms of Service: contact us in writing, provide specifics, and allow us 72 hours to investigate and respond. A chargeback filed without completing this process is an unauthorized chargeback.
+8.2 Mandatory Pre-Chargeback Resolution. Before initiating any chargeback, bank dispute, or payment reversal, you are contractually required to complete the dispute resolution process in Section 10.1 of our Terms of Service: contact us in writing, provide specifics, and allow us 72 hours to investigate and respond. A chargeback filed without completing this process is an unauthorized chargeback.
 
-8.3 Unauthorized Chargebacks Constitute Fraud. As established in Section 9.2 of our Terms of Service, an unauthorized chargeback constitutes material breach, fraud under Maryland law, theft of services, and may constitute wire fraud under 18 U.S.C. § 1343.
+8.3 Unauthorized Chargebacks Constitute Fraud. As established in Section 10.2 of our Terms of Service, an unauthorized chargeback constitutes material breach, fraud under Maryland law, theft of services, and may constitute wire fraud under 18 U.S.C. § 1343.
 
-8.4 We Contest Every Illegitimate Chargeback. Per Section 9.3 of our Terms of Service, we submit a comprehensive representment package to the card network including these Terms, your acceptance record, timestamped before-and-after photographs, GPS service data, complete communication logs, the completed checklist, payment records, and device and IP logs. A signed on-site completion confirmation, where obtained, is included.
+8.4 We Contest Every Illegitimate Chargeback. Per Section 10.3 of our Terms of Service, we submit a comprehensive representment package to the card network including these Terms, your acceptance record, timestamped before-and-after photographs, GPS service data, complete communication logs, the completed checklist, payment records, and device and IP logs. A signed on-site completion confirmation, where obtained, is included.
 
-8.5 Financial Liability for Fraudulent Chargebacks. Per Section 9.4 of our Terms of Service, an unauthorized chargeback makes you immediately liable for: 100% of the original service amount; a $150 administrative fee per dispute; all processor chargeback fees; all attorneys' fees and litigation costs; all collection costs (typically 25–40% of the debt); interest at the maximum lawful rate; and treble damages where permitted under Maryland consumer protection law.
+8.5 Financial Liability for Fraudulent Chargebacks. Per Section 10.4 of our Terms of Service, an unauthorized chargeback makes you immediately liable for: 100% of the original service amount; a $150 administrative fee per dispute; all processor chargeback fees; all attorneys' fees and litigation costs; all collection costs (typically 25–40% of the debt); interest at the maximum lawful rate; and treble damages where permitted under Maryland consumer protection law.
 
-8.6 Criminal and Civil Referral. Per Section 9.5 of our Terms of Service, fraudulent chargebacks are reported to law enforcement, may be investigated as theft by deception under Maryland law and as federal wire fraud, and result in permanent ban and reporting to credit bureaus and fraud databases.
+8.6 Criminal and Civil Referral. Per Section 10.5 of our Terms of Service, fraudulent chargebacks are reported to law enforcement, may be investigated as theft by deception under Maryland law and as federal wire fraud, and result in permanent ban and reporting to credit bureaus and fraud databases.
 
-8.7 No Refund During Active Chargeback. Once a chargeback is filed, all voluntary refund and credit options are immediately and permanently withdrawn for that transaction. The matter proceeds exclusively through the card network representment process and, where applicable, the remedies in Section 9 of our Terms of Service. We will not negotiate a separate refund while a chargeback is pending or after one has been filed.
+8.7 No Refund During Active Chargeback. Once a chargeback is filed, all voluntary refund and credit options are immediately and permanently withdrawn for that transaction. The matter proceeds exclusively through the card network representment process and, where applicable, the remedies in Section 10 of our Terms of Service. We will not negotiate a separate refund while a chargeback is pending or after one has been filed.
 
 ## 9. FRAUDULENT AND BAD-FAITH REFUND CLAIMS
 
-9.1 Submitting false documentation, manufactured or misattributed photographs, fabricated complaints, staged conditions, or knowingly false statements in pursuit of a refund constitutes fraud under Section 8.1 of our Terms of Service.
+9.1 Submitting false documentation, manufactured or misattributed photographs, fabricated complaints, staged conditions, or knowingly false statements in pursuit of a refund constitutes fraud under Section 9.1 of our Terms of Service.
 
-9.2 We maintain comprehensive evidence for every job under Section 12 of our Terms of Service for a minimum of four (4) years. Claims are verified against this evidence.
+9.2 We maintain comprehensive evidence for every job under Section 13 of our Terms of Service for a minimum of four (4) years. Claims are verified against this evidence.
 
-9.3 Customers found to have submitted fraudulent or bad-faith refund claims are subject to the consequences in Section 8.5 of our Terms of Service: immediate termination, forfeiture of all payments, permanent ban, civil litigation including treble damages where permitted, and referral to law enforcement.
+9.3 Customers found to have submitted fraudulent or bad-faith refund claims are subject to the consequences in Section 9.5 of our Terms of Service: immediate termination, forfeiture of all payments, permanent ban, civil litigation including treble damages where permitted, and referral to law enforcement.
 
 ## 10. MEMBERSHIP AND RECURRING SERVICE REFUNDS
 
@@ -170,19 +170,19 @@ Personal dissatisfaction absent documented service failure, verified against our
 
 ## 12. REFUND REVERSAL
 
-12.1 If any refund or credit is issued in reliance on information later determined to be false, incomplete, or fraudulent, NovaraCleaning reserves the right to reverse the refund, re-charge the original payment method, and pursue the amount plus interest, recovery costs, and the remedies in Section 9 of our Terms of Service.
+12.1 If any refund or credit is issued in reliance on information later determined to be false, incomplete, or fraudulent, NovaraCleaning reserves the right to reverse the refund, re-charge the original payment method, and pursue the amount plus interest, recovery costs, and the remedies in Section 10 of our Terms of Service.
 
 ## 13. GOVERNING TERMS, ARBITRATION, AND GOVERNING LAW
 
-13.1 This Refund Policy is governed by and construed under the laws of the State of Maryland, consistent with Section 13.7 of our Terms of Service.
+13.1 This Refund Policy is governed by and construed under the laws of the State of Maryland, consistent with Section 14.7 of our Terms of Service.
 
-13.2 Any dispute arising from this Refund Policy is subject to the binding arbitration and class action waiver provisions in Section 13 of our Terms of Service, including our right to seek immediate injunctive relief in court to enforce Sections 8 and 9 of our Terms of Service.
+13.2 Any dispute arising from this Refund Policy is subject to the binding arbitration and class action waiver provisions in Section 14 of our Terms of Service, including our right to seek immediate injunctive relief in court to enforce Sections 9 and 10 of our Terms of Service.
 
 13.3 This Policy supplements our Terms of Service. To the extent of any conflict, the Terms of Service control.
 
 ## 14. MODIFICATIONS
 
-14.1 NovaraCleaning reserves the right to modify this Refund Policy at any time. Material changes will be posted with notice as provided in Section 14.2 of our Terms of Service. The Policy in effect at the time of your booking applies to that booking. Continued use of our services constitutes acceptance.
+14.1 NovaraCleaning reserves the right to modify this Refund Policy at any time. Material changes will be posted with notice as provided in Section 15.2 of our Terms of Service. The Policy in effect at the time of your booking applies to that booking. Continued use of our services constitutes acceptance.
 
 ## 15. CONTACT
 
@@ -204,7 +204,7 @@ You agree to report any concern in writing within 24 hours with itemized detail 
 
 You understand subjective dissatisfaction is not grounds for a refund
 
-You understand that unauthorized chargebacks constitute fraud and are governed by Section 9 of our Terms of Service, with the financial, civil, and criminal consequences stated therein
+You understand that unauthorized chargebacks constitute fraud and are governed by Section 10 of our Terms of Service, with the financial, civil, and criminal consequences stated therein
 
 You agree that this Policy is strict, exhaustive, and enforced without exception
 `;

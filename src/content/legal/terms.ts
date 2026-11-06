@@ -2,7 +2,7 @@
 // Nov 6, 2026. Edit the wording here; the page renders it as-is.
 
 const text = `
-IMPORTANT LEGAL NOTICE: These Terms of Service contain binding arbitration, class action waiver, and strict anti-fraud provisions. By using our services, booking appointments, or making payments, you agree to be legally bound by all terms herein. Fraudulent activity, including unauthorized chargebacks, false claims, or payment disputes made in bad faith, will result in immediate legal action, criminal referrals, and collection proceedings as detailed in Sections 8, 9, and 12.
+IMPORTANT LEGAL NOTICE: These Terms of Service contain binding arbitration, class action waiver, and strict anti-fraud provisions. By using our services, booking appointments, or making payments, you agree to be legally bound by all terms herein. Fraudulent activity, including unauthorized chargebacks, false claims, or payment disputes made in bad faith, will result in immediate legal action, criminal referrals, and collection proceedings as detailed in Sections 9, 10, and 13.
 
 ## 1. AGREEMENT TO TERMS
 
@@ -250,7 +250,7 @@ Allow us 72 hours to investigate and respond
 
 Permit us the opportunity to correct any legitimate issues through re-service
 
-10.2 UNAUTHORIZED CHARGEBACK CONSTITUTES FRAUD. Initiating a chargeback, payment dispute, or reversal request WITHOUT first completing the dispute resolution process in Section 9.1 constitutes:
+10.2 UNAUTHORIZED CHARGEBACK CONSTITUTES FRAUD. Initiating a chargeback, payment dispute, or reversal request WITHOUT first completing the dispute resolution process in Section 10.1 constitutes:
 
 Material breach of these Terms of Service
 
@@ -392,7 +392,7 @@ IP address logs and device information
 
 14.5 CLASS ACTION WAIVER. YOU AGREE THAT ANY DISPUTE RESOLUTION PROCEEDINGS SHALL BE CONDUCTED ONLY ON AN INDIVIDUAL BASIS AND NOT IN A CLASS, CONSOLIDATED, OR REPRESENTATIVE ACTION. YOU WAIVE ANY RIGHT TO PARTICIPATE IN A CLASS ACTION LAWSUIT OR CLASS-WIDE ARBITRATION.
 
-14.6 EXCEPTION FOR EQUITABLE RELIEF. Notwithstanding the arbitration requirement, Novara Cleaning may seek immediate injunctive or equitable relief in any court of competent jurisdiction to enforce Sections 8 (Prohibited Conduct) and 9 (Chargeback Fraud) without posting bond.
+14.6 EXCEPTION FOR EQUITABLE RELIEF. Notwithstanding the arbitration requirement, Novara Cleaning may seek immediate injunctive or equitable relief in any court of competent jurisdiction to enforce Sections 9 (Prohibited Conduct) and 10 (Chargeback Fraud) without posting bond.
 
 14.7 GOVERNING LAW. These Terms shall be governed by and construed in accordance with the laws of the State of Maryland, without regard to its conflict of laws principles.
 
