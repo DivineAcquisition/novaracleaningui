@@ -21,6 +21,11 @@ import {
   RiAlertLine,
   RiTimeLine,
   RiLineChartLine,
+  RiAlarmWarningLine,
+  RiArrowRightLine,
+  RiFileEditLine,
+  RiRefreshLine,
+  RiToolsLine,
 } from "@/components/icons";
 import { supabase } from "@/integrations/supabase/client";
 import { Bar, BarChart, XAxis, YAxis } from "recharts";
@@ -288,11 +293,27 @@ export default function AdminDashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-jakarta text-2xl font-bold text-slate-900 tracking-tight">Today at a glance</h1>
-        <p className="text-sm text-slate-500">
-          Eastern Time · live operations metrics, not a P&amp;L.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[#5A1FD6]">{todayLabel()}</p>
+          <h1 className="mt-1 text-[1.75rem] font-semibold tracking-[-0.03em] text-foreground">Today at a glance</h1>
+          <p className="text-sm text-muted-foreground">Eastern Time · live operations metrics, not a P&amp;L.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <QuickLink href="/admin/csr" icon={RiFileEditLine} label="New internal booking" primary />
+          <QuickLink href="/admin/bookings" icon={RiCalendarCheckLine} label="Bookings" />
+          <QuickLink href="/admin/operations" icon={RiAlarmWarningLine} label="Operations" />
+          <QuickLink href="/admin/cleaners" icon={RiToolsLine} label="Cleaners" />
+          <button
+            type="button"
+            onClick={() => void load()}
+            disabled={loading}
+            aria-label="Refresh dashboard"
+            className="grid h-9 w-9 place-items-center rounded-[9px] border border-[#e1dfe8] bg-white text-muted-foreground transition hover:text-foreground disabled:opacity-50"
+          >
+            <RiRefreshLine className={cn("h-4 w-4", loading && "animate-spin")} />
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
@@ -341,6 +362,32 @@ export default function AdminDashboard() {
           }
         />
       </div>
+
+      {stats ? <TodayProgress stats={stats} /> : null}
+
+      {stats && (stats.openDispatchAlerts > 0 || stats.pendingOffers > 0) ? (
+        <Link
+          href={stats.openDispatchAlerts > 0 ? "/admin/operations?tab=attention" : "/admin/operations?tab=dispatch"}
+          className="group flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50/70 px-4 py-3 transition hover:border-amber-300"
+        >
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-700">
+            <RiAlarmWarningLine className="h-5 w-5" />
+          </span>
+          <span className="min-w-0 flex-1 text-sm text-amber-900">
+            <span className="font-semibold">Needs attention: </span>
+            {[
+              stats.openDispatchAlerts > 0 ? `${stats.openDispatchAlerts} unresolved dispatch alert${stats.openDispatchAlerts === 1 ? "" : "s"}` : null,
+              stats.pendingOffers > 0 ? `${stats.pendingOffers} offer${stats.pendingOffers === 1 ? "" : "s"} waiting on a cleaner` : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </span>
+          <span className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-amber-800">
+            Open Operations
+            <RiArrowRightLine className="h-4 w-4 transition group-hover:translate-x-0.5" />
+          </span>
+        </Link>
+      ) : null}
 
       {isAdmin ? (
         <Card className="border-violet-200 bg-violet-50/40">
@@ -487,10 +534,15 @@ export default function AdminDashboard() {
 function UpcomingItem({ job, today }: { job: JobRow; today?: boolean }) {
   return (
     <li className="flex items-center gap-3 py-2.5">
-      <div className="w-16 shrink-0">
-        <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+      <div className="w-20 shrink-0">
+        <span
+          className={cn(
+            "inline-flex rounded-md px-2 py-1 text-[11px] font-semibold uppercase tracking-wide",
+            today ? "bg-[#F3EEFF] text-[#5A1FD6]" : "bg-[#F6F5F9] text-[#5F5B6B]",
+          )}
+        >
           {today ? "Today" : shortDate(job.service_date)}
-        </p>
+        </span>
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-sm text-slate-900 truncate">
@@ -523,41 +575,83 @@ function KpiTile({
   tone: "emerald" | "amber" | "slate";
 }) {
   const toneStyles = {
-    emerald: "bg-brand-50 text-primary",
+    emerald: "bg-[#F3EEFF] text-[#6810FE]",
     amber: "bg-amber-50 text-amber-700",
-    slate: "bg-muted text-muted-foreground",
+    slate: "bg-[#F3F2F7] text-[#5F5B6B]",
   }[tone];
   return (
     <Card className="panel panel-hover">
       <CardContent className="p-4 sm:p-5">
-        <div className="flex items-center gap-3">
-          <span className={cn("w-10 h-10 rounded-lg flex items-center justify-center", toneStyles)}>
-            <Icon className="w-5 h-5" />
+        <div className="flex items-start justify-between gap-3">
+          <p className="text-[12px] font-medium text-muted-foreground">{label}</p>
+          <span className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-xl", toneStyles)}>
+            <Icon className="h-[18px] w-[18px]" />
           </span>
-          <div className="min-w-0">
-            <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground font-semibold">
-              {label}
-            </p>
-            {loading ? (
-              <Skeleton className="h-7 w-16 mt-1" />
-            ) : (
-              <p className="text-xl font-heading font-bold text-foreground truncate">
-                {value ?? "0"}
-              </p>
-            )}
-          </div>
         </div>
-        {footer && (
-          <p className="text-[11px] text-muted-foreground mt-3 truncate">{footer}</p>
+        {loading ? (
+          <Skeleton className="mt-1 h-8 w-20" />
+        ) : (
+          <p className="mt-1 truncate text-[1.75rem] font-semibold leading-none tracking-[-0.03em] tabular-nums text-foreground">{value ?? "0"}</p>
         )}
+        {footer && <p className="mt-3 truncate border-t border-[#f0eef4] pt-2.5 text-[11.5px] text-muted-foreground">{footer}</p>}
       </CardContent>
     </Card>
   );
 }
 
+function QuickLink({ href, icon: Icon, label, primary = false }: { href: string; icon: typeof RiCalendarCheckLine; label: string; primary?: boolean }) {
+  return (
+    <Link
+      href={href}
+      className={cn(
+        "inline-flex h-9 items-center gap-1.5 rounded-[9px] px-3 text-[13px] font-medium transition",
+        primary
+          ? "bg-gradient-to-b from-[#7A2BFF] to-[#5A0BE6] text-white shadow-[0_8px_18px_-10px_rgba(104,16,254,0.75)] hover:brightness-110"
+          : "border border-[#e1dfe8] bg-white text-foreground hover:bg-[#F6F5F9]",
+      )}
+    >
+      <Icon className="h-4 w-4" />
+      {label}
+    </Link>
+  );
+}
+
+/** Today's jobs as a progress bar: done, still on, and the share complete. */
+function TodayProgress({ stats }: { stats: TodayStats }) {
+  const total = stats.bookingsToday;
+  const pct = total > 0 ? Math.round((stats.completedToday / total) * 100) : 0;
+  return (
+    <div className="rounded-2xl border border-[#e9e7ee] bg-white px-4 py-3.5 shadow-[0_1px_2px_rgba(11,10,17,0.04)] sm:px-5">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+        <p className="font-medium text-foreground">
+          Today’s jobs{" "}
+          <span className="text-muted-foreground">
+            · {stats.completedToday} of {total} done · {stats.stillOnToday} still on
+          </span>
+        </p>
+        <p className="tabular-nums text-[13px] font-semibold text-[#5A1FD6]">{total > 0 ? `${pct}%` : "No jobs today"}</p>
+      </div>
+      <div
+        className="mt-2.5 h-2 overflow-hidden rounded-full bg-[#F0EEF4]"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={total}
+        aria-valuenow={stats.completedToday}
+        aria-label="Today's jobs completed"
+      >
+        <div className="h-full rounded-full bg-gradient-to-r from-[#7A2BFF] to-[#5A0BE6] transition-[width] duration-700" style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function todayLabel(): string {
+  return new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: "America/New_York" });
+}
+
 const trendConfig = {
-  bookings: { label: "Jobs", color: "#5C0FFE" },
-  revenue: { label: "Revenue ($)", color: "#C4B5FD" },
+  bookings: { label: "Jobs", color: "#6810FE" },
+  revenue: { label: "Revenue ($)", color: "#C9B6FF" },
 } satisfies ChartConfig;
 
 function TrendStrip({ rows }: { rows: DailyRow[] }) {

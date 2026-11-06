@@ -835,3 +835,110 @@
 .book-theme .btn-trail::after {
   display: none;
 }
+
+/* ─── Admin workspace theme ──────────────────────────────────────────────
+   Scoped to .admin-theme (the /admin shell). Same palette and type as the
+   public site and booking flow: Inter, ink text, quiet borders, Novara
+   purple #6810FE for actions. Light mode only; dark mode keeps its tokens.
+   Restyles shared components (cards, tables, tabs, inputs) in place, so
+   page layouts, links and routes are unchanged. */
+html:not(.dark) .admin-theme {
+  color-scheme: light;
+  --background: 240 20% 98%;
+  --foreground: 250 26% 5%;
+  --card: 0 0% 100%;
+  --card-foreground: 250 26% 5%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 250 26% 5%;
+  --primary: 263 99% 53%;
+  --primary-foreground: 0 0% 100%;
+  --primary-hover: 263 92% 47%;
+  --primary-glow: 262 100% 68%;
+  --secondary: 252 20% 96%;
+  --secondary-foreground: 250 26% 5%;
+  --muted: 252 20% 96%;
+  --muted-foreground: 254 8% 39%;
+  --accent: 262 100% 96%;
+  --accent-foreground: 263 90% 42%;
+  --border: 255 14% 91%;
+  --input: 255 14% 88%;
+  --ring: 263 99% 53%;
+  --focus-ring: 263 99% 53%;
+  --focus-ring-offset: 0 0% 100%;
+  --radius: 0.75rem;
+  --hairline: #e9e7ee;
+  --gradient-primary: linear-gradient(180deg, #7a2bff, #5a0be6);
+  --gradient-lavender: linear-gradient(180deg, #f7f4ff, #f3eeff);
+  --shadow-sm: 0 1px 2px 0 rgba(11, 10, 17, 0.04);
+  --shadow-md: 0 8px 24px -18px rgba(11, 10, 17, 0.28);
+  --shadow-lg: 0 16px 40px -28px rgba(11, 10, 17, 0.32);
+  --shadow-card: 0 1px 2px rgba(11, 10, 17, 0.04), 0 12px 32px -28px rgba(11, 10, 17, 0.35);
+  --shadow-lavender: 0 10px 24px -12px rgba(104, 16, 254, 0.5);
+}
+html:not(.dark) .admin-theme :is(h1, h2, h3, h4, h5, h6),
+html:not(.dark) .admin-theme .font-heading,
+html:not(.dark) .admin-theme .font-jakarta {
+  font-family: var(--font-inter), Inter, system-ui, sans-serif;
+  letter-spacing: -0.02em;
+}
+html:not(.dark) .admin-theme .hairline-glow::before { display: none; }
+
+/* Cards and raised surfaces */
+html:not(.dark) .admin-theme .panel {
+  background: #ffffff;
+  border: 1px solid #e9e7ee;
+  box-shadow: var(--shadow-card);
+}
+html:not(.dark) .admin-theme .panel-hover:hover {
+  border-color: #dcd3f7;
+  box-shadow: 0 1px 2px rgba(11, 10, 17, 0.04), 0 16px 40px -28px rgba(104, 16, 254, 0.35);
+}
+html:not(.dark) .admin-theme .surface-raised {
+  border-color: #e9e7ee;
+  box-shadow: var(--shadow-lg);
+}
+html:not(.dark) .admin-theme .surface-sunken {
+  background: #f6f5f9;
+  border-color: #ecebf1;
+}
+
+/* Tables: quiet uppercase headers, roomy rows, purple hover */
+html:not(.dark) .admin-theme table thead th {
+  height: 2.5rem;
+  background: #fafafc;
+  color: #5f5b6b;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+html:not(.dark) .admin-theme table thead tr { border-color: #e9e7ee; }
+html:not(.dark) .admin-theme table tbody tr { border-color: #f0eef4; }
+html:not(.dark) .admin-theme table tbody tr:hover { background: #faf8ff; }
+html:not(.dark) .admin-theme table td { font-variant-numeric: tabular-nums; }
+
+/* Tabs: segmented control */
+html:not(.dark) .admin-theme [role="tablist"] {
+  background: #f3f2f7;
+  border: 1px solid #ecebf1;
+  border-radius: 0.75rem;
+}
+html:not(.dark) .admin-theme [role="tab"][data-state="active"] {
+  background: #ffffff;
+  color: #0b0a11;
+  box-shadow: 0 1px 2px rgba(11, 10, 17, 0.08), 0 0 0 1px rgba(11, 10, 17, 0.04);
+}
+
+/* Inputs: white, hairline border, purple focus ring */
+html:not(.dark) .admin-theme :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), textarea, select, button[role="combobox"]) {
+  background-color: #ffffff;
+  border-color: #e1dfe8;
+}
+html:not(.dark) .admin-theme :is(input, textarea, select, button[role="combobox"]):focus-visible {
+  border-color: rgba(104, 16, 254, 0.5);
+  box-shadow: 0 0 0 3px rgba(104, 16, 254, 0.14);
+  outline: none;
+}
+html:not(.dark) .admin-theme .btn-coss { font-weight: 500; border-radius: 9px; }
+html:not(.dark) .admin-theme .btn-trail::after { display: none; }

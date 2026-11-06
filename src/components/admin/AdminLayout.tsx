@@ -52,9 +52,7 @@ import { ReactNode, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
-import { BrandAtmosphere } from "@/components/brand/atmosphere";
 import { Button } from "@/components/ui/button";
-import { BRAND } from "@/lib/brand";
 import { supabase } from "@/integrations/supabase/client";
 import { AdminCommandMenu } from "@/components/admin/AdminCommandMenu";
 import { cn } from "@/lib/utils";
@@ -63,7 +61,6 @@ import { OpsAssistantProvider, useOpsAssistant } from "@/components/ops-assistan
 import { OpsAssistantPanel, OpsAssistantToggle } from "@/components/ops-assistant/OpsAssistantPanel";
 
 // Brand ramp — Novara purple as a precise accent on a clean Coss-style shell.
-const RAMP = BRAND.gradient;
 
 interface NavItem {
   title: string;
@@ -253,10 +250,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
   return (
     <OpsAssistantProvider surface="workspace">
-    <div className="relative min-h-screen flex w-full bg-background text-foreground font-sans">
-      <BrandAtmosphere />
+    <div className="admin-theme relative min-h-screen flex w-full bg-background text-foreground font-sans antialiased">
       {/* ─── Desktop sidebar ─────────────────────────────────────────── */}
-      <aside className="relative z-10 hidden lg:flex w-64 flex-col border-r border-[color:var(--hairline)] bg-card/70 backdrop-blur-xl shrink-0">
+      <aside className="sticky top-0 z-10 hidden h-screen lg:flex w-64 flex-col border-r border-[color:var(--hairline)] bg-card shrink-0">
         <SidebarBrand />
         <SidebarNav pathname={pathname} items={navItems} />
         <SidebarFooter user={user} onSignOut={handleSignOut} />
@@ -271,7 +267,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       )}
       <aside
         className={cn(
-          "lg:hidden fixed inset-y-0 left-0 z-50 w-72 flex-col bg-card/95 backdrop-blur-xl border-r border-[color:var(--hairline)] transition-transform",
+          "lg:hidden fixed inset-y-0 left-0 z-50 w-72 flex-col bg-card border-r border-[color:var(--hairline)] shadow-[0_24px_60px_-20px_rgba(11,10,17,0.35)] transition-transform",
           mobileOpen ? "translate-x-0 flex" : "-translate-x-full flex",
         )}
       >
@@ -326,41 +322,38 @@ function AdminMain({
         open && "lg:mr-[420px]",
       )}
     >
-      <header className="h-14 flex items-center gap-3 px-4 sm:px-6 border-b border-[color:var(--hairline)] bg-background/80 backdrop-blur-xl sticky top-0 z-30 hairline-glow">
+      <header className="h-14 flex items-center gap-3 px-4 sm:px-6 border-b border-[color:var(--hairline)] bg-card/90 backdrop-blur-md sticky top-0 z-30">
         <Button
           variant="ghost"
           size="sm"
           className="lg:hidden text-foreground"
           onClick={onOpenMobile}
+          aria-label="Open navigation"
         >
           <RiMenuLine className="w-5 h-5" />
         </Button>
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center gap-2.5 min-w-0">
           {active ? (
             <>
-              <span className="w-7 h-7 rounded-lg text-primary inline-flex items-center justify-center shrink-0 bg-brand-50">
+              <span className="hidden sm:inline text-[13px] text-muted-foreground">Workspace</span>
+              <span className="hidden sm:inline text-[13px] text-muted-foreground/50">/</span>
+              <span className="w-7 h-7 rounded-lg text-[#6810FE] inline-flex items-center justify-center shrink-0 bg-[#F3EEFF]">
                 <active.icon className="w-4 h-4" />
               </span>
-              <h1 className="font-heading text-sm font-semibold text-foreground truncate tracking-tight">
-                {active.title}
-              </h1>
-              <span className="hidden sm:inline text-xs text-muted-foreground truncate">
-                · {active.description}
-              </span>
+              <h1 className="text-[14px] font-semibold text-foreground truncate tracking-tight">{active.title}</h1>
+              <span className="hidden md:inline text-[12.5px] text-muted-foreground truncate">{active.description}</span>
             </>
           ) : (
-            <h1 className="font-heading text-sm font-semibold text-foreground">Admin</h1>
+            <h1 className="text-[14px] font-semibold text-foreground">Workspace</h1>
           )}
         </div>
-        <div className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
+        <div className="ml-auto flex items-center gap-2.5 text-xs text-muted-foreground">
           <AdminCommandMenu pages={pages} />
           <OpsAssistantToggle />
-          <span className="hidden md:inline truncate max-w-[200px] font-mono tabular-nums">
-            {user?.email}
-          </span>
+          <UserBadge email={user?.email} />
         </div>
       </header>
-      <div className="flex-1 overflow-auto p-4 sm:p-6">{children}</div>
+      <div className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">{children}</div>
     </main>
   );
 }
@@ -369,73 +362,61 @@ function AdminMain({
 
 function SidebarBrand({ compact = false }: { compact?: boolean }) {
   return (
-    <div
-      className={cn(
-        "relative flex items-center gap-2 overflow-hidden px-5 py-5 border-b border-[color:var(--hairline)]",
-        compact && "border-0 py-0",
-      )}
-    >
-      {!compact && (
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0"
-          style={{ background: "radial-gradient(120% 100% at 0% 0%, rgba(92,15,254,0.08), transparent 70%)" }}
-        />
-      )}
-      <img src="/novara-email-logo.png" alt="Novara" className="relative h-[22px] w-auto" />
-      <span className="relative rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-primary bg-brand-50">
+    <div className={cn("flex items-center gap-2 px-4 h-16 border-b border-[color:var(--hairline)]", compact && "h-auto border-0 px-0")}>
+      <img src="/novara-logo.png" alt="" className="h-8 w-8 rounded-[9px]" />
+      <span className="whitespace-nowrap text-[14.5px] font-semibold tracking-[-0.02em] text-foreground">Novara Cleaning</span>
+      <span className="rounded-md bg-[#F3EEFF] px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-[0.12em] text-[#5A1FD6]">
         Admin
       </span>
     </div>
   );
 }
 
+function UserBadge({ email }: { email?: string | null }) {
+  const initials = (email || "?").split("@")[0].split(/[._-]/).map((p) => p[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
+  return (
+    <span className="flex items-center gap-2" title={email || undefined}>
+      <span className="hidden md:inline truncate max-w-[200px] text-[12.5px] text-muted-foreground">{email}</span>
+      <span className="grid h-8 w-8 place-items-center rounded-full bg-gradient-to-b from-[#7A2BFF] to-[#5A0BE6] text-[11px] font-semibold text-white">
+        {initials || "?"}
+      </span>
+    </span>
+  );
+}
+
 function SidebarNav({ pathname, items }: { pathname: string | null; items: NavItem[] }) {
   return (
-    <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
-      <p className="px-3 pb-2 text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-semibold">
-        Workspace
-      </p>
+    <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5" aria-label="Workspace">
+      <p className="px-3 pb-2 text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground font-semibold">Workspace</p>
       {items.map((item) => {
         const isActive = isNavActive(pathname, item.url);
         return (
           <Link
             key={item.url}
             href={item.url}
+            aria-current={isActive ? "page" : undefined}
+            title={item.description}
             className={cn(
-              "group relative flex items-center gap-3 px-3 py-2 rounded-xl transition-all duration-150 text-sm",
-              isActive
-                ? "bg-brand-50 text-primary font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] ring-1 ring-primary/10"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/70",
+              "group relative flex items-center gap-3 rounded-[10px] px-2.5 py-2 text-[13.5px] transition-colors duration-150",
+              isActive ? "bg-[#F3EEFF] text-[#0B0A11] font-semibold" : "text-muted-foreground hover:bg-[#F6F5F9] hover:text-foreground",
             )}
           >
-            {isActive && (
-              <span aria-hidden className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-full" style={{ background: RAMP }} />
-            )}
             <span
               className={cn(
-                "w-8 h-8 rounded-md flex items-center justify-center transition-all",
+                "grid h-8 w-8 shrink-0 place-items-center rounded-lg transition-colors",
                 isActive
-                  ? "text-white shadow-[0_2px_6px_-1px_rgba(92,15,254,0.5)]"
-                  : "bg-muted text-muted-foreground group-hover:bg-brand-50 group-hover:text-primary",
+                  ? "bg-gradient-to-b from-[#7A2BFF] to-[#5A0BE6] text-white shadow-[0_6px_14px_-6px_rgba(104,16,254,0.7)]"
+                  : "bg-[#F3F2F7] text-[#5F5B6B] group-hover:bg-[#F3EEFF] group-hover:text-[#6810FE]",
               )}
-              style={isActive ? { background: RAMP } : undefined}
             >
-              <item.icon className="w-4 h-4" />
+              <item.icon className="w-[17px] h-[17px]" />
             </span>
-            <div className="flex-1 min-w-0">
-              <p className="leading-tight tracking-tight">{item.title}</p>
-              <p
-                className={cn(
-                  "text-[11px] leading-tight truncate",
-                  isActive
-                    ? "text-primary/70"
-                    : "text-muted-foreground/80 group-hover:text-muted-foreground",
-                )}
-              >
+            <span className="min-w-0 flex-1">
+              <span className="block leading-tight tracking-tight">{item.title}</span>
+              <span className={cn("block truncate text-[11px] leading-tight", isActive ? "text-[#5A1FD6]/80 font-normal" : "text-muted-foreground/80")}>
                 {item.description}
-              </p>
-            </div>
+              </span>
+            </span>
           </Link>
         );
       })}
@@ -452,8 +433,8 @@ function SidebarFooter({
 }) {
   return (
     <div className="border-t border-[color:var(--hairline)] p-3 space-y-2">
-      <div className="px-3 py-2 rounded-lg surface-sunken">
-        <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-bold">
+      <div className="px-3 py-2 rounded-lg surface-sunken border">
+        <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground font-semibold">
           Signed in
         </p>
         <p className="text-sm text-foreground font-medium truncate">
