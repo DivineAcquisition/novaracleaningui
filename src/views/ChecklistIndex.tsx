@@ -1,128 +1,173 @@
-// Public checklist index (/checklist). Server component in the landing style.
+"use client";
 
 import Link from "next/link";
-import { RiArrowRightLine, RiArrowRightUpLine, RiCheckLine } from "@/components/icons";
-import { MarketingShell, PageHero } from "@/components/landing/MarketingShell";
-import { Chip, Frame, Index, Section } from "@/components/landing/primitives";
+import {
+  RiArrowRightLine,
+  RiCheckLine,
+} from "@/components/icons";
+import { SEO } from "@/components/SEO";
+import {
+  ChecklistShell,
+  countItems,
+  roomIcon,
+} from "@/components/checklists/ChecklistPages";
 import {
   CHECKLISTS,
   COMMERCIAL_CHECKLIST_SLUGS,
   RESIDENTIAL_CHECKLIST_SLUGS,
-  type Checklist,
   type ChecklistSlug,
 } from "@/lib/checklists";
-import { cn } from "@/lib/utils";
-
-function countItems(c: Checklist) {
-  return c.sections.reduce((n, s) => n + s.items.length, 0);
-}
-
-function sentence(tagline: string) {
-  return tagline.replace(/\s+—\s+/g, ". ").replace(/•/g, "·").replace(/(^|\.\s+)([a-z])/g, (_m, pre: string, c: string) => pre + c.toUpperCase());
-}
-
-function Preview() {
-  const c = CHECKLISTS["standard-clean"];
-  const kitchen = c.sections[0];
-  return (
-    <Frame glow label="From the Standard checklist">
-      <div className="flex items-center justify-between">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#5A1FD6]">Standard clean · {kitchen.title}</p>
-        <Chip tone="good">{countItems(c)} tasks</Chip>
-      </div>
-      <ul className="mt-4 divide-y divide-line rounded-xl border border-line">
-        {kitchen.items.slice(0, 6).map((item) => (
-          <li key={item} className="flex gap-3 px-4 py-2.5 text-[14px] text-ink">
-            <RiCheckLine className="mt-0.5 h-4 w-4 flex-shrink-0 text-[#6810FE]" aria-hidden="true" />
-            {item}
-          </li>
-        ))}
-      </ul>
-      <Link href="/checklist/standard-clean" className="mt-4 inline-flex items-center gap-1.5 text-[14px] font-medium text-[#5A1FD6] hover:underline">
-        Open the full list
-        <RiArrowRightLine className="h-4 w-4" aria-hidden="true" />
-      </Link>
-    </Frame>
-  );
-}
-
-function Family({ id, headline, lead, slugs, start }: { id: string; headline: string; lead: string; slugs: ChecklistSlug[]; start: number }) {
-  return (
-    <Section id={id} headline={headline} lead={lead}>
-      <ul className="grid gap-4 md:grid-cols-2">
-        {slugs.map((slug, i) => {
-          const c = CHECKLISTS[slug];
-          const first = i === 0;
-          return (
-            <li key={slug}>
-              <Link
-                href={`/checklist/${slug}`}
-                className={cn(
-                  "group flex h-full flex-col rounded-2xl border bg-white p-5 transition hover:border-[#C9B6FF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6810FE]",
-                  first ? "border-[#E3D7FF] shadow-[0_0_60px_-28px_rgba(104,16,254,0.6)]" : "border-line shadow-[0_16px_40px_-32px_rgba(11,10,17,0.35)]",
-                )}
-              >
-                <div className="flex items-center justify-between">
-                  <Index n={start + i} />
-                  <Chip tone={first ? "good" : "neutral"}>{countItems(c)} tasks</Chip>
-                </div>
-                <p className="mt-2 flex items-center justify-between gap-2 text-[21px] font-medium tracking-[-0.02em] text-ink">
-                  {c.name}
-                  <RiArrowRightUpLine className="h-5 w-5 text-ink-muted transition group-hover:text-[#6810FE]" aria-hidden="true" />
-                </p>
-                <p className="mt-1 text-[14.5px] leading-relaxed text-ink-muted">{sentence(c.tagline)}.</p>
-                <dl className="mt-4 grid grid-cols-3 gap-2">
-                  {[
-                    { label: "Time", value: c.meta.estimatedTime.split(" for ")[0] },
-                    { label: "Areas", value: String(c.sections.length) },
-                    { label: "Frequency", value: c.meta.frequency.split(",")[0] },
-                  ].map((f) => (
-                    <div key={f.label} className="rounded-lg border border-line bg-[#FAFAFC] px-2.5 py-2">
-                      <dt className="text-[11px] text-ink-muted">{f.label}</dt>
-                      <dd className="mt-0.5 truncate text-[12.5px] text-ink">{f.value}</dd>
-                    </div>
-                  ))}
-                </dl>
-                <ul className="mt-4 flex-1 space-y-1.5 border-t border-line pt-4">
-                  {c.sections[0]?.items.slice(0, 3).map((item) => (
-                    <li key={item} className="flex gap-2 text-[13.5px] text-ink-muted">
-                      <RiCheckLine className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-[#6810FE]" aria-hidden="true" />
-                      <span className="line-clamp-1">{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
-    </Section>
-  );
-}
 
 export default function ChecklistIndex() {
   return (
-    <MarketingShell>
-      <PageHero
-        eyebrow="Checklists"
-        title="The list is the promise."
-        lead="Every service has a written checklist. It is what your cleaner works from, and it is what you can hold us to. Open one to see every task."
-        aside={<Preview />}
+    <ChecklistShell>
+      <SEO
+        title="Cleaning Checklists"
+        description="See exactly what's included in every Novara Cleaning service — home Standard, Deep, Move In/Out, and Recurring, plus commercial Light, Standard, Detailed, and office."
+        canonical="https://novaracleaning.com/checklist"
       />
-      <Family
-        id="homes"
-        headline="Homes"
-        lead="Standard, Deep, Move-in/out, and Recurring. Each one adds to the list before it."
-        slugs={RESIDENTIAL_CHECKLIST_SLUGS}
-        start={1}
-      />
-      <Family
-        id="commercial"
-        headline="Commercial and offices"
-        lead="Light, Standard, and Detailed build on each other. Office adds desk and lock-up rules for after-hours work."
-        slugs={COMMERCIAL_CHECKLIST_SLUGS}
-        start={RESIDENTIAL_CHECKLIST_SLUGS.length + 1}
-      />
-    </MarketingShell>
+
+      <section className="relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-b from-primary/[0.08] via-background to-background" />
+        <div className="absolute left-1/2 top-0 h-[420px] w-[820px] -translate-x-1/2 rounded-full bg-primary/[0.07] blur-3xl" />
+        <div className="relative container mx-auto grid max-w-6xl items-end gap-10 px-4 pb-12 pt-14 md:grid-cols-[1.2fr_0.8fr] md:pb-16 md:pt-20">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">What&apos;s included</p>
+            <h1 className="mt-3 font-jakarta text-4xl font-extrabold tracking-tight md:text-6xl md:leading-[1.02]">
+              The exact list
+              <span className="block bg-gradient-primary bg-clip-text text-transparent">the crew follows</span>
+            </h1>
+            <p className="mt-4 max-w-xl text-base text-muted-foreground md:text-lg">
+              Homes and commercial sites each have their own scope. Open a service and you&apos;ll see every line, in the order it gets done.
+            </p>
+          </div>
+          <PreviewCard />
+        </div>
+      </section>
+
+      <div className="container mx-auto max-w-6xl space-y-14 px-4 pb-16">
+        <ChecklistFamily
+          kicker="Homes"
+          title="Four residential lists"
+          subtitle="Standard, Deep, Move In/Out, and Recurring."
+          slugs={RESIDENTIAL_CHECKLIST_SLUGS}
+        />
+        <ChecklistFamily
+          kicker="Sites"
+          title="Commercial and office"
+          subtitle="Light, Standard, and Detailed stack. Office adds after-hours desk and lock-up rules."
+          slugs={COMMERCIAL_CHECKLIST_SLUGS}
+        />
+      </div>
+    </ChecklistShell>
+  );
+}
+
+function PreviewCard() {
+  const sample = CHECKLISTS["standard-clean"];
+  const kitchen = sample.sections[0];
+  return (
+    <Link
+      href="/checklist/standard-clean"
+      className="group block rounded-[28px] border border-border/70 bg-card p-5 shadow-xl shadow-primary/10"
+    >
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Sample · Standard</p>
+        <span className="text-xs text-muted-foreground">{countItems(sample.sections)} lines</span>
+      </div>
+      <p className="mt-3 font-jakarta text-2xl font-bold">{kitchen?.title}</p>
+      <ul className="mt-4 space-y-2">
+        {kitchen?.items.slice(0, 4).map((item) => (
+          <li key={item} className="flex items-start gap-2 text-sm">
+            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
+              <RiCheckLine className="h-3.5 w-3.5" />
+            </span>
+            <span className="line-clamp-1">{item}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-4 inline-flex items-center text-sm font-semibold text-primary">
+        Open the full list
+        <RiArrowRightLine className="ml-1 h-4 w-4 transition group-hover:translate-x-0.5" />
+      </p>
+    </Link>
+  );
+}
+
+function ChecklistFamily({
+  kicker,
+  title,
+  subtitle,
+  slugs,
+}: {
+  kicker: string;
+  title: string;
+  subtitle: string;
+  slugs: ChecklistSlug[];
+}) {
+  return (
+    <section>
+      <div className="mb-5">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">{kicker}</p>
+        <h2 className="mt-1 font-jakarta text-2xl font-bold tracking-tight md:text-3xl">{title}</h2>
+        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{subtitle}</p>
+      </div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        {slugs.map((slug) => {
+          const checklist = CHECKLISTS[slug];
+          const total = countItems(checklist.sections);
+          const Icon = roomIcon(checklist.sections[0]?.title || checklist.name);
+          return (
+            <Link
+              key={slug}
+              href={`/checklist/${slug}`}
+              className="group relative overflow-hidden rounded-[28px] border border-border/70 bg-card p-5 shadow-card transition hover:-translate-y-0.5 hover:shadow-xl"
+            >
+              <div className="absolute inset-x-0 top-0 h-1 bg-gradient-primary" />
+              <div className="flex items-start gap-4">
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-primary text-white shadow-lavender">
+                  <Icon className="h-5 w-5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="font-jakarta text-xl font-bold tracking-tight">{checklist.name}</h3>
+                    <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
+                      {total} lines
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-muted-foreground">{checklist.tagline}</p>
+                </div>
+              </div>
+              <div className="mt-4 grid grid-cols-3 gap-2">
+                <Fact label="Time" value={checklist.meta.estimatedTime.split(" for ")[0]} />
+                <Fact label="Frequency" value={checklist.meta.frequency.split(",")[0]} />
+                <Fact label="Areas" value={`${checklist.sections.length}`} />
+              </div>
+              <ul className="mt-4 space-y-1.5">
+                {checklist.sections[0]?.items.slice(0, 3).map((item) => (
+                  <li key={item} className="flex items-start gap-2 text-xs text-foreground/80">
+                    <RiCheckLine className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                    <span className="line-clamp-1">{item}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-4 inline-flex items-center text-sm font-semibold text-primary">
+                See every line
+                <RiArrowRightLine className="ml-1 h-4 w-4 transition group-hover:translate-x-0.5" />
+              </p>
+            </Link>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function Fact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl bg-muted/60 px-3 py-2">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className="mt-0.5 line-clamp-1 text-xs font-medium">{value}</p>
+    </div>
   );
 }

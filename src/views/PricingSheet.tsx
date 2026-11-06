@@ -136,7 +136,7 @@ export default function PricingSheet() {
           <div className="flex items-center gap-3">
             <img src={logo} alt="Novara" className="w-9 h-9 rounded-xl" />
             <span className="text-lg font-bold tracking-tight font-jakarta">
-              Novara<span className="text-primary">Cleaning</span>
+              Novara Cleaning
             </span>
           </div>
           <div className="flex items-center gap-3">

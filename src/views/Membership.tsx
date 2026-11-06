@@ -1,239 +1,328 @@
 "use client";
 
-// Membership plans (/membership). Logged-out visitors get the marketing page;
-// signed-in customers see the same plans inside their account, with their
-// subscription status and pause / resume at the top.
-
-import { useState, type ReactNode } from "react";
-import Link from "next/link";
-import { RiArrowRightLine, RiArrowRightUpLine, RiCheckLine, RiPauseCircleLine, RiPlayCircleLine } from "@/components/icons";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import {
+  RiCheckboxCircleLine, RiSparklingLine, RiCalendarLine, RiGiftLine, RiFlashlightLine,
+  RiVipCrownLine, RiArrowRightLine, RiArrowLeftLine, RiPauseCircleLine, RiPlayCircleLine,
+  RiAlertLine, RiShieldCheckLine, RiStarLine, RiTimeLine
+} from "@/components/icons";
 import { PauseResumeDialog } from "@/components/membership/PauseResumeDialog";
-import { MarketingShell, PageHero } from "@/components/landing/MarketingShell";
-import { Chip, Index, Section, btnOutline, btnPrimary } from "@/components/landing/primitives";
-import { MEMBERSHIP_COPY, PLANS, PLAN_ORDER, planFrom } from "@/lib/landing/membership";
+import { MEMBERSHIP_PRICES } from "@/lib/pricing-system";
 import { cn } from "@/lib/utils";
+import { SiteHeader } from "@/components/landing/Chrome";
+import { SEO } from "@/components/SEO";
 
-function PlanCards() {
-  return (
-    <ul className="grid gap-4 lg:grid-cols-3">
-      {PLAN_ORDER.map((id, i) => {
-        const plan = PLANS[id];
-        return (
-          <li key={id}>
-            <Link
-              href={`/membership/${id}`}
-              className={cn(
-                "group relative flex h-full flex-col overflow-hidden rounded-2xl border bg-white p-6 transition hover:border-[#C9B6FF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6810FE]",
-                plan.popular ? "border-[#E3D7FF] shadow-[0_0_72px_-28px_rgba(104,16,254,0.6)]" : "border-line shadow-[0_16px_40px_-30px_rgba(11,10,17,0.35)]",
-              )}
-            >
-              {plan.popular ? (
-                <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-[#6810FE]/[0.08] to-transparent" />
-              ) : null}
-              <div className="relative flex items-center justify-between">
-                <Index n={i + 1} />
-                {plan.popular ? <Chip tone="good" dot>Most popular</Chip> : <Chip>{plan.cadence}</Chip>}
-              </div>
-              <h2 className="relative mt-3 flex items-center justify-between text-[24px] font-medium tracking-[-0.02em] text-ink">
-                {plan.name}
-                <RiArrowRightUpLine className="h-5 w-5 text-ink-muted transition group-hover:text-[#6810FE]" aria-hidden="true" />
-              </h2>
-              <p className="relative mt-1 text-[14.5px] leading-relaxed text-ink-muted">{plan.tagline}</p>
-              <p className="relative mt-5 text-[18px] text-ink">
-                From <span className="text-[34px] font-medium tracking-[-0.03em]">${planFrom(id)}</span>
-                <span className="text-ink-muted"> per month</span>
-              </p>
-              <ul className="relative mt-5 flex-1 space-y-2 border-t border-line pt-5">
-                {plan.benefits.map((b) => (
-                  <li key={b} className="flex gap-2.5 text-[14px] text-ink">
-                    <RiCheckLine className="mt-0.5 h-4 w-4 flex-shrink-0 text-[#6810FE]" aria-hidden="true" />
-                    {b}
-                  </li>
-                ))}
-              </ul>
-              <span className={cn(plan.popular ? btnPrimary : btnOutline, "relative mt-6 w-full")}>
-                See prices for your home
-                <RiArrowRightLine className="h-4 w-4" aria-hidden="true" />
-              </span>
-            </Link>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
-function Compare() {
-  const rows: Array<{ label: string; values: string[] }> = [
-    { label: "Cleans a month", values: PLAN_ORDER.map((id) => String(PLANS[id].credits)) },
-    { label: "Time per clean", values: PLAN_ORDER.map((id) => PLANS[id].hours) },
-    { label: "Discount", values: PLAN_ORDER.map((id) => PLANS[id].discount) },
-    { label: "Dedicated cleaner", values: ["No", "Yes", "Yes, plus your time slot"] },
-    { label: "Starting price", values: PLAN_ORDER.map((id) => `$${planFrom(id)}/mo`) },
-  ];
-  return (
-    <div className="overflow-x-auto rounded-2xl border border-line bg-white shadow-[0_16px_40px_-32px_rgba(11,10,17,0.35)]">
-      <table className="w-full min-w-[620px] text-left text-[14px]">
-        <thead>
-          <tr className="border-b border-line bg-[#FAFAFC]">
-            <th scope="col" className="px-5 py-3.5 font-medium text-ink-muted">
-              <span className="sr-only">Feature</span>
-            </th>
-            {PLAN_ORDER.map((id) => (
-              <th key={id} scope="col" className="px-5 py-3.5 font-medium text-ink">
-                {PLANS[id].name}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.label} className="border-b border-line last:border-b-0">
-              <th scope="row" className="px-5 py-3.5 font-normal text-ink-muted">
-                {r.label}
-              </th>
-              {r.values.map((v, i) => (
-                <td key={i} className={cn("px-5 py-3.5 text-ink", i === 1 && "bg-[#F7F4FF]")}>
-                  {v}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function SubscriptionStatus({ onManage }: { onManage: () => void }) {
-  const { subscription } = useAuth();
-  if (!subscription?.subscribed) return null;
-  const paused = subscription.is_paused;
-  return (
-    <div
-      className={cn(
-        "mb-8 flex flex-col gap-4 rounded-2xl border p-5 sm:flex-row sm:items-center sm:justify-between",
-        paused ? "border-amber-200 bg-amber-50/70" : "border-emerald-200 bg-emerald-50/60",
-      )}
-    >
-      <div>
-        <p className="flex items-center gap-2 text-[16px] font-medium text-ink">
-          <Chip tone={paused ? "warn" : "good"} dot>
-            {paused ? "Paused" : "Active"}
-          </Chip>
-          {paused ? "Your membership is paused." : "You have an active membership."}
-        </p>
-        <p className="mt-1 text-[14px] text-ink-muted">
-          {paused
-            ? `While paused you are not charged and no cleans are issued.${
-                subscription.resumes_at ? ` Resumes ${new Date(subscription.resumes_at).toLocaleDateString()}.` : ""
-              }`
-            : "Pause any time from here. Your cleaner and schedule are kept."}
-        </p>
-      </div>
-      <button type="button" onClick={onManage} className={cn(paused ? btnPrimary : btnOutline, "h-11")}>
-        {paused ? <RiPlayCircleLine className="h-4 w-4" aria-hidden="true" /> : <RiPauseCircleLine className="h-4 w-4" aria-hidden="true" />}
-        {paused ? "Resume" : "Pause"}
-      </button>
-    </div>
-  );
-}
-
-function Body({ signedIn, onManage }: { signedIn: boolean; onManage: () => void }): ReactNode {
-  const c = MEMBERSHIP_COPY;
-  return (
-    <>
-      {signedIn ? (
-        <div className="px-1 pb-4 pt-2">
-          <SubscriptionStatus onManage={onManage} />
-          <h1 className="text-[2rem] font-medium tracking-[-0.03em] text-ink">Membership plans</h1>
-          <p className="mt-2 max-w-2xl text-[15px] text-ink-muted">{c.lead}</p>
-          <div className="mt-8">
-            <PlanCards />
-          </div>
-        </div>
-      ) : (
-        <>
-          <PageHero eyebrow={c.eyebrow} title={c.headline} lead={c.lead}>
-            <p className="mt-6 text-[14px] text-ink-muted">
-              {c.oneTime.text}{" "}
-              <Link href={c.oneTime.href} className="font-medium text-ink underline-offset-4 hover:underline">
-                {c.oneTime.link}
-              </Link>
-              .
-            </p>
-          </PageHero>
-          <section className="px-5 pb-6 sm:px-6 lg:px-8">
-            <div className="mx-auto max-w-6xl">
-              <PlanCards />
-              <p className="mt-4 text-[13px] text-ink-muted">
-                Prices depend on your home&rsquo;s size. Every plan adds a ${c.firstMonthFee} deep clean to the first month.
-              </p>
-            </div>
-          </section>
-        </>
-      )}
-
-      <Section id="how" headline={c.howHeadline} lead={c.howLead}>
-        <ol className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          {c.steps.map((s, i) => (
-            <li key={s.title} className="rounded-2xl border border-line bg-white p-4 shadow-[0_16px_40px_-32px_rgba(11,10,17,0.35)]">
-              <Index n={i + 1} />
-              <h3 className="mt-2 text-[17px] font-medium tracking-[-0.02em] text-ink">{s.title}</h3>
-              <p className="mt-1 text-[14px] leading-relaxed text-ink-muted">{s.body}</p>
-            </li>
-          ))}
-        </ol>
-      </Section>
-
-      <Section id="compare" headline={c.compareHeadline}>
-        <Compare />
-        <div className="mt-8 rounded-2xl border border-line bg-[#FAFAFC] p-5">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#5A1FD6]">Membership terms</p>
-          <ul className="mt-3 space-y-1.5">
-            {c.terms.map((t) => (
-              <li key={t} className="flex gap-2.5 text-[14px] text-ink">
-                <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[#8E5BFF]" aria-hidden="true" />
-                {t}
-              </li>
-            ))}
-          </ul>
-          <a href={c.termsLink.href} target="_blank" rel="noopener noreferrer" className="mt-4 inline-flex items-center gap-1.5 text-[14px] font-medium text-[#5A1FD6] hover:underline">
-            {c.termsLink.label}
-            <RiArrowRightUpLine className="h-4 w-4" aria-hidden="true" />
-          </a>
-        </div>
-      </Section>
-    </>
-  );
-}
+const MEMBERSHIP_TIERS = [
+  {
+    id: 'monthly',
+    name: 'Glow Monthly',
+    startingPrice: MEMBERSHIP_PRICES['0_999'].monthly,
+    credits: 1,
+    discount: '20%',
+    icon: RiCalendarLine,
+    features: [
+      '1 cleaning credit per month (up to 2 hrs)',
+      '48-hour reclean guarantee',
+      'Priority customer support',
+      '20% off extra hours & add-ons',
+    ],
+    popular: false,
+  },
+  {
+    id: 'biweekly',
+    name: 'Glow Bi-Weekly',
+    startingPrice: MEMBERSHIP_PRICES['0_999'].biweekly,
+    credits: 2,
+    discount: '25%',
+    icon: RiGiftLine,
+    features: [
+      '2 cleaning credits per month (up to 3 hrs each)',
+      'Dedicated cleaner match',
+      '25% off deep cleans & add-ons',
+      'Satisfaction guarantee',
+      'Free rescheduling',
+    ],
+    popular: true,
+  },
+  {
+    id: 'weekly',
+    name: 'Glow Weekly',
+    startingPrice: MEMBERSHIP_PRICES['0_999'].weekly,
+    credits: 4,
+    discount: '30%',
+    icon: RiVipCrownLine,
+    features: [
+      '4 cleaning credits per month (up to 3 hrs each)',
+      'Dedicated cleaner & preferred time slot',
+      'Free deep clean every 6 months',
+      '30% off extra hours & add-ons',
+      'VIP scheduling',
+    ],
+    popular: false,
+  },
+];
 
 export default function Membership() {
+  const router = useRouter();
   const { user, subscription, checkSubscription } = useAuth();
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const dialog = (
-    <PauseResumeDialog
-      open={dialogOpen}
-      onOpenChange={setDialogOpen}
-      isPaused={subscription?.is_paused || false}
-      resumesAt={subscription?.resumes_at}
-      onSuccess={checkSubscription}
-    />
-  );
+  const [pauseResumeDialogOpen, setPauseResumeDialogOpen] = useState(false);
 
-  if (user) {
-    return (
-      <div className="landing mx-auto max-w-6xl font-sans text-ink">
-        <Body signedIn onManage={() => setDialogOpen(true)} />
-        {dialog}
-      </div>
-    );
-  }
   return (
-    <MarketingShell>
-      <Body signedIn={false} onManage={() => setDialogOpen(true)} />
-      {dialog}
-    </MarketingShell>
+    <div className={user ? "book-theme mx-auto max-w-6xl" : "book-theme landing min-h-screen bg-background"}>
+      {!user && <SiteHeader />}
+      <SEO title="Membership Plans" description="Save up to 30% with a Novara Glow membership. Choose from monthly, bi-weekly, or weekly plans with dedicated cleaners and priority scheduling." />
+      {!user && (
+      <div className="border-b border-border/50 hairline-glow">
+        <div className="container max-w-7xl mx-auto px-4 py-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              // Members came from their account; public visitors browse this
+              // page on try.* — send them back to the marketing home instead
+              // of the login-gated account page on app.*.
+              if (subscription?.subscribed) {
+                router.push("/account");
+              } else {
+                window.location.href = "https://novaracleaning.com/";
+              }
+            }}
+            className="text-muted-foreground -ml-2"
+          >
+            <RiArrowLeftLine className="w-4 h-4 mr-1.5" /> Back
+          </Button>
+        </div>
+      </div>
+      )}
+
+      {/* Hero */}
+      <div className="relative overflow-hidden">
+        <div className="absolute inset-0" style={{ background: 'var(--gradient-hero)' }} />
+        <div className="absolute inset-0 opacity-[0.03]" style={{ background: 'var(--gradient-primary)' }} />
+        <div className="relative container max-w-7xl mx-auto px-4 py-12 md:py-20">
+          <div className="text-center space-y-4 max-w-2xl mx-auto animate-fade-in-up">
+            <Badge className="bg-primary/10 text-primary border-primary/20 shadow-none px-4 py-1.5">
+              <RiSparklingLine className="w-3.5 h-3.5 mr-1.5" />
+              Membership Plans
+            </Badge>
+            <h1 className="text-3xl md:text-5xl lg:text-6xl font-bold font-jakarta tracking-tight">
+              Choose Your <span className="gradient-text">Perfect Plan</span>
+            </h1>
+            <p className="text-base md:text-lg text-muted-foreground leading-relaxed">
+              Subscribe today and enjoy consistent, professional cleaning at a fraction of one-time pricing.
+              Every plan starts with a deep clean on your first visit ($75, charged once).
+            </p>
+            <p className="text-xs text-muted-foreground/70">
+              Prices vary by home size. Click a plan to see your exact monthly cost.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="container max-w-7xl mx-auto px-4 -mt-4 pb-16">
+        {/* Active Subscription Banner */}
+        {subscription?.subscribed && (
+          <Card className={cn(
+            "mb-8 shadow-md animate-fade-in-up",
+            subscription?.is_paused
+              ? 'border-amber-300 dark:border-amber-700 bg-amber-50/60 dark:bg-amber-950/20'
+              : 'border-emerald-300 dark:border-emerald-700 bg-emerald-50/60 dark:bg-emerald-950/20'
+          )}>
+            <CardHeader>
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className={cn(
+                    "w-10 h-10 rounded-xl flex items-center justify-center",
+                    subscription?.is_paused ? "bg-amber-100 dark:bg-amber-900/40" : "bg-emerald-100 dark:bg-emerald-900/40"
+                  )}>
+                    {subscription?.is_paused
+                      ? <RiPauseCircleLine className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                      : <RiCheckboxCircleLine className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                    }
+                  </div>
+                  <div>
+                    <CardTitle className="text-base">
+                      {subscription?.is_paused ? 'Membership Paused' : 'Active Membership'}
+                    </CardTitle>
+                    <CardDescription className="mt-0.5">
+                      {subscription?.is_paused ? (
+                        <>
+                          Your subscription is paused
+                          {subscription.resumes_at && (
+                            <span className="block mt-0.5 font-medium text-foreground">
+                              Resumes on {new Date(subscription.resumes_at).toLocaleDateString()}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        'You have an active Novara Membership'
+                      )}
+                    </CardDescription>
+                  </div>
+                </div>
+                <Button
+                  variant={subscription?.is_paused ? "default" : "outline"}
+                  size="sm"
+                  className="rounded-lg"
+                  onClick={() => setPauseResumeDialogOpen(true)}
+                >
+                  {subscription?.is_paused ? (
+                    <><RiPlayCircleLine className="w-4 h-4 mr-1.5" /> Resume</>
+                  ) : (
+                    <><RiPauseCircleLine className="w-4 h-4 mr-1.5" /> Pause</>
+                  )}
+                </Button>
+              </div>
+              
+              {subscription?.is_paused && (
+                <div className="mt-4 p-3 rounded-xl bg-amber-100/50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                  <div className="flex items-start gap-2.5">
+                    <RiAlertLine className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+                    <div className="text-sm text-muted-foreground">
+                      <p className="font-medium text-foreground">Your membership is on hold</p>
+                      <p className="mt-0.5">While paused, you won't be charged and credits won't be issued. Resume anytime.</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardHeader>
+          </Card>
+        )}
+
+        {/* Plan Cards */}
+        <div className="grid md:grid-cols-3 gap-5 lg:gap-6 mb-16">
+          {MEMBERSHIP_TIERS.map((tier, index) => {
+            const Icon = tier.icon;
+            
+            return (
+              <Card
+                key={tier.id}
+                className={cn(
+                  "relative overflow-hidden transition-all duration-300 hover:shadow-xl cursor-pointer group animate-fade-in-up",
+                  tier.popular
+                    ? 'border-primary shadow-lg md:scale-[1.03] z-10'
+                    : 'hover:border-primary/40',
+                  index === 0 && 'stagger-1',
+                  index === 1 && 'stagger-2',
+                  index === 2 && 'stagger-3',
+                )}
+                onClick={() => router.push(`/membership/${tier.id}`)}
+              >
+                {tier.popular && (
+                  <div className="absolute top-0 left-0 right-0 h-1" style={{ background: 'var(--gradient-primary)' }} />
+                )}
+
+                {tier.popular && (
+                  <div className="absolute top-3 right-3">
+                    <Badge className="bg-gradient-primary text-white border-0 shadow-md text-[10px] font-bold uppercase tracking-wider px-2.5 py-1">
+                      Most Popular
+                    </Badge>
+                  </div>
+                )}
+
+                <CardHeader className="text-center space-y-4 pb-6 pt-8">
+                  <div className={cn(
+                    "mx-auto w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg transition-transform group-hover:scale-110",
+                  )} style={{ background: 'var(--gradient-primary)' }}>
+                    <Icon className="w-7 h-7 text-white" />
+                  </div>
+                  
+                  <div>
+                    <CardTitle className="text-xl mb-1.5">{tier.name}</CardTitle>
+                    <div className="flex items-baseline justify-center gap-1">
+                      <span className="text-3xl font-bold">${tier.startingPrice}</span>
+                      <span className="text-muted-foreground text-sm">/month</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">starting price</p>
+                  </div>
+
+                  <Badge variant="secondary" className="text-xs px-3 py-1 rounded-lg">
+                    <RiFlashlightLine className="w-3 h-3 mr-1" />
+                    {tier.credits} {tier.credits === 1 ? 'Credit' : 'Credits'}/Month &middot; Save {tier.discount}
+                  </Badge>
+                </CardHeader>
+
+                <CardContent className="space-y-5 pb-8">
+                  <Separator />
+                  
+                  <ul className="space-y-3">
+                    {tier.features.map((feature, i) => (
+                      <li key={i} className="flex items-start gap-2.5">
+                        <RiCheckboxCircleLine className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                        <span className="text-sm text-muted-foreground">{feature}</span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  <Button className={cn(
+                    "w-full h-11 rounded-xl shadow-md transition-all",
+                    tier.popular ? "bg-gradient-primary" : "bg-primary hover:bg-primary/90"
+                  )}>
+                    View Plan Details
+                    <RiArrowRightLine className="w-4 h-4 ml-2" />
+                  </Button>
+
+                  <p className="text-[11px] text-center text-muted-foreground">
+                    +$75 first-month deep clean &middot; Cancel anytime
+                  </p>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+
+        {/* Why Choose Section */}
+        <Card className="border-0 shadow-lg overflow-hidden">
+          <div className="h-0.5 w-full" style={{ background: 'var(--gradient-primary)' }} />
+          <CardHeader className="text-center pt-10">
+            <CardTitle className="text-2xl md:text-3xl font-jakarta tracking-tight">Why Choose Novara Membership?</CardTitle>
+            <CardDescription className="text-base mt-2">
+              Pick a plan, choose your home size, and book your first visit online
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pb-10">
+            <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
+              {[
+                { icon: RiGiftLine, title: "Monthly Credits", desc: "Use your credits for professional cleaning services, anytime you need them" },
+                { icon: RiFlashlightLine, title: "Exclusive Discounts", desc: "Save up to 30% on all add-ons, upgrades, and extra cleaning hours" },
+                { icon: RiCalendarLine, title: "Flexible Scheduling", desc: "Priority booking windows and easy rescheduling with no fees" },
+              ].map((item, i) => (
+                <div key={i} className="text-center space-y-3">
+                  <div className="mx-auto w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'var(--gradient-lavender)' }}>
+                    <item.icon className="w-6 h-6 text-primary" />
+                  </div>
+                  <h3 className="font-semibold">{item.title}</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{item.desc}</p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* CTA */}
+        <div className="text-center mt-10 space-y-3">
+          <p className="text-muted-foreground text-sm">
+            Not ready for a membership?{' '}
+            <Button variant="link" onClick={() => router.push('/book/zip')} className="p-0 h-auto text-primary">
+              Book a one-time cleaning
+            </Button>
+          </p>
+        </div>
+      </div>
+      
+      <PauseResumeDialog
+        open={pauseResumeDialogOpen}
+        onOpenChange={setPauseResumeDialogOpen}
+        isPaused={subscription?.is_paused || false}
+        resumesAt={subscription?.resumes_at}
+        onSuccess={checkSubscription}
+      />
+    </div>
   );
 }

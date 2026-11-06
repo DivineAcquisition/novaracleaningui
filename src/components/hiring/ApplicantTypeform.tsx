@@ -339,7 +339,7 @@ export function ApplicantTypeform({ session }: { session?: PublicHiringSession |
         <Link href="/hiring" className="flex items-center gap-2.5 transition hover:opacity-80">
           <img src={LOGO} alt="" className="h-8 w-8 rounded-lg" />
           <span className="font-heading text-[15px] font-bold tracking-tight">
-            Novara<span className="text-primary">Cleaning</span>
+            Novara Cleaning
           </span>
         </Link>
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">

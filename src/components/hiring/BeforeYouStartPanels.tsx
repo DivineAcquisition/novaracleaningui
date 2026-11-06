@@ -88,7 +88,7 @@ export function BeforeYouStartHeader() {
           <Link href="/hiring" className="flex items-center gap-2.5 transition hover:opacity-80">
             <img src="/novara-logo.png" alt="Novara" className="h-9 w-9 rounded-lg object-contain sm:h-10 sm:w-10" />
             <span className="font-jakarta text-[15px] font-bold tracking-tight">
-              Novara<span className="text-primary">Cleaning</span>
+              Novara Cleaning
             </span>
           </Link>
           <Badge variant="outline" className="rounded-full border-primary/30 bg-primary/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-primary">

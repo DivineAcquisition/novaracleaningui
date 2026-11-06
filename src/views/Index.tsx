@@ -5,46 +5,46 @@ import {
   RiCalendarCheckLine,
   RiCheckboxCircleLine,
   RiFlashlightLine,
-  RiGroupLine,
   RiMapPinLine,
   RiPhoneLine,
   RiRepeatLine,
   RiShieldLine,
   RiSparklingLine,
-  RiStarLine,
   RiTimeLine,
-  RiTrophyLine
-} from "@remixicon/react";
+  RiListCheck2,
+  RiShoppingBasket2Line,
+  RiPriceTag3Line,
+  RiUserLine,
+} from "@/components/icons";
 import { useState } from "react";
 import { SEO } from "@/components/SEO";
 import { Button } from "@/components/ui/button";
-import { INBOUND_PHONE } from "@/config/brand-config";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useAuth } from "@/contexts/AuthContext";
 import { useBooking } from "@/contexts/BookingContext";
 
 import { supabase } from "@/integrations/supabase/client";
 import { formatPhoneNumber } from "@/lib/input-formatters";
-import { BookingFooter } from "@/components/booking/BookingFooter";
+import { SiteHeader } from "@/components/landing/Chrome";
+import { SiteFooter } from "@/components/landing/Footer";
 import { AnimatedShinyText } from "@/components/magicui/animated-shiny-text";
 import { BlurFade } from "@/components/magicui/blur-fade";
 import { BorderBeam } from "@/components/magicui/border-beam";
 import { MagicCard } from "@/components/magicui/magic-card";
-import { Marquee } from "@/components/magicui/marquee";
 import { NumberTicker } from "@/components/magicui/number-ticker";
 import { Particles } from "@/components/magicui/particles";
 import { ShineBorder } from "@/components/magicui/shine-border";
 import { BRAND } from "@/lib/brand";
-const logo = "/novara-logo.png";
 
-const TRUST_STATS = [
-  { label: "Homes Cleaned", value: 1200, suffix: "+", icon: RiCheckboxCircleLine },
-  { label: "5-Star Reviews", value: 500, suffix: "+", icon: RiStarLine },
-  { label: "Repeat Customers", value: 92, suffix: "%", icon: RiGroupLine },
-  { label: "On-Time Rate", value: 99, suffix: "%", icon: RiTimeLine },
+// True, checkable facts from the booking code: online discounts, the re-clean
+// window, and the deposit most bookings take.
+const FACTS = [
+  { label: "Off a standard clean booked online", value: 15, suffix: "%", icon: RiPriceTag3Line },
+  { label: "Off a deep clean booked online", value: 25, suffix: "%", icon: RiSparklingLine },
+  { label: "Free re-clean window", value: 48, suffix: " hr", icon: RiTimeLine },
+  { label: "Deposit to book most cleans", value: 50, suffix: "%", icon: RiCheckboxCircleLine },
 ];
 
 const HOW_IT_WORKS = [
@@ -63,36 +63,14 @@ const HOW_IT_WORKS = [
   {
     step: "3",
     title: "We Show Up",
-    description: "Our vetted, insured team arrives on time. Every time.",
+    description: "Your cleaner brings supplies and works from the written checklist.",
     icon: RiFlashlightLine,
-  },
-];
-
-const TESTIMONIALS = [
-  {
-    name: "Sarah M.",
-    location: "Bethesda, MD",
-    text: "Novara is the first cleaning service that actually shows up when they say they will. My home has never looked better.",
-    rating: 5,
-  },
-  {
-    name: "James R.",
-    location: "Rockville, MD",
-    text: "I signed up for the membership and it's been a game-changer. Same team every time, and they know exactly how I like things.",
-    rating: 5,
-  },
-  {
-    name: "Michelle T.",
-    location: "Silver Spring, MD",
-    text: "The deep clean exceeded my expectations. Every corner was spotless. Worth every penny.",
-    rating: 5,
   },
 ];
 
 const Index = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { signOut } = useAuth();
   const { updateBookingData } = useBooking();
   const fbclid = searchParams.get('fbclid');
   const [zipCode, setZipCode] = useState("");
@@ -183,44 +161,13 @@ const Index = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="book-theme landing min-h-screen bg-background">
       <SEO
         title="Professional Home Cleaning in Maryland & DMV"
-        description="Book top-rated home cleaning in the DMV area. Google Guaranteed cleaners, $99 first clean, transparent pricing, and 100% satisfaction guarantee. Book online in 60 seconds."
+        description="Book home cleaning in Maryland, DC and Northern Virginia. See the exact price for your home, a written checklist on every visit, and a 48-hour re-clean guarantee."
         canonical="https://novaracleaning.com"
       />
-      {/* Navigation */}
-      <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-xl hairline-glow">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img
-              src={logo}
-              alt="Novara Cleaning"
-              className="w-9 h-9 rounded-xl"
-            />
-            <span className="text-lg font-bold tracking-tight font-heading">
-              Novara<span className="text-primary">Cleaning</span>
-            </span>
-          </div>
-          <div className="flex items-center gap-3">
-            <a
-              href={INBOUND_PHONE.tel}
-              className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <RiPhoneLine className="w-4 h-4" />
-              {INBOUND_PHONE.display}
-            </a>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-9"
-              onClick={() => router.push("/auth")}
-            >
-              Sign In
-            </Button>
-          </div>
-        </div>
-      </header>
+      <SiteHeader withMenus />
 
       {/* Hero Section */}
       <section className="relative overflow-hidden">
@@ -238,15 +185,16 @@ const Index = () => {
           <div className="max-w-3xl mx-auto text-center space-y-8">
             <BlurFade delay={0.04} inView>
               <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-primary/20 bg-primary/[0.04] backdrop-blur-sm">
-                <RiShieldLine className="w-4 h-4 text-primary" />
+                <RiMapPinLine className="w-4 h-4 text-primary" />
                 <AnimatedShinyText className="mx-0 max-w-none text-sm font-medium text-primary">
-                  Google Guaranteed & Fully Insured
+                  <span className="sm:hidden">House cleaning · MD, DC &amp; VA</span>
+                  <span className="hidden sm:inline">House cleaning in Maryland, DC &amp; Northern Virginia</span>
                 </AnimatedShinyText>
               </div>
             </BlurFade>
 
             <BlurFade delay={0.1} inView>
-              <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight font-heading leading-[1.1]">
+              <h1 className="text-[2.05rem] sm:text-5xl lg:text-6xl !font-bold tracking-tight font-heading leading-[1.1]">
                 Stop Spending Your
                 <br />
                 <span className="text-gradient">
@@ -442,7 +390,7 @@ const Index = () => {
 
             {/* Sub-text */}
             <p className="text-xs text-muted-foreground">
-              No credit card required to see pricing. Cancel anytime.
+              No credit card required to see pricing.
             </p>
           </div>
         </div>
@@ -452,7 +400,7 @@ const Index = () => {
       <section className="border-y border-border/40 bg-muted/30">
         <div className="container mx-auto px-4 py-10 md:py-14">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8">
-            {TRUST_STATS.map((stat, i) => (
+            {FACTS.map((stat, i) => (
               <BlurFade key={stat.label} delay={0.04 * i} inView>
                 <div className="text-center space-y-2">
                   <stat.icon className="w-6 h-6 text-primary mx-auto" />
@@ -469,7 +417,7 @@ const Index = () => {
       </section>
 
       {/* How It Works */}
-      <section className="container mx-auto px-4 py-16 md:py-24">
+      <section id="how" className="scroll-mt-20 container mx-auto px-4 py-16 md:py-24">
         <div className="max-w-3xl mx-auto">
           <div className="text-center mb-12 md:mb-16">
             <Badge
@@ -516,7 +464,7 @@ const Index = () => {
       </section>
 
       {/* Why Novara */}
-      <section className="bg-muted/30 border-y border-border/40">
+      <section id="why" className="scroll-mt-20 bg-muted/30 border-y border-border/40">
         <div className="container mx-auto px-4 py-16 md:py-24">
           <div className="max-w-3xl mx-auto">
             <div className="text-center mb-12">
@@ -537,40 +485,40 @@ const Index = () => {
             <div className="grid sm:grid-cols-2 gap-4 md:gap-5">
               {[
                 {
-                  icon: RiShieldLine,
-                  title: "Fully Insured & Bonded",
+                  icon: RiPriceTag3Line,
+                  title: "The Price Comes First",
                   description:
-                    "Every team is background-checked, insured, and bonded for your peace of mind.",
+                    "You see the price for your home before you book. No surprise fees at the door.",
                 },
                 {
-                  icon: RiTimeLine,
-                  title: "Always On Time",
+                  icon: RiListCheck2,
+                  title: "A Written Checklist",
                   description:
-                    "99% on-time arrival rate. If we're late, your next clean is on us.",
+                    "Every service has a written checklist. Your cleaner works from it, and you can hold us to it.",
                 },
                 {
                   icon: RiSparklingLine,
                   title: "48-Hour Re-Clean Guarantee",
                   description:
-                    "Not satisfied? We'll come back within 48 hours and re-clean for free.",
+                    "Missed something? Tell us within 48 hours and we come back to re-clean it free.",
                 },
                 {
-                  icon: RiTrophyLine,
-                  title: "Google Guaranteed",
+                  icon: RiShoppingBasket2Line,
+                  title: "Supplies Included",
                   description:
-                    "Backed by Google's $2,000 guarantee. Your home is in trusted hands.",
+                    "Your cleaner brings the products and equipment. You don't need to buy anything.",
                 },
                 {
-                  icon: RiGroupLine,
-                  title: "Same Team Every Time",
+                  icon: RiUserLine,
+                  title: "A Dedicated Cleaner",
                   description:
-                    "Members get the same trusted cleaning team for every visit.",
+                    "Bi-weekly and weekly members get a dedicated cleaner who learns your home.",
                 },
                 {
-                  icon: RiCalendarCheckLine,
-                  title: "Flexible Scheduling",
+                  icon: RiShieldLine,
+                  title: "Insured",
                   description:
-                    "Book, reschedule, or cancel anytime. No long-term contracts.",
+                    "Novara Cleaning carries business insurance. Ask us for the certificate.",
                 },
               ].map((feature) => (
                 <Card
@@ -597,54 +545,6 @@ const Index = () => {
         </div>
       </section>
 
-      {/* Testimonials */}
-      <section className="container mx-auto px-4 py-16 md:py-24">
-        <div className="max-w-3xl mx-auto">
-          <div className="text-center mb-12">
-            <Badge
-              variant="secondary"
-              className="mb-4 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider"
-            >
-              Testimonials
-            </Badge>
-            <h2 className="text-3xl md:text-4xl font-bold font-heading">
-              Loved by Homeowners
-            </h2>
-          </div>
-
-          <div className="relative overflow-hidden">
-            <Marquee pauseOnHover className="[--duration:42s]">
-              {TESTIMONIALS.map((testimonial) => (
-                <Card
-                  key={testimonial.name}
-                  className="w-[280px] shrink-0"
-                >
-                  <CardContent className="p-5 space-y-4">
-                    <div className="flex gap-0.5">
-                      {Array.from({ length: testimonial.rating }).map((_, i) => (
-                        <RiStarLine
-                          key={i}
-                          className="w-4 h-4 fill-amber-400 text-amber-400"
-                        />
-                      ))}
-                    </div>
-                    <p className="text-sm text-muted-foreground leading-relaxed italic">
-                      "{testimonial.text}"
-                    </p>
-                    <div>
-                      <p className="text-sm font-semibold">{testimonial.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {testimonial.location}
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </Marquee>
-          </div>
-        </div>
-      </section>
-
       {/* CTA Section */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.06] to-accent/[0.04]" />
@@ -655,8 +555,8 @@ const Index = () => {
               Ready for a Spotless Home?
             </h2>
             <p className="text-lg text-muted-foreground">
-              Join 1,200+ homeowners who trust Novara for their cleaning needs.
-              Book your first clean today.
+              See the price for your home in under a minute, then pick a
+              day. Book your first clean today.
             </p>
             <Button
               size="lg"
@@ -675,7 +575,7 @@ const Index = () => {
         </div>
       </section>
 
-      <BookingFooter />
+      <SiteFooter />
     </div>
   );
 };

@@ -3,12 +3,15 @@
 import {
   RiArrowLeftLine,
   RiCheckboxCircleLine,
-  RiLoader4Line
+  RiLoader4Line,
+  RiMailLine
 } from "@/components/icons";
 import { useState } from "react";
 import Link from "next/link";
-import { CustomerAuthShell, authField, authLabel, authOutline, authPrimary } from "@/components/auth/CustomerAuthShell";
-import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 
 import { z } from "zod";
@@ -50,59 +53,80 @@ export default function ResetPassword() {
   };
 
   return (
-    <CustomerAuthShell
-      eyebrow="Account security"
-      title="Reset your password."
-      lead="Enter the email on your account and we will send you a link to choose a new password."
-      footer={
-        <p className="text-center text-[13px] text-[#5F5B6B]">
-          <Link href="/auth" className="inline-flex items-center gap-1 font-medium text-[#0B0A11] underline-offset-4 hover:underline">
-            <RiArrowLeftLine className="h-4 w-4" aria-hidden="true" />
-            Back to sign in
-          </Link>
-        </p>
-      }
-    >
+    <div className="min-h-screen bg-background flex items-center justify-center px-4 py-6">
       <SEO title="Reset Password" description="Reset your Novara Cleaning account password." noindex />
-      {emailSent ? (
-        <div role="status">
-          <p className="flex items-center gap-2 text-[22px] font-medium tracking-[-0.03em]">
-            <RiCheckboxCircleLine className="h-6 w-6 text-emerald-600" aria-hidden="true" />
-            Check your email.
-          </p>
-          <p className="mt-2 text-[14.5px] text-[#5F5B6B]">
-            If <strong className="font-medium text-[#0B0A11]">{email}</strong> has an account, a reset link is on its way.
-          </p>
-          <Link href="/auth" className={cn(authOutline, "mt-6")}>
-            Back to sign in
-          </Link>
-        </div>
-      ) : (
-        <>
-          <h2 className="text-[26px] font-medium leading-tight tracking-[-0.03em]">Reset your password.</h2>
-          <p className="mt-1.5 text-[14.5px] text-[#5F5B6B]">We will email you a reset link.</p>
-          <form onSubmit={handleResetPassword} className="mt-6 space-y-4">
-            <div>
-              <label htmlFor="email" className={authLabel}>Email</label>
-              <input
-                id="email"
-                type="email"
-                autoComplete="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className={authField}
-                disabled={isLoading}
-                required
-              />
+      <Card className="max-w-sm w-full shadow-xl border-0 overflow-hidden animate-scale-in">
+        <div className="h-0.5 w-full" style={{ background: 'var(--gradient-primary)' }} />
+        <CardHeader className="text-center space-y-1 pb-3 pt-6">
+          <CardTitle className="text-xl font-bold tracking-tight">Reset Password</CardTitle>
+          <CardDescription className="text-sm">
+            {emailSent 
+              ? "Check your email for the reset link"
+              : "We'll send you a reset link"
+            }
+          </CardDescription>
+        </CardHeader>
+        
+        <CardContent className="px-6 pb-6">
+          {emailSent ? (
+            <div className="space-y-4 text-center">
+              <div className="mx-auto w-14 h-14 rounded-2xl flex items-center justify-center shadow-md" style={{ background: 'var(--gradient-primary)' }}>
+                <RiCheckboxCircleLine className="w-7 h-7 text-white" />
+              </div>
+              <div className="space-y-1">
+                <p className="font-semibold text-sm">Email sent!</p>
+                <p className="text-xs text-muted-foreground">
+                  Reset link sent to <strong>{email}</strong>
+                </p>
+              </div>
+              <Link href="/auth">
+                <Button variant="outline" className="w-full rounded-xl" size="sm">
+                  <RiArrowLeftLine className="mr-1.5 w-4 h-4" />
+                  Back to Sign In
+                </Button>
+              </Link>
             </div>
-            <button type="submit" className={authPrimary} disabled={isLoading}>
-              {isLoading ? <RiLoader4Line className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
-              {isLoading ? "Sending…" : "Send reset link"}
-            </button>
-          </form>
-        </>
-      )}
-    </CustomerAuthShell>
+          ) : (
+            <form onSubmit={handleResetPassword} className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="email" className="text-sm">Email</Label>
+                <div className="relative">
+                  <RiMailLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="you@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="pl-10 h-11 rounded-xl"
+                    disabled={isLoading}
+                    required
+                  />
+                </div>
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full h-11 rounded-xl bg-gradient-primary shadow-md"
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <><RiLoader4Line className="mr-2 w-4 h-4 animate-spin" /> Sending...</>
+                ) : (
+                  "Send Reset Link"
+                )}
+              </Button>
+
+              <Link href="/auth">
+                <Button variant="ghost" className="w-full rounded-xl text-muted-foreground" size="sm">
+                  <RiArrowLeftLine className="mr-1.5 w-4 h-4" />
+                  Back to Sign In
+                </Button>
+              </Link>
+            </form>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }

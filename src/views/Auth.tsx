@@ -4,14 +4,31 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { RiLoader4Line } from "@/components/icons";
+import {
+  RiLoader4Line, RiMailLine, RiLockLine, RiSparklingLine,
+  RiShieldCheckLine, RiStarLine, RiCheckboxCircleLine
+} from "@/components/icons";
 import { z } from "zod";
 import { SEO } from "@/components/SEO";
-import { GoogleIcon } from "@/components/auth/AuthScaffold";
-import { CustomerAuthShell, authField, authLabel, authOutline, authPrimary } from "@/components/auth/CustomerAuthShell";
-import { cn } from "@/lib/utils";
+import { AuthScaffold, AuthCard, GoogleIcon, AUTH_INPUT_CLS, AUTH_GRADIENT } from "@/components/auth/AuthScaffold";
 import { ADMIN_AUTH_URL, isStaffCustomerEmail, looksLikeNovaraStaffEmail, STAFF_CUSTOMER_ERROR } from "@/lib/staff-customer";
+
+// (accent color references below use #5C0FFE to match the brand scheme)
+const CUSTOMER_FEATURES = [
+  { icon: RiShieldCheckLine, label: "Price first", desc: "See the price for your home before you book." },
+  { icon: RiStarLine, label: "Written checklist", desc: "Every visit follows the checklist for your service." },
+  { icon: RiCheckboxCircleLine, label: "48-hour re-clean", desc: "Missed something? We come back and re-clean free." },
+];
+const CUSTOMER_STATS = [
+  { value: "15%", label: "Off standard online" },
+  { value: "25%", label: "Off deep online" },
+  { value: "48 hr", label: "Re-clean window" },
+];
 
 const emailSchema = z.string().email("Please enter a valid email address");
 const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
@@ -22,7 +39,6 @@ export default function Auth() {
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
 
   useEffect(() => {
     const guestEmail = localStorage.getItem('guestBookingEmail');
@@ -113,105 +129,111 @@ export default function Auth() {
     setIsLoading(false);
   };
 
-  const signingIn = mode === "signin";
-
   return (
-    <CustomerAuthShell
-      title="Your bookings, in one place."
-      lead="Sign in to see your visits, use membership credits, and change anything about an upcoming clean."
-      footer={
-        <p className="text-center text-[13px] text-[#5F5B6B]">
-          Cleaning with us?{" "}
-          <Link href="/cleaner/auth" className="font-medium text-[#0B0A11] underline-offset-4 hover:underline">
-            Cleaner sign in
-          </Link>
-          <span aria-hidden="true"> · </span>
-          <button
-            type="button"
-            className="underline-offset-4 hover:text-[#0B0A11] hover:underline"
-            onClick={() => window.dispatchEvent(new CustomEvent("novara:cookie-settings"))}
-          >
-            Cookie settings
-          </button>
-        </p>
-      }
+    <AuthScaffold
+      eyebrow="Customer Account"
+      headline={<>Your home,<br />spotless on schedule.</>}
+      subline="Sign in to manage bookings, membership credits, and keep your home sparkling."
+      features={CUSTOMER_FEATURES}
+      stats={CUSTOMER_STATS}
     >
-      <SEO title="Sign In" description="Sign in to your Novara Cleaning account to manage bookings, membership credits, and upcoming cleans." />
-      <h2 className="text-[26px] font-medium leading-tight tracking-[-0.03em]">{signingIn ? "Welcome back." : "Create your account."}</h2>
-      <p className="mt-1.5 text-[14.5px] text-[#5F5B6B]">
-        {signingIn ? "Sign in with the email you booked with." : "Use the email you booked with so your visits show up."}
-      </p>
+      <SEO title="Sign In" description="Sign in to your Novara Cleaning account to manage bookings, track membership credits, and schedule cleanings." />
+      <AuthCard>
+        <div className="space-y-1.5">
+          <h1 className="font-jakarta text-[26px] font-bold leading-tight tracking-tight text-slate-900">Welcome back</h1>
+          <p className="text-sm text-slate-500">Sign in to manage your bookings and account.</p>
+        </div>
 
-      <button type="button" className={cn(authOutline, "mt-6")} onClick={() => signInWithGoogle("/auth/callback")} disabled={isLoading}>
-        <GoogleIcon className="h-5 w-5" />
-        Continue with Google
-      </button>
-
-      <div className="my-5 flex items-center gap-3" aria-hidden="true">
-        <span className="h-px flex-1 bg-[#E9E7EE]" />
-        <span className="text-[12px] text-[#5F5B6B]">or with email</span>
-        <span className="h-px flex-1 bg-[#E9E7EE]" />
-      </div>
-
-      <div role="tablist" aria-label="Account" className="mb-5 grid grid-cols-2 gap-1 rounded-[10px] border border-[#E9E7EE] bg-[#F6F5F9] p-1">
-        {(["signin", "signup"] as const).map((m) => (
-          <button
-            key={m}
+        <div className="mt-6 space-y-4">
+          {/* Google */}
+          <Button
             type="button"
-            role="tab"
-            aria-selected={mode === m}
-            onClick={() => setMode(m)}
-            className={cn(
-              "rounded-[7px] py-2 text-[14px] font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6810FE]",
-              mode === m ? "bg-white text-[#0B0A11] shadow-[0_1px_3px_rgba(11,10,17,0.12)]" : "text-[#5F5B6B] hover:text-[#0B0A11]",
-            )}
+            variant="outline"
+            className="h-11 w-full gap-2.5 border-slate-200 font-semibold text-slate-700 hover:bg-slate-50"
+            onClick={() => signInWithGoogle("/auth/callback")}
+            disabled={isLoading}
           >
-            {m === "signin" ? "Sign in" : "Create account"}
-          </button>
-        ))}
-      </div>
+            <GoogleIcon className="h-5 w-5" />
+            Continue with Google
+          </Button>
 
-      <form onSubmit={signingIn ? handleSignIn : handleSignUp} className="space-y-4">
-        <div>
-          <label htmlFor="auth-email" className={authLabel}>Email</label>
-          <input
-            id="auth-email"
-            type="email"
-            autoComplete="email"
-            placeholder="you@example.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className={authField}
-            disabled={isLoading}
-            required
-          />
-        </div>
-        <div>
-          <div className="flex items-center justify-between">
-            <label htmlFor="auth-password" className={authLabel}>Password</label>
-            {signingIn ? (
-              <Link href="/reset-password" className="mb-1.5 text-[13px] font-medium text-[#5A1FD6] hover:underline">
-                Forgot password?
-              </Link>
-            ) : null}
+          {/* Divider */}
+          <div className="flex items-center gap-3">
+            <div className="h-px flex-1 bg-slate-200" />
+            <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400">or with email</span>
+            <div className="h-px flex-1 bg-slate-200" />
           </div>
-          <input
-            id="auth-password"
-            type="password"
-            autoComplete={signingIn ? "current-password" : "new-password"}
-            placeholder={signingIn ? "Your password" : "At least 6 characters"}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className={authField}
-            disabled={isLoading}
-            required
-          />
+
+          {/* Tabs */}
+          <Tabs defaultValue="signin" className="w-full">
+            <TabsList className="mb-4 grid h-10 w-full grid-cols-2 rounded-xl bg-slate-100 p-1">
+              <TabsTrigger value="signin" className="rounded-lg text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm">Sign In</TabsTrigger>
+              <TabsTrigger value="signup" className="rounded-lg text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm">Create Account</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="signin" className="mt-0">
+              <form onSubmit={handleSignIn} className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="signin-email" className="text-slate-700">Email</Label>
+                  <div className="relative">
+                    <RiMailLine className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <Input id="signin-email" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} className={AUTH_INPUT_CLS} disabled={isLoading} required />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="signin-password" className="text-slate-700">Password</Label>
+                    <Link href="/reset-password" className="text-xs font-medium text-[#5C0FFE] hover:underline">Forgot password?</Link>
+                  </div>
+                  <div className="relative">
+                    <RiLockLine className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <Input id="signin-password" type="password" placeholder="Enter your password" value={password} onChange={(e) => setPassword(e.target.value)} className={AUTH_INPUT_CLS} disabled={isLoading} required />
+                  </div>
+                </div>
+                <Button type="submit" className="h-11 w-full font-semibold text-white shadow-lg shadow-[#5C0FFE]/25 transition hover:opacity-95" style={{ background: AUTH_GRADIENT }} disabled={isLoading}>
+                  {isLoading ? <><RiLoader4Line className="mr-2 h-4 w-4 animate-spin" />Signing in…</> : "Sign In"}
+                </Button>
+              </form>
+            </TabsContent>
+
+            <TabsContent value="signup" className="mt-0">
+              <form onSubmit={handleSignUp} className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="signup-email" className="text-slate-700">Email</Label>
+                  <div className="relative">
+                    <RiMailLine className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <Input id="signup-email" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} className={AUTH_INPUT_CLS} disabled={isLoading} required />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="signup-password" className="text-slate-700">Password</Label>
+                  <div className="relative">
+                    <RiLockLine className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <Input id="signup-password" type="password" placeholder="Create a password" value={password} onChange={(e) => setPassword(e.target.value)} className={AUTH_INPUT_CLS} disabled={isLoading} required />
+                  </div>
+                  <p className="text-xs text-slate-400">Must be at least 6 characters</p>
+                </div>
+                <Button type="submit" className="h-11 w-full font-semibold text-white shadow-lg shadow-[#5C0FFE]/25 transition hover:opacity-95" style={{ background: AUTH_GRADIENT }} disabled={isLoading}>
+                  {isLoading ? <><RiLoader4Line className="mr-2 h-4 w-4 animate-spin" />Creating account…</> : <><RiSparklingLine className="mr-2 h-4 w-4" />Create Account</>}
+                </Button>
+              </form>
+            </TabsContent>
+          </Tabs>
         </div>
-        <button type="submit" className={authPrimary} disabled={isLoading}>
-          {isLoading ? <RiLoader4Line className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
-          {isLoading ? (signingIn ? "Signing in…" : "Creating account…") : signingIn ? "Sign in" : "Create account"}
-        </button>
-      </form>
-    </CustomerAuthShell>
+      </AuthCard>
+
+      <div className="space-y-2 text-center">
+        <p className="text-xs text-slate-500">
+          Are you a cleaner?{" "}
+          <Link href="/cleaner/auth" className="font-medium text-[#5C0FFE] hover:underline">Cleaner Portal</Link>
+        </p>
+        <p className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] text-slate-400">
+          <span>© {new Date().getFullYear()} Novara Cleaning LLC</span>
+          <a href="https://novaracleaning.com/privacy" target="_blank" rel="noopener noreferrer" className="underline">Privacy Policy</a>
+          <a href="https://novaracleaning.com/terms" target="_blank" rel="noopener noreferrer" className="underline">Terms</a>
+          <button type="button" className="underline" onClick={() => window.dispatchEvent(new CustomEvent("novara:cookie-settings"))}>Cookie settings</button>
+        </p>
+      </div>
+    </AuthScaffold>
   );
 }

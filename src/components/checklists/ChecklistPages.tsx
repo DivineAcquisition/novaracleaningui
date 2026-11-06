@@ -1,5 +1,6 @@
 "use client";
 
+import { SiteHeader } from "@/components/landing/Chrome";
 import type { ComponentType, ReactNode } from "react";
 import Link from "next/link";
 import {
@@ -52,33 +53,8 @@ export function ChecklistShell({
   ctaLabel?: string;
 }) {
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-xl">
-        <div className="container mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
-          <Link href="/" className="flex items-center gap-2.5">
-            <img src={logo} alt="" className="h-9 w-9 rounded-xl" />
-            <span className="font-jakarta text-lg font-bold tracking-tight">
-              Novara<span className="text-primary">Cleaning</span>
-            </span>
-          </Link>
-          <div className="flex items-center gap-2 sm:gap-3">
-            <a
-              href={INBOUND_PHONE.tel}
-              className="hidden items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground sm:flex"
-            >
-              <RiPhoneLine className="h-4 w-4" />
-              {INBOUND_PHONE.display}
-            </a>
-            <Link
-              href={ctaHref}
-              className="inline-flex h-10 items-center rounded-xl bg-gradient-primary px-4 text-sm font-semibold text-white shadow-lavender transition hover:opacity-90"
-            >
-              {ctaLabel}
-              <RiArrowRightLine className="ml-1.5 h-4 w-4" />
-            </Link>
-          </div>
-        </div>
-      </header>
+    <div className="book-theme landing min-h-screen bg-background text-foreground">
+      <SiteHeader />
       {children}
       <footer className="border-t border-border/60 bg-muted/30">
         <div className="container mx-auto flex max-w-6xl flex-col items-center justify-between gap-2 px-4 py-6 text-xs text-muted-foreground sm:flex-row">

@@ -335,7 +335,7 @@ export default function PortfolioLanding() {
           <div className="flex items-center gap-3">
             <img src={logo} alt="Novara Cleaning" className="h-9 w-9 rounded-xl" />
             <span className="font-heading text-lg font-bold tracking-tight">
-              Novara<span className="text-primary">Cleaning</span>
+              Novara Cleaning
             </span>
             <span className="hidden rounded-md bg-brand-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-primary sm:inline">
               Rentals

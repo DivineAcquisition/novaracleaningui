@@ -16,8 +16,7 @@ export const SITE = {
 export const NAV = {
   links: [
     { href: "/#how", label: "How it works" },
-    { href: "/#nova", label: "Nova" },
-    { href: "/#prices", label: "Prices" },
+    { href: "/#why", label: "Why Novara" },
     { href: "/checklist", label: "Checklists" },
     { href: "/str", label: "Airbnb hosts" },
   ],
@@ -349,9 +348,8 @@ export const FOOTER = {
       title: "Company",
       links: [
         { href: "/#how", label: "How it works" },
-        { href: "/#nova", label: "Nova" },
+        { href: "/#why", label: "Why Novara" },
         { href: "/checklist", label: "Checklists" },
-        { href: "/#faq", label: "FAQ" },
         { href: "https://hiring.novaracleaning.com", label: "Work with us" },
         { href: "/auth", label: "Sign in" },
       ],
@@ -451,10 +449,9 @@ export const MENUS = [
   {
     label: "Company",
     items: [
-      { href: "/#how", title: "How it works", body: "From price to a checked clean", icon: "route" },
-      { href: "/#guarantee", title: "Our guarantee", body: "Missed something? We come back free", icon: "shield" },
-      { href: "/#nova", title: "Call Nova", body: "Our assistant answers day and night", icon: "phone" },
-      { href: "/#faq", title: "FAQ", body: "Prices, cancellations, and more", icon: "help" },
+      { href: "/#how", title: "How it works", body: "Book in under two minutes", icon: "route" },
+      { href: "/#why", title: "Why Novara", body: "Checklists, supplies, and a 48-hour re-clean", icon: "shield" },
+      { href: "tel:+18337002611", title: "Call us", body: "(833) 700-2611 for booking", icon: "phone" },
       { href: "https://hiring.novaracleaning.com", title: "Work with us", body: "Join the cleaning team", icon: "briefcase" },
     ],
   },

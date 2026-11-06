@@ -44,7 +44,7 @@ export function HiringNav({ ctaHref = "#positions", ctaLabel = "Open roles" }: {
         >
           <img src={LOGO} alt="" className="h-8 w-8 rounded-lg" />
           <span className="font-heading text-[15px] font-bold tracking-tight text-foreground sm:text-base">
-            Novara<span className="text-primary">Cleaning</span>
+            Novara Cleaning
           </span>
         </Link>
         <div className="flex items-center gap-2 sm:gap-3">
@@ -75,7 +75,7 @@ export function HiringFooter() {
         <Link href="/hiring" className="flex items-center gap-2.5">
           <img src={LOGO} alt="" className="h-7 w-7 rounded-md opacity-90" />
           <span className="font-heading text-sm font-bold text-foreground">
-            Novara<span className="text-primary">Cleaning</span>
+            Novara Cleaning
           </span>
         </Link>
         <div className="max-w-xl text-center text-xs font-medium leading-relaxed text-muted-foreground sm:text-right">
