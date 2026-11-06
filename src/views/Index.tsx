@@ -16,7 +16,8 @@ import { NovaSection } from "@/components/landing/NovaSection";
 import { Problem, Standard } from "@/components/landing/Story";
 import { Promises } from "@/components/landing/Promises";
 import { QuoteReport } from "@/components/landing/QuoteReport";
-import { QuoteStudio } from "@/components/landing/QuoteStudio";
+import { BeforeAfterSection } from "@/components/landing/BeforeAfter";
+import { GuaranteeBand, ValueSection } from "@/components/landing/Value";
 import { Services } from "@/components/landing/Services";
 import { Eyebrow, gutter, shell, subhead } from "@/components/landing/primitives";
 import { HERO } from "@/lib/landing/content";
@@ -89,21 +90,19 @@ export default function IndexPage({ data }: { data: LandingData }) {
               </p>
             ) : null}
           </div>
-          {band ? (
-            <div className="relative mx-auto mt-14 max-w-xl text-left">
-              <QuoteStudio baseCents={deep} extraCents={oven?.cents || 0} />
-            </div>
-          ) : null}
         </section>
 
-        <AgentFlow />
-        <Problem />
+        <ValueSection />
         <Standard />
-        <HowRun />
-        <NovaSection deep={dollars(deep)} bandLabel={band?.label || ""} oven={oven ? dollars(oven.cents) : null} />
+        <GuaranteeBand />
+        <BeforeAfterSection />
         <QuoteReport prices={prices} />
         <Services prices={prices} />
+        <HowRun />
         <Hosts />
+        <Problem />
+        <NovaSection deep={dollars(deep)} bandLabel={band?.label || ""} oven={oven ? dollars(oven.cents) : null} />
+        <AgentFlow />
         <Promises />
         <Pricing prices={prices} />
         <Faq />

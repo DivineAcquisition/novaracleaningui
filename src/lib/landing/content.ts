@@ -104,8 +104,8 @@ export const PROBLEM = {
 
 export const STANDARD = {
   id: "standard",
-  eyebrow: "How we work",
-  headline: "Written down before we walk in.",
+  eyebrow: "What's included",
+  headline: "Every room, on a written list.",
   paragraphs: [
     "A clean is easy to promise and hard to check. So we write it down first: the price, the time, and every task on the list.",
     "Your cleaner works from that list room by room. If something on it was missed, you tell us within 48 hours and we come back to do it. No forms.",
@@ -369,3 +369,48 @@ export const FOOTER = {
     },
   ],
 } as const;
+
+/** What a customer gets, in plain outcomes. Shown right under the hero. */
+export const VALUE = {
+  id: "value",
+  eyebrow: "What you get",
+  headline: "A clean home without giving up your day off.",
+  lead: "We do the scrubbing, dusting, and mopping so your free time stays free. Here is what comes with every visit.",
+  items: [
+    {
+      id: "time",
+      title: "Your weekend back",
+      body: "A typical home takes two to three hours of hands-on cleaning. That is time we spend so you don't have to.",
+    },
+    {
+      id: "list",
+      title: "Every room, on a written list",
+      body: "Kitchen, bathrooms, and every room follow the checklist for your service, so nothing depends on memory.",
+    },
+    {
+      id: "supplies",
+      title: "Supplies included",
+      body: "Your cleaner brings the products and equipment. You don't need to buy or set out anything.",
+    },
+    {
+      id: "reclean",
+      title: "Missed a spot? We come back",
+      body: "Tell us within 48 hours and a cleaner returns to re-clean it at no charge.",
+    },
+  ],
+} as const;
+
+export const GUARANTEE = {
+  id: "guarantee",
+  headline: "If something is missed, we come back. Free.",
+  body: "Every clean is checked against its written list. If a task on it was missed, tell us within 48 hours of your visit and we send a cleaner back to re-clean those areas. No forms and no extra charge.",
+  points: ["Report it by reply text or a call", "A cleaner returns to fix it", "No charge, ever"],
+} as const;
+
+/**
+ * Real before and after photos from Novara jobs. The section stays hidden
+ * until this list has at least one pair. Use photos of the same spot from
+ * the same angle, with the customer's permission, and no people in frame.
+ * Images can be public URLs or files in /public.
+ */
+export const BEFORE_AFTER: Array<{ room: string; service: string; before: string; after: string }> = [];
