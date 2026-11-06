@@ -120,7 +120,7 @@ export default function PricingSheet() {
         });
       }
     }
-    router.push("/book/zip");
+    router.push("/#get-price");
   };
 
   return (

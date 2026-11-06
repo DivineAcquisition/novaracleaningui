@@ -106,7 +106,7 @@ export default function PlanDetail() {
       membership: String(planId),
       homeSize: selectedHomeSize,
     });
-    router.push(`/book/zip?${params.toString()}`);
+    router.push(`/?${params.toString()}#get-price`);
   };
 
   return (

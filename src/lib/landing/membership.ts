@@ -81,7 +81,7 @@ export const MEMBERSHIP_COPY = {
     "Report anything missed within 24 hours of a member visit for a free re-clean.",
   ],
   termsLink: { href: "https://novaracleaning.com/terms", label: "Read the full terms" },
-  oneTime: { text: "Not ready for a plan?", link: "Book a one-time clean", href: "/book/zip" },
+  oneTime: { text: "Not ready for a plan?", link: "Book a one-time clean", href: "/#get-price" },
 } as const;
 
 export function planPrice(plan: PlanId, homeSize: string): number {

@@ -28,7 +28,7 @@ export const RECEPTIONIST_KNOWLEDGE = {
       refunds: "refunds@novaracleaning.com",
     },
     websites: {
-      book: "https://try.novaracleaning.com/book/zip",
+      book: "https://try.novaracleaning.com/",
       account: "https://app.novaracleaning.com/account",
       membership: "https://try.novaracleaning.com/membership",
       commercial: "https://novaracleaning.com",
@@ -401,7 +401,7 @@ export const RECEPTIONIST_KNOWLEDGE = {
       "Create the booking and send the pay link by text or email. They pay the deposit on our Stripe page. Never take a card number on the call.",
       "Tell them the order on the link: confirm the service and the window, pay half, then finish the home details page. Pets, access, and the agreements are on that last page. The visit is not fully set until they finish it. If they pay and stop, we email them to finish the details.",
       "After the deposit clears they get a confirmation email: booking number, date, arrival window, service, address, total, deposit paid, and balance due.",
-      "They can also book it themselves at https://try.novaracleaning.com/book/zip. The pages run ZIP, home and service, date and arrival window, checkout for the deposit, then home details.",
+      "They can also book it themselves at https://try.novaracleaning.com/. The pages run ZIP, home and service, date and arrival window, checkout for the deposit, then home details.",
     ],
     ifTheyDoNotProceed: "Still save every field you have. Text or email the summary: service, address, window if they named one, total, the courtesy if you offered it, the deposit, and the booking link. Tell them the price holds for 48 hours.",
     readBack: "Before you hang up, read back name, mobile, email, address, service, add-ons, date, arrival window, total, courtesy if any, and deposit. Ask them to correct anything that is wrong. That is the record we save and send.",

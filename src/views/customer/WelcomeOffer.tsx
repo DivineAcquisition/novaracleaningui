@@ -92,7 +92,7 @@ export default function WelcomeOfferPage({ token }: { token: string }) {
             <div className="grid gap-2">
               {PLANS.map((plan) => (
                 <Button key={plan.id} asChild className="w-full">
-                  <a href={`/book/zip?membership=${plan.id}&welcome=${encodeURIComponent(offer.code || "")}`}>
+                  <a href={`/?membership=${plan.id}&welcome=${encodeURIComponent(offer.code || "")}`}>
                     Start {plan.label}
                   </a>
                 </Button>

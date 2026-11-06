@@ -45,7 +45,7 @@ export function roomIcon(title: string): Icon {
 
 export function ChecklistShell({
   children,
-  ctaHref = "/book/zip",
+  ctaHref = "/#get-price",
   ctaLabel = "Book a clean",
 }: {
   children: ReactNode;

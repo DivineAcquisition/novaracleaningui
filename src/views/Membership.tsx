@@ -309,7 +309,7 @@ export default function Membership() {
         <div className="text-center mt-10 space-y-3">
           <p className="text-muted-foreground text-sm">
             Not ready for a membership?{' '}
-            <Button variant="link" onClick={() => router.push('/book/zip')} className="p-0 h-auto text-primary">
+            <Button variant="link" onClick={() => router.push('/#get-price')} className="p-0 h-auto text-primary">
               Book a one-time cleaning
             </Button>
           </p>

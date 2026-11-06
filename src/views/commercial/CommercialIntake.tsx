@@ -495,7 +495,7 @@ export default function CommercialIntake() {
                 </a>
                 {" · "}
                 Looking for home cleaning instead?{" "}
-                <a href="https://try.novaracleaning.com/book/zip" className="font-semibold text-primary hover:underline">
+                <a href="https://try.novaracleaning.com/" className="font-semibold text-primary hover:underline">
                   Book residential
                 </a>
               </p>

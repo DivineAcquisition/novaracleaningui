@@ -192,7 +192,7 @@ export default function PropertyDetails() {
   }, [bookingId, bookingData.bookingId, router]);
 
   // Keep address chain in sync — if the context updates (e.g. user
-  // bounces back to /book/zip and changes ZIP), reflect the new value
+  // bounces back to the ZIP step and changes ZIP), reflect the new value
   // here unless the user has already typed over it.
   useEffect(() => {
     if (bookingData.zipCode && !zipCode) setZipCode(bookingData.zipCode);

@@ -1,32 +1,32 @@
 "use client";
+
+// The first booking step: ZIP check, then contact details (in the service
+// area) or the waitlist (outside it). Used in the landing page hero, which is
+// where every booking starts. Saves the ZIP, city and state, referral and
+// membership parameters to the booking state, records the abandoned cart and
+// lead, and sends the visitor on to /book/sqft.
+
 import {
   RiArrowRightLine,
   RiCheckboxCircleLine,
   RiGiftLine,
   RiMapPinLine,
-  RiTimeLine,
-  RiVipCrownLine
+  RiTimeLine
 } from "@/components/icons";
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useBooking } from "@/contexts/BookingContext";
 
-import { BookingHeader } from "@/components/booking/BookingHeader";
-import { BookingFooter } from "@/components/booking/BookingFooter";
-import { TrustChips } from "@/components/booking/TrustChips";
-import { ZipGallery } from "@/components/booking/ZipGallery";
 import { supabase } from "@/integrations/supabase/client";
 import { formatPhoneNumber } from "@/lib/input-formatters";
 import { trackLead } from "@/lib/meta-pixel";
-import { SEO } from "@/components/SEO";
 import { getStoredTrackingData, getTrackingPayload } from "@/hooks/useUTMTracking";
 
 type FormMode = 'zip' | 'contact' | 'waitlist' | 'waitlist-success';
 
-export default function BookingZip() {
+export function BookingStartForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { updateBookingData } = useBooking();
@@ -236,7 +236,7 @@ export default function BookingZip() {
           city: cityState.split(', ')[0] || '',
           state: cityState.split(', ')[1] || '',
           source: tracking.utm_source || 'Website',
-          landingPage: tracking.landing_page || '/book/zip',
+          landingPage: tracking.landing_page || '/',
           referrer: tracking.referrer || undefined,
           fbclid: tracking.fbclid || fbclid || undefined,
           gclid: tracking.gclid || undefined,
@@ -319,15 +319,7 @@ export default function BookingZip() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-hero">
-      <SEO title="Book a Cleaning" description="Enter your ZIP code to check if Novara Cleaning serves your area. Professional home cleaning starting at $99." />
-      {/* Sticky Booking Header */}
-      <BookingHeader currentStep={1} totalSteps={6} stepLabel="Location" />
-
-      {/* Hero + Booking Section */}
-      <section className="container mx-auto px-4 py-12 md:py-20">
-        <div className="max-w-2xl mx-auto text-center space-y-8">
-          
+    <div className="space-y-6">
           {/* Referral Banner */}
           {referralCode && (
             <div className="flex items-center gap-3 p-4 bg-primary/10 border border-primary/30 rounded-xl animate-fade-in">
@@ -341,32 +333,6 @@ export default function BookingZip() {
             </div>
           )}
 
-          <div className="space-y-4">
-            <h1 className="text-3xl md:text-4xl tracking-tight lg:text-6xl text-center font-extrabold font-jakarta mx-auto max-w-4xl">
-              {formMode === 'waitlist-success'
-                ? "You're On The List! 🎉"
-                : "Book Your Cleaning Today"}
-            </h1>
-
-            {/* New-customer 50% off sub-headline — sits directly under
-                the page headline, in our primary brand color. Hidden on
-                the waitlist-success state. */}
-            {formMode !== 'waitlist-success' && (
-              <p className="mx-auto max-w-xl text-sm leading-relaxed text-[#2c2c2c] md:text-base">
-                <span className="font-jakarta text-lg font-bold text-foreground md:text-2xl">
-                  <span className="text-[#6810FE]">Standard 15% off. Deep 25% off.</span>
-                </span>{" "}
-                {formMode === 'waitlist'
-                  ? "We are not in your area yet, and we are expanding soon."
-                  : "Enter your ZIP code and we will show the price for your home. Most bookings take a 50% deposit."}
-              </p>
-            )}
-          </div>
-
-          {/* Main Card */}
-          <Card className="overflow-hidden">
-            <CardContent className="pt-8 pb-8 space-y-6">
-              
               {/* ZIP Code Form */}
               {formMode === 'zip' && (
                 <form onSubmit={handleZipSubmit} className="space-y-4 animate-fade-in">
@@ -522,19 +488,11 @@ export default function BookingZip() {
 
                   {/* Benefits */}
                   <div className="bg-muted/30 rounded-lg p-4 space-y-2">
-                    <p className="text-sm font-medium text-foreground">Waitlist perks:</p>
+                    <p className="text-sm font-medium text-foreground">What you get:</p>
                     <ul className="text-sm text-muted-foreground space-y-1">
                       <li className="flex items-center gap-2">
                         <RiCheckboxCircleLine className="w-4 h-4 text-primary" />
                         First to know when we launch in your area
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <RiCheckboxCircleLine className="w-4 h-4 text-primary" />
-                        Exclusive early-bird pricing
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <RiCheckboxCircleLine className="w-4 h-4 text-primary" />
-                        Special founding member perks
                       </li>
                     </ul>
                   </div>
@@ -656,43 +614,6 @@ export default function BookingZip() {
                   </Button>
                 </div>
               )}
-            </CardContent>
-          </Card>
-
-          {(formMode === 'zip' || formMode === 'contact') && <TrustChips />}
-
-          {/* Membership Promo Card - Only show when not on waitlist success */}
-          {formMode !== 'waitlist-success' && (
-            <Card className="mt-12 border-2 border-primary/40 bg-gradient-lavender shadow-card">
-              <CardContent className="pt-6 pb-6">
-                <div className="flex flex-col md:flex-row items-center gap-4 md:gap-6">
-                  <div className="flex-shrink-0">
-                    <div className="w-12 h-12 md:w-16 md:h-16 bg-primary rounded-full flex items-center justify-center shadow-lavender">
-                      <RiVipCrownLine className="w-6 h-6 md:w-8 md:h-8 text-white" />
-                    </div>
-                  </div>
-                  <div className="flex-1 text-center md:text-left space-y-2">
-                    <h3 className="text-lg md:text-xl font-semibold">Want a regular clean?</h3>
-                    <p className="text-sm md:text-base text-muted-foreground">
-                      Memberships run monthly, every two weeks, or weekly. Bi-weekly and weekly plans
-                      come with a dedicated cleaner and up to 30% off add-ons.
-                    </p>
-                  </div>
-                  <Button onClick={() => router.push("/membership")} size="lg" className="bg-primary hover:bg-primary-hover w-full md:w-auto h-11 md:h-12">
-                    See plans
-                    <RiArrowRightLine className="w-4 h-4 ml-2" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      </section>
-
-      <ZipGallery />
-
-      {/* Footer */}
-      <BookingFooter />
     </div>
   );
 }

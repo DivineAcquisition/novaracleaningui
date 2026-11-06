@@ -18,7 +18,7 @@ interface StepNavigationProps {
 }
 
 const STEP_ROUTES: Record<number, string> = {
-  1: "/book/zip",
+  1: "/",
   2: "/book/sqft",
   3: "/book/offer",
   4: "/book/checkout",

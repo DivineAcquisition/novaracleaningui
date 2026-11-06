@@ -3,16 +3,114 @@
 // Booking flow header: logo, help links, and step progress. Same props as
 // before, so every step keeps calling it the same way.
 
+import { useEffect, useMemo, useRef, useState } from "react";
 import { RiArrowRightUpLine, RiPhoneLine } from "@/components/icons";
 import { INBOUND_PHONE } from "@/config/brand-config";
+import { useBooking } from "@/contexts/BookingContext";
+import { useReducedMotion } from "@/components/landing/motion";
+import { MEMBERSHIP_PRICES, calculatePrice, getServiceFinalPrice } from "@/lib/pricing";
 
 interface BookingHeaderProps {
   currentStep: number;
   totalSteps: number;
   stepLabel?: string;
+  /** Exact amount from the step. Checkout passes its own total, which
+   *  includes same-day and focused pricing. Omit to work it out from the
+   *  saved booking. */
+  runningTotal?: number | null;
+  runningLabel?: string;
 }
 
-export function BookingHeader({ currentStep, totalSteps, stepLabel }: BookingHeaderProps) {
+const LAST_TOTAL_KEY = "novara_running_total";
+
+function money(v: number): string {
+  const cents = Math.round(v * 100);
+  return "$" + (cents / 100).toLocaleString("en-US", {
+    minimumFractionDigits: cents % 100 === 0 ? 0 : 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+/** The price so far, from the same tables checkout charges from. */
+function useStepTotal(currentStep: number): { value: number; label: string } | null {
+  const { bookingData } = useBooking();
+  return useMemo(() => {
+    const size = bookingData.homeSizeId;
+    if (!size) return null;
+    const plan = bookingData.membershipPlan;
+    if (plan === "monthly" || plan === "biweekly" || plan === "weekly") {
+      const monthly = MEMBERSHIP_PRICES[size]?.[plan] || 0;
+      return monthly > 0 ? { value: monthly, label: "Per month" } : null;
+    }
+    // Until a service is picked (home size and service steps), show the
+    // lowest price for this home: a standard clean after the online discount.
+    const service = bookingData.serviceType;
+    if (currentStep < 4 || !service || service === "focused") {
+      const from = getServiceFinalPrice(size, "standard");
+      return from > 0 ? { value: from, label: "From" } : null;
+    }
+    const total = calculatePrice(size, service, bookingData.addOns || [], "none", false).total;
+    return total > 0 ? { value: total, label: "Your price" } : null;
+  }, [bookingData.homeSizeId, bookingData.membershipPlan, bookingData.serviceType, bookingData.addOns, currentStep]);
+}
+
+/** Counts from the last total the visitor saw (kept across steps) to the new one. */
+function useRunningNumber(target: number | null, reduced: boolean): number | null {
+  const [value, setValue] = useState<number | null>(null);
+  const fromRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (target === null) {
+      setValue(null);
+      return;
+    }
+    if (fromRef.current === null) {
+      const saved = Number(sessionStorage.getItem(LAST_TOTAL_KEY));
+      fromRef.current = Number.isFinite(saved) && saved > 0 ? saved : 0;
+    }
+    sessionStorage.setItem(LAST_TOTAL_KEY, String(target));
+    const from = fromRef.current;
+    if (reduced || from === target) {
+      fromRef.current = target;
+      setValue(target);
+      return;
+    }
+    const start = performance.now();
+    const duration = 700;
+    let raf = 0;
+    const tick = (now: number) => {
+      const q = Math.min(1, (now - start) / duration);
+      const v = from + (target - from) * (1 - Math.pow(1 - q, 3));
+      fromRef.current = v;
+      setValue(v);
+      if (q < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, reduced]);
+  return value;
+}
+
+function RunningTotal({ currentStep, override, overrideLabel }: { currentStep: number; override?: number | null; overrideLabel?: string }) {
+  // Booking state comes from localStorage, so render only after mount to
+  // keep the server and browser HTML the same.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const reduced = useReducedMotion();
+  const computed = useStepTotal(currentStep);
+  const hasOverride = override != null && override > 0;
+  const target = hasOverride ? (override as number) : computed?.value ?? null;
+  const label = hasOverride ? overrideLabel || "Your price" : computed?.label || "";
+  const shown = useRunningNumber(mounted ? target : null, reduced);
+  if (!mounted || shown === null || target === null) return null;
+  return (
+    <p className="inline-flex items-baseline gap-1.5 rounded-full bg-[#F3EEFF] px-2.5 py-0.5" aria-live="polite">
+      <span className="text-[11.5px] text-[#5A1FD6]">{label}</span>
+      <span className="text-[14px] font-semibold tabular-nums tracking-tight text-[#0B0A11]">{money(shown)}</span>
+    </p>
+  );
+}
+
+export function BookingHeader({ currentStep, totalSteps, stepLabel, runningTotal, runningLabel }: BookingHeaderProps) {
   const progressPercent = Math.round((currentStep / totalSteps) * 100);
 
   return (
@@ -53,7 +151,10 @@ export function BookingHeader({ currentStep, totalSteps, stepLabel }: BookingHea
             </span>
             {stepLabel ? <span className="ml-2 font-medium">{stepLabel}</span> : null}
           </p>
-          <p className="text-[#5F5B6B]">{progressPercent}%</p>
+          <div className="flex items-center gap-2.5">
+            <RunningTotal currentStep={currentStep} override={runningTotal} overrideLabel={runningLabel} />
+            <p className="text-[#5F5B6B]">{progressPercent}%</p>
+          </div>
         </div>
         <div
           className="mt-2 h-1 w-full overflow-hidden rounded-full bg-[#ECEAF2]"

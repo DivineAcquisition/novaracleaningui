@@ -51,7 +51,7 @@ import { preloadStripe } from "@/lib/stripe-client";
 import { VALUE_STACK_HEADLINES } from "@/lib/value-stack";
 
 const BOOKING_STEPS = [
-  { number: 1, label: "Location", path: "/book/zip" },
+  { number: 1, label: "Location", path: "/" },
   { number: 2, label: "Home Size", path: "/book/sqft" },
   { number: 3, label: "Service", path: "/book/offer" },
   { number: 4, label: "Checkout", path: "/book/checkout" },

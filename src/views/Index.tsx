@@ -7,7 +7,6 @@ import {
   RiFlashlightLine,
   RiMapPinLine,
   RiPhoneLine,
-  RiRepeatLine,
   RiShieldLine,
   RiSparklingLine,
   RiTimeLine,
@@ -16,17 +15,13 @@ import {
   RiPriceTag3Line,
   RiUserLine,
 } from "@/components/icons";
-import { useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { SEO } from "@/components/SEO";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useBooking } from "@/contexts/BookingContext";
+import { BookingStartForm } from "@/components/booking/BookingStartForm";
 
-import { supabase } from "@/integrations/supabase/client";
-import { formatPhoneNumber } from "@/lib/input-formatters";
 import { SiteHeader, StickyMobileBar } from "@/components/landing/Chrome";
 import { INBOUND_PHONE } from "@/config/brand-config";
 import { SiteFooter } from "@/components/landing/Footer";
@@ -76,97 +71,6 @@ type IndexProps = {
 };
 
 const Index = ({ standardFrom = null, afterHow = null, afterWhy = null }: IndexProps) => {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const { updateBookingData } = useBooking();
-  const fbclid = searchParams.get('fbclid');
-  const [zipCode, setZipCode] = useState("");
-  const [isValidating, setIsValidating] = useState(false);
-  const [zipValidated, setZipValidated] = useState(false);
-  const [cityState, setCityState] = useState("");
-
-  // Contact form state
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const handleZipSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (zipCode.length !== 5) return;
-    setIsValidating(true);
-
-    const { data: coverage } = await supabase
-      .from("service_coverage_zones")
-      .select("city, state")
-      .eq("zip_code", zipCode)
-      .eq("is_active", true)
-      .single();
-    if (coverage) {
-      setCityState(`${coverage.city}, ${coverage.state}`);
-    } else {
-      setCityState("your area");
-    }
-    setIsValidating(false);
-    setZipValidated(true);
-    updateBookingData({ zipCode });
-  };
-
-  const handleContactSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!firstName || !lastName || !email || !phone) return;
-    setIsSubmitting(true);
-    const formattedPhone = phone.replace(/\D/g, "");
-
-    updateBookingData({
-      firstName,
-      lastName,
-      email,
-      phone: formattedPhone,
-    });
-
-    // Send lead capture webhook with client-side duplicate guard
-    const capturedEmails: string[] = JSON.parse(localStorage.getItem('lead_captured_emails') || '[]');
-    if (!capturedEmails.includes(email.toLowerCase())) {
-      supabase.functions
-        .invoke("send-lead-capture-webhook", {
-          body: {
-            firstName,
-            lastName,
-            email,
-            phone: formattedPhone,
-            zipCode,
-            city: cityState.split(", ")[0] || "",
-            state: cityState.split(", ")[1] || "",
-            source: "Website",
-            landingPage: "/",
-            fbclid: fbclid || undefined,
-          },
-        })
-        .then(() => {
-          const updated = [...capturedEmails, email.toLowerCase()];
-          localStorage.setItem('lead_captured_emails', JSON.stringify(updated));
-        })
-        .catch((err) => console.error("Lead webhook error:", err));
-    }
-    router.push("/book/sqft");
-  };
-
-  const handleChangeZip = () => {
-    setZipValidated(false);
-    setZipCode("");
-    setFirstName("");
-    setLastName("");
-    setEmail("");
-    setPhone("");
-  };
-
-  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const formatted = formatPhoneNumber(e.target.value);
-    setPhone(formatted);
-  };
-
   return (
     <div className="book-theme landing min-h-screen bg-background">
       <SEO
@@ -212,176 +116,7 @@ const Index = ({ standardFrom = null, afterHow = null, afterWhy = null }: IndexP
             <Card id="get-price" className="relative max-w-md mx-auto overflow-hidden panel scroll-mt-28">
               <ShineBorder borderWidth={1.5} duration={14} />
               <CardContent className="relative z-10 p-6 md:p-8">
-                {/* ZIP Code Form */}
-                <div
-                  className={`transition-all duration-500 ease-out ${
-                    zipValidated
-                      ? "h-0 opacity-0 overflow-hidden"
-                      : "h-auto opacity-100"
-                  }`}
-                >
-                  <form onSubmit={handleZipSubmit} className="space-y-4">
-                    <div className="space-y-2">
-                      <label
-                        htmlFor="zipCode"
-                        className="text-sm font-semibold text-left block"
-                      >
-                        Enter Your ZIP Code
-                      </label>
-                      <Input
-                        id="zipCode"
-                        type="text"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        maxLength={5}
-                        placeholder="e.g. 20814"
-                        value={zipCode}
-                        onChange={(e) =>
-                          setZipCode(e.target.value.replace(/\D/g, ""))
-                        }
-                        className="h-14 text-lg text-center bg-background/50 border-border/60"
-                        autoFocus
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Check availability and see instant pricing
-                      </p>
-                    </div>
-
-                    <Button
-                      type="submit"
-                      size="lg"
-                      disabled={zipCode.length !== 5 || isValidating}
-                      className="w-full h-13 text-base font-semibold"
-                    >
-                      {isValidating ? "Checking..." : "Get My Price"}
-                      <RiArrowRightLine className="w-5 h-5 ml-2" />
-                    </Button>
-                  </form>
-                </div>
-
-                {/* Contact Details Form */}
-                <div
-                  className={`transition-all duration-500 ease-out ${
-                    zipValidated
-                      ? "opacity-100 translate-y-0"
-                      : "opacity-0 translate-y-4 h-0 overflow-hidden"
-                  }`}
-                >
-                  <form
-                    onSubmit={handleContactSubmit}
-                    className="space-y-4"
-                  >
-                    {/* Success Message */}
-                    <div className="flex items-start gap-3 p-3 bg-primary/[0.06] rounded-xl border border-primary/10">
-                      <RiCheckboxCircleLine className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-                      <div className="text-left">
-                        <p className="font-semibold text-sm text-foreground">
-                          We service {cityState}!
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Enter your details to see your personalized quote
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <label
-                          htmlFor="firstName"
-                          className="text-xs font-semibold text-left block"
-                        >
-                          First Name
-                        </label>
-                        <Input
-                          id="firstName"
-                          type="text"
-                          placeholder="John"
-                          value={firstName}
-                          onChange={(e) => setFirstName(e.target.value)}
-                          className="h-11 bg-background/50"
-                          required
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label
-                          htmlFor="lastName"
-                          className="text-xs font-semibold text-left block"
-                        >
-                          Last Name
-                        </label>
-                        <Input
-                          id="lastName"
-                          type="text"
-                          placeholder="Smith"
-                          value={lastName}
-                          onChange={(e) => setLastName(e.target.value)}
-                          className="h-11 bg-background/50"
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label
-                        htmlFor="email"
-                        className="text-xs font-semibold text-left block"
-                      >
-                        Email
-                      </label>
-                      <Input
-                        id="email"
-                        type="email"
-                        placeholder="john@example.com"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        className="h-11 bg-background/50"
-                        required
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label
-                        htmlFor="phone"
-                        className="text-xs font-semibold text-left block"
-                      >
-                        Phone Number
-                      </label>
-                      <Input
-                        id="phone"
-                        type="tel"
-                        placeholder="(301) 555-0123"
-                        value={phone}
-                        onChange={handlePhoneChange}
-                        className="h-11 bg-background/50"
-                        required
-                      />
-                    </div>
-
-                    <Button
-                      type="submit"
-                      size="lg"
-                      disabled={
-                        !firstName ||
-                        !lastName ||
-                        !email ||
-                        phone.replace(/\D/g, "").length !== 10 ||
-                        isSubmitting
-                      }
-                      className="w-full h-13 text-base font-semibold"
-                    >
-                      {isSubmitting ? "Processing..." : "See My Quote"}
-                      <RiArrowRightLine className="w-5 h-5 ml-2" />
-                    </Button>
-
-                    <button
-                      type="button"
-                      onClick={handleChangeZip}
-                      className="text-xs text-primary hover:text-primary/80 font-medium transition-colors"
-                    >
-                      Change ZIP code ({zipCode})
-                    </button>
-                  </form>
-                </div>
+                <BookingStartForm />
               </CardContent>
             </Card>
 

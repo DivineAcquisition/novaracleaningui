@@ -78,7 +78,7 @@ import { PriceBreakdown } from "@/components/compliance/PriceBreakdown";
 const BOOKING_STEPS = [{
   number: 1,
   label: "Location",
-  path: "/book/zip"
+  path: "/"
 }, {
   number: 2,
   label: "Home Size",
@@ -938,7 +938,7 @@ export default function BookingCheckout() {
             : "Complete your booking with a secure 50% deposit. Balance auto-charged after service."}
           noindex
         />
-        <BookingHeader currentStep={currentStep} totalSteps={6} stepLabel="Checkout" />
+        <BookingHeader currentStep={currentStep} totalSteps={6} stepLabel="Checkout" runningTotal={isNewMembershipSignup ? membershipDueDollars : isGlowPlan ? null : depositPricing.total} runningLabel={isNewMembershipSignup ? "First month" : "Your price"} />
         
         <div ref={checkoutCaptureRef} className="container max-w-2xl mx-auto px-4 py-6 space-y-6">
           

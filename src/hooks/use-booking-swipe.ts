@@ -13,7 +13,7 @@ interface UseBookingSwipeOptions {
 }
 
 const STEP_ROUTES = [
-  '/book/zip',
+  '/',
   '/book/sqft',
   '/book/offer',
   '/book/checkout',

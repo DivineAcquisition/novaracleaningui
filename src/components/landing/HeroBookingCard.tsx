@@ -1,7 +1,7 @@
 "use client";
 
 // The landing page's ZIP box. It hands the visitor to the booking flow
-// (try.novaracleaning.com/book/zip) with the ZIP filled in; the booking flow
+// (the ZIP form on try.novaracleaning.com) with the ZIP filled in; the booking flow
 // checks coverage, captures the lead, and continues from there. Attribution
 // parameters on the landing URL (ref, fbclid, utm_*) are passed along.
 
@@ -25,7 +25,7 @@ export function HeroBookingCard({ centered = false }: { centered?: boolean }) {
     e.preventDefault();
     if (zipCode.length !== 5) return;
     setGoing(true);
-    window.location.assign(bookingHref("/book/zip", { zip: zipCode }));
+    window.location.assign(bookingHref("/", { zip: zipCode }));
   };
 
   return (

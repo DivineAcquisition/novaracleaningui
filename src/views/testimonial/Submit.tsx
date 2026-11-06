@@ -140,7 +140,7 @@ export default function TestimonialSubmitPage({ token }: { token: string }) {
           <CardContent className="text-center space-y-4">
             <p className="text-2xl font-bold tracking-widest text-primary">{meta.promoCode}</p>
             <Button asChild className="w-full">
-              <a href="https://try.novaracleaning.com/book/zip">Book your next clean</a>
+              <a href="https://try.novaracleaning.com/">Book your next clean</a>
             </Button>
           </CardContent>
         </Card>

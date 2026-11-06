@@ -91,7 +91,7 @@ export function DomainRestricted({
             To book a cleaning, please visit our booking site:
           </p>
           <Button 
-            onClick={() => window.location.href = 'https://try.novaracleaning.com/book/zip'}
+            onClick={() => window.location.href = 'https://try.novaracleaning.com/'}
             className="w-full"
           >
             <RiExternalLinkLine className="w-4 h-4 mr-2" />
