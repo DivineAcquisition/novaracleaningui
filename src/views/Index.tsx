@@ -34,7 +34,7 @@ export default function IndexPage({ data }: { data: LandingData }) {
   return (
     <div className="landing min-h-screen bg-white font-sans text-ink antialiased">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd()) }} />
-      <SiteHeader />
+      <SiteHeader withMenus />
 
       <main id="main">
         {/* Hero — centered, with the original headline */}

@@ -5,22 +5,14 @@ import {
   RiAlarmWarningLine,
   RiArrowRightLine,
   RiCheckLine,
-  RiChatOffLine,
   RiFileList3Line,
-  RiPhoneLine,
-  RiPriceTag3Line,
-  RiQuestionLine,
 } from "@/components/icons";
+import { ChatCircleSlash, PhoneSlash, Question, Tag } from "@phosphor-icons/react/dist/ssr";
 import { CHECKLISTS } from "@/lib/checklists";
 import { PROBLEM, STANDARD } from "@/lib/landing/content";
 import { Index, Section, lead, panel } from "./primitives";
 
-const PAIN_ICONS = [
-  RiPhoneLine,
-  RiPriceTag3Line,
-  RiQuestionLine,
-  RiChatOffLine,
-];
+const PAIN_ICONS = [PhoneSlash, Tag, Question, ChatCircleSlash];
 
 function ScatteredScene() {
   const { tabs, activeTab, note, flags, stamp } = PROBLEM.scene;
@@ -89,7 +81,7 @@ export function Problem() {
             return (
               <li key={pain} className={`${panel} flex items-start gap-4 p-4`}>
                 <span className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-lg border border-line bg-[#F6F5F9]">
-                  <Icon className="h-4 w-4 text-[#6810FE]" aria-hidden="true" />
+                  <Icon className="h-5 w-5 text-[#6810FE]" weight="duotone" aria-hidden="true" />
                 </span>
                 <p className="pt-1.5 text-[15px] text-ink">
                   <Index n={i + 1} className="mr-2" />

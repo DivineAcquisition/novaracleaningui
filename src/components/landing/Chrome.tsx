@@ -9,25 +9,25 @@ import * as NavigationMenu from "@radix-ui/react-navigation-menu";
 import {
   ArrowRight,
   ArrowUpRight,
-  BedDouble,
+  ArrowsClockwise,
+  Bed,
   Briefcase,
-  Building2,
-  ChevronDown,
-  CircleHelp,
-  ClipboardCheck,
-  ClipboardList,
-  KeyRound,
-  Menu,
+  Buildings,
+  CaretDown,
+  ClipboardText,
+  Key,
+  List,
+  ListChecks,
+  Path,
   Phone,
-  Repeat,
-  Route,
-  ShieldCheck,
-  Sparkles,
-  SprayCan,
+  Question,
+  SealCheck,
+  Sparkle,
+  SprayBottle,
   Truck,
   X,
-  type LucideIcon,
-} from "lucide-react";
+  type Icon as PhosphorIcon,
+} from "@phosphor-icons/react";
 import { RiPhoneLine } from "@/components/icons";
 import { INBOUND_PHONE } from "@/config/brand-config";
 import { MENUS, NAV, PROMO } from "@/lib/landing/content";
@@ -44,20 +44,20 @@ export function PriceButton({ children, variant = "primary", className }: { chil
   );
 }
 
-const MENU_ICONS: Record<string, LucideIcon> = {
-  sparkles: Sparkles,
-  spray: SprayCan,
+const MENU_ICONS: Record<string, PhosphorIcon> = {
+  sparkles: Sparkle,
+  spray: SprayBottle,
   truck: Truck,
-  repeat: Repeat,
-  list: ClipboardList,
-  bed: BedDouble,
-  key: KeyRound,
-  building: Building2,
-  clipboard: ClipboardCheck,
-  route: Route,
-  shield: ShieldCheck,
+  repeat: ArrowsClockwise,
+  list: ListChecks,
+  bed: Bed,
+  key: Key,
+  building: Buildings,
+  clipboard: ClipboardText,
+  route: Path,
+  shield: SealCheck,
   phone: Phone,
-  help: CircleHelp,
+  help: Question,
   briefcase: Briefcase,
 };
 
@@ -72,7 +72,7 @@ export function PromoBanner({ showCta = true }: { showCta?: boolean }) {
         {showCta ? (
           <a href={BOOK_PATH} className="inline-flex items-center gap-1 font-medium text-[#C9B6FF] underline-offset-4 hover:text-white hover:underline">
             {PROMO.cta}
-            <ArrowRight className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
+            <ArrowRight className="h-3.5 w-3.5" weight="bold" aria-hidden="true" />
           </a>
         ) : null}
       </span>
@@ -92,7 +92,7 @@ export function BrandMark({ className }: { className?: string }) {
 }
 
 function MenuItemLink({ item, onNavigate }: { item: (typeof MENUS)[number]["items"][number]; onNavigate?: () => void }) {
-  const Icon = MENU_ICONS[item.icon] ?? Sparkles;
+  const Icon = MENU_ICONS[item.icon] ?? Sparkle;
   const external = item.href.startsWith("http");
   return (
     <a
@@ -101,13 +101,13 @@ function MenuItemLink({ item, onNavigate }: { item: (typeof MENUS)[number]["item
       {...(external ? { target: "_blank", rel: "noopener" } : {})}
       className="group flex items-start gap-3 rounded-xl p-2.5 transition hover:bg-[#F6F5F9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6810FE]"
     >
-      <span className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-lg border border-line bg-white text-[#6810FE] group-hover:border-[#C9B6FF]">
-        <Icon className="h-[18px] w-[18px]" strokeWidth={1.75} aria-hidden="true" />
+      <span className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl bg-[#F3EEFF] text-[#6810FE] transition group-hover:bg-[#6810FE] group-hover:text-white">
+        <Icon className="h-5 w-5" weight="duotone" aria-hidden="true" />
       </span>
       <span className="min-w-0">
         <span className="flex items-center gap-1 text-[14.5px] font-medium text-ink">
           {item.title}
-          {external ? <ArrowUpRight className="h-3.5 w-3.5 text-ink-muted" strokeWidth={1.75} aria-hidden="true" /> : null}
+          {external ? <ArrowUpRight className="h-3.5 w-3.5 text-ink-muted" aria-hidden="true" /> : null}
         </span>
         <span className="block text-[13px] leading-snug text-ink-muted">{item.body}</span>
       </span>
@@ -115,7 +115,8 @@ function MenuItemLink({ item, onNavigate }: { item: (typeof MENUS)[number]["item
   );
 }
 
-export function SiteHeader() {
+/** Site header. `withMenus` adds the dropdown nav; only the main landing page passes it. */
+export function SiteHeader({ withMenus = false }: { withMenus?: boolean }) {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [openSection, setOpenSection] = useState<string | null>(MENUS[0].label);
@@ -156,13 +157,14 @@ export function SiteHeader() {
             <BrandMark />
           </Link>
 
+          {withMenus ? (
           <NavigationMenu.Root className="relative hidden lg:block" delayDuration={80}>
             <NavigationMenu.List className="flex items-center gap-0.5">
               {MENUS.map((menu) => (
                 <NavigationMenu.Item key={menu.label}>
                   <NavigationMenu.Trigger className="group inline-flex items-center gap-1 rounded-lg px-3 py-2 text-[14.5px] text-ink-muted transition hover:bg-[#F6F5F9] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6810FE] data-[state=open]:bg-[#F6F5F9] data-[state=open]:text-ink">
                     {menu.label}
-                    <ChevronDown className="h-4 w-4 transition-transform duration-200 group-data-[state=open]:rotate-180" strokeWidth={1.75} aria-hidden="true" />
+                    <CaretDown className="h-4 w-4 transition-transform duration-200 group-data-[state=open]:rotate-180" aria-hidden="true" />
                   </NavigationMenu.Trigger>
                   <NavigationMenu.Content className="absolute left-0 top-0 w-[380px] p-2">
                     <ul className="grid gap-0.5">
@@ -182,10 +184,11 @@ export function SiteHeader() {
               <NavigationMenu.Viewport className="relative h-[var(--radix-navigation-menu-viewport-height)] w-[var(--radix-navigation-menu-viewport-width)] overflow-hidden rounded-2xl border border-line bg-white shadow-[0_24px_50px_-24px_rgba(11,10,17,0.35)] transition-[width,height] duration-200" />
             </div>
           </NavigationMenu.Root>
+          ) : null}
 
           <div className="flex items-center gap-2">
             <a href={INBOUND_PHONE.tel} className="hidden items-center gap-1.5 px-2 py-1.5 text-[14px] font-medium text-ink xl:inline-flex">
-              <Phone className="h-4 w-4 text-[#6810FE]" strokeWidth={1.75} aria-hidden="true" />
+              <Phone className="h-4 w-4 text-[#6810FE]" weight="duotone" aria-hidden="true" />
               {INBOUND_PHONE.display}
             </a>
             <Link href="/auth" className="hidden px-2 py-1.5 text-[14px] text-ink-muted hover:text-ink sm:inline">
@@ -194,6 +197,7 @@ export function SiteHeader() {
             <a href={BOOK_PATH} className={cn(btnPrimary, "hidden h-10 px-4 text-[14px] sm:inline-flex")}>
               Book now
             </a>
+            {withMenus ? (
             <button
               type="button"
               className="grid h-10 w-10 place-items-center rounded-lg border border-line text-ink lg:hidden"
@@ -202,12 +206,17 @@ export function SiteHeader() {
               aria-label={mobileOpen ? "Close menu" : "Open menu"}
               onClick={() => setMobileOpen((v) => !v)}
             >
-              {mobileOpen ? <X className="h-5 w-5" strokeWidth={1.75} /> : <Menu className="h-5 w-5" strokeWidth={1.75} />}
+              {mobileOpen ? <X className="h-5 w-5" /> : <List className="h-5 w-5" />}
             </button>
+            ) : (
+              <a href={INBOUND_PHONE.tel} aria-label={`Call ${INBOUND_PHONE.display}`} className="grid h-10 w-10 place-items-center rounded-lg border border-line text-[#6810FE] sm:hidden">
+                <Phone className="h-5 w-5" weight="duotone" aria-hidden="true" />
+              </a>
+            )}
           </div>
         </div>
 
-        {mobileOpen ? (
+        {withMenus && mobileOpen ? (
           <nav id="mobile-menu" aria-label="Main" className="mx-auto max-h-[calc(100dvh-7rem)] max-w-6xl overflow-y-auto border-t border-line pb-6 lg:hidden">
             <ul className="divide-y divide-line">
               {MENUS.map((menu) => {
@@ -221,7 +230,7 @@ export function SiteHeader() {
                       className="flex w-full items-center justify-between py-4 text-left text-[16px] font-medium text-ink"
                     >
                       {menu.label}
-                      <ChevronDown className={cn("h-5 w-5 text-ink-muted transition-transform", open && "rotate-180")} strokeWidth={1.75} aria-hidden="true" />
+                      <CaretDown className={cn("h-5 w-5 text-ink-muted transition-transform", open && "rotate-180")} aria-hidden="true" />
                     </button>
                     {open ? (
                       <ul className="grid gap-0.5 pb-3">
@@ -242,7 +251,7 @@ export function SiteHeader() {
               </a>
               <div className="grid grid-cols-2 gap-2">
                 <a href={INBOUND_PHONE.tel} className={cn(btnOutline, "w-full")}>
-                  <Phone className="h-4 w-4 text-[#6810FE]" strokeWidth={1.75} aria-hidden="true" />
+                  <Phone className="h-4 w-4 text-[#6810FE]" weight="duotone" aria-hidden="true" />
                   Call
                 </a>
                 <Link href="/auth" className={cn(btnOutline, "w-full")} onClick={() => setMobileOpen(false)}>

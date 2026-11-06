@@ -1,16 +1,17 @@
 // "What you get" and the 48-hour guarantee: the service itself, in plain
 // outcomes, near the top of the page. Server-rendered.
 
-import { RiArrowRightLine, RiCalendarCheckLine, RiFileList3Line, RiRefreshLine, RiShoppingBasket2Line } from "@/components/icons";
+import { ArrowsClockwise, CalendarCheck, ListChecks, SprayBottle } from "@phosphor-icons/react/dist/ssr";
+import { RiArrowRightLine } from "@/components/icons";
 import { GUARANTEE, VALUE } from "@/lib/landing/content";
 import { PriceButton } from "./Chrome";
 import { Section, gutter, shell } from "./primitives";
 
 const ICONS = {
-  time: RiCalendarCheckLine,
-  list: RiFileList3Line,
-  supplies: RiShoppingBasket2Line,
-  reclean: RiRefreshLine,
+  time: CalendarCheck,
+  list: ListChecks,
+  supplies: SprayBottle,
+  reclean: ArrowsClockwise,
 } as const;
 
 export function ValueSection() {
@@ -22,7 +23,7 @@ export function ValueSection() {
           return (
             <li key={item.id} className="rounded-2xl border border-line bg-white p-5 shadow-[0_16px_40px_-32px_rgba(11,10,17,0.35)]">
               <span className="grid h-11 w-11 place-items-center rounded-xl bg-[#F3EEFF]">
-                <Icon className="h-5 w-5 text-[#6810FE]" aria-hidden="true" />
+                <Icon className="h-6 w-6 text-[#6810FE]" weight="duotone" aria-hidden="true" />
               </span>
               <h3 className="mt-4 text-[18px] font-semibold tracking-[-0.02em] text-ink">{item.title}</h3>
               <p className="mt-1.5 text-[14.5px] leading-relaxed text-ink-muted">{item.body}</p>
