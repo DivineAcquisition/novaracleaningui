@@ -63,11 +63,11 @@ function renderDetailsReminderEmail(args: {
 }) {
   const name = args.firstName || "there";
   const datePhrase = args.serviceDate ? ` on ${args.serviceDate}` : "";
-  return `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">One quick step left</h1>
+  return `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#0B0A11;">One quick step left</h1>
 <p style="margin:0 0 16px;">Hi ${escapeHtml(name)},</p>
 <p style="margin:0 0 16px;">Your payment cleared — thank you! Before we can confirm your cleaning${escapeHtml(datePhrase)} and dispatch a cleaner, we need a few quick details about your home (bedrooms, bathrooms, access notes, etc.).</p>
 <p style="margin:0 0 16px;font-weight:600;">Your booking is NOT confirmed until this step is complete.</p>
-<p style="margin:22px 0 0;"><a class="novara-btn" href="${args.url}" style="display:inline-block;padding:14px 28px;background:#e7e7ea;color:#18181b;text-decoration:none;border-radius:12px;font-weight:600;">Complete Home Details</a></p>
+<p style="margin:22px 0 0;"><a class="novara-btn" href="${args.url}" style="display:inline-block;padding:14px 28px;background:#6810FE;color:#ffffff;text-decoration:none;border-radius:12px;font-weight:600;">Complete Home Details</a></p>
 <p style="margin:16px 0 0;font-size:14px;">It takes under a minute. If you need help, reply to this email or text us at ${SUPPORT_PHONE} and the Novara team will finish it with you.</p>`;
 }
 

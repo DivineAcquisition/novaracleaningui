@@ -333,11 +333,11 @@ serve(async (req) => {
             declaredType: "internal_admin",
             staffRecipient: true,
             html: `
-              <h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">Welcome aboard, ${firstName}</h1>
+              <h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#0B0A11;">Welcome aboard, ${firstName}</h1>
               <p>We're excited to offer you the <strong>${roleLabel[vaRole] || vaRole}</strong> position with Novara Cleaning as an independent contractor.</p>
-              ${offerNote ? `<p style="padding-left:12px;border-left:4px solid #7c6af7;">${offerNote}</p>` : ""}
+              ${offerNote ? `<p style="padding-left:12px;border-left:4px solid #6810FE;">${offerNote}</p>` : ""}
               <p>To accept, review and sign the VA Independent Contractor Agreement, then complete your onboarding details.</p>
-              <p style="margin:22px 0 0;"><a class="novara-btn" href="${offerUrl}" style="display:inline-block;padding:14px 28px;background:#e7e7ea;color:#18181b;text-decoration:none;border-radius:12px;font-weight:600;">Accept your offer and sign</a></p>
+              <p style="margin:22px 0 0;"><a class="novara-btn" href="${offerUrl}" style="display:inline-block;padding:14px 28px;background:#6810FE;color:#ffffff;text-decoration:none;border-radius:12px;font-weight:600;">Accept your offer and sign</a></p>
               <p>For security this link expires 30 minutes after being sent. If it expires, reply to this email and we'll send a fresh one.</p>
               <p>No access to our systems is granted until your agreement is signed and an admin approves your onboarding.</p>`,
           }, admin);
@@ -526,20 +526,20 @@ serve(async (req) => {
             declaredType: "internal_admin",
             staffRecipient: true,
             html: `
-              <h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">Welcome to the Novara team, ${row.first_name || ""}</h1>
+              <h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#0B0A11;">Welcome to the Novara team, ${row.first_name || ""}</h1>
               <p>Your onboarding was approved and your access has been provisioned for the <strong>${row.va_role}</strong> role.</p>
-              <p style="margin:16px 0 6px;font-weight:700;color:#ffffff;">1. CRM (GoHighLevel)</p>
+              <p style="margin:16px 0 6px;font-weight:700;color:#0B0A11;">1. CRM (GoHighLevel)</p>
               <p>Log in at <a href="https://app.gohighlevel.com">app.gohighlevel.com</a><br/>
               Email: <strong>${ghlEmail}</strong><br/>
               Temporary password: <strong>${ghl.created ? ghlPassword : "use your existing password / reset via the login page"}</strong></p>
               <p>Change your password after first login.</p>
-              <p style="margin:16px 0 6px;font-weight:700;color:#ffffff;">2. Admin Workspace</p>
+              <p style="margin:16px 0 6px;font-weight:700;color:#0B0A11;">2. Admin Workspace</p>
               <p>${workspaceInviteSent
                 ? "A separate invite email with your workspace access is on its way."
                 : `Access <a href="https://admin.novaracleaning.com">admin.novaracleaning.com</a> — if you don't receive an invite, ask your admin to resend it.`}</p>
-              ${discordInvite ? `<p style="margin:16px 0 6px;font-weight:700;color:#ffffff;">3. Team Discord</p>
+              ${discordInvite ? `<p style="margin:16px 0 6px;font-weight:700;color:#0B0A11;">3. Team Discord</p>
               <p>Announcements, dispatch, and day-to-day comms happen here.</p>
-              <p style="margin:12px 0 0;"><a class="novara-btn" href="${discordInvite}" style="display:inline-block;padding:14px 28px;background:#e7e7ea;color:#18181b;text-decoration:none;border-radius:12px;font-weight:600;">Join the Novara Discord</a></p>` : ""}
+              <p style="margin:12px 0 0;"><a class="novara-btn" href="${discordInvite}" style="display:inline-block;padding:14px 28px;background:#6810FE;color:#ffffff;text-decoration:none;border-radius:12px;font-weight:600;">Join the Novara Discord</a></p>` : ""}
               <p>Your access matches your role — if something you need is missing, ask your admin.</p>`,
           }, admin);
           if (sent.error) throw new Error(sent.error.message);

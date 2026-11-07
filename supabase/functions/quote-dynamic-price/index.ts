@@ -72,16 +72,16 @@ async function notifyAdminQuoteOverride(
   const sign = opts.deltaPct > 0 ? "+" : "";
   const subject = `Price override on quote ${opts.quoteId.slice(0, 8)}: ${money(opts.originalCents)} → ${money(opts.overrideCents)} (${sign}${opts.deltaPct}%)`;
   const html = `
-    <h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">Price override</h1>
+    <h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#0B0A11;">Price override</h1>
     <p style="margin:0 0 12px"><strong>A VA applied a price override outside the usual adjustment band.</strong> No approval was required — this is a notification only.</p>
     <table style="border-collapse:collapse;width:100%;">
-      <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">Quote</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;"><strong>${opts.quoteId}</strong></td></tr>
-      <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">Customer</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${opts.customerLabel || "—"}</td></tr>
-      <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">VA</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${opts.vaName}</td></tr>
-      <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">Quoted</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${money(opts.originalCents)}</td></tr>
-      <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">Override</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;"><strong>${money(opts.overrideCents)}</strong> (${sign}${opts.deltaPct}%)</td></tr>
-      <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">Reason</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${opts.reason}</td></tr>
-      <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">Note</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${opts.note || "—"}</td></tr>
+      <tr><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;">Quote</td><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;"><strong>${opts.quoteId}</strong></td></tr>
+      <tr><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;">Customer</td><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;">${opts.customerLabel || "—"}</td></tr>
+      <tr><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;">VA</td><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;">${opts.vaName}</td></tr>
+      <tr><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;">Quoted</td><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;">${money(opts.originalCents)}</td></tr>
+      <tr><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;">Override</td><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;"><strong>${money(opts.overrideCents)}</strong> (${sign}${opts.deltaPct}%)</td></tr>
+      <tr><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;">Reason</td><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;">${opts.reason}</td></tr>
+      <tr><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;">Note</td><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;">${opts.note || "—"}</td></tr>
     </table>`;
   const { sendThroughCompliance } = await import("../_shared/email-compliance-send.ts");
   const sent = await sendThroughCompliance(resendKey, {

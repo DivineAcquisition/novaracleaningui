@@ -71,12 +71,12 @@ export const AbandonedCartReminder = ({
   );
 };
 
-const paragraph = { fontSize: '16px', lineHeight: '26px', color: '#d4d4d8', margin: '0 0 16px' };
-const summaryBox = { backgroundColor: '#1c1c20', border: '1px solid #3a3a40', borderRadius: '12px', padding: '16px 18px', margin: '8px 0 16px' };
-const summaryTitle = { fontSize: '14px', fontWeight: '600', color: '#ffffff', margin: '0 0 12px' };
+const paragraph = { fontSize: '16px', lineHeight: '26px', color: '#27272A', margin: '0 0 16px' };
+const summaryBox = { backgroundColor: '#F6F3FF', border: '1px solid #E7E5EE', borderRadius: '12px', padding: '16px 18px', margin: '8px 0 16px' };
+const summaryTitle = { fontSize: '14px', fontWeight: '600', color: '#0B0A11', margin: '0 0 12px' };
 const summaryItem = { padding: '0 8px' };
-const summaryLabel = { fontSize: '12px', color: '#a1a1aa', margin: '0 0 4px' };
-const summaryValue = { fontSize: '16px', fontWeight: '600', color: '#ffffff', margin: '0' };
+const summaryLabel = { fontSize: '12px', color: '#52525B', margin: '0 0 4px' };
+const summaryValue = { fontSize: '16px', fontWeight: '600', color: '#0B0A11', margin: '0' };
 const cta = { margin: '8px 0 16px' };
 
 export default AbandonedCartReminder;

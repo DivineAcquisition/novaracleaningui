@@ -174,7 +174,7 @@ export const BookingModification = ({ bookingData }: BookingModificationProps) =
 export default BookingModification;
 
 const main = {
-  backgroundColor: '#141416',
+  backgroundColor: '#F4F2F8',
   fontFamily: 'Inter, Arial, sans-serif',
 };
 
@@ -217,8 +217,8 @@ const detailsSection = {
 };
 
 const pricingSection = {
-  backgroundColor: '#1c1c20',
-  border: '1px solid #3a3a40',
+  backgroundColor: '#F6F3FF',
+  border: '1px solid #E7E5EE',
   borderRadius: BRAND.borderRadius.lg,
   padding: BRAND.spacing.lg,
   margin: `${BRAND.spacing.xl} 0`,

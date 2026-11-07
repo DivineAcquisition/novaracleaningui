@@ -82,18 +82,18 @@ serve(async (req) => {
         const subject = `New Lead: ${leadData.firstName} ${lastInitial} — ${leadData.zipCode}`;
         
         const html = `
-            <h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">New lead captured</h1>
+            <h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#0B0A11;">New lead captured</h1>
             <p>A new lead just filled out the contact form.</p>
             <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
-              <tr><td style="padding: 8px 0; border-bottom: 1px solid #3a3a40; font-weight: 600; width: 140px;">First Name</td><td style="padding: 8px 0; border-bottom: 1px solid #3a3a40;">${leadData.firstName}</td></tr>
-              <tr><td style="padding: 8px 0; border-bottom: 1px solid #3a3a40; font-weight: 600;">Last Name</td><td style="padding: 8px 0; border-bottom: 1px solid #3a3a40;">${leadData.lastName}</td></tr>
-              <tr><td style="padding: 8px 0; border-bottom: 1px solid #3a3a40; font-weight: 600;">Email</td><td style="padding: 8px 0; border-bottom: 1px solid #3a3a40;"><a href="mailto:${leadData.email}">${leadData.email}</a></td></tr>
-              <tr><td style="padding: 8px 0; border-bottom: 1px solid #3a3a40; font-weight: 600;">Phone</td><td style="padding: 8px 0; border-bottom: 1px solid #3a3a40;"><a href="tel:${leadData.phone}">${leadData.phone}</a></td></tr>
-              <tr><td style="padding: 8px 0; border-bottom: 1px solid #3a3a40; font-weight: 600;">ZIP Code</td><td style="padding: 8px 0; border-bottom: 1px solid #3a3a40;">${leadData.zipCode}</td></tr>
-              <tr><td style="padding: 8px 0; border-bottom: 1px solid #3a3a40; font-weight: 600;">City</td><td style="padding: 8px 0; border-bottom: 1px solid #3a3a40;">${leadData.city || "—"}</td></tr>
-              <tr><td style="padding: 8px 0; border-bottom: 1px solid #3a3a40; font-weight: 600;">State</td><td style="padding: 8px 0; border-bottom: 1px solid #3a3a40;">${leadData.state || "—"}</td></tr>
-              <tr><td style="padding: 8px 0; border-bottom: 1px solid #3a3a40; font-weight: 600;">Source</td><td style="padding: 8px 0; border-bottom: 1px solid #3a3a40;">${leadData.source || "Website"}</td></tr>
-              <tr><td style="padding: 8px 0; border-bottom: 1px solid #3a3a40; font-weight: 600;">Landing Page</td><td style="padding: 8px 0; border-bottom: 1px solid #3a3a40;">${leadData.landingPage || "/"}</td></tr>
+              <tr><td style="padding: 8px 0; border-bottom: 1px solid #E7E5EE; font-weight: 600; width: 140px;">First Name</td><td style="padding: 8px 0; border-bottom: 1px solid #E7E5EE;">${leadData.firstName}</td></tr>
+              <tr><td style="padding: 8px 0; border-bottom: 1px solid #E7E5EE; font-weight: 600;">Last Name</td><td style="padding: 8px 0; border-bottom: 1px solid #E7E5EE;">${leadData.lastName}</td></tr>
+              <tr><td style="padding: 8px 0; border-bottom: 1px solid #E7E5EE; font-weight: 600;">Email</td><td style="padding: 8px 0; border-bottom: 1px solid #E7E5EE;"><a href="mailto:${leadData.email}">${leadData.email}</a></td></tr>
+              <tr><td style="padding: 8px 0; border-bottom: 1px solid #E7E5EE; font-weight: 600;">Phone</td><td style="padding: 8px 0; border-bottom: 1px solid #E7E5EE;"><a href="tel:${leadData.phone}">${leadData.phone}</a></td></tr>
+              <tr><td style="padding: 8px 0; border-bottom: 1px solid #E7E5EE; font-weight: 600;">ZIP Code</td><td style="padding: 8px 0; border-bottom: 1px solid #E7E5EE;">${leadData.zipCode}</td></tr>
+              <tr><td style="padding: 8px 0; border-bottom: 1px solid #E7E5EE; font-weight: 600;">City</td><td style="padding: 8px 0; border-bottom: 1px solid #E7E5EE;">${leadData.city || "—"}</td></tr>
+              <tr><td style="padding: 8px 0; border-bottom: 1px solid #E7E5EE; font-weight: 600;">State</td><td style="padding: 8px 0; border-bottom: 1px solid #E7E5EE;">${leadData.state || "—"}</td></tr>
+              <tr><td style="padding: 8px 0; border-bottom: 1px solid #E7E5EE; font-weight: 600;">Source</td><td style="padding: 8px 0; border-bottom: 1px solid #E7E5EE;">${leadData.source || "Website"}</td></tr>
+              <tr><td style="padding: 8px 0; border-bottom: 1px solid #E7E5EE; font-weight: 600;">Landing Page</td><td style="padding: 8px 0; border-bottom: 1px solid #E7E5EE;">${leadData.landingPage || "/"}</td></tr>
               <tr><td style="padding: 8px 0; font-weight: 600;">Captured At</td><td style="padding: 8px 0;">${new Date().toLocaleString("en-US", { timeZone: "America/New_York" })}</td></tr>
             </table>`;
 

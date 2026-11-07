@@ -265,7 +265,7 @@ async function sendCustomerTipInvite(
             </table>
             <p style="margin:24px 0;">
               <a href="${opts.url}"
-                 style="background:#7c3aed;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600;">
+                 style="background:#6810FE;color:#ffffff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600;">
                 Tip your ${opts.crewNames.length > 1 ? "crew" : "cleaner"}
               </a>
             </p>
@@ -540,11 +540,11 @@ serve(async (req) => {
                 ? `Your share of the ${totalStr} crew tip is below.`
                 : "100% of it goes to you.";
               const html = `
-                  <h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">You received a tip</h1>
+                  <h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#0B0A11;">You received a tip</h1>
                   <p style="margin:0 0 16px;">Hi ${first},</p>
                   <p style="margin:0 0 16px;">${customerName} left a tip on ${ref}. ${splitLine}</p>
                   <p style="margin:0 0 4px;font-size:13px;letter-spacing:.04em;text-transform:uppercase;">Your tip</p>
-                  <p style="margin:0 0 8px;font-size:32px;font-weight:800;color:#ffffff;">${shareStr}</p>
+                  <p style="margin:0 0 8px;font-size:32px;font-weight:800;color:#0B0A11;">${shareStr}</p>
                   <p style="margin:0 0 16px;">100% pass-through — Novara takes nothing. It will be included with your next payout.</p>`;
               await sendThroughCompliance(resendKey, {
                 to: c.email,

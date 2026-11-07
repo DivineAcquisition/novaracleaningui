@@ -74,7 +74,7 @@ function configFor(kind: Kind, link: string, firstName: string): EmailConfig {
         subject: "Your Novara Host Portal sign-in link",
         preheader: "Tap the link below to sign in - no password needed.",
         heading: "Sign in to Novara",
-        bodyHtml: `<p style="margin:0;font-size:16px;line-height:1.5;color:#b4b4bc;">Use the button below to sign in. This link expires shortly and works once.</p>`,
+        bodyHtml: `<p style="margin:0;font-size:16px;line-height:1.5;color:#3F3F46;">Use the button below to sign in. This link expires shortly and works once.</p>`,
         ctaLabel: "Sign in",
         expiryNote: "This link expires in 1 hour and can only be used once.",
         textVersion: `${greeting}\n\nSign in to the Novara Host Portal:\n${link}\n\nThis link expires in 1 hour and can only be used once.`,
@@ -85,7 +85,7 @@ function configFor(kind: Kind, link: string, firstName: string): EmailConfig {
 function renderHtml(cfg: EmailConfig, link: string): string {
   const body = cfg.bodyHtml.includes("Use the button below")
     ? cfg.bodyHtml
-    : `${cfg.bodyHtml}<p style="margin:16px 0 0;font-size:15px;line-height:1.5;color:#b4b4bc;">${cfg.expiryNote}</p>`;
+    : `${cfg.bodyHtml}<p style="margin:16px 0 0;font-size:15px;line-height:1.5;color:#3F3F46;">${cfg.expiryNote}</p>`;
   return buildEmailCard({
     preheader: cfg.preheader,
     title: cfg.heading,

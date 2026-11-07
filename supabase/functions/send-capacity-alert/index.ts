@@ -35,19 +35,19 @@ serve(async (req) => {
     });
 
     const emailHtml = `
-      <h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">${urgencyLevel === "FULL" ? "Slot fully booked" : "Slot filling up"}</h1>
-      <p style="margin:0 0 16px;font-size:18px;color:#ffffff;">${current_bookings} of ${max_capacity} spots taken (${capacityPercentage}%)</p>
+      <h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#0B0A11;">${urgencyLevel === "FULL" ? "Slot fully booked" : "Slot filling up"}</h1>
+      <p style="margin:0 0 16px;font-size:18px;color:#0B0A11;">${current_bookings} of ${max_capacity} spots taken (${capacityPercentage}%)</p>
       <table style="width:100%;border-collapse:collapse;">
-        <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">Date</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;text-align:right;">${formattedDate}</td></tr>
-        <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">Time slot</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;text-align:right;">${time_slot}</td></tr>
-        <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">Status</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;text-align:right;">${urgencyLevel}</td></tr>
+        <tr><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;">Date</td><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;text-align:right;">${formattedDate}</td></tr>
+        <tr><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;">Time slot</td><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;text-align:right;">${time_slot}</td></tr>
+        <tr><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;">Status</td><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;text-align:right;">${urgencyLevel}</td></tr>
       </table>
       <p>
         ${urgencyLevel === "FULL"
           ? "This time slot is now fully booked. Consider adding additional capacity or notifying customers of alternative times."
           : "This time slot is filling up quickly. You may want to review cleaner availability and prepare for potential capacity issues."}
       </p>
-      <p style="margin:22px 0 0;"><a class="novara-btn" href="https://admin.novaracleaning.com/admin/csr" style="display:inline-block;padding:14px 28px;background:#e7e7ea;color:#18181b;text-decoration:none;border-radius:12px;font-weight:600;">View Admin Dashboard</a></p>
+      <p style="margin:22px 0 0;"><a class="novara-btn" href="https://admin.novaracleaning.com/admin/csr" style="display:inline-block;padding:14px 28px;background:#6810FE;color:#ffffff;text-decoration:none;border-radius:12px;font-weight:600;">View Admin Dashboard</a></p>
     `;
 
     const sent = await sendThroughCompliance(Deno.env.get("RESEND_API_KEY") || "", {

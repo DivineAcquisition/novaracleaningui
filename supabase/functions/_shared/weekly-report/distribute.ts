@@ -152,7 +152,7 @@ export async function notifyWeeklyReport(
     await sendThroughCompliance(apiKey, {
       to: settings.recipients,
       subject: title,
-      html: `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">${title}</h1>
+      html: `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#0B0A11;">${title}</h1>
              <p>${description.replace(/\n/g, "<br/>")}</p>
              <p>This report is read-only. It does not change budgets, zones, or pricing.</p>`,
       templateKey: "admin_internal_notice",

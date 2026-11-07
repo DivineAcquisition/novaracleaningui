@@ -307,10 +307,10 @@ function renderEmail(opts: {
   ctaHref: string;
   footerNote?: string;
 }) {
-  return `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">${escapeHtml(opts.headline)}</h1>` +
+  return `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#0B0A11;">${escapeHtml(opts.headline)}</h1>` +
     `<p style="margin:0 0 16px;">Hi ${escapeHtml(opts.firstName)},</p>` +
     `<p style="margin:0 0 16px;">${opts.body}</p>` +
-    `<p style="margin:22px 0 0;"><a class="novara-btn" href="${opts.ctaHref}" style="display:inline-block;padding:14px 28px;background:#e7e7ea;color:#18181b;text-decoration:none;border-radius:12px;font-weight:600;">${escapeHtml(opts.ctaLabel)}</a></p>` +
+    `<p style="margin:22px 0 0;"><a class="novara-btn" href="${opts.ctaHref}" style="display:inline-block;padding:14px 28px;background:#6810FE;color:#ffffff;text-decoration:none;border-radius:12px;font-weight:600;">${escapeHtml(opts.ctaLabel)}</a></p>` +
     (opts.footerNote ? `<p style="margin:16px 0 0;font-size:14px;">${escapeHtml(opts.footerNote)}</p>` : "");
 }
 

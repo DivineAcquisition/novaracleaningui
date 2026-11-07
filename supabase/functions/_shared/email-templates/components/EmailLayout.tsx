@@ -20,15 +20,12 @@ interface EmailLayoutProps {
 }
 
 const cardCss = `
-  .novara-card p, .novara-card li, .novara-card span, .novara-card td { color:#d4d4d8 !important; }
-  .novara-card h1, .novara-card h2, .novara-card h3,
-  .novara-card strong, .novara-card b, .novara-card strong span, .novara-card b span { color:#ffffff !important; }
-  .novara-card p[style*="font-weight:600"], .novara-card p[style*="font-weight: 600"],
-  .novara-card p[style*="font-weight:700"], .novara-card p[style*="font-weight: 700"] { color:#ffffff !important; }
-  .novara-card a:not(.novara-btn) { color:#ddd6fe !important; }
-  .novara-card a.novara-btn { color:#18181b !important; background:#f4f4f5 !important; border-radius:999px !important; }
-  .novara-card .novara-label { color:#a1a1aa !important; font-weight:500 !important; }
-  .novara-card .novara-value, .novara-card .novara-value span, .novara-card .novara-value strong { color:#ffffff !important; font-weight:600 !important; }
+  .novara-card p, .novara-card li, .novara-card td { color:#27272A; }
+  .novara-card h1, .novara-card h2, .novara-card h3, .novara-card strong, .novara-card b { color:#0B0A11; }
+  .novara-card a:not(.novara-btn) { color:#5A1FD6; }
+  .novara-card a.novara-btn { color:#ffffff !important; background:#6810FE !important; border-radius:999px !important; }
+  .novara-card .novara-label { color:#52525B !important; font-weight:500 !important; }
+  .novara-card .novara-value, .novara-card .novara-value span, .novara-card .novara-value strong { color:#0B0A11 !important; font-weight:600 !important; }
 `;
 
 export const EmailLayout = ({
@@ -41,6 +38,8 @@ export const EmailLayout = ({
   return (
     <Html>
       <Head>
+        <meta name="color-scheme" content="light" />
+        <meta name="supported-color-schemes" content="light" />
         <style>{cardCss}</style>
       </Head>
       <Preview>{previewText}</Preview>
@@ -76,7 +75,7 @@ export const EmailLayout = ({
                       </td>
                     </tr>
                     <tr>
-                      <td style={{ padding: '0 12px 8px' }}>
+                      <td style={{ padding: '0 12px 8px', backgroundColor: '#ffffff', borderRadius: '0 0 20px 20px' }}>
                         <div dangerouslySetInnerHTML={{ __html: '<!--data-novara-card--><!--NOVARA_FOOTER_START--><!--NOVARA_FOOTER_END-->' }} />
                       </td>
                     </tr>
@@ -94,27 +93,27 @@ export const EmailLayout = ({
 const page = {
   margin: '0',
   padding: '0',
-  backgroundColor: '#0b0b0d',
+  backgroundColor: '#F4F2F8',
   fontFamily: 'Inter, Arial, sans-serif',
 };
 
 const card = {
   maxWidth: '600px',
   width: '100%',
-  backgroundColor: '#18181b',
-  border: '1px solid #2e2e33',
+  backgroundColor: '#ffffff',
+  border: '1px solid #E7E5EE',
   borderRadius: '20px',
 };
 
 const headerBand = {
   padding: '0',
-  backgroundColor: '#121214',
+  backgroundColor: '#0B0A11',
   borderRadius: '20px 20px 0 0',
 };
 
 const accent = {
   height: '4px',
-  backgroundColor: '#7c6af7',
+  backgroundColor: '#6810FE',
   fontSize: '0',
   lineHeight: '4px',
   borderRadius: '20px 20px 0 0',
@@ -130,6 +129,7 @@ const logo = {
 
 const bodyCell = {
   padding: '28px 28px 8px',
+  backgroundColor: '#ffffff',
   fontFamily: 'Inter, Arial, sans-serif',
 };
 
@@ -140,7 +140,7 @@ const heading = {
   lineHeight: '1.2',
   fontWeight: 700,
   letterSpacing: '-0.02em',
-  color: '#ffffff',
+  color: '#0B0A11',
 };
 
 const subhead = {
@@ -148,14 +148,14 @@ const subhead = {
   fontFamily: 'Inter, Arial, sans-serif',
   fontSize: '16px',
   lineHeight: '1.5',
-  color: '#a1a1aa',
+  color: '#52525B',
 };
 
 const note = {
   margin: '16px 0 0',
   fontSize: '13px',
   lineHeight: '1.5',
-  color: '#a1a1aa',
+  color: '#52525B',
 };
 
 export default EmailLayout;

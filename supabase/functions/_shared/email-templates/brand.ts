@@ -1,8 +1,8 @@
 // Brand configuration for email templates.
 //
-// Colors mirror the in-app Tailwind theme (green primary) so emails feel
-// like a natural extension of the customer portal at app.novaracleaning.com
-// instead of a third-party transactional template. URLs use the *real*
+// Colors follow the site's current palette (Novara purple on white, near-black
+// text) so emails match novaracleaning.com and the booking pages. Body text is
+// kept dark on a white card so it stays readable in every mail app. URLs use the *real*
 // subdomains the marketing + portal sites run on:
 //   • try.novaracleaning.com   → booking funnel
 //   • app.novaracleaning.com   → customer portal (account / billing)
@@ -14,11 +14,9 @@
 export const BRAND = {
   name: 'NovaraCleaning',
   colors: {
-    // Primary green — matches Tailwind `hsl(142 76% 36%)` from
-    // src/config/brand-config.ts so in-app + email look identical.
-    primary: '#16A34A',
-    primaryDark: '#15803D',
-    secondary: '#0EA371',
+    primary: '#6810FE',
+    primaryDark: '#5A1FD6',
+    secondary: '#5A1FD6',
     success: '#16A34A',
     warning: '#F59E0B',
     danger: '#EF4444',
@@ -27,13 +25,13 @@ export const BRAND = {
       100: '#F3F4F6',
       200: '#E5E7EB',
       300: '#D1D5DB',
-      600: '#6B7280',
-      700: '#374151',
-      900: '#111827',
+      600: '#52525B',
+      700: '#27272A',
+      900: '#0B0A11',
     },
   },
   gradient: {
-    primary: 'linear-gradient(135deg, #16A34A 0%, #0E7C3A 100%)',
+    primary: '#6810FE',
   },
   spacing: {
     xs: '8px',
@@ -59,7 +57,7 @@ export const BRAND = {
     account: 'https://app.novaracleaning.com/account',
     portal: 'https://app.novaracleaning.com/account',
     // Booking funnel lives on try.* — public, no auth required.
-    booking: 'https://try.novaracleaning.com/book/zip',
+    booking: 'https://try.novaracleaning.com/',
     membership: 'https://try.novaracleaning.com/membership',
     terms: 'https://novaracleaning.com/terms',
     privacy: 'https://novaracleaning.com/privacy',

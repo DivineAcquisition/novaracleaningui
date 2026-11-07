@@ -149,10 +149,10 @@ async function createBillingPortalSession(
 
 function renderBillingPortalEmail(firstName: string, portalUrl: string) {
   const safeName = escapeHtml(firstName || "there");
-  return `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">Update your payment method</h1>` +
+  return `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#0B0A11;">Update your payment method</h1>` +
     `<p style="margin:0 0 16px;">Hi ${safeName},</p>` +
     `<p style="margin:0 0 16px;">Use the secure link below to update the card on file for your Novara Cleaning account. You can also view invoices and manage billing details from the same page.</p>` +
-    `<p style="margin:22px 0 0;"><a class="novara-btn" href="${portalUrl}" style="display:inline-block;padding:14px 28px;background:#e7e7ea;color:#18181b;text-decoration:none;border-radius:12px;font-weight:600;">Update Payment Method</a></p>` +
+    `<p style="margin:22px 0 0;"><a class="novara-btn" href="${portalUrl}" style="display:inline-block;padding:14px 28px;background:#6810FE;color:#ffffff;text-decoration:none;border-radius:12px;font-weight:600;">Update Payment Method</a></p>` +
     `<p style="margin:16px 0 0;font-size:14px;">This link is personal to your account and expires after a short time. If it stops working, reply to this email and we'll send a fresh one.</p>`;
 }
 

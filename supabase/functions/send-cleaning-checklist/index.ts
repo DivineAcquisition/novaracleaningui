@@ -57,7 +57,7 @@ function renderHtml(opts: {
   const { content } = opts;
   const sectionHtml = content.sections.map(
     (g) => `
-    <h2 style="font-family:Inter,Arial,sans-serif;font-size:18px;margin:24px 0 8px;color:#ffffff">${g.title}</h2>
+    <h2 style="font-family:Inter,Arial,sans-serif;font-size:18px;margin:24px 0 8px;color:#0B0A11">${g.title}</h2>
     <ul style="margin:0;padding-left:20px;font-size:15px;line-height:1.65">
       ${g.items.map((t) => `<li style="margin:4px 0">${t}</li>`).join("")}
     </ul>`,
@@ -69,28 +69,28 @@ function renderHtml(opts: {
     </ul>`;
 
   const viewCta = opts.viewUrl
-    ? `<p style="margin:22px 0 0;"><a class="novara-btn" href="${opts.viewUrl}" style="display:inline-block;padding:14px 28px;background:#e7e7ea;color:#18181b;text-decoration:none;border-radius:12px;font-weight:600;">View checklist online</a></p>`
+    ? `<p style="margin:22px 0 0;"><a class="novara-btn" href="${opts.viewUrl}" style="display:inline-block;padding:14px 28px;background:#6810FE;color:#ffffff;text-decoration:none;border-radius:12px;font-weight:600;">View checklist online</a></p>`
     : "";
 
   const bookingMetaRows: string[] = [];
   if (opts.bookingNumber) {
     bookingMetaRows.push(
-      `<tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">Booking</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;font-weight:600;text-align:right">NVC-${String(opts.bookingNumber).padStart(4, "0")}</td></tr>`,
+      `<tr><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;">Booking</td><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;font-weight:600;text-align:right">NVC-${String(opts.bookingNumber).padStart(4, "0")}</td></tr>`,
     );
   }
   if (opts.serviceDate) {
     bookingMetaRows.push(
-      `<tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">Service date</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;font-weight:600;text-align:right">${opts.serviceDate}</td></tr>`,
+      `<tr><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;">Service date</td><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;font-weight:600;text-align:right">${opts.serviceDate}</td></tr>`,
     );
   }
   if (opts.timeSlot) {
     bookingMetaRows.push(
-      `<tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">Arrival window</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;font-weight:600;text-align:right">${opts.timeSlot}</td></tr>`,
+      `<tr><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;">Arrival window</td><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;font-weight:600;text-align:right">${opts.timeSlot}</td></tr>`,
     );
   }
   if (opts.serviceAddress) {
     bookingMetaRows.push(
-      `<tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">Service address</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;font-weight:600;text-align:right">${opts.serviceAddress}</td></tr>`,
+      `<tr><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;">Service address</td><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;font-weight:600;text-align:right">${opts.serviceAddress}</td></tr>`,
     );
   }
 
@@ -100,16 +100,16 @@ function renderHtml(opts: {
        </table>`
     : "";
 
-  return `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">${content.heading}</h1>
+  return `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#0B0A11;">${content.heading}</h1>
 <p style="margin:0 0 16px;">Hi ${opts.firstName || "there"} — here's exactly what the Novara team will do on your visit. Save this email so you always know what's included and what's an add-on.</p>
 ${bookingMetaTable}
 <p style="margin:0 0 16px;">${content.intro}</p>
 ${sectionHtml}
-<h2 style="font-family:Inter,Arial,sans-serif;font-size:18px;margin:24px 0 8px;color:#ffffff;">Extras (additional charges apply)</h2>
+<h2 style="font-family:Inter,Arial,sans-serif;font-size:18px;margin:24px 0 8px;color:#0B0A11;">Extras (additional charges apply)</h2>
 <p style="margin:0 0 8px;">Want any of these on your next visit? Reply to this email or text us — we'll add them and send an updated total.</p>
 ${extrasHtml}
 ${viewCta}
-<p style="margin:16px 0 0;"><strong style="color:#ffffff;">Day-of prep tips:</strong> tidy small valuables, secure pets, and flag any sensitive surfaces (natural stone, antique wood, framed art) so we use the right cleaner.</p>`;
+<p style="margin:16px 0 0;"><strong style="color:#0B0A11;">Day-of prep tips:</strong> tidy small valuables, secure pets, and flag any sensitive surfaces (natural stone, antique wood, framed art) so we use the right cleaner.</p>`;
 }
 
 function plainText(opts: { firstName: string; content: ChecklistContent; viewUrl?: string }): string {

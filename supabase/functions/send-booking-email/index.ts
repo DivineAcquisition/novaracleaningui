@@ -22,10 +22,6 @@ const logStep = (step: string, details?: any) => {
   console.log(`[SEND-BOOKING-EMAIL] ${step}${detailsStr}`);
 };
 
-// Migma template conversation IDs
-const MIGMA_TEMPLATES = {
-  booking_confirmation: '698acaea41154eb80fab602e',
-};
 
 interface BookingEmailRequest {
   type: 'confirmation' | 'payment_receipt' | 'modification' | 'cancellation' | 'completion' | 'photo_gallery';
@@ -78,107 +74,6 @@ interface BookingEmailRequest {
   bookingData?: any;
 }
 
-async function fetchMigmaTemplate(conversationId: string): Promise<string | null> {
-  const apiKey = Deno.env.get("MIGMA_API_KEY");
-  if (!apiKey) {
-    logStep("MIGMA_API_KEY not configured, falling back to React Email");
-    return null;
-  }
-
-  try {
-    const response = await fetch(`https://api.migma.ai/v1/export/html/${conversationId}`, {
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-      },
-    });
-
-    if (!response.ok) {
-      logStep("Migma API error", { status: response.status, statusText: response.statusText });
-      return null;
-    }
-
-    const result = await response.json();
-    // The API may return { html: "..." } or the HTML directly
-    const html = typeof result === 'string' ? result : (result.html || result.data?.html || null);
-    
-    if (html) {
-      logStep("Migma template fetched successfully", { length: html.length });
-    }
-    return html;
-  } catch (err: any) {
-    logStep("Error fetching Migma template", { error: err.message });
-    return null;
-  }
-}
-
-function formatCurrency(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
-}
-
-function formatServiceDate(dateStr: string): string {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  const year = d.getFullYear();
-  return `${month}-${day}-${year}`;
-}
-
-function populateMigmaTemplate(html: string, data: BookingEmailRequest['data']): string {
-  const serviceTypeLabels: Record<string, string> = {
-    standard: 'Standard Cleaning',
-    deep: 'Deep Cleaning',
-    moveInOut: 'Move In/Out Cleaning',
-  };
-
-  const fullAddress = `${data.address || ''}, ${data.city || ''}, ${data.state || ''} ${data.zipCode || ''}`.trim();
-  const serviceType = serviceTypeLabels[data.serviceType || 'standard'] || data.serviceType || 'Cleaning';
-
-  // Build a map of GHL placeholders to actual values
-  const replacements: Record<string, string> = {
-    '{{contact.first_name}}': data.firstName || 'there',
-    '{{opportunity.name}}': data.bookingNumber || data.bookingId?.substring(0, 8) || '',
-    '{{appointment.start_date}}': data.serviceDate ? formatServiceDate(data.serviceDate) : '',
-    '{{contact.service_start_time}}': data.arrivalWindow || data.timeSlot || '',
-    '{{contact.address1}}': fullAddress,
-    '{{contact.novara_glow_plan}}': data.membershipPlan || 'N/A',
-    '{{contact.cleaning_type}}': serviceType,
-    '{{contact.service_frequency}}': data.frequency || 'One-Time',
-    '{{contact.bedrooms}}': String(data.bedrooms ?? 0),
-    '{{contact.bathrooms}}': String(data.bathrooms ?? 0),
-    '{{contact.estimated_sqft}}': data.sqft || data.homeSizeId || '',
-    '{{contact.add_ons}}': data.addOns?.length ? data.addOns.join(', ') : 'None',
-    '{{contact.final_cost_}}': data.totalAmount ? formatCurrency(data.totalAmount) : '$0.00',
-    '{{contact.deposit_amount_}}': data.depositAmount ? formatCurrency(data.depositAmount) : '$0.00',
-    '{{contact.remaining_balance}}': data.balanceAmount ? formatCurrency(data.balanceAmount) : '$0.00',
-    '{{contact.last_invoice_url}}': data.hostedInvoiceUrl || '#',
-    '{{contact.referral_link}}': data.referralLink || '#',
-    '{{appointment.reschedule_link}}': data.rescheduleLink || '#',
-    '{{appointment.cancellation_link}}': data.cancellationLink || '#',
-    // Public service checklist (e.g. /checklist/standard-clean) so the
-    // Migma template can render a "See what's included" CTA without
-    // hard-coding service-type → URL logic in the HTML editor.
-    '{{appointment.checklist_link}}': data.checklistLink || '#',
-    '{{unsubscribe_link}}': '#',
-  };
-
-  let result = html;
-
-  // Replace both raw and URL-encoded variants of each placeholder
-  for (const [placeholder, value] of Object.entries(replacements)) {
-    result = result.replaceAll(placeholder, value);
-    // Handle URL-encoded version (e.g. %7B%7Bcontact.first_name%7D%7D)
-    const encoded = encodeURIComponent(placeholder);
-    result = result.replaceAll(encoded, value);
-  }
-
-  // Replace year in footer
-  const currentYear = new Date().getFullYear();
-  result = result.replaceAll('© 2026', `© ${currentYear}`);
-
-  return result;
-}
-
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -199,8 +94,7 @@ serve(async (req: Request) => {
     let attachments: any[] = [];
 
     if (type === 'confirmation') {
-      // The in-app card is the confirmation. The remote Migma layout is the
-      // old template and does not carry this footer.
+      // Rendered with the shared Novara card.
       const { BookingConfirmation } = await import('../_shared/email-templates/BookingConfirmation.tsx');
       html = await renderAsync(React.createElement(BookingConfirmation, data));
       logStep("Using the Novara card for confirmation email");
@@ -286,10 +180,10 @@ serve(async (req: Request) => {
         ? `${beforeCount} before &amp; ${afterCount} after photo${(beforeCount + afterCount) === 1 ? '' : 's'}`
         : 'your before &amp; after photos';
       html = `
-        <h1 style="margin:0 0 14px;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">Your clean is done, ${first}</h1>
-        <p style="margin:0 0 16px;font-size:16px;line-height:1.5;color:#d4d4d8;">We've uploaded ${countLine} from your cleaning. Use the button to view the gallery. No login needed.</p>
-        <p style="margin:0 0 16px;"><a class="novara-btn" href="${galleryUrl}" style="display:inline-block;background:#e7e7ea;color:#18181b;text-decoration:none;font-weight:600;font-size:16px;padding:14px 28px;border-radius:12px;">View before and after photos</a></p>
-        <p style="margin:0;font-size:13px;line-height:1.5;color:#a1a1aa;">Questions? Call (844) 735-2070 or reply to this email.</p>`;
+        <h1 style="margin:0 0 14px;font-size:28px;line-height:1.2;font-weight:700;color:#0B0A11;">Your clean is done, ${first}</h1>
+        <p style="margin:0 0 16px;font-size:16px;line-height:1.5;color:#27272A;">We've uploaded ${countLine} from your cleaning. Use the button to view the gallery. No login needed.</p>
+        <p style="margin:0 0 16px;"><a class="novara-btn" href="${galleryUrl}" style="display:inline-block;background:#6810FE;color:#ffffff;text-decoration:none;font-weight:600;font-size:16px;padding:14px 28px;border-radius:12px;">View before and after photos</a></p>
+        <p style="margin:0;font-size:13px;line-height:1.5;color:#52525B;">Questions? Call (844) 735-2070 or reply to this email.</p>`;
       subject = `Your before & after photos are ready 📸`;
     } else {
       throw new Error(`Unknown email type: ${type}`);

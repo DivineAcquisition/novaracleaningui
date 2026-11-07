@@ -230,15 +230,15 @@ serve(async (req) => {
             <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#0f172a">
               <h2 style="margin:0 0 8px;font-size:20px">You've got Novara credit 🎉</h2>
               <p style="margin:0 0 16px;color:#475569">Hi ${first}, we've added account credit to your Novara Cleaning wallet.</p>
-              <div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:12px;padding:18px;text-align:center;margin:0 0 16px">
+              <div style="background:#f5f3ff;border:1px solid #5A1FD6;border-radius:12px;padding:18px;text-align:center;margin:0 0 16px">
                 <div style="font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#6d28d9">Credit added</div>
                 <div style="font-size:32px;font-weight:800;color:#5b21b6;margin-top:4px">${amountStr}</div>
                 <div style="font-size:12px;color:#6d28d9;margin-top:4px">Wallet balance: ${balanceStr}</div>
               </div>
               ${reasonLine ? `<p style="margin:0 0 12px;color:#475569;font-size:14px">${reasonLine}</p>` : ""}
               <p style="margin:0 0 16px;color:#475569;font-size:14px">It'll automatically apply at checkout on your next booking — nothing to do.</p>
-              <a href="https://try.novaracleaning.com/book/zip" style="display:inline-block;background:#7c3aed;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:600;font-size:14px">Book your next clean</a>
-              <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">Novara Cleaning</p>
+              <a href="https://try.novaracleaning.com/book/zip" style="display:inline-block;background:#6810FE;color:#ffffff;text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:600;font-size:14px">Book your next clean</a>
+              <p style="margin:16px 0 0;color:#52525B;font-size:12px">Novara Cleaning</p>
             </div>`;
           const { error: emailErr } = await adminClient.functions.invoke("admin-send-email", {
             body: { to: cust.email, subject: `You've got ${amountStr} in Novara credit`, html },

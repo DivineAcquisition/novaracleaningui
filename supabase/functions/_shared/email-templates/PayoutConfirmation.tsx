@@ -92,7 +92,7 @@ const styles = {
   paragraph: {
     fontSize: "16px",
     lineHeight: "24px",
-    color: "#374151",
+    color: "#27272A",
     marginBottom: "16px",
   },
   highlightSection: {
@@ -106,7 +106,7 @@ const styles = {
   footer: {
     fontSize: "16px",
     lineHeight: "24px",
-    color: "#6B7280",
+    color: "#52525B",
     marginTop: "32px",
     paddingTop: "24px",
     borderTop: "1px solid #E5E7EB",

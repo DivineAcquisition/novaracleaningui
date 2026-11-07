@@ -22,7 +22,7 @@ export const DetailRow = ({ label, value, isLast = false }: DetailRowProps) => {
 
 const rowStyle = {
   padding: '12px 0',
-  borderBottom: '1px solid #3a3a40',
+  borderBottom: '1px solid #E7E5EE',
 };
 
 const rowStyleLast = {
@@ -38,7 +38,7 @@ const labelText = {
   margin: '0',
   fontSize: '14px',
   fontWeight: '500',
-  color: '#a1a1aa',
+  color: '#52525B',
 };
 
 const valueStyle = {
@@ -49,7 +49,7 @@ const valueText = {
   margin: '0',
   fontSize: '14px',
   fontWeight: '600',
-  color: '#ffffff',
+  color: '#0B0A11',
   textAlign: 'right' as const,
 };
 

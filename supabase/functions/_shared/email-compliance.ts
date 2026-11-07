@@ -362,7 +362,6 @@ export const SETUP_TASKS = [
   "Point GoHighLevel workflows, campaigns, and any reactivation tool at the marketing-allowed check before they send. Those sends are not in this repository, so this app cannot stamp their footers until they move here or call the check.",
     "DocuSeal sends agreement emails from its own system. Classify those templates in DocuSeal as agreement messages and keep promotional content out of them.",
     "Approve each offer you still want to send (5% off on the second cart reminder, $30 on the new-customer reminder, 50% off on the video testimonial) on the claims list with a basis. Marketing that uses a claim that is not approved cannot be sent.",
-  "Migma hosts the remote HTML for some booking and cart messages. This app replaces the footer at send time. Remove any footer baked into the Migma document so the type footer is the only one.",
 ];
 
 const PROMO_RE = [
@@ -740,9 +739,9 @@ export function footerModel(
 
 function renderFooter(model: FooterModel, theme: "light" | "dark"): string {
   const dark = theme === "dark";
-  const bg = dark ? "#18181b" : "#2a2a2e";
-  const fg = dark ? "#e4e4e7" : "#c8c8d0";
-  const brand = dark ? "#ddd6fe" : "#ddd6fe";
+  const bg = dark ? "#18181b" : "#F7F6FA";
+  const fg = dark ? "#f4f4f5" : "#3F3F46";
+  const brand = dark ? "#ddd6fe" : "#5A1FD6";
   const lineHtml = model.lines.map((line) =>
     `<p style="margin:0 0 6px;font-family:Inter,Arial,sans-serif;font-size:13px;line-height:1.5;font-weight:400;color:${fg};">${escapeHtml(line)}</p>`,
   ).join("");
@@ -751,7 +750,7 @@ function renderFooter(model: FooterModel, theme: "light" | "dark"): string {
     const weight = index === 0 ? "600" : "400";
     const size = index === 0 ? "14px" : "13px";
     const margin = index === 0
-      ? "margin:16px 0 4px;padding-top:12px;border-top:1px solid #3f3f46;"
+      ? `margin:16px 0 4px;padding-top:12px;border-top:1px solid ${dark ? "#3f3f46" : "#E7E5EE"};`
       : "margin:0 0 2px;";
     return `<p class="novara-footer-identity" style="${margin}font-family:Inter,Arial,sans-serif;font-size:${size};line-height:1.5;font-weight:${weight};color:${color};">${escapeHtml(line)}</p>`;
   }).join("");
@@ -768,7 +767,7 @@ function renderFooter(model: FooterModel, theme: "light" | "dark"): string {
   const afterHtml = model.after.map((line) =>
     `<p style="margin:8px 0 0;font-family:Inter,Arial,sans-serif;font-size:13px;line-height:1.5;color:${fg};">${escapeHtml(line)}</p>`,
   ).join("");
-  return `<table role="presentation" class="novara-footer" data-novara-footer="1" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background:${bg};border-top:1px solid ${dark ? "#3f3f46" : "#e4e4e7"};">
+  return `<table role="presentation" class="novara-footer" data-novara-footer="1" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background:${bg};border-top:1px solid ${dark ? "#3f3f46" : "#E7E5EE"};border-radius:0 0 14px 14px;">
   <tr><td style="padding:16px 8px 12px;font-family:Inter,Arial,sans-serif;">
     ${lineHtml}
     ${afterHtml}
@@ -810,7 +809,7 @@ export function buildFooter(
     return { versionKey: versionKey(versionKeySource), html: wrapped, darkHtml: ops.html, text: ops.text };
   }
   const model = footerModel(identity, type, urls, ctx);
-  const html = `<!--NOVARA_FOOTER_START--><style>@media (prefers-color-scheme: dark){.novara-footer{background:#18181b !important;}.novara-footer p{color:#e4e4e7 !important;}.novara-footer a{color:#ddd6fe !important;}}</style>${renderFooter(model, "light")}<!--NOVARA_FOOTER_END-->`;
+  const html = `<!--NOVARA_FOOTER_START-->${renderFooter(model, "light")}<!--NOVARA_FOOTER_END-->`;
   const darkHtml = renderFooter(model, "dark");
   const text = [
     ...model.lines,
@@ -1359,7 +1358,7 @@ export const EMAIL_CATALOG: CatalogEntry[] = [
   entry({ key: "booking_completion", name: "Completion thank-you", where: "send-booking-email / BookingThankYou", senderBefore: "Novara Cleaning <hello@novaracleaning.com>", replyToBefore: "none", footerBefore: "Shared email layout.", unsubscribeBefore: false, promotionalBefore: false, plainTextBefore: false, assignedType: "customer_service", ownerDecisionNeeded: false, external: false, changed: "Service footer." }),
   entry({ key: "booking_photo_gallery", name: "Before and after photos", where: "send-booking-email", senderBefore: "Novara Cleaning <hello@novaracleaning.com>", replyToBefore: "none", footerBefore: "Phone line only.", unsubscribeBefore: false, promotionalBefore: false, plainTextBefore: false, assignedType: "customer_service", ownerDecisionNeeded: false, external: false, changed: "Service footer." }),
   entry({ key: "booking_reminder", name: "Saved-booking reminder", where: "BookingReminder / send-booking-reminder-email", senderBefore: "Novara Cleaning <hello@novaracleaning.com>", replyToBefore: "none", footerBefore: "Shared email layout. Copy says the person started a booking.", unsubscribeBefore: false, promotionalBefore: true, plainTextBefore: false, assignedType: "customer_service", ownerDecisionNeeded: false, external: false, changed: "A reminder that offers $30 off or a new-customer discount is marketing and needs consent. A reminder with no offer stays a service message. The $30 variant now states the offer terms beside the offer." }),
-  entry({ key: "abandoned_cart", name: "Abandoned cart", where: "send-abandoned-cart-email / AbandonedCartReminder / Migma", senderBefore: "Novara Cleaning <hello@novaracleaning.com>", replyToBefore: "none", footerBefore: "Questions line and copyright. Migma remote HTML when configured.", unsubscribeBefore: false, promotionalBefore: true, plainTextBefore: false, assignedType: "customer_marketing", ownerDecisionNeeded: false, external: false, changed: "Marketing footer, separate stream, unsubscribe, and offer terms on the 5% line. Sends only with consent and a mailing address." }),
+  entry({ key: "abandoned_cart", name: "Abandoned cart", where: "send-abandoned-cart-email / AbandonedCartReminder", senderBefore: "Novara Cleaning <hello@novaracleaning.com>", replyToBefore: "none", footerBefore: "Questions line and copyright.", unsubscribeBefore: false, promotionalBefore: true, plainTextBefore: false, assignedType: "customer_marketing", ownerDecisionNeeded: false, external: false, changed: "Marketing footer, separate stream, unsubscribe, and offer terms on the 5% line. Sends only with consent and a mailing address." }),
   entry({ key: "job_feedback", name: "Visit feedback request", where: "job-feedback-offer", senderBefore: "Novara Cleaning <hello@novaracleaning.com>", replyToBefore: "none", footerBefore: "None.", unsubscribeBefore: false, promotionalBefore: false, plainTextBefore: false, assignedType: "customer_service", ownerDecisionNeeded: false, external: false, changed: "Service footer. A discount added later reclassifies it as marketing." }),
   entry({ key: "testimonial_offer", name: "Video testimonial offer", where: "testimonial-offer via admin-send-email", senderBefore: "Novara Cleaning <hello@novaracleaning.com>", replyToBefore: "none", footerBefore: "Sign-off only.", unsubscribeBefore: false, promotionalBefore: true, plainTextBefore: false, assignedType: "customer_marketing", ownerDecisionNeeded: false, external: false, changed: "50% off makes this marketing. Offer terms added beside the offer. Blocked without consent, address, and unsubscribe." }),
   entry({ key: "membership_welcome", name: "Membership welcome", where: "send-membership-email / MembershipWelcome", senderBefore: "Novara Cleaning <hello@novaracleaning.com>", replyToBefore: "none", footerBefore: "Shared layout plus a membership sentence.", unsubscribeBefore: false, promotionalBefore: true, plainTextBefore: false, assignedType: "customer_service", ownerDecisionNeeded: false, external: false, changed: "Removed the exclusive-discount line. Service footer." }),
@@ -1401,7 +1400,6 @@ export const EMAIL_CATALOG: CatalogEntry[] = [
   entry({ key: "ghl_workflows", name: "GoHighLevel workflows and campaigns", where: "GoHighLevel, outside this repository", senderBefore: "Configured in GoHighLevel, not in this repo", replyToBefore: "Unknown here", footerBefore: "Unknown here. Not shared with Resend templates.", unsubscribeBefore: false, promotionalBefore: false, plainTextBefore: false, assignedType: "customer_service", ownerDecisionNeeded: true, external: true, changed: "Untyped until the owner assigns each workflow. They send as service mail with no promotional content only if they move through this app. Marketing from GHL must call the shared suppression check." }),
   entry({ key: "reactivation_platform", name: "Reactivation platform", where: "Not implemented. Weekly report cannot yet tell a reactivation from a rebooking.", senderBefore: "None in this repository", replyToBefore: "n/a", footerBefore: "None.", unsubscribeBefore: false, promotionalBefore: true, plainTextBefore: false, assignedType: "customer_marketing", ownerDecisionNeeded: true, external: true, changed: "When a reactivation email is added, it is marketing and uses this footer, consent, and suppression list." }),
   entry({ key: "docuseal_agreement", name: "DocuSeal agreement email", where: "DocuSeal send_email", senderBefore: "DocuSeal on behalf of the account", replyToBefore: "Unknown", footerBefore: "DocuSeal's own footer.", unsubscribeBefore: false, promotionalBefore: false, plainTextBefore: false, assignedType: "agreement_account", ownerDecisionNeeded: false, external: true, changed: "Classified as an agreement message. The vendor still renders it. Keep it factual and free of offers." }),
-  entry({ key: "migma_remote", name: "Migma remote HTML", where: "api.migma.ai export used by confirmation and cart", senderBefore: "Novara Cleaning <hello@novaracleaning.com>", replyToBefore: "none", footerBefore: "Whatever is saved in Migma. Confirmation code set {{unsubscribe_link}} to #.", unsubscribeBefore: false, promotionalBefore: false, plainTextBefore: false, assignedType: "customer_service", ownerDecisionNeeded: true, external: true, changed: "Send-time footer replaces the broken unsubscribe placeholder for service mail. Cart HTML is marketing. Owner confirms each Migma document's type." }),
   entry({ key: "admin_one_off", name: "Admin one-off", where: "admin-send-email", senderBefore: "Caller-supplied, default Novara Cleaning <hello@novaracleaning.com>", replyToBefore: "Caller-supplied or none", footerBefore: "Whatever the composer pasted.", unsubscribeBefore: false, promotionalBefore: false, plainTextBefore: false, assignedType: "customer_service", ownerDecisionNeeded: true, external: false, changed: "A one-off without a type sends as service mail and loses promotional content until the sender picks a type." }),
 ];
 
@@ -1427,13 +1425,13 @@ export function buildAuditReport(): { findings: AuditFinding[]; setupTasks: stri
       id: "sends",
       status: "partial",
       title: "Emails the system sends",
-      detail: `${EMAIL_CATALOG.length} send paths are classified. Resend is the app sender (react templates, admin one-offs, partnership mail, contractor mail). GoHighLevel is used for SMS and for workflows that are not stored here. There is no reactivation email program in this repository. DocuSeal and Migma render some messages outside the template folder.`,
+      detail: `${EMAIL_CATALOG.length} send paths are classified. Resend is the app sender (react templates, admin one-offs, partnership mail, contractor mail). GoHighLevel is used for SMS and for workflows that are not stored here. There is no reactivation email program in this repository. DocuSeal renders some messages outside the template folder. Migma is no longer used; every app email uses the shared Novara card.`,
     },
     {
       id: "unsubscribe",
       status: "partial",
       title: "Unsubscribe and suppression",
-      detail: "Partnership mail had its own opt-out, separate from SMS STOP. Booking templates had no working unsubscribe (the Migma placeholder was set to #). There was no suppression list shared by Resend, GoHighLevel, and a reactivation tool. This layer is that list. An email unsubscribe does not change text status.",
+      detail: "Partnership mail had its own opt-out, separate from SMS STOP. Booking templates had no working unsubscribe (the old remote template set the unsubscribe placeholder to #). There was no suppression list shared by Resend, GoHighLevel, and a reactivation tool. This layer is that list. An email unsubscribe does not change text status.",
     },
     {
       id: "auth",
@@ -1488,45 +1486,49 @@ export interface EmailCardInput {
  * The email box every send uses. Header band with the mark,
  * then the message, then the compliance footer.
  */
+/**
+ * Card styles. Every color is also set inline, so a mail app that drops this
+ * block still shows dark text on a white card. This block only keeps older
+ * fragments (grey or white text) readable where styles are supported.
+ */
+export const EMAIL_CARD_CSS = [
+  ".novara-card p, .novara-card li, .novara-card td { color:#27272A; }",
+  ".novara-card h1, .novara-card h2, .novara-card h3, .novara-card strong, .novara-card b { color:#0B0A11; }",
+  ".novara-card a:not(.novara-btn) { color:#5A1FD6; }",
+  ".novara-card a.novara-btn { color:#ffffff !important; background:#6810FE !important; border-radius:999px !important; }",
+  ".novara-card .novara-label { color:#52525B !important; font-weight:500 !important; }",
+  ".novara-card .novara-value, .novara-card .novara-value span, .novara-card .novara-value strong { color:#0B0A11 !important; font-weight:600 !important; }",
+].join("\n");
+
 export function buildEmailCard(input: EmailCardInput): string {
   const title = textOf(input.title).trim();
   const button = input.buttonHref && input.buttonLabel
-    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:26px 0 0;"><tr><td style="background:#f4f4f5;border-radius:999px;">
-        <a class="novara-btn" href="${escapeHtml(input.buttonHref)}" style="display:inline-block;padding:14px 28px;font-family:Inter,Arial,sans-serif;font-size:15px;line-height:1;font-weight:600;color:#18181b;text-decoration:none;border-radius:999px;">${escapeHtml(input.buttonLabel)}</a>
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:26px 0 0;"><tr><td style="background:#6810FE;border-radius:999px;">
+        <a class="novara-btn" href="${escapeHtml(input.buttonHref)}" style="display:inline-block;padding:14px 28px;font-family:Inter,Arial,sans-serif;font-size:15px;line-height:1;font-weight:600;color:#ffffff;text-decoration:none;border-radius:999px;background:#6810FE;">${escapeHtml(input.buttonLabel)}</a>
       </td></tr></table>
-      <p style="margin:12px 0 0;font-family:Inter,Arial,sans-serif;font-size:12px;line-height:1.5;color:#a1a1aa;word-break:break-all;">${escapeHtml(input.buttonHref)}</p>`
+      <p style="margin:12px 0 0;font-family:Inter,Arial,sans-serif;font-size:12px;line-height:1.5;color:#52525B;word-break:break-all;">${escapeHtml(input.buttonHref)}</p>`
     : "";
   const heading = title
-    ? `<h1 style="margin:0 0 16px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;letter-spacing:-0.02em;color:#ffffff;">${escapeHtml(title)}</h1>`
+    ? `<h1 style="margin:0 0 16px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;letter-spacing:-0.02em;color:#0B0A11;">${escapeHtml(title)}</h1>`
     : "";
   const footer = input.footerHtml ?? "<!--NOVARA_FOOTER_START--><!--NOVARA_FOOTER_END-->";
   const preheader = textOf(input.preheader).trim();
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="dark"><meta name="supported-color-schemes" content="dark">
-<style>
-  .novara-card p, .novara-card li, .novara-card span, .novara-card td { color:#d4d4d8 !important; }
-  .novara-card h1, .novara-card h2, .novara-card h3,
-  .novara-card strong, .novara-card b, .novara-card strong span, .novara-card b span { color:#ffffff !important; }
-  .novara-card p[style*="font-weight:600"], .novara-card p[style*="font-weight: 600"],
-  .novara-card p[style*="font-weight:700"], .novara-card p[style*="font-weight: 700"] { color:#ffffff !important; }
-  .novara-card a:not(.novara-btn) { color:#ddd6fe !important; }
-  .novara-card a.novara-btn { color:#18181b !important; background:#f4f4f5 !important; border-radius:999px !important; }
-  .novara-card .novara-label { color:#a1a1aa !important; font-weight:500 !important; }
-  .novara-card .novara-value, .novara-card .novara-value span, .novara-card .novara-value strong { color:#ffffff !important; font-weight:600 !important; }
-</style></head>
-<body style="margin:0;padding:0;background:#0b0b0d;">
-${preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#0b0b0d;">${escapeHtml(preheader)}</div>` : ""}
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0b0b0d;"><tr><td align="center" style="padding:32px 16px;">
-<table data-novara-card="1" role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#18181b;border:1px solid #2e2e33;border-radius:20px;">
-<tr><td style="padding:0;background:#121214;border-radius:20px 20px 0 0;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="height:4px;background:#7c6af7;font-size:0;line-height:4px;border-radius:20px 20px 0 0;">&nbsp;</td></tr>
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light">
+<style>${EMAIL_CARD_CSS}</style></head>
+<body style="margin:0;padding:0;background:#F4F2F8;">
+${preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#F4F2F8;">${escapeHtml(preheader)}</div>` : ""}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F4F2F8;"><tr><td align="center" style="padding:32px 16px;">
+<table data-novara-card="1" role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border:1px solid #E7E5EE;border-radius:20px;">
+<tr><td style="padding:0;background:#0B0A11;border-radius:20px 20px 0 0;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="height:4px;background:#6810FE;font-size:0;line-height:4px;border-radius:20px 20px 0 0;">&nbsp;</td></tr>
 <tr><td style="padding:18px 28px;"><img src="${EMAIL_LOGO_URL}" width="40" height="40" alt="Novara Cleaning" style="display:block;width:40px;height:40px;border:0;border-radius:10px;" /></td></tr></table>
 </td></tr>
-<tr><td class="novara-card" style="padding:28px 28px 8px;font-family:Inter,Arial,sans-serif;">
+<tr><td class="novara-card" style="padding:28px 28px 8px;font-family:Inter,Arial,sans-serif;background:#ffffff;">
 ${heading}
-<div style="font-family:Inter,Arial,sans-serif;font-size:16px;line-height:1.55;color:#d4d4d8;">${input.bodyHtml}</div>
+<div style="font-family:Inter,Arial,sans-serif;font-size:16px;line-height:1.6;color:#27272A;">${input.bodyHtml}</div>
 ${button}
 </td></tr>
-<tr><td style="padding:0 12px 8px;">${footer}</td></tr>
+<tr><td style="padding:0 12px 8px;background:#ffffff;border-radius:0 0 20px 20px;">${footer}</td></tr>
 </table>
 </td></tr></table></body></html>`;
 }

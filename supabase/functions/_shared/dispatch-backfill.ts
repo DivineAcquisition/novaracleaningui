@@ -197,17 +197,17 @@ export async function notifyStaffNoCleanersAvailable(
 
   const subject = `URGENT: No cleaners available — ${ref} (${when})`;
   const html = `
-      <h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">No cleaners available for dispatch</h1>
+      <h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#0B0A11;">No cleaners available for dispatch</h1>
       <p>Auto-dispatch exhausted the active cleaner pool (offers expired, declined, or no eligible cleaners left). <strong>Hire or onboard a cleaner ASAP</strong> and assign manually in Admin.</p>
       <p><strong>Reason:</strong> ${context.reason}</p>
       <table style="width:100%;border-collapse:collapse;margin:16px 0;">
-        <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;font-weight:600;">Booking</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${ref}</td></tr>
-        <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;font-weight:600;">Customer</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${customer}${booking?.phone ? ` · ${booking.phone}` : ""}</td></tr>
-        <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;font-weight:600;">Service</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${job.service_type || "—"} · ${when}</td></tr>
-        <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;font-weight:600;">Location</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${location || "—"}</td></tr>
-        <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;font-weight:600;">Team needed</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${team?.confirmed ?? 0} / ${team?.need ?? job.min_cleaners_required} confirmed</td></tr>
+        <tr><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;font-weight:600;">Booking</td><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;">${ref}</td></tr>
+        <tr><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;font-weight:600;">Customer</td><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;">${customer}${booking?.phone ? ` · ${booking.phone}` : ""}</td></tr>
+        <tr><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;font-weight:600;">Service</td><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;">${job.service_type || "—"} · ${when}</td></tr>
+        <tr><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;font-weight:600;">Location</td><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;">${location || "—"}</td></tr>
+        <tr><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;font-weight:600;">Team needed</td><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;">${team?.confirmed ?? 0} / ${team?.need ?? job.min_cleaners_required} confirmed</td></tr>
       </table>
-      <p><a class="novara-btn" href="https://admin.novaracleaning.com/admin/bookings" style="display:inline-block;padding:14px 28px;background:#e7e7ea;color:#18181b;text-decoration:none;border-radius:12px;font-weight:600;">Open Admin Bookings</a></p>
+      <p><a class="novara-btn" href="https://admin.novaracleaning.com/admin/bookings" style="display:inline-block;padding:14px 28px;background:#6810FE;color:#ffffff;text-decoration:none;border-radius:12px;font-weight:600;">Open Admin Bookings</a></p>
       <p><a href="https://admin.novaracleaning.com/admin/map">Dispatch map</a></p>`;
 
   try {

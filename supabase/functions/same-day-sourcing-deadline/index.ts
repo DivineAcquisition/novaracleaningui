@@ -120,7 +120,7 @@ serve(async (req) => {
                   <h2 style="margin:0 0 8px;font-size:20px">We're sorry, ${first}</h2>
                   <p style="color:#475569">We weren't able to assign a cleaner for your same-day booking today. Your booking has been canceled and a <strong>full refund of $${amount}</strong> (including the same-day fee) is processing automatically. Nothing is required from you.</p>
                   <p style="color:#475569">Want to rebook a regular (non-same-day) slot? <a href="https://try.novaracleaning.com/book/zip">Book here</a>.</p>
-                  <p style="color:#94a3b8;font-size:12px">Novara Cleaning</p>
+                  <p style="color:#52525B;font-size:12px">Novara Cleaning</p>
                 </div>`,
               },
             });

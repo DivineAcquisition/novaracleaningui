@@ -108,7 +108,7 @@ const styles = {
   paragraph: {
     fontSize: "16px",
     lineHeight: "24px",
-    color: "#374151",
+    color: "#27272A",
     marginBottom: "16px",
   },
   highlightSection: {
@@ -122,7 +122,7 @@ const styles = {
   listItem: {
     fontSize: "16px",
     lineHeight: "24px",
-    color: "#374151",
+    color: "#27272A",
     marginBottom: "8px",
     paddingLeft: "16px",
   },
@@ -131,10 +131,10 @@ const styles = {
     margin: "32px 0",
   },
   button: {
-    backgroundColor: "#e7e7ea",
-    color: "#18181b",
+    backgroundColor: "#6810FE",
+    color: "#ffffff",
     padding: "14px 28px",
-    borderRadius: "12px",
+    borderRadius: "999px",
     textDecoration: "none",
     fontWeight: "600",
     fontSize: "16px",
@@ -143,7 +143,7 @@ const styles = {
   footer: {
     fontSize: "16px",
     lineHeight: "24px",
-    color: "#6B7280",
+    color: "#52525B",
     marginTop: "32px",
     paddingTop: "24px",
     borderTop: "1px solid #E5E7EB",

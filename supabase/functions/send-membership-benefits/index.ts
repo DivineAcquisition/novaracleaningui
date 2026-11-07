@@ -92,18 +92,18 @@ const BENEFIT_SECTIONS: Array<{ title: string; items: string[] }> = [
 function renderHtml(opts: { firstName: string }): string {
   const sectionHtml = BENEFIT_SECTIONS.map(
     (g) => `
-    <h2 style="font-family:Inter,Arial,sans-serif;font-size:18px;margin:24px 0 8px;color:#ffffff">${g.title}</h2>
+    <h2 style="font-family:Inter,Arial,sans-serif;font-size:18px;margin:24px 0 8px;color:#0B0A11">${g.title}</h2>
     <ul style="margin:0;padding-left:20px;font-size:15px;line-height:1.65">
       ${g.items.map((t) => `<li style="margin:4px 0">${t}</li>`).join("")}
     </ul>`,
   ).join("");
 
-  return `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">Glow Membership Benefits</h1>
+  return `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#0B0A11;">Glow Membership Benefits</h1>
 <p style="margin:0 0 16px;">Hi ${opts.firstName || "there"} — here's everything included with a Glow Membership. More than a recurring clean: full visibility, photo proof, and you stay in control.</p>
 <p style="margin:0 0 16px;">Every Glow plan — <strong>Monthly (1 clean/mo)</strong>, <strong>Bi-Weekly (2 cleans/mo)</strong>, or <strong>Weekly (4 cleans/mo)</strong> — includes the full benefit stack below. Same benefits on every plan; just choose how often we visit.</p>
 ${sectionHtml}
-<p style="margin:22px 0 8px;"><a class="novara-btn" href="${VIEW_URL}" style="display:inline-block;padding:14px 28px;background:#e7e7ea;color:#18181b;text-decoration:none;border-radius:12px;font-weight:600;">See all membership benefits</a></p>
-<p style="margin:16px 0 8px;"><a class="novara-btn" href="${MEMBERSHIP_URL}" style="display:inline-block;padding:14px 28px;background:#e7e7ea;color:#18181b;text-decoration:none;border-radius:12px;font-weight:600;">View plans and pricing</a></p>
+<p style="margin:22px 0 8px;"><a class="novara-btn" href="${VIEW_URL}" style="display:inline-block;padding:14px 28px;background:#6810FE;color:#ffffff;text-decoration:none;border-radius:12px;font-weight:600;">See all membership benefits</a></p>
+<p style="margin:16px 0 8px;"><a class="novara-btn" href="${MEMBERSHIP_URL}" style="display:inline-block;padding:14px 28px;background:#6810FE;color:#ffffff;text-decoration:none;border-radius:12px;font-weight:600;">View plans and pricing</a></p>
 <p style="margin:16px 0 0;">Questions about your quote or which plan fits? Reply to this email or text us at (844) 735-2070.</p>`;
 }
 

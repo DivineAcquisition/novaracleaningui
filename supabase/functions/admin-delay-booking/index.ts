@@ -391,25 +391,25 @@ serve(async (req) => {
       try {
         const compBlock =
           compensation === "discount"
-            ? `<div style="margin:0 0 16px;padding-left:12px;border-left:4px solid #7c6af7">
+            ? `<div style="margin:0 0 16px;padding-left:12px;border-left:4px solid #6810FE">
                  <p style="margin:0;font-size:12px;letter-spacing:.04em;text-transform:uppercase;">On us — service discount</p>
-                 <p style="margin:4px 0 0;font-size:22px;font-weight:700;color:#ffffff;">${dollars(discountApplied)} off</p>
+                 <p style="margin:4px 0 0;font-size:22px;font-weight:700;color:#0B0A11;">${dollars(discountApplied)} off</p>
                  <p style="margin:4px 0 0;font-size:13px;">Applied to this cleaning.</p>
                </div>`
             : compensation === "credit"
-              ? `<div style="margin:0 0 16px;padding-left:12px;border-left:4px solid #7c6af7">
+              ? `<div style="margin:0 0 16px;padding-left:12px;border-left:4px solid #6810FE">
                    <p style="margin:0;font-size:12px;letter-spacing:.04em;text-transform:uppercase;">On us — account credit</p>
-                   <p style="margin:4px 0 0;font-size:22px;font-weight:700;color:#ffffff;">${dollars(compCents)} credit</p>
+                   <p style="margin:4px 0 0;font-size:22px;font-weight:700;color:#0B0A11;">${dollars(compCents)} credit</p>
                    <p style="margin:4px 0 0;font-size:13px;">Auto-applies at checkout on your next booking.</p>
                  </div>`
               : "";
 
         const html = `
-            <h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">Quick update on today's cleaning</h1>
+            <h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#0B0A11;">Quick update on today's cleaning</h1>
             <p style="margin:0 0 16px;">Hi ${first}, we need to push your Novara appointment back by ${hours} hour${hours === 1 ? "" : "s"}.</p>
             <div style="margin:0 0 16px;padding-left:12px;border-left:4px solid #f59e0b">
               <p style="margin:0;font-size:12px;letter-spacing:.04em;text-transform:uppercase;">New arrival window</p>
-              <p style="margin:4px 0 0;font-size:20px;font-weight:700;color:#ffffff;">${dateLabel || "Today"} · ${newSlot}</p>
+              <p style="margin:4px 0 0;font-size:20px;font-weight:700;color:#0B0A11;">${dateLabel || "Today"} · ${newSlot}</p>
               <p style="margin:4px 0 0;font-size:13px;">Previously ${preDelay}</p>
             </div>
             <p style="margin:0 0 16px;"><strong>What happened:</strong> ${reason}</p>

@@ -82,14 +82,14 @@ export function buildContractorChecklistNudgeEmail(opts: {
         </p>
         <p style="margin:24px 0;text-align:center">
           <a href="${url}"
-             style="display:inline-block;background:#5C0FFE;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600">
+             style="display:inline-block;background:#6810FE;color:#ffffff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600">
             Open your job checklist
           </a>
         </p>
         <p style="margin:0 0 8px;color:#64748b;font-size:14px">
           Quality on this list is how we keep the customer and keep you booked.
         </p>
-        <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">Novara Cleaning</p>
+        <p style="margin:16px 0 0;color:#52525B;font-size:12px">Novara Cleaning</p>
       </div>`,
   };
 }

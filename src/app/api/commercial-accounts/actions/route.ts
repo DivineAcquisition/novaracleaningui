@@ -218,7 +218,7 @@ export async function POST(req: Request): Promise<NextResponse> {
           apiKey: resendKey,
           to: String(account.email),
           subject: `Set up payment for ${account.business_name} — Novara Cleaning`,
-          html: `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">Set up payment</h1><p>Hi ${account.contact_name || "there"},</p><p>To activate cleaning service for <strong>${account.business_name}</strong>, add a payment method on this page. It stays on our site — a Stripe Pre-Auth hold verifies the card and nothing is captured now.</p><p style="margin:22px 0 0;"><a class="novara-btn" href="${setupUrl}" style="display:inline-block;padding:14px 28px;background:#e7e7ea;color:#18181b;text-decoration:none;border-radius:12px;font-weight:600;">Add a payment method</a></p>`,
+          html: `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#0B0A11;">Set up payment</h1><p>Hi ${account.contact_name || "there"},</p><p>To activate cleaning service for <strong>${account.business_name}</strong>, add a payment method on this page. It stays on our site — a Stripe Pre-Auth hold verifies the card and nothing is captured now.</p><p style="margin:22px 0 0;"><a class="novara-btn" href="${setupUrl}" style="display:inline-block;padding:14px 28px;background:#6810FE;color:#ffffff;text-decoration:none;border-radius:12px;font-weight:600;">Add a payment method</a></p>`,
           templateKey: "commercial_account",
           declaredType: "customer_service",
         });

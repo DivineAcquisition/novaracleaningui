@@ -18,8 +18,8 @@ export const Button = ({ href, children, variant = 'primary' }: ButtonProps) => 
 
 const buttonPrimary = {
   display: 'inline-block',
-  backgroundColor: '#f4f4f5',
-  color: '#18181b',
+  backgroundColor: '#6810FE',
+  color: '#ffffff',
   padding: '14px 28px',
   textDecoration: 'none',
   borderRadius: '999px',
@@ -31,11 +31,12 @@ const buttonPrimary = {
 
 const buttonSecondary = {
   display: 'inline-block',
-  backgroundColor: BRAND.colors.gray[100],
-  color: BRAND.colors.gray[900],
-  padding: '12px 32px',
+  backgroundColor: '#F6F3FF',
+  color: '#5A1FD6',
+  border: '1px solid #E2D8FF',
+  padding: '12px 28px',
   textDecoration: 'none',
-  borderRadius: BRAND.borderRadius.md,
+  borderRadius: '999px',
   fontWeight: '600',
   fontSize: '14px',
   textAlign: 'center' as const,

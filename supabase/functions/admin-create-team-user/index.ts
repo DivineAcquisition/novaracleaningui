@@ -76,10 +76,10 @@ function renderInviteHtml(opts: {
     ? "This sign-in link expires in 1 hour and can only be used once."
     : "This invitation expires in 24 hours.";
 
-  const html = `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">Workspace invitation</h1>
+  const html = `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#0B0A11;">Workspace invitation</h1>
 ${bodyHtml}
 <p>Console: <a href="${ADMIN_PORTAL_URL}">${ADMIN_PORTAL_URL}</a></p>
-<p style="margin:22px 0 0;"><a class="novara-btn" href="${opts.link}" style="display:inline-block;padding:14px 28px;background:#e7e7ea;color:#18181b;text-decoration:none;border-radius:12px;font-weight:600;">${ctaLabel}</a></p>
+<p style="margin:22px 0 0;"><a class="novara-btn" href="${opts.link}" style="display:inline-block;padding:14px 28px;background:#6810FE;color:#ffffff;text-decoration:none;border-radius:12px;font-weight:600;">${ctaLabel}</a></p>
 <p style="margin:16px 0 0;font-size:14px;">${expiryNote}</p>`;
 
   const text = `${greeting}\n\nYou've been invited to the Novara admin workspace as ${roleName}.\n\nAccept your invitation:\n${opts.link}\n\n${expiryNote}\n\nConsole: ${ADMIN_PORTAL_URL}`;

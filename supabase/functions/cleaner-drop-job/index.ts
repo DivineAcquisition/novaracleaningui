@@ -149,16 +149,16 @@ serve(async (req) => {
           declaredType: "internal_admin",
           staffRecipient: true,
           html: `
-            <h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">${lateDrop ? "Late drop — less than 48 hours before service" : "Job dropped by contractor"}</h1>
+            <h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#0B0A11;">${lateDrop ? "Late drop — less than 48 hours before service" : "Job dropped by contractor"}</h1>
             <p><strong>${cleanerName}</strong> dropped <strong>${bookingRef}</strong>. This job needs urgent reassignment.</p>
             <table style="border-collapse:collapse;width:100%;">
-              <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">Customer</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${customer}</td></tr>
-              <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">When</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${when}</td></tr>
-              <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">Where</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${where || "—"}</td></tr>
-              <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">Reason</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${reason || "—"}</td></tr>
-              <tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">Hours until service</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${hrs != null ? Math.max(0, Math.round(hrs)) : "—"}</td></tr>
+              <tr><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;">Customer</td><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;">${customer}</td></tr>
+              <tr><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;">When</td><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;">${when}</td></tr>
+              <tr><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;">Where</td><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;">${where || "—"}</td></tr>
+              <tr><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;">Reason</td><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;">${reason || "—"}</td></tr>
+              <tr><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;">Hours until service</td><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;">${hrs != null ? Math.max(0, Math.round(hrs)) : "—"}</td></tr>
             </table>
-            <p style="margin:22px 0 0;"><a class="novara-btn" href="https://admin.novaracleaning.com/admin/dispatch" style="display:inline-block;padding:14px 28px;background:#e7e7ea;color:#18181b;text-decoration:none;border-radius:12px;font-weight:600;">Open Dispatch console</a></p>
+            <p style="margin:22px 0 0;"><a class="novara-btn" href="https://admin.novaracleaning.com/admin/dispatch" style="display:inline-block;padding:14px 28px;background:#6810FE;color:#ffffff;text-decoration:none;border-radius:12px;font-weight:600;">Open Dispatch console</a></p>
           `,
         }, admin);
       }

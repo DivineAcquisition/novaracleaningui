@@ -121,30 +121,30 @@ serve(async (req) => {
           ? `${cleaner.first_name || ""} ${cleaner.last_name || ""}`.trim()
           : "—";
         return `<tr>
-          <td style="padding:8px;border-bottom:1px solid #3a3a40">${ref}</td>
-          <td style="padding:8px;border-bottom:1px solid #3a3a40">${b.service_date}</td>
-          <td style="padding:8px;border-bottom:1px solid #3a3a40">${b.time_slot || "—"}</td>
-          <td style="padding:8px;border-bottom:1px solid #3a3a40">${customer}</td>
-          <td style="padding:8px;border-bottom:1px solid #3a3a40">${cleanerName}</td>
-          <td style="padding:8px;border-bottom:1px solid #3a3a40">${b.status}</td>
+          <td style="padding:8px;border-bottom:1px solid #E7E5EE">${ref}</td>
+          <td style="padding:8px;border-bottom:1px solid #E7E5EE">${b.service_date}</td>
+          <td style="padding:8px;border-bottom:1px solid #E7E5EE">${b.time_slot || "—"}</td>
+          <td style="padding:8px;border-bottom:1px solid #E7E5EE">${customer}</td>
+          <td style="padding:8px;border-bottom:1px solid #E7E5EE">${cleanerName}</td>
+          <td style="padding:8px;border-bottom:1px solid #E7E5EE">${b.status}</td>
         </tr>`;
       }).join("");
 
       const html = `
-          <h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">Incomplete cleanings past service date</h1>
+          <h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#0B0A11;">Incomplete cleanings past service date</h1>
           <p>These bookings were scheduled on or before yesterday but are still not marked complete. Please confirm status with the cleaner and update the booking in admin.</p>
           <table style="width:100%;border-collapse:collapse;font-size:14px;margin:16px 0">
             <thead><tr style="text-align:left">
-              <th style="padding:8px;border-bottom:1px solid #3a3a40;">Booking</th>
-              <th style="padding:8px;border-bottom:1px solid #3a3a40;">Date</th>
-              <th style="padding:8px;border-bottom:1px solid #3a3a40;">Window</th>
-              <th style="padding:8px;border-bottom:1px solid #3a3a40;">Customer</th>
-              <th style="padding:8px;border-bottom:1px solid #3a3a40;">Cleaner</th>
-              <th style="padding:8px;border-bottom:1px solid #3a3a40;">Status</th>
+              <th style="padding:8px;border-bottom:1px solid #E7E5EE;">Booking</th>
+              <th style="padding:8px;border-bottom:1px solid #E7E5EE;">Date</th>
+              <th style="padding:8px;border-bottom:1px solid #E7E5EE;">Window</th>
+              <th style="padding:8px;border-bottom:1px solid #E7E5EE;">Customer</th>
+              <th style="padding:8px;border-bottom:1px solid #E7E5EE;">Cleaner</th>
+              <th style="padding:8px;border-bottom:1px solid #E7E5EE;">Status</th>
             </tr></thead>
             <tbody>${lines}</tbody>
           </table>
-          <p style="margin:22px 0 0;"><a class="novara-btn" href="${ADMIN_BOOKINGS_URL}" style="display:inline-block;padding:14px 28px;background:#e7e7ea;color:#18181b;text-decoration:none;border-radius:12px;font-weight:600;">Open admin bookings</a></p>`;
+          <p style="margin:22px 0 0;"><a class="novara-btn" href="${ADMIN_BOOKINGS_URL}" style="display:inline-block;padding:14px 28px;background:#6810FE;color:#ffffff;text-decoration:none;border-radius:12px;font-weight:600;">Open admin bookings</a></p>`;
 
       staffEmailSent = await sendStaffEmail(
         resendKey,

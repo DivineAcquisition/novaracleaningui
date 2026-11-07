@@ -86,8 +86,8 @@ const paragraph = {
 };
 
 const detailBox = {
-  backgroundColor: '#1c1c20',
-  border: '1px solid #3a3a40',
+  backgroundColor: '#F6F3FF',
+  border: '1px solid #E7E5EE',
   padding: BRAND.spacing.lg,
   borderRadius: BRAND.borderRadius.lg,
   margin: `${BRAND.spacing.lg} 0`,
@@ -101,8 +101,8 @@ const sectionTitle = {
 };
 
 const successBox = {
-  backgroundColor: '#1c1c20',
-  border: '1px solid #3a3a40',
+  backgroundColor: '#F6F3FF',
+  border: '1px solid #E7E5EE',
   padding: BRAND.spacing.lg,
   borderRadius: BRAND.borderRadius.lg,
   margin: `${BRAND.spacing.lg} 0`,

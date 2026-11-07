@@ -97,11 +97,11 @@ function copyFor(
     ` Questions? Call ${SUPPORT_PHONE_DISPLAY}.`;
 
   const cta = payUrl
-    ? `<p style="margin:22px 0 0;"><a class="novara-btn" href="${payUrl}" style="display:inline-block;padding:14px 28px;background:#e7e7ea;color:#18181b;text-decoration:none;border-radius:12px;font-weight:600;">Pay deposit ${money}</a></p>`
+    ? `<p style="margin:22px 0 0;"><a class="novara-btn" href="${payUrl}" style="display:inline-block;padding:14px 28px;background:#6810FE;color:#ffffff;text-decoration:none;border-radius:12px;font-weight:600;">Pay deposit ${money}</a></p>`
     : `<p style="margin:16px 0 0">Check your inbox for the Stripe invoice and pay the deposit there.</p>`;
 
   const html = `
-      <h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">Deposit still needed</h1>
+      <h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#0B0A11;">Deposit still needed</h1>
       <p style="margin:0 0 12px">Hi ${name},</p>
       <p style="margin:0 0 12px">Your Novara cleaning${when ? ` on <strong>${when}</strong>` : ""} is still <strong>pending until we receive your ${money} deposit</strong>.</p>
       <p style="margin:0 0 12px">${

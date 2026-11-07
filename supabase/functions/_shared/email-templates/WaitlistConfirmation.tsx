@@ -44,9 +44,9 @@ export const WaitlistConfirmation = ({
   );
 };
 
-const paragraph = { fontSize: '16px', lineHeight: '26px', color: '#d4d4d8', margin: '0 0 16px' };
-const listBox = { backgroundColor: '#1c1c20', border: '1px solid #3a3a40', borderRadius: '12px', padding: '8px 18px', margin: '8px 0 16px' };
-const listItem = { fontSize: '15px', lineHeight: '24px', color: '#d4d4d8', margin: '8px 0' };
+const paragraph = { fontSize: '16px', lineHeight: '26px', color: '#27272A', margin: '0 0 16px' };
+const listBox = { backgroundColor: '#F6F3FF', border: '1px solid #E7E5EE', borderRadius: '12px', padding: '8px 18px', margin: '8px 0 16px' };
+const listItem = { fontSize: '15px', lineHeight: '24px', color: '#27272A', margin: '8px 0' };
 const cta = { margin: '22px 0 0' };
 
 export default WaitlistConfirmation;

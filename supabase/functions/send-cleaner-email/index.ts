@@ -60,7 +60,7 @@ serve(async (req) => {
             </p>
             <p style="margin:24px 0;text-align:center">
               <a href="${safeUrl}"
-                 style="display:inline-block;background:#7c3aed;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600">
+                 style="display:inline-block;background:#6810FE;color:#ffffff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600">
                 Start onboarding
               </a>
             </p>
@@ -70,7 +70,7 @@ serve(async (req) => {
             <p style="margin:0 0 16px;font-size:13px;word-break:break-all">
               <a href="${safeUrl}" style="color:#7c3aed">${safeUrl}</a>
             </p>
-            <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">Novara Cleaning</p>
+            <p style="margin:16px 0 0;color:#52525B;font-size:12px">Novara Cleaning</p>
           </div>`;
         break;
       }
@@ -140,7 +140,7 @@ serve(async (req) => {
               ${pctStr ? `<div style="font-size:12px;color:#047857;margin-top:4px">${pctStr} of job revenue</div>` : ""}
             </div>
             <p style="margin:0 0 8px;color:#475569;font-size:14px">We've queued this payout and it's on its way to your account. You'll get a confirmation once it's sent.</p>
-            <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">Novara Cleaning</p>
+            <p style="margin:16px 0 0;color:#52525B;font-size:12px">Novara Cleaning</p>
           </div>`;
         break;
       }
@@ -190,7 +190,7 @@ serve(async (req) => {
             </p>
             <p style="margin:24px 0;text-align:center">
               <a href="${agreementUrl}"
-                 style="display:inline-block;background:#7c3aed;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600">
+                 style="display:inline-block;background:#6810FE;color:#ffffff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600">
                 Sign your agreement
               </a>
             </p>
@@ -199,7 +199,7 @@ serve(async (req) => {
               <a href="${loginUrl}" style="color:#7c3aed">${loginUrl.replace(/^https?:\/\//, "")}</a>
               with the email on your invite.
             </p>
-            <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">Novara Cleaning</p>
+            <p style="margin:16px 0 0;color:#52525B;font-size:12px">Novara Cleaning</p>
           </div>`;
         break;
       }
@@ -228,7 +228,7 @@ serve(async (req) => {
             <p style="margin:0 0 16px;color:#475569">
               We have a job that needs coverage. First to finish remaining steps and accept gets it.
             </p>
-            <div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:12px;padding:16px;margin:0 0 16px">
+            <div style="background:#f5f3ff;border:1px solid #5A1FD6;border-radius:12px;padding:16px;margin:0 0 16px">
               <div style="font-size:14px;color:#4c1d95;margin:0 0 8px"><strong>${service}</strong></div>
               <div style="font-size:14px;color:#334155">${when || "Upcoming"}</div>
               <div style="font-size:14px;color:#334155">Area: ${zone}</div>
@@ -239,11 +239,11 @@ serve(async (req) => {
             <p style="margin:0 0 16px;color:#475569;font-size:14px">${gate} The exact address is shared once you're assigned.</p>
             <p style="margin:24px 0;text-align:center">
               <a href="${offerUrl}"
-                 style="display:inline-block;background:#5C0FFE;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600">
+                 style="display:inline-block;background:#6810FE;color:#ffffff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600">
                 Open the offer
               </a>
             </p>
-            <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">Novara Cleaning</p>
+            <p style="margin:16px 0 0;color:#52525B;font-size:12px">Novara Cleaning</p>
           </div>`;
         break;
       }
@@ -283,11 +283,11 @@ serve(async (req) => {
             </p>
             <p style="margin:24px 0;text-align:center">
               <a href="${setupUrl}"
-                 style="display:inline-block;background:#7c3aed;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600">
+                 style="display:inline-block;background:#6810FE;color:#ffffff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600">
                 Complete account setup
               </a>
             </p>
-            <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">Novara Cleaning</p>
+            <p style="margin:16px 0 0;color:#52525B;font-size:12px">Novara Cleaning</p>
           </div>`;
         break;
       }
@@ -306,12 +306,12 @@ serve(async (req) => {
             </p>
             <p style="margin:24px 0;text-align:center">
               <a href="${supplyUrl}"
-                 style="display:inline-block;background:#7c3aed;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600">
+                 style="display:inline-block;background:#6810FE;color:#ffffff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600">
                 Open supply checklist
               </a>
             </p>
             <p style="margin:0 0 8px;color:#64748b;font-size:14px">No login required — the link opens straight onto the checklist.</p>
-            <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">Novara Cleaning</p>
+            <p style="margin:16px 0 0;color:#52525B;font-size:12px">Novara Cleaning</p>
           </div>`;
         break;
       }
@@ -333,12 +333,12 @@ serve(async (req) => {
             </p>
             <p style="margin:24px 0;text-align:center">
               <a href="${w9Url}"
-                 style="display:inline-block;background:#7c3aed;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600">
+                 style="display:inline-block;background:#6810FE;color:#ffffff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600">
                 Submit W-9
               </a>
             </p>
             <p style="margin:0 0 8px;color:#64748b;font-size:14px">This link is just for you. It expires in 14 days.</p>
-            <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">Novara Cleaning</p>
+            <p style="margin:16px 0 0;color:#52525B;font-size:12px">Novara Cleaning</p>
           </div>`;
         break;
       }
@@ -360,7 +360,7 @@ serve(async (req) => {
               We didn't get a response to your Novara Cleaning pulse check, so your contractor account
               is closed as of today. You cannot reapply for 3 months${reapplyDate ? ` (after ${reapplyDate})` : ""}.
             </p>
-            <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">Novara Cleaning</p>
+            <p style="margin:16px 0 0;color:#52525B;font-size:12px">Novara Cleaning</p>
           </div>`;
           break;
         }
@@ -378,12 +378,12 @@ serve(async (req) => {
             </p>
             <p style="margin:24px 0;text-align:center">
               <a href="${pulseUrl}"
-                 style="display:inline-block;background:#7c3aed;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600">
+                 style="display:inline-block;background:#6810FE;color:#ffffff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600">
                 Open your pulse check
               </a>
             </p>
             <p style="margin:0 0 8px;color:#64748b;font-size:14px">No login required — the link opens straight onto your form.</p>
-            <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">Novara Cleaning</p>
+            <p style="margin:16px 0 0;color:#52525B;font-size:12px">Novara Cleaning</p>
           </div>`;
         break;
       }
@@ -409,12 +409,12 @@ serve(async (req) => {
             </p>
             <p style="margin:24px 0;text-align:center">
               <a href="${statementUrl}"
-                 style="display:inline-block;background:#7c3aed;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600">
+                 style="display:inline-block;background:#6810FE;color:#ffffff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600">
                 Open the statement form
               </a>
             </p>
             <p style="margin:0 0 8px;color:#64748b;font-size:14px">No login required. No conclusion has been reached.</p>
-            <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">Novara Cleaning</p>
+            <p style="margin:16px 0 0;color:#52525B;font-size:12px">Novara Cleaning</p>
           </div>`;
         break;
       }
@@ -435,7 +435,7 @@ serve(async (req) => {
               ${customerName} left a tip on ${bookingLabel}.
               ${crewSize > 1 ? `Your share of the ${totalStr} crew tip is below.` : "100% of it goes to you."}
             </p>
-            <div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:12px;padding:18px;text-align:center;margin:0 0 16px">
+            <div style="background:#f5f3ff;border:1px solid #5A1FD6;border-radius:12px;padding:18px;text-align:center;margin:0 0 16px">
               <div style="font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#6d28d9">Your tip</div>
               <div style="font-size:32px;font-weight:800;color:#5b21b6;margin-top:4px">${amountStr}</div>
               <div style="font-size:12px;color:#7c3aed;margin-top:4px">100% pass-through — Novara takes nothing</div>
@@ -443,7 +443,7 @@ serve(async (req) => {
             <p style="margin:0 0 8px;color:#475569;font-size:14px">
               It will be included with your next payout.
             </p>
-            <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">Novara Cleaning</p>
+            <p style="margin:16px 0 0;color:#52525B;font-size:12px">Novara Cleaning</p>
           </div>`;
         break;
       }
@@ -465,11 +465,11 @@ serve(async (req) => {
             </p>
             <p style="margin:24px 0;text-align:center">
               <a href="${checklistUrl}"
-                 style="display:inline-block;background:#5C0FFE;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600">
+                 style="display:inline-block;background:#6810FE;color:#ffffff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600">
                 Open your job checklist
               </a>
             </p>
-            <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">Novara Cleaning</p>
+            <p style="margin:16px 0 0;color:#52525B;font-size:12px">Novara Cleaning</p>
           </div>`;
         break;
       }

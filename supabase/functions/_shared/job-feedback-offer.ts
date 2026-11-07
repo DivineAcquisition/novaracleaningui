@@ -308,7 +308,7 @@ export function buildFeedbackEmailHtml(ctx: FeedbackContext, url: string, opts?:
       </table>
       <p style="margin:24px 0;">
         <a href="${url}"
-           style="background:#7c3aed;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600;">
+           style="background:#6810FE;color:#ffffff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600;">
           Share your feedback
         </a>
       </p>

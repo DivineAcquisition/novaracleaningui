@@ -76,12 +76,12 @@ interface AddonEmailData {
 
 function renderHtml(opts: { heading: string; bodyHtml: string; rows: Array<{ label: string; value: string }>; ctaLabel?: string; ctaUrl?: string }): string {
   const rowsHtml = opts.rows.filter((r) => r.value)
-    .map((r) => `<tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${r.label}</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;font-weight:600;text-align:right;">${r.value}</td></tr>`)
+    .map((r) => `<tr><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;">${r.label}</td><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;font-weight:600;text-align:right;">${r.value}</td></tr>`)
     .join("");
   const cta = opts.ctaLabel && opts.ctaUrl
-    ? `<p style="margin:22px 0 0;"><a class="novara-btn" href="${opts.ctaUrl}" style="display:inline-block;padding:14px 28px;background:#e7e7ea;color:#18181b;text-decoration:none;border-radius:12px;font-weight:600;">${opts.ctaLabel}</a></p>`
+    ? `<p style="margin:22px 0 0;"><a class="novara-btn" href="${opts.ctaUrl}" style="display:inline-block;padding:14px 28px;background:#6810FE;color:#ffffff;text-decoration:none;border-radius:12px;font-weight:600;">${opts.ctaLabel}</a></p>`
     : "";
-  return `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">${opts.heading}</h1>
+  return `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#0B0A11;">${opts.heading}</h1>
 ${opts.bodyHtml}
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:8px 0 4px;">${rowsHtml}</table>
 ${cta}`;
@@ -133,10 +133,10 @@ function build(type: string, d: AddonEmailData): { subject: string; html: string
       ? `<p style="margin:0 0 16px;padding-left:12px;border-left:4px solid #f59e0b;"><strong>Internal review draft</strong> — this email has <em>not</em> been sent to the customer yet. Intended recipient: <strong>${d.reviewFor}</strong>.</p>`
       : "";
     const reasonBlock = d.chargeReason
-      ? `<div style="margin:16px 0;padding-left:12px;border-left:4px solid #7c6af7;"><p style="margin:0 0 8px;font-weight:700;color:#ffffff;">Why you were charged</p><p style="margin:0;">${d.chargeReason}</p></div>`
+      ? `<div style="margin:16px 0;padding-left:12px;border-left:4px solid #6810FE;"><p style="margin:0 0 8px;font-weight:700;color:#0B0A11;">Why you were charged</p><p style="margin:0;">${d.chargeReason}</p></div>`
       : "";
     const reportBlock = d.cleanerReport
-      ? `<div style="margin:16px 0;padding-left:12px;border-left:4px solid #7c6af7;"><p style="margin:0 0 8px;font-weight:700;color:#ffffff;">What our cleaner found on site${d.cleanerName ? ` (${d.cleanerName})` : ""}</p><p style="margin:0;white-space:pre-wrap;">${d.cleanerReport}</p></div>`
+      ? `<div style="margin:16px 0;padding-left:12px;border-left:4px solid #6810FE;"><p style="margin:0 0 8px;font-weight:700;color:#0B0A11;">What our cleaner found on site${d.cleanerName ? ` (${d.cleanerName})` : ""}</p><p style="margin:0;white-space:pre-wrap;">${d.cleanerReport}</p></div>`
       : "";
     const detailRows = [
       { label: "Booking", value: d.bookingRef || "" },
@@ -155,7 +155,7 @@ function build(type: string, d: AddonEmailData): { subject: string; html: string
       subject: `${subjectPrefix}Why you were charged for ${list}${d.amount ? ` (${d.amount})` : ""}`,
       html: renderHtml({
         heading: "Additional charge explanation",
-        bodyHtml: `${reviewBanner}<p>${hi}</p><p>${intro}</p><p style="margin-top:16px;">We're writing to explain <strong>why this additional charge was applied</strong> and what work was performed. A copy of the charge details is included below for your records.</p>${reasonBlock}${reportBlock}<p style="margin:0 0 8px;font-weight:600;color:#ffffff;">Charge summary</p><p style="margin:0 0 4px;">The <strong>${list}</strong> add-on (${d.amount || "see below"}) was charged to the card on file after this extra work was completed.</p>`,
+        bodyHtml: `${reviewBanner}<p>${hi}</p><p>${intro}</p><p style="margin-top:16px;">We're writing to explain <strong>why this additional charge was applied</strong> and what work was performed. A copy of the charge details is included below for your records.</p>${reasonBlock}${reportBlock}<p style="margin:0 0 8px;font-weight:600;color:#0B0A11;">Charge summary</p><p style="margin:0 0 4px;">The <strong>${list}</strong> add-on (${d.amount || "see below"}) was charged to the card on file after this extra work was completed.</p>`,
         rows: detailRows,
       }),
     };
@@ -165,7 +165,7 @@ function build(type: string, d: AddonEmailData): { subject: string; html: string
     // the justification the admin approved, then show the price movement and
     // note that the condition photos are on file.
     const justification = d.justification
-      ? `<div style="margin:16px 0;padding-left:12px;border-left:4px solid #7c6af7;"><p style="margin:0 0 8px;font-weight:700;color:#ffffff;">Why the rate changed</p><p style="margin:0;">${d.justification}</p></div>`
+      ? `<div style="margin:16px 0;padding-left:12px;border-left:4px solid #6810FE;"><p style="margin:0 0 8px;font-weight:700;color:#0B0A11;">Why the rate changed</p><p style="margin:0;">${d.justification}</p></div>`
       : "";
     const photos = d.photoCount
       ? `<p style="margin:16px 0 0;">${d.photoCount} before/after photo${d.photoCount === 1 ? "" : "s"} documenting the condition ${d.photoCount === 1 ? "is" : "are"} on file with this job. We're happy to share them on request.</p>`
@@ -178,7 +178,7 @@ function build(type: string, d: AddonEmailData): { subject: string; html: string
           `<p>${hi}</p>` +
           `<p>Thank you for having us out. The work this job needed went beyond what the booked service covers, so we're writing to explain the adjustment clearly and put the details on record.</p>` +
           `${justification}` +
-          `<p style="margin:0 0 8px;font-weight:600;color:#ffffff;">Adjustment summary</p>` +
+          `<p style="margin:0 0 8px;font-weight:600;color:#0B0A11;">Adjustment summary</p>` +
           `${photos}`,
         rows: [
           { label: "Booking", value: d.bookingRef || "" },

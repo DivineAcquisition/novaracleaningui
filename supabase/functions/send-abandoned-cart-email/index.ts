@@ -15,52 +15,11 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const MIGMA_CONVERSATION_ID = "698acaea41154eb80fab602e";
 
 const logStep = (step: string, details?: any) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
   console.log(`[SEND-ABANDONED-CART-EMAIL] ${step}${detailsStr}`);
 };
-
-async function fetchMigmaTemplate(conversationId: string): Promise<string | null> {
-  const apiKey = Deno.env.get("MIGMA_API_KEY");
-  if (!apiKey) {
-    logStep("MIGMA_API_KEY not configured, falling back to React Email");
-    return null;
-  }
-
-  try {
-    const response = await fetch(`https://api.migma.ai/v1/export/html/${conversationId}`, {
-      headers: { 'Authorization': `Bearer ${apiKey}` },
-    });
-
-    if (!response.ok) {
-      logStep("Migma API error", { status: response.status, statusText: response.statusText });
-      return null;
-    }
-
-    const result = await response.json();
-    const html = typeof result === 'string' ? result : (result.html || result.data?.html || null);
-
-    if (html) {
-      logStep("Migma template fetched successfully", { length: html.length });
-    }
-    return html;
-  } catch (err: any) {
-    logStep("Error fetching Migma template", { error: err.message });
-    return null;
-  }
-}
-
-function populateAbandonedCartTemplate(html: string, data: Record<string, string>): string {
-  let result = html;
-  for (const [placeholder, value] of Object.entries(data)) {
-    result = result.replaceAll(`{{${placeholder}}}`, value);
-    const encoded = encodeURIComponent(`{{${placeholder}}}`);
-    result = result.replaceAll(encoded, value);
-  }
-  return result;
-}
 
 interface AbandonedCartEmailRequest {
   cartId: string;
@@ -205,7 +164,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     logStep(`Sending ${isSecondReminder ? 'second' : 'first'} reminder to ${cart.email}`);
 
-    // The in-app card is the reminder. The remote Migma layout is the old template.
+    // Rendered with the shared Novara card.
     let html: string;
     html = await renderAsync(
         React.createElement(AbandonedCartReminder, {

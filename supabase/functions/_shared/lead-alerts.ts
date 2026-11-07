@@ -188,11 +188,11 @@ export function renderFacebookLeadEmail(lead: LeadAlertInput): { subject: string
   const zip = lead.zipCode || "ZIP n/a";
   const subject = `New Facebook lead: ${subjectName} — ${zip}`;
   const row = (label: string, value: string) =>
-    `<tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;font-weight:600;width:160px;">${escapeHtml(label)}</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${value}</td></tr>`;
+    `<tr><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;font-weight:600;width:160px;">${escapeHtml(label)}</td><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;">${value}</td></tr>`;
 
   const phone = (lead.phone || "").trim();
   const email = (lead.email || "").trim();
-  const html = `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">New Facebook lead</h1>
+  const html = `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#0B0A11;">New Facebook lead</h1>
 <p>Call within 2 minutes.</p>
 <table style="width:100%;border-collapse:collapse;margin-top:8px;">
   ${row("Name", escapeHtml(name))}
@@ -206,7 +206,7 @@ export function renderFacebookLeadEmail(lead: LeadAlertInput): { subject: string
   ${row("Source", escapeHtml(lead.source || "fb_lead_ads"))}
   ${row("Captured", escapeHtml(new Date().toLocaleString("en-US", { timeZone: "America/New_York" })) + " ET")}
 </table>
-<p style="margin:22px 0 0;"><a class="novara-btn" href="${ADMIN_CSR_URL}" style="display:inline-block;padding:14px 28px;background:#e7e7ea;color:#18181b;text-decoration:none;border-radius:12px;font-weight:600;">Open Internal Booking</a></p>`;
+<p style="margin:22px 0 0;"><a class="novara-btn" href="${ADMIN_CSR_URL}" style="display:inline-block;padding:14px 28px;background:#6810FE;color:#ffffff;text-decoration:none;border-radius:12px;font-weight:600;">Open Internal Booking</a></p>`;
   return { subject, html };
 }
 

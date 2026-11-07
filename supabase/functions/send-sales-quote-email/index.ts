@@ -32,14 +32,14 @@ function formatCurrency(cents: number): string {
 }
 
 function quoteRow(label: string, value: string): string {
-  return `<tr><td style="padding:8px 0;border-bottom:1px solid #3a3a40;">${label}</td><td style="padding:8px 0;border-bottom:1px solid #3a3a40;text-align:right;font-weight:600;">${value}</td></tr>`;
+  return `<tr><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;">${label}</td><td style="padding:8px 0;border-bottom:1px solid #E7E5EE;text-align:right;font-weight:600;">${value}</td></tr>`;
 }
 
 function buildQuoteHtml(data: QuoteEmailRequest): string {
   const addOns = data.addOns.length > 0
     ? `<p style="margin:16px 0 8px;font-weight:600;">Add-ons</p><ul style="margin:0;padding-left:20px;">${data.addOns.map((a) => `<li>${a}</li>`).join("")}</ul>`
     : "";
-  return `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">Your cleaning quote</h1>
+  return `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#0B0A11;">Your cleaning quote</h1>
 <p style="margin:0 0 16px;">Hi ${data.firstName || "there"},</p>
 <p style="margin:0 0 16px;">Here is the quote for this home.</p>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0 16px;">
@@ -58,7 +58,7 @@ ${quoteRow("Balance after service", formatCurrency(data.balanceDueCents))}
 ${data.frequency !== "One-Time" ? quoteRow("Monthly total", formatCurrency(data.monthlyTotalCents)) : ""}
 </table>
 ${addOns}
-<p style="margin:22px 0 0;"><a class="novara-btn" href="https://try.novaracleaning.com/book/zip" style="display:inline-block;padding:14px 28px;background:#e7e7ea;color:#18181b;text-decoration:none;border-radius:12px;font-weight:600;">Book now</a></p>`;
+<p style="margin:22px 0 0;"><a class="novara-btn" href="https://try.novaracleaning.com/book/zip" style="display:inline-block;padding:14px 28px;background:#6810FE;color:#ffffff;text-decoration:none;border-radius:12px;font-weight:600;">Book now</a></p>`;
 }
 
 serve(async (req: Request) => {

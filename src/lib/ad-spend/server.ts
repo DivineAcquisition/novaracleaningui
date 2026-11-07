@@ -313,20 +313,20 @@ function escapeHtml(value: string): string {
 }
 
 function renderSingleMonthEmail(range: string, url: string, platforms: string[]): string {
-  return `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">Monthly ad spend log — ${escapeHtml(range)}</h1>
+  return `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#0B0A11;">Monthly ad spend log — ${escapeHtml(range)}</h1>
 <p>Log last month's paid spend so the P&amp;L sheet and Airtable stay accurate. One form per calendar month.</p>
 <p>Channels: ${escapeHtml(platforms.join(", "))}. Leave a channel blank if it wasn't running. Enter 0 if it ran but spent nothing.</p>
-<p style="margin:22px 0 0;"><a class="novara-btn" href="${url}" style="display:inline-block;padding:14px 28px;background:#e7e7ea;color:#18181b;text-decoration:none;border-radius:12px;font-weight:600;">Open ${escapeHtml(range)} form</a></p>`;
+<p style="margin:22px 0 0;"><a class="novara-btn" href="${url}" style="display:inline-block;padding:14px 28px;background:#6810FE;color:#ffffff;text-decoration:none;border-radius:12px;font-weight:600;">Open ${escapeHtml(range)} form</a></p>`;
 }
 
 function renderBackfillEmail(months: Array<{ range: string; url: string }>): string {
   const buttons = months
     .map(
       (m) =>
-        `<p style="margin:0 0 10px;"><a class="novara-btn" href="${m.url}" style="display:inline-block;padding:12px 18px;background:#e7e7ea;color:#18181b;text-decoration:none;border-radius:12px;font-weight:600;">${escapeHtml(m.range)}</a></p>`,
+        `<p style="margin:0 0 10px;"><a class="novara-btn" href="${m.url}" style="display:inline-block;padding:12px 18px;background:#6810FE;color:#ffffff;text-decoration:none;border-radius:12px;font-weight:600;">${escapeHtml(m.range)}</a></p>`,
     )
     .join("");
-  return `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">Ad spend catch-up — ${months.length} months</h1>
+  return `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#0B0A11;">Ad spend catch-up — ${months.length} months</h1>
 <p>Please use these monthly forms instead of the weekly links sent earlier. Each button is one calendar month from the start of operations through last completed month. Submitting writes the P&amp;L Google Sheet and Airtable.</p>
 <p>Facebook, LSA, Google, and Instagram. Leave a channel blank if it wasn't running.</p>
 ${buttons}`;

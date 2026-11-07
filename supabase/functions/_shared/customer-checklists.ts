@@ -719,7 +719,7 @@ export function buildPersonalChecklist(booking: PersonalChecklistBooking): Perso
 /** A visit can be viewed until a month after it happened. Cancelled visits show nothing. */
 export const CHECKLIST_VIEW_DAYS_AFTER_SERVICE = 30;
 
-const META_CELL = "padding:8px 0;border-bottom:1px solid #3a3a40;";
+const META_CELL = "padding:8px 0;border-bottom:1px solid #E7E5EE;";
 
 function escapeHtml(value: string): string {
   return String(value ?? "")
@@ -747,17 +747,17 @@ export function renderPersonalEmail(checklist: PersonalChecklist, url: string): 
     ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 16px">${rows}</table>`
     : "";
   const addOns = checklist.yourAddOns.length
-    ? `<p style="margin:0 0 8px;"><strong style="color:#ffffff;">Your add-ons</strong></p><ul style="margin:0 0 16px;padding-left:20px;line-height:1.65">${
+    ? `<p style="margin:0 0 8px;"><strong style="color:#0B0A11;">Your add-ons</strong></p><ul style="margin:0 0 16px;padding-left:20px;line-height:1.65">${
       checklist.yourAddOns.map((label) => `<li>${escapeHtml(label)}</li>`).join("")
     }</ul>`
     : "";
-  const areas = `<p style="margin:0 0 8px;"><strong style="color:#ffffff;">What we cover</strong></p><ul style="margin:0 0 16px;padding-left:20px;line-height:1.65">${
+  const areas = `<p style="margin:0 0 8px;"><strong style="color:#0B0A11;">What we cover</strong></p><ul style="margin:0 0 16px;padding-left:20px;line-height:1.65">${
     checklist.sections.map((section) => `<li>${escapeHtml(section.title)} (${section.items.length} tasks)</li>`).join("")
   }</ul>`;
-  return `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#ffffff;">Your cleaning checklist</h1>
+  return `<h1 style="margin:0 0 14px;font-family:Inter,Arial,sans-serif;font-size:28px;line-height:1.2;font-weight:700;color:#0B0A11;">Your cleaning checklist</h1>
 <p style="margin:0 0 16px;">Hi ${escapeHtml(checklist.firstName)}, this is exactly what the Novara team will do on your visit. It is built from the home and add-ons you booked, and it stays up to date if anything about your booking changes.</p>
 ${table}${addOns}${areas}
-<p style="margin:22px 0 0;"><a class="novara-btn" href="${escapeHtml(url)}" style="display:inline-block;padding:14px 28px;background:#e7e7ea;color:#18181b;text-decoration:none;border-radius:12px;font-weight:600;">Open your checklist</a></p>
+<p style="margin:22px 0 0;"><a class="novara-btn" href="${escapeHtml(url)}" style="display:inline-block;padding:14px 28px;background:#6810FE;color:#ffffff;text-decoration:none;border-radius:12px;font-weight:600;">Open your checklist</a></p>
 <p style="margin:16px 0 0;font-size:14px;">This link is private to your booking, so please do not forward it. Questions or something to add? Reply to this email or text (844) 735-2070.</p>`;
 }
 

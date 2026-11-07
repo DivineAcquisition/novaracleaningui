@@ -69,7 +69,7 @@ function page(title: string, bodyHtml: string, status = 200): Response {
   a.btn, button.btn { display: block; flex: 1 1 140px; text-align: center; padding: 15px 16px;
     border-radius: 10px; font-size: 16px; font-weight: 600; text-decoration: none;
     border: 1px solid transparent; cursor: pointer; }
-  .primary { background: #5C0FFE; color: #fff; }
+  .primary { background:#6810FE;color:#ffffff; }
   .ghost { background: #fff; color: #334155; border-color: #cbd5e1; }
   .ok { color: #047857; }
   .bad { color: #b91c1c; }
