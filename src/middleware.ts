@@ -334,6 +334,17 @@ export async function middleware(request: NextRequest) {
   // The main domain (novaracleaning.com, www) shows the company home page at
   // its root. try.* keeps the booking landing page with the ZIP form.
   const isMainDomain = hostname === "novaracleaning.com" || hostname === "www.novaracleaning.com";
+  // A booking link on the main domain (plan, home size, ZIP or referral in
+  // the query) belongs on the booking site, where the ZIP form is.
+  const BOOKING_PARAMS = ["membership", "homeSize", "zip", "ref", "welcome"];
+  if (pathname === "/" && isMainDomain && BOOKING_PARAMS.some((k) => request.nextUrl.searchParams.has(k))) {
+    const url = request.nextUrl.clone();
+    url.protocol = "https:";
+    url.host = HOSTS.try;
+    url.port = "";
+    return NextResponse.redirect(url, 307);
+  }
+
   if (pathname === "/" && isMainDomain) {
     const url = request.nextUrl.clone();
     url.pathname = "/home";

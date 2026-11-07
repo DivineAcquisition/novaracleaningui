@@ -41,7 +41,7 @@ import { Hosts } from "@/components/landing/Hosts";
 import { Chip, Eyebrow, Frame, Index, btnOutline, btnPrimary, gutter, lead, sectionTitle, shell } from "@/components/landing/primitives";
 import { Standard } from "@/components/landing/Story";
 import { GuaranteeBand } from "@/components/landing/Value";
-import { BookNowLink, HomeMobileBar, TickingChecklist } from "@/components/home/HomeIslands";
+import { BookNowLink, ForwardBookingLinks, HomeMobileBar, TickingChecklist } from "@/components/home/HomeIslands";
 import { CHECKLISTS } from "@/lib/checklists";
 import type { CoverageState } from "@/lib/landing/coverage";
 import { TRY_URL } from "@/lib/landing/links";
@@ -87,6 +87,7 @@ export default function HomePage({ data, coverage }: { data: LandingData; covera
 
   return (
     <div className="landing min-h-screen bg-white font-sans text-ink antialiased">
+      <ForwardBookingLinks />
       <SiteHeader withMenus bookHref={TRY_URL} />
 
       <main id="main">

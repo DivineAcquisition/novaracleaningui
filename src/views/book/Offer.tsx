@@ -268,6 +268,18 @@ export default function BookingOffer() {
     router.push("/book/checkout");
   };
 
+  // Arriving from a membership plan page: the Glow plan is already selected,
+  // so bring its card (and the date picker under it) into view.
+  useEffect(() => {
+    if (!bookingData.membershipPlan || bookingData.membershipPlan === "none") return;
+    const t = window.setTimeout(() => {
+      const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      document.getElementById("membership-offer")?.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "start" });
+    }, 300);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Warm Stripe.js while the customer is still on the offer step.
   useEffect(() => {
     if (bookingData.serviceDate && bookingData.timeSlot) {
@@ -808,7 +820,9 @@ export default function BookingOffer() {
 
             {/* Novara Glow Membership card */}
             <Card
+              id="membership-offer"
               className={cn(
+                "scroll-mt-28",
                 "relative border-2 transition-all duration-200 cursor-pointer hover:shadow-xl",
                 selectedService === "membership"
                   ? "border-primary shadow-lg ring-2 ring-primary/20"

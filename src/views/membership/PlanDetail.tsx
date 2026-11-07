@@ -1,4 +1,6 @@
 "use client";
+import { MembershipIncluded } from "@/components/membership/MembershipIncluded";
+import { TRY_URL, bookingStartHref } from "@/lib/landing/links";
 import {
   RiArrowDownSLine,
   RiArrowLeftLine,
@@ -96,16 +98,15 @@ export default function PlanDetail() {
       toast.error("Select your home size to see your monthly rate");
       return;
     }
-    const params = new URLSearchParams({
-      membership: String(planId),
-      homeSize: selectedHomeSize,
-    });
-    router.push(`/?${params.toString()}#get-price`);
+    // First booking step (ZIP + contact) with the plan and home size. After
+    // contact details it goes straight to the service step with this Glow plan
+    // selected, then the date and checkout.
+    window.location.assign(bookingStartHref({ membership: String(planId), homeSize: selectedHomeSize }));
   };
 
   return (
     <div className="book-theme landing min-h-screen bg-background">
-      <SiteHeader />
+      <SiteHeader withMenus bookHref={TRY_URL} />
       <SEO title="Plan Details" description="View detailed pricing and benefits for your Novara Glow membership plan. Select your home size to see your exact monthly cost." />
       {/* Navigation */}
       <div className="border-b border-border/50">
@@ -215,17 +216,20 @@ export default function PlanDetail() {
 
         <Separator />
 
-        {/* How It Works — same steps as a one-time public booking */}
+        <MembershipIncluded compact />
+
+        <Separator />
+
+        {/* How It Works — the booking steps after this page */}
         <section className="space-y-5 animate-fade-in-up stagger-3">
           <h2 className="text-xl md:text-2xl font-bold font-jakarta text-center">How It Works</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-center">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
             {[
-              { step: "1", label: "Location", desc: "ZIP + your contact info" },
-              { step: "2", label: "Home size", desc: "Confirm square footage" },
-              { step: "3", label: "First clean", desc: "Pick date & arrival window" },
-              { step: "4", label: "Checkout", desc: "Pay the first month on this site" },
-              { step: "5", label: "Details", desc: "Address + membership agreement" },
-              { step: "6", label: "Confirm", desc: "You're on Glow" },
+              { step: "1", label: "Your details", desc: "ZIP + your contact info" },
+              { step: "2", label: "First clean", desc: "Pick date & arrival window" },
+              { step: "3", label: "Checkout", desc: "Pay the first month on this site" },
+              { step: "4", label: "Details", desc: "Address + membership agreement" },
+              { step: "5", label: "Confirm", desc: "You're on Glow" },
             ].map((s) => (
               <div key={s.step} className="space-y-2">
                 <div className="mx-auto w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: 'var(--gradient-lavender)' }}>
@@ -272,7 +276,7 @@ export default function PlanDetail() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-center text-muted-foreground">
-              Same steps as a one-time booking: location, home size, first-clean date, then pay on this site. You&apos;ll sign the membership agreement after payment.
+              Next: your ZIP and contact details, then pick the date of your first clean and pay on this site. Your home size and plan carry over. You&apos;ll sign the membership agreement after payment.
             </p>
             <Button
               onClick={handleContinue}

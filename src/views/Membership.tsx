@@ -1,5 +1,7 @@
 "use client";
 
+import { MembershipIncluded } from "@/components/membership/MembershipIncluded";
+import { TRY_URL, bookingStartHref } from "@/lib/landing/links";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
@@ -44,7 +46,7 @@ const MEMBERSHIP_TIERS = [
       '2 cleaning credits per month',
       'Dedicated cleaner match',
       'Satisfaction guarantee',
-      'Free rescheduling',
+      'Reschedule with 48 hours’ notice',
     ],
     popular: true,
   },
@@ -72,51 +74,39 @@ export default function Membership() {
 
   return (
     <div className={user ? "book-theme mx-auto max-w-6xl" : "book-theme landing min-h-screen bg-background"}>
-      {!user && <SiteHeader />}
+      {!user && <SiteHeader withMenus bookHref={TRY_URL} />}
       <SEO title="Membership Plans" description="Glow memberships priced by home size. Choose from monthly, bi-weekly, or weekly plans with dedicated cleaners and priority scheduling." />
-      {!user && (
-      <div className="border-b border-border/50 hairline-glow">
-        <div className="container max-w-7xl mx-auto px-4 py-3">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              // Members came from their account; public visitors browse this
-              // page on try.* — send them back to the marketing home instead
-              // of the login-gated account page on app.*.
-              if (subscription?.subscribed) {
-                router.push("/account");
-              } else {
-                window.location.href = "https://novaracleaning.com/";
-              }
-            }}
-            className="text-muted-foreground -ml-2"
-          >
-            <RiArrowLeftLine className="w-4 h-4 mr-1.5" /> Back
-          </Button>
-        </div>
-      </div>
-      )}
-
       {/* Hero */}
       <div className="relative overflow-hidden">
         <div className="absolute inset-0" style={{ background: 'var(--gradient-hero)' }} />
         <div className="absolute inset-0 opacity-[0.03]" style={{ background: 'var(--gradient-primary)' }} />
         <div className="relative container max-w-7xl mx-auto px-4 py-12 md:py-20">
           <div className="text-center space-y-4 max-w-2xl mx-auto animate-fade-in-up">
-            <Badge className="bg-primary/10 text-primary border-primary/20 shadow-none px-4 py-1.5">
-              <RiSparklingLine className="w-3.5 h-3.5 mr-1.5" />
-              Membership Plans
-            </Badge>
-            <h1 className="text-3xl md:text-5xl lg:text-6xl font-bold font-jakarta tracking-tight">
-              Choose Your <span className="gradient-text">Perfect Plan</span>
+            <p className="inline-flex items-center gap-1.5 rounded-full border border-[#E3D7FF] bg-white px-3 py-1 text-[13px] font-medium text-[#5A1FD6]">
+              <RiSparklingLine className="w-3.5 h-3.5" />
+              Glow membership
+            </p>
+            <h1 className="text-[2.2rem] md:text-5xl lg:text-[3.6rem] font-semibold tracking-[-0.035em] leading-[1.05] text-[#0B0A11]">
+              Choose Your <span className="text-[#6810FE]">Perfect Plan</span>
             </h1>
             <p className="text-base md:text-lg text-muted-foreground leading-relaxed">
               Subscribe today and enjoy consistent, professional cleaning at a fraction of one-time pricing.
               Every plan starts with a deep clean on your first visit ($75, charged once).
             </p>
-            <p className="text-xs text-muted-foreground/70">
-              Prices vary by home size. Click a plan to see your exact monthly cost.
+            <ul className="flex flex-wrap justify-center gap-2 pt-1">
+              {[
+                `From $${Math.min(...MEMBERSHIP_TIERS.map((t) => t.startingPrice))}/month`,
+                "$75 first-month deep clean",
+                "Cancel with 14 days’ notice",
+              ].map((chip) => (
+                <li key={chip} className="inline-flex items-center gap-1.5 rounded-full border border-[#E9E7EE] bg-white px-3 py-1 text-[12.5px] font-medium text-[#0B0A11]">
+                  <RiCheckboxCircleLine className="h-3.5 w-3.5 text-[#6810FE]" />
+                  {chip}
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-muted-foreground/80">
+              Prices vary by home size. Pick a plan to see your exact monthly price.
             </p>
           </div>
         </div>
@@ -261,7 +251,7 @@ export default function Membership() {
                     "w-full h-11 rounded-xl shadow-md transition-all",
                     tier.popular ? "bg-gradient-primary" : "bg-primary hover:bg-primary/90"
                   )}>
-                    View Plan Details
+                    See my price
                     <RiArrowRightLine className="w-4 h-4 ml-2" />
                   </Button>
 
@@ -273,6 +263,8 @@ export default function Membership() {
             );
           })}
         </div>
+
+        <MembershipIncluded className="mt-16" />
 
         {/* Why Choose Section */}
         <Card className="border-0 shadow-lg overflow-hidden">
@@ -288,7 +280,7 @@ export default function Membership() {
               {[
                 { icon: RiGiftLine, title: "Monthly Credits", desc: "Use your credits for professional cleaning services, anytime you need them" },
                 { icon: RiFlashlightLine, title: "Pause When You Need To", desc: "Pause for up to 60 days a year with 14 days' notice before your billing date" },
-                { icon: RiCalendarLine, title: "Flexible Scheduling", desc: "Priority booking windows and easy rescheduling with no fees" },
+                { icon: RiCalendarLine, title: "Flexible Scheduling", desc: "Priority booking windows, and reschedule a visit with 48 hours’ notice" },
               ].map((item, i) => (
                 <div key={i} className="text-center space-y-3">
                   <div className="mx-auto w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'var(--gradient-lavender)' }}>
@@ -306,7 +298,7 @@ export default function Membership() {
         <div className="text-center mt-10 space-y-3">
           <p className="text-muted-foreground text-sm">
             Not ready for a membership?{' '}
-            <Button variant="link" onClick={() => router.push('/#get-price')} className="p-0 h-auto text-primary">
+            <Button variant="link" onClick={() => window.location.assign(bookingStartHref())} className="p-0 h-auto text-primary">
               Book a one-time cleaning
             </Button>
           </p>

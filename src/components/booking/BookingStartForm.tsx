@@ -29,7 +29,7 @@ type FormMode = 'zip' | 'contact' | 'waitlist' | 'waitlist-success';
 export function BookingStartForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { updateBookingData } = useBooking();
+  const { updateBookingData, setCurrentStep } = useBooking();
   const referralCode = searchParams.get('ref');
   const fbclid = searchParams.get('fbclid');
   const membershipParam = searchParams.get('membership');
@@ -254,6 +254,16 @@ export function BookingStartForm() {
       }).catch(err => console.error('Lead webhook error:', err));
     }
     
+    // Membership pages pass the plan and home size: skip the home-size step
+    // and open the service step with that Glow plan selected, then checkout.
+    const plan = (membershipParam || "").toLowerCase();
+    const comingFromPlan = (plan === "monthly" || plan === "biweekly" || plan === "weekly") && Boolean(homeSizeParam);
+    if (comingFromPlan) {
+      updateBookingData({ membershipPlan: plan, serviceType: "standard", homeSizeId: homeSizeParam || undefined });
+      setCurrentStep(3);
+      router.push("/book/offer");
+      return;
+    }
     router.push("/book/sqft");
   };
 

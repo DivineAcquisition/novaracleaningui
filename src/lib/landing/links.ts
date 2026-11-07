@@ -24,3 +24,19 @@ export const BOOK_PATH = "/#get-price";
 
 /** The booking site. The main novaracleaning.com home page sends homeowners here. */
 export const TRY_URL = "https://try.novaracleaning.com/";
+
+/** The main domain, where "/" is the company home page and has no ZIP form. */
+export function isMainDomain(hostname: string): boolean {
+  return hostname === "novaracleaning.com" || hostname === "www.novaracleaning.com";
+}
+
+/**
+ * Link to the first booking step (the ZIP form) with booking parameters
+ * (membership, homeSize, zip …) plus attribution from the current page.
+ * On novaracleaning.com that form lives on try.novaracleaning.com; on
+ * try.* and previews it is this site's "/". Client-side only.
+ */
+export function bookingStartHref(extra: Record<string, string> = {}): string {
+  const onMain = typeof window !== "undefined" && isMainDomain(window.location.hostname);
+  return bookingHref(onMain ? `${TRY_URL}#get-price` : "/#get-price", extra);
+}

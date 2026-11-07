@@ -51,7 +51,6 @@ export const HERO_BENEFITS: BenefitSection[] = [
       "The portal remembers who has cleaned for you and routes them back to you",
       "Same trusted team learns your home, your products, and your standards",
       "If your regular is ever out, we brief the backup on your preferences first",
-      "Novara Cleaning is an insured company",
     ],
   },
 ];
@@ -59,13 +58,13 @@ export const HERO_BENEFITS: BenefitSection[] = [
 /** The rest of the value stack. */
 export const MORE_BENEFITS: BenefitSection[] = [
   {
-    title: "Member Pricing & Add-On Discount",
-    tagline: "Our best per-clean rates — plus a members-only discount on extras.",
+    title: "Member Pricing",
+    tagline: "Our best per-clean rates, on one flat monthly price.",
     icon: "price",
     items: [
       "Members pay our lowest per-clean rates — always below one-time pricing",
-      "Members-only discount on every add-on — inside the fridge, inside the oven, interior windows, laundry, and more",
-      "One flat rate based on your home size — no surprise totals",
+      "One flat monthly rate based on your home size — no surprise totals",
+      "A one-time $75 deep clean on your first visit sets the baseline",
     ],
   },
   {
@@ -75,7 +74,6 @@ export const MORE_BENEFITS: BenefitSection[] = [
     items: [
       "Priority access to the best arrival windows",
       "Reserve a preferred standing day and arrival window on Bi-Weekly and Weekly plans",
-      "Most member requests are scheduled within 48 hours",
     ],
   },
   {
@@ -84,18 +82,18 @@ export const MORE_BENEFITS: BenefitSection[] = [
     icon: "shield",
     items: [
       "24-hour re-clean guarantee on every visit",
-      "Insured and bonded professional teams",
+      "Novara Cleaning is an insured company",
       "All supplies and equipment included",
     ],
   },
   {
-    title: "Cleaning Credits & Deep-Clean Reset",
+    title: "Cleaning Credits",
     tagline: "Your plan, ready when you are — with a periodic reset built in.",
     icon: "credit",
     items: [
       "Monthly cleaning credits included with every plan (1, 2, or 4 per month)",
       "Redeem credits straight from the portal — pick a date, done",
-      "A periodic deep-clean credit to reset the whole home every few months",
+      "Glow Weekly includes a free deep clean every 6 months"
     ],
   },
   {
@@ -103,7 +101,7 @@ export const MORE_BENEFITS: BenefitSection[] = [
     tagline: "A membership that works around you.",
     icon: "flex",
     items: [
-      "Free rescheduling — life happens, your plan flexes",
+      "Reschedule a visit with 48 hours’ notice — your plan flexes",
       "Pause or cancel from the portal with 14 days’ notice",
       "Switch plans as your needs change",
     ],

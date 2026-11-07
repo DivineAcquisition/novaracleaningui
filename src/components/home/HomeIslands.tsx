@@ -85,3 +85,16 @@ export function HomeMobileBar() {
     </div>
   );
 }
+
+/**
+ * Links across the site send "Book now" to "/#get-price" (the ZIP form). On
+ * novaracleaning.com "/" is this home page, which has no form, so forward
+ * those visits to the booking site, keeping the query (plan, ZIP, ads).
+ */
+export function ForwardBookingLinks() {
+  useEffect(() => {
+    if (window.location.hash !== "#get-price") return;
+    window.location.replace(`${TRY_URL.replace(/\/$/, "")}/${window.location.search}#get-price`);
+  }, []);
+  return null;
+}
