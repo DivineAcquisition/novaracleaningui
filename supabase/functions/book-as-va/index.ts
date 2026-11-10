@@ -24,7 +24,7 @@
 // Body (every field optional except the ones called out):
 //   leadId?           — link to an existing public.leads row
 //   firstName *required, lastName, email *required, phone *required
-//   address, city, state, zipCode
+//   address *required (street number; city and ZIP alone are not enough), city, state, zipCode
 //   homeSizeId *required ('0_999' .. '4501_5000')
 //   serviceType *required ('standard' | 'deep' | 'moveInOut' | 'combo')
 //   addOns?: ('fridge' | 'oven' | 'windows')[]
@@ -627,6 +627,11 @@ serve(async (req) => {
   }
   try {
     const body: VaBookingBody = await req.json();
+    const streetAddress = String(body.address || "").trim();
+    const zipDigits = String(body.zipCode || "").replace(/\D/g, "");
+    const streetWithoutZip = zipDigits.length === 5
+      ? streetAddress.split(zipDigits).join(" ")
+      : streetAddress;
     if (
       !body.firstName || !body.email || !body.phone || !body.homeSizeId ||
       !body.serviceType || !body.serviceDate || !body.timeSlot
@@ -635,6 +640,18 @@ serve(async (req) => {
         JSON.stringify({
           error:
             "firstName, email, phone, homeSizeId, serviceType, serviceDate, timeSlot are required",
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 400,
+        },
+      );
+    }
+    if (!streetAddress || !/\d/.test(streetWithoutZip)) {
+      return new Response(
+        JSON.stringify({
+          error: "Enter the street address, including the street number. City and ZIP are not enough.",
+          code: "STREET_ADDRESS_REQUIRED",
         }),
         {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -982,7 +999,7 @@ serve(async (req) => {
         first_name: body.firstName,
         last_name: body.lastName || "",
         phone: phoneDigits || null,
-        address: body.address || null,
+        address: streetAddress,
         city: body.city || null,
         state: body.state || null,
         zip_code: body.zipCode || null,
@@ -1219,7 +1236,7 @@ serve(async (req) => {
           body.lastName || "",
           phoneE164,
           {
-            line1: body.address,
+            line1: streetAddress,
             city: body.city,
             state: body.state,
             postal_code: body.zipCode,
@@ -1378,7 +1395,7 @@ serve(async (req) => {
           serviceType: body.serviceType,
           serviceDate: body.serviceDate,
           timeSlot: body.timeSlot,
-          address: body.address || null,
+          address: streetAddress,
           bookingRef,
           totalCents,
           depositCents: fullInvoice ? totalCents : depositCents,
@@ -1424,7 +1441,7 @@ serve(async (req) => {
         const msgParts = [
           `Novara Cleaning: Hi ${fname}! Your ${body.serviceType} clean is pending for ${body.serviceDate} ${body.timeSlot}`,
         ];
-        if (body.address) msgParts.push(` at ${body.address}`);
+        if (streetAddress) msgParts.push(` at ${streetAddress}`);
         msgParts.push(
           `. Total $${(totalCents / 100).toFixed(2)}. Your booking stays pending until your deposit is received.`,
         );

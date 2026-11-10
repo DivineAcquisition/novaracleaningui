@@ -37,6 +37,7 @@ import {
   type AddressHistoryItem,
 } from "@/lib/address-history";
 import { mergeAddressParts, parseAddressString } from "@/lib/address-formatter";
+import { serviceStreetIssue } from "@/lib/form-validation";
 import { useAddressAutocomplete, type AddressAutocompleteStatus } from "@/hooks/use-address-autocomplete";
 import { AddressSuggestionMenu } from "@/components/booking/AddressSuggestionMenu";
 import { geocodeTypedAddress, type AddressSuggestion } from "@/lib/google-places-loader";
@@ -54,6 +55,8 @@ interface AddressComponents {
 
 interface AddressAutocompleteProps {
   onAddressSelect: (address: AddressComponents) => void;
+  /** Fires on every keystroke so a submit can use the typed street before blur finishes parsing. */
+  onDraft?: (value: string) => void;
   initialValue?: string;
   label?: string;
   placeholder?: string;
@@ -66,6 +69,7 @@ interface AddressAutocompleteProps {
 
 export function AddressAutocomplete({
   onAddressSelect,
+  onDraft,
   initialValue = "",
   label = "Street Address *",
   placeholder = "Start typing the customer's address…",
@@ -81,6 +85,18 @@ export function AddressAutocomplete({
 
   const { status, suggestions, query, resolve, clear } = useAddressAutocomplete();
 
+  const publish = (addr: AddressComponents) => {
+    if (serviceStreetIssue(addr.street, addr.zipCode)) {
+      setValidationError("Add the street number. A city and ZIP are not enough to book.");
+      pickedRef.current = false;
+      return;
+    }
+    setValidationError(null);
+    pickedRef.current = true;
+    onDraft?.(addr.street);
+    onAddressSelect(addr);
+  };
+
   useEffect(() => {
     setAddressHistory(getAddressHistory());
   }, []);
@@ -95,8 +111,7 @@ export function AddressAutocomplete({
     setValidationError(null);
     setGeocodedLocation(null);
     if (inputRef.current) inputRef.current.value = item.street;
-    pickedRef.current = true;
-    onAddressSelect({
+    publish({
       street: item.street,
       city: item.city,
       state: item.state,
@@ -113,6 +128,7 @@ export function AddressAutocomplete({
     if (validationError) setValidationError(null);
     if (geocodedLocation) setGeocodedLocation(null);
     pickedRef.current = false;
+    onDraft?.(e.target.value);
     if (status === "ready") {
       query(e.target.value);
       setOpen(true);
@@ -126,11 +142,9 @@ export function AddressAutocomplete({
       setValidationError("Could not load that address — type it in full and click Parse.");
       return;
     }
-    pickedRef.current = true;
-    setValidationError(null);
     setGeocodedLocation(parsed.formattedAddress || null);
     if (inputRef.current && parsed.street) inputRef.current.value = parsed.street;
-    onAddressSelect({
+    publish({
       street: parsed.street,
       city: parsed.city,
       state: parsed.state,
@@ -152,7 +166,7 @@ export function AddressAutocomplete({
         const merged = mergeAddressParts(keyless, local);
         const finalStreet = merged.street || local.street || value;
         setGeocodedLocation(keyless.formattedAddress || null);
-        onAddressSelect({
+        publish({
           street: finalStreet,
           city: merged.city || "",
           state: merged.state || "",
@@ -160,7 +174,9 @@ export function AddressAutocomplete({
           lat: keyless.lat ?? 0,
           lng: keyless.lng ?? 0,
         });
-        if (inputRef.current && finalStreet) inputRef.current.value = finalStreet;
+        if (inputRef.current && finalStreet && !serviceStreetIssue(finalStreet, merged.zipCode || "")) {
+          inputRef.current.value = finalStreet;
+        }
         return;
       }
       const { data, error } = await supabase.functions.invoke("geocode-address", {
@@ -174,7 +190,7 @@ export function AddressAutocomplete({
       const remoteParsed =
         data.parsed && typeof data.parsed === "object" ? mergeAddressParts(data.parsed, local) : local;
       const finalStreet = remoteParsed.street || local.street || value;
-      onAddressSelect({
+      publish({
         street: finalStreet,
         city: remoteParsed.city || local.city || "",
         state: remoteParsed.state || local.state || "",
@@ -182,7 +198,9 @@ export function AddressAutocomplete({
         lat: typeof data.lat === "number" ? data.lat : 0,
         lng: typeof data.lng === "number" ? data.lng : 0,
       });
-      if (inputRef.current && finalStreet) inputRef.current.value = finalStreet;
+      if (inputRef.current && finalStreet && !serviceStreetIssue(finalStreet, remoteParsed.zipCode || local.zipCode || "")) {
+        inputRef.current.value = finalStreet;
+      }
     } catch (err) {
       console.warn("[AddressAutocomplete:admin] geocode fallback failed", err);
       emitFallback(local, value);
@@ -190,7 +208,7 @@ export function AddressAutocomplete({
   };
 
   const emitFallback = (parsed: ReturnType<typeof parseAddressString>, raw: string) => {
-    onAddressSelect({
+    publish({
       street: parsed.street || raw,
       city: parsed.city || "",
       state: parsed.state || "",

@@ -70,6 +70,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
+import { serviceStreetIssue } from "@/lib/form-validation";
 import { looksLikeNovaraStaffEmail } from "@/lib/staff-customer";
 import { useAvailability } from "@/hooks/use-availability";
 import { useAdminRole } from "@/hooks/use-admin-role";
@@ -478,6 +479,7 @@ export default function VaBooking() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
+  const [addressDraft, setAddressDraft] = useState("");
   const [addressLat, setAddressLat] = useState<number | null>(null);
   const [addressLng, setAddressLng] = useState<number | null>(null);
   const [city, setCity] = useState("");
@@ -1011,12 +1013,15 @@ export default function VaBooking() {
 
   const phoneDigits = digitsOnly(phone);
   const zipDigits = digitsOnly(zipCode);
+  const streetLine = addressDraft.trim() || address.trim();
 
   const restrictionsLifted = isAdmin && adminOverride;
 
   const requirements = useMemo(() => {
     const list: string[] = [];
     if (!firstName.trim()) list.push("First name");
+    const streetIssue = serviceStreetIssue(streetLine, zipDigits);
+    if (streetIssue) list.push(streetIssue);
     if (!isValidEmail(email)) list.push("Valid email");
     else if (!restrictionsLifted && looksLikeNovaraStaffEmail(email)) list.push("A personal customer email (not @novaracleaning.com)");
     if (phoneDigits.length < 10) list.push("Phone (10+ digits)");
@@ -1040,7 +1045,7 @@ export default function VaBooking() {
     if (!isRecurring && overrideTotal.trim() && !overrideReason) list.push("Adjustment reason");
     if (restrictionsLifted && !adminOverrideNote.trim()) list.push("Override note");
     return list;
-  }, [firstName, email, phoneDigits, zipDigits, selectedDate, selectedTime, vaAgreedOnPhone, isRecurring, dynQuote.served, serviceType, focusedSelections, overrideTotal, overrideReason, restrictionsLifted, adminOverrideNote]);
+  }, [firstName, email, phoneDigits, zipDigits, streetLine, selectedDate, selectedTime, vaAgreedOnPhone, isRecurring, dynQuote.served, serviceType, focusedSelections, overrideTotal, overrideReason, restrictionsLifted, adminOverrideNote]);
 
   const canSubmit = requirements.length === 0;
 
@@ -1080,7 +1085,7 @@ export default function VaBooking() {
           first_name: firstName.trim() || null,
           last_name: lastName.trim() || null,
           phone: phone || null,
-          address: address || null,
+          address: streetLine || null,
           city: city || null,
           state: state || null,
           zip_code: zipCode || null,
@@ -1195,7 +1200,7 @@ export default function VaBooking() {
               firstName: firstName.trim() || undefined,
               lastName: lastName.trim() || undefined,
               phone: phone || undefined,
-              address: address || undefined,
+              address: streetLine || undefined,
               city: city || undefined,
               state: state || undefined,
               zipCode: zipCode || undefined,
@@ -1289,7 +1294,7 @@ export default function VaBooking() {
             phone: phone || undefined,
             plan: CADENCE_PLAN_LABEL[cadence],
             serviceAddress:
-              [address, city, state, zipCode].filter(Boolean).join(", ") || undefined,
+              [streetLine, city, state, zipCode].filter(Boolean).join(", ") || undefined,
             firstServiceDate,
             membershipRateCents: createGlowLink ? pricing.monthlyGlowCents : undefined,
             oneTimeRateCents: pricing.perCleanCents,
@@ -1368,7 +1373,7 @@ export default function VaBooking() {
         lastName: lastName.trim(),
         email: email.trim().toLowerCase(),
         phone,
-        address,
+        address: streetLine,
         addressLat: addressLat ?? undefined,
         addressLng: addressLng ?? undefined,
         city,
@@ -1511,7 +1516,7 @@ export default function VaBooking() {
           lastName: lastName.trim() || undefined,
           email: email.trim().toLowerCase(),
           phone: phone || undefined,
-          address: address || undefined,
+          address: streetLine || undefined,
           city: city || undefined,
           state: state || undefined,
           bedrooms: bedrooms ? parseInt(bedrooms) : null,
@@ -1538,7 +1543,7 @@ export default function VaBooking() {
           last_name: lastName.trim() || null,
           email: email.trim().toLowerCase(),
           phone: phone || null,
-          address: address || null,
+          address: streetLine || null,
           city: city || null,
           state: state || null,
           zip_code: zipCode || null,
@@ -2080,8 +2085,10 @@ export default function VaBooking() {
               label="Service address *"
               placeholder="Start typing the customer's address…"
               initialValue={address}
+              onDraft={setAddressDraft}
               onAddressSelect={(addr) => {
                 setAddress(addr.street);
+                setAddressDraft(addr.street);
                 setCity(addr.city);
                 setState(addr.state);
                 setZipCode(addr.zipCode);
