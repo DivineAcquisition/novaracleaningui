@@ -76,26 +76,32 @@ export const validateZipCode = (zipCode: string): ValidationResult => {
   return { isValid: true };
 };
 
+/**
+ * A bookable service address needs a street number. A city, state, and ZIP
+ * are not enough — "Parkville, MD 21234" has digits, but they are the ZIP.
+ */
+export function serviceStreetIssue(street: string, zip?: string): string | null {
+  const value = street.trim();
+  if (!value) return "Street address";
+  if (value.length > 200) return "Shorter street address";
+  const zipDigits = (zip || "").replace(/\D/g, "");
+  const withoutZip = zipDigits.length === 5 ? value.replaceAll(zipDigits, " ") : value;
+  if (!/\d/.test(withoutZip)) return "Street number";
+  if (value.length < 5) return "Street address";
+  return null;
+}
+
 export const validateAddress = (address: string): ValidationResult => {
-  if (!address) {
-    return { isValid: false, error: "Street address is required" };
+  const issue = serviceStreetIssue(address);
+  if (!issue) return { isValid: true };
+  if (!address.trim()) return { isValid: false, error: "Street address is required" };
+  if (issue === "Shorter street address") {
+    return { isValid: false, error: "Address must be less than 200 characters" };
   }
-  
   if (address.trim().length < 5) {
     return { isValid: false, error: "Please enter a complete street address" };
   }
-  
-  if (address.length > 200) {
-    return { isValid: false, error: "Address must be less than 200 characters" };
-  }
-  
-  // Check for basic street address components (number + street name)
-  const hasNumber = /\d+/.test(address);
-  if (!hasNumber) {
-    return { isValid: false, error: "Address must include a street number" };
-  }
-  
-  return { isValid: true };
+  return { isValid: false, error: "Address must include a street number" };
 };
 
 export const validateCity = (city: string): ValidationResult => {
