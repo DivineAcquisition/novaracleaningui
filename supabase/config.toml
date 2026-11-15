@@ -677,6 +677,9 @@ verify_jwt = false
 [functions.ghl-tag-cleanup]
 verify_jwt = false
 
+[functions.google-ads-webhook]
+verify_jwt = false
+
 [functions.lead-intake]
 verify_jwt = false
 

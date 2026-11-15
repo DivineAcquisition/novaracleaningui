@@ -68,6 +68,7 @@
     "pulse:verify": "tsx scripts/verify-pulse-check.ts",
     "mailbox-ack:verify": "tsx scripts/verify-mailbox-ack.deno.ts",
     "facebook-leads:verify": "node --experimental-strip-types --no-warnings scripts/verify-facebook-lead-alerts.ts",
+    "google-ads-webhook:verify": "node --experimental-strip-types --no-warnings scripts/verify-google-ads-webhook.ts",
     "termination-sms:verify": "tsx scripts/verify-termination-sms.ts",
     "recurring-pause:verify": "tsx scripts/verify-recurring-pause.ts",
     "reinstate-booking:verify": "node --experimental-strip-types --no-warnings scripts/verify-reinstate-booking.ts",

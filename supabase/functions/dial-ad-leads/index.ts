@@ -1,4 +1,4 @@
-// Dial Facebook Lead Ads and LSA leads with the outbound booking assistant.
+// Dial Facebook, Google Ads, and LSA leads with the outbound booking assistant.
 // One attempt per lead. Calls only from 8:00 AM to 8:00 PM Eastern.
 // A lead marked do_not_call is never dialed.
 
@@ -28,7 +28,7 @@ function toE164(raw: string | null | undefined): string {
 function isAdLead(source: string | null | undefined): boolean {
   const s = String(source || "").toLowerCase();
   return s.includes("fb") || s.includes("facebook") || s.includes("meta") || s.includes("instagram")
-    || s.includes("lsa") || s.includes("local_service") || s.includes("google_lsa");
+    || s.includes("lsa") || s.includes("local_service") || s.includes("google");
 }
 
 function easternHour(now = new Date()): number {
