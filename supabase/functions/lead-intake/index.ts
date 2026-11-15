@@ -23,7 +23,7 @@
 //
 // Body shape (all optional except phone OR email):
 //   {
-//     source: 'fb_lead_ads' | 'lsa' | 'website' | 'manual' | 'recycled',
+//     source: 'fb_lead_ads' | 'google_ads' | 'lsa' | 'website' | 'manual' | 'recycled',
 //     firstName, lastName, email, phone,
 //     zipCode, city, state, address?,
 //     serviceType?, propertyType?, bedrooms?, bathrooms?, sqft?,
@@ -74,7 +74,7 @@ const logStep = (step: string, details?: unknown) => {
 };
 
 interface LeadPayload {
-  source?: "fb_lead_ads" | "lsa" | "website" | "manual" | "recycled" | string;
+  source?: "fb_lead_ads" | "google_ads" | "lsa" | "website" | "manual" | "recycled" | string;
   firstName?: string;
   lastName?: string;
   email?: string;
@@ -99,6 +99,7 @@ interface LeadPayload {
   utmCampaign?: string;
   leadScore?: "hot" | "warm" | "cold";
   fbLeadId?: string;
+  gclid?: string;
 }
 
 function digitsOnly(s: string | undefined | null): string {
@@ -131,7 +132,7 @@ const NON_SALES_PIPELINE_RE =
 
 function defaultLeadScore(source: string): "hot" | "warm" | "cold" {
   const s = source.toLowerCase();
-  if (s.includes("fb") || s.includes("lsa") || s.includes("local_service_ads")) {
+  if (s.includes("fb") || s.includes("lsa") || s.includes("local_service_ads") || s.includes("google")) {
     return "hot";
   }
   if (s.includes("website") || s.includes("manual")) return "warm";
@@ -443,6 +444,10 @@ async function ingestLead(supabase: any, payload: LeadPayload) {
         special_requests: payload.specialRequests || null,
         urgency: payload.urgency || (leadScore === "hot" ? "urgent" : null),
         notes,
+        gclid: payload.gclid || null,
+        utm_source: payload.utmSource || null,
+        utm_medium: payload.utmMedium || null,
+        utm_campaign: payload.utmCampaign || null,
         lead_score: leadScore,
         assigned_va_user_id: assignedVa.userId,
         next_action_at: leadScore === "hot"
@@ -516,7 +521,8 @@ async function ingestLead(supabase: any, payload: LeadPayload) {
   }
 
   const adSource = source.includes("fb") || source.includes("facebook") || source.includes("meta")
-    || source.includes("instagram") || source.includes("lsa") || source.includes("local_service");
+    || source.includes("instagram") || source.includes("lsa") || source.includes("local_service")
+    || source.includes("google");
   if (isNew && adSource && payload.phone && leadId) {
     try {
       const cronSecret = await resolveSecret(supabase, "CRON_SECRET");
