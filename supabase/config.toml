@@ -1,3 +1,5 @@
+# One production project. Do not create Supabase preview or development
+# branches for this repo. Those databases bill on their own.
 project_id = "sxdraeptzuamsgjcvfeg"
 
 [functions.seed-availability]
