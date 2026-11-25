@@ -4,6 +4,7 @@
 // pages where a booking or quote actually completes.
 
 const GTM_ID = "GTM-WT3SLNN7";
+const ADS_ID = "AW-17623293005";
 
 type DataLayer = unknown[];
 
@@ -55,32 +56,44 @@ function once(key: string): boolean {
   }
 }
 
-function push(event: string, params: { value?: number; transactionId?: string }, dedupeKey: string) {
-  if (!ensureTag()) return;
+function push(event: string, params: { value?: number; transactionId?: string }, dedupeKey: string, asConversion: boolean) {
+  if (typeof window === "undefined") return;
   if (!once(dedupeKey)) return;
-  const dataLayer = layer();
   const value = typeof params.value === "number" && Number.isFinite(params.value) ? params.value : undefined;
-  dataLayer.push({
+  const payload = {
     event,
     value,
     currency: "USD",
     transaction_id: params.transactionId,
-  });
+  };
+  // Queue first so the tag still receives the hit if it loads with consent
+  // a moment later. No name, email, phone, or address.
+  layer().push(payload);
+  if (!ensureTag()) return;
   const w = window as Window & { gtag?: (...args: unknown[]) => void };
+  w.gtag?.("js", new Date());
+  w.gtag?.("config", ADS_ID);
   w.gtag?.("event", event, {
     value,
     currency: "USD",
     transaction_id: params.transactionId,
   });
+  if (asConversion) {
+    w.gtag?.("event", "conversion", {
+      send_to: ADS_ID,
+      value,
+      currency: "USD",
+      transaction_id: params.transactionId,
+    });
+  }
 }
 
 /** Paid booking confirmed. This is the Google Ads conversion. */
 export function trackGooglePurchase(value: number, transactionId?: string) {
-  push("purchase", { value, transactionId }, `purchase:${transactionId || "booking"}`);
-  push("booking_completed", { value, transactionId }, `booking_completed:${transactionId || "booking"}`);
+  push("booking_completed", { value, transactionId }, `booking_completed:${transactionId || "booking"}`, true);
 }
 
 /** Quote request submitted. */
 export function trackGoogleLead(transactionId?: string) {
-  push("generate_lead", { transactionId }, `generate_lead:${transactionId || "quote"}`);
+  push("generate_lead", { transactionId }, `generate_lead:${transactionId || "quote"}`, true);
 }
