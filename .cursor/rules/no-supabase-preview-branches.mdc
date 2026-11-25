@@ -1,0 +1,8 @@
+---
+description: Do not create Supabase preview branches
+alwaysApply: true
+---
+
+Novara uses one Supabase project, NovaraCleaning (`sxdraeptzuamsgjcvfeg`). Do not create a Supabase preview branch, development branch, or branch database for this repo.
+
+Do not run `supabase branches create`, do not call a branch-creation tool, and do not turn on GitHub automatic branching. A pull request does not get its own database. Schema and edge functions are applied to the production project only after the change is merged to `main`.
