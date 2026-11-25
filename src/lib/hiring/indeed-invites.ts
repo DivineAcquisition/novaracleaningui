@@ -8,6 +8,7 @@ import { indeedApplicationLinkState, parseIndeedApplicant, splitPersonName, type
 import { hiringApplyUrl, newHiringToken, sessionExpiry } from "@/lib/hiring/session";
 
 const CURSOR_KEY = "indeed_link_cursor";
+export const INDEED_APPLICATION_CC = ["contact@novaracleaning.com"];
 
 export function indeedApplicationEmail(input: { firstName: string; url: string }): { subject: string; html: string; text: string } {
   const name = input.firstName.trim() || "there";
@@ -96,6 +97,7 @@ export async function sendIndeedApplicationLink(
     apiKey,
     declaredType: "contractor_operational",
     templateKey: "field_cleaner_application",
+    cc: [...INDEED_APPLICATION_CC],
     idempotencyKey: `indeed-application/${applicant.gmailMessageId || applicant.email}`,
   });
   if (!sent.ok) return sent.blocked ? "skipped" : "failed";

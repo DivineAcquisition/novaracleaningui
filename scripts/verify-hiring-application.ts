@@ -26,7 +26,7 @@ import {
   type HiringApplicationDraft,
 } from "../src/lib/hiring/application";
 import { indeedApplicationLinkState, parseIndeedApplicant, splitPersonName, stateFromIndeedJob } from "../src/lib/hiring/indeed";
-import { indeedApplicationEmail, indeedLinkIsNew } from "../src/lib/hiring/indeed-invites";
+import { indeedApplicationEmail, indeedLinkIsNew, INDEED_APPLICATION_CC } from "../src/lib/hiring/indeed-invites";
 import { usesForbiddenApplicantLanguage } from "../src/lib/contractor-intake/decide";
 import { hiringApplyUrl, isHiringToken, sanitizeAnswers, toPublicSession } from "../src/lib/hiring/session";
 import { applicationHostAllowed, contractorOnboardingUrl, hiringApplyUrl as hiringPage, onboardingHostAllowed } from "../src/lib/site-hosts";
@@ -328,6 +328,7 @@ check("New York Indeed applications do not get a link", indeedApplicationLinkSta
 check("Los Angeles Indeed applications do not get a link", indeedApplicationLinkState("House Cleaners Needed (LA), Los Angeles, CA"), null);
 const linkMail = indeedApplicationEmail({ firstName: "Ada", url: "https://hiring.novaracleaning.com/hiring/apply/abc" });
 check("the application link email uses contractor language", !usesForbiddenApplicantLanguage(`${linkMail.subject}\n${linkMail.text}`), true);
+check("Indeed application mail is copied to the contact inbox", INDEED_APPLICATION_CC.includes("contact@novaracleaning.com"), true);
 check("mail after the cursor is new", indeedLinkIsNew("2026-10-22T15:00:00.000Z", Date.parse("2026-10-22T14:00:00.000Z")), true);
 check("mail before the cursor is left alone", indeedLinkIsNew("2026-10-22T13:00:00.000Z", Date.parse("2026-10-22T14:00:00.000Z")), false);
 check("undated mail is left alone", indeedLinkIsNew(null, Date.parse("2026-10-22T14:00:00.000Z")), false);
