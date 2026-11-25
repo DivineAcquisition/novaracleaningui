@@ -6,6 +6,7 @@ import { readStoredCookieChoice, type StoredCookieChoice } from "./CookieNotice"
 import { trackersAllowed } from "@/lib/compliance";
 
 const ADS_ID = "AW-17623293005";
+const GTM_ID = "GTM-WT3SLNN7";
 const META_PIXEL_ID = "1641726577181415";
 
 /**
@@ -27,6 +28,20 @@ export function TrackerGate() {
 
   return (
     <>
+      <Script id="google-tag-manager" strategy="afterInteractive">
+        {`
+          window.dataLayer = window.dataLayer || [];
+          window.dataLayer.push({'gtm.start': new Date().getTime(), event: 'gtm.js'});
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          (function(){
+            var s = document.createElement('script');
+            s.async = true;
+            s.src = 'https://www.googletagmanager.com/gtm.js?id=${GTM_ID}';
+            document.head.appendChild(s);
+          })();
+        `}
+      </Script>
       <Script src={`https://www.googletagmanager.com/gtag/js?id=${ADS_ID}`} strategy="afterInteractive" />
       <Script id="google-ads" strategy="afterInteractive">
         {`

@@ -178,7 +178,7 @@ export function CookieNotice() {
             <div className="mt-3 space-y-2">
               <ChoiceRow title="Essential" detail="Booking, security, and payments. Always on." checked disabled label="Essential cookies always on" />
               <ChoiceRow title="Analytics" detail="How the site is used." checked={analytics} label="Analytics cookies" onChange={setAnalytics} />
-              <ChoiceRow title="Advertising" detail="Meta pixel and ad measurement." checked={advertising} label="Advertising and tracking cookies" onChange={setAdvertising} />
+              <ChoiceRow title="Advertising" detail="Google Tag Manager, Google Ads, and the Meta pixel." checked={advertising} label="Advertising and tracking cookies" onChange={setAdvertising} />
             </div>
           ) : null}
           <div className="mt-4 grid grid-cols-3 gap-2">

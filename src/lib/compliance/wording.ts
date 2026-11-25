@@ -122,7 +122,7 @@ export const SEEDED_WORDING: WordingVersion[] = [
   seed(
     "cookie_banner",
     "Cookie notice",
-    "Novara Cleaning uses essential cookies so booking, security, and payments work. Those stay on. Analytics, and advertising or tracking (including the Meta pixel and ad measurement), stay off unless you accept them. Declining does not block booking and does not change the price.",
+    "Novara Cleaning uses essential cookies so booking, security, and payments work. Those stay on. Analytics, and advertising or tracking (including Google Tag Manager, Google Ads, and the Meta pixel), stay off unless you accept them. Declining does not block booking and does not change the price.",
   ),
   seed(
     "privacy_summary",
