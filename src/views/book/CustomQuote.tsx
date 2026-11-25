@@ -15,9 +15,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { AddressAutocomplete } from "@/components/booking/AddressAutocomplete";
 
 import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
+import { trackGoogleLead } from "@/lib/google-ads";
 import { formatPhoneNumber, getRawPhoneNumber, isValidPhoneNumber } from "@/lib/input-formatters";
 import { SEO } from "@/components/SEO";
+import { toast } from "sonner";
 
 export default function CustomQuote() {
   const router = useRouter();
@@ -76,6 +77,7 @@ export default function CustomQuote() {
       if (error) throw error;
 
       setIsSuccess(true);
+      trackGoogleLead();
       toast.success('Quote request submitted successfully!');
     } catch (error: any) {
       console.error('Quote submission error:', error);

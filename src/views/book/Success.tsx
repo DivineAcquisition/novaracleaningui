@@ -390,6 +390,13 @@ export default function BookingSuccess() {
         if (!mustVerifyDeposit) {
           // No payment intent means either using credit or old booking flow
           setPaymentVerified(true);
+          trackPurchase(
+            pricing.total / 100,
+            bookingData.serviceType,
+            bookingData.membershipPlan || "none",
+            bookingData.zipCode,
+            bookingId || undefined,
+          );
           return;
         }
         if (depositPaidAt) {

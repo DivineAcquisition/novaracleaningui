@@ -3,6 +3,8 @@
  * Each function safely no-ops if fbq is not loaded (e.g. ad blockers).
  */
 
+import { trackGooglePurchase } from "@/lib/google-ads";
+
 function advertisingAllowed(): boolean {
   if (typeof window === "undefined") return false;
   try {
@@ -58,4 +60,5 @@ export function trackPurchase(
   void frequency;
   void zoneId;
   callFbq("booking_completed", { value, currency: "USD" }, eventId);
+  trackGooglePurchase(value, eventId);
 }
