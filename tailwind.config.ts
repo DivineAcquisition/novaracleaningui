@@ -20,10 +20,23 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ['var(--font-inter)', 'Inter', 'system-ui', 'sans-serif'],
-        jakarta: ['var(--font-inter)', 'Inter', 'system-ui', 'sans-serif'],
-        heading: ['var(--font-inter)', 'Inter', 'system-ui', 'sans-serif'],
-        mono: ['var(--font-mono)', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        // --font-ui / --font-ui-mono exist only while the admin shell is
+        // mounted (AdminTypography). Everywhere else these fall back to the
+        // public Inter and JetBrains Mono, unchanged.
+        sans: ['var(--font-ui, var(--font-inter))', 'Inter', 'system-ui', 'sans-serif'],
+        jakarta: ['var(--font-ui, var(--font-inter))', 'Inter', 'system-ui', 'sans-serif'],
+        heading: ['var(--font-ui, var(--font-inter))', 'Inter', 'system-ui', 'sans-serif'],
+        mono: ['var(--font-ui-mono, var(--font-mono))', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+      },
+      // Tailwind 3 compiles weights to static numbers, unlike Selestial's
+      // Tailwind 4 --font-weight-* theme variables. Routing them through
+      // --fw-* gives the same effect: 400/500/600/700 on the public site,
+      // 450/550/650/750 inside the admin scope (globals.css).
+      fontWeight: {
+        normal: 'var(--fw-normal, 400)',
+        medium: 'var(--fw-medium, 500)',
+        semibold: 'var(--fw-semibold, 600)',
+        bold: 'var(--fw-bold, 700)',
       },
       colors: {
         ink: { DEFAULT: "#0B0A11", muted: "#5F5B6B" },

@@ -308,7 +308,7 @@ export default function AdminMap() {
         },
       });
       const info = new (window as any).google.maps.InfoWindow({
-        content: `<div style="font-family:Inter,sans-serif;color:#0f172a;padding:2px 4px;max-width:260px"><strong>${escapeHtml(p.title)}</strong><br/><span style="color:#64748b;font-size:12px">${escapeHtml(p.subtitle)}</span></div>`,
+        content: `<div style="font-family:inherit;color:#0f172a;padding:2px 4px;max-width:260px"><strong>${escapeHtml(p.title)}</strong><br/><span style="color:#64748b;font-size:12px">${escapeHtml(p.subtitle)}</span></div>`,
       });
       marker.addListener("click", () => info.open(mapRef.current, marker));
       bounds.extend({ lat: p.lat, lng: p.lng });

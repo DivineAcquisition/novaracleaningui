@@ -866,11 +866,51 @@ html:not(.dark) .admin-theme {
   --shadow-card: 0 1px 2px rgba(11, 10, 17, 0.04), 0 12px 32px -28px rgba(11, 10, 17, 0.35);
   --shadow-lavender: 0 10px 24px -12px rgba(104, 16, 254, 0.5);
 }
-html:not(.dark) .admin-theme :is(h1, h2, h3, h4, h5, h6),
-html:not(.dark) .admin-theme .font-heading,
-html:not(.dark) .admin-theme .font-jakarta {
-  font-family: var(--font-inter), Inter, system-ui, sans-serif;
+/* ─── Admin typography (all appearance modes) ───────────────────────────
+   Inter Display, matching the Selestial operator app. Scoped by :has() to
+   documents that contain the admin shell ([data-admin-text]), so the public
+   site and booking flow are untouched, while portaled menus, dialogs, sheets
+   and toasts mounted under <body> still inherit it. Selectors are kept at
+   zero or element specificity (:where) so an explicit utility on an element
+   (font-semibold, font-mono, tabular-nums) still wins. */
+:where(:root:has([data-admin-text])) {
+  --fw-normal: 450;
+  --fw-medium: 550;
+  --fw-semibold: 650;
+  --fw-bold: 750;
+}
+:root:has([data-admin-text]) body {
+  /* Specific enough to beat the public body rule (ss01/ss02, auto opsz);
+     body carries no weight or feature utilities, so nothing is shadowed. */
+  font-weight: 450;
+  font-feature-settings: "liga" 1, "calt" 1;
+  /* Chromium ignores the @font-face opsz descriptor; lock it here. */
+  font-optical-sizing: none;
+  font-variation-settings: "opsz" 32;
+}
+/* Element specificity (0,0,1): later than the public h1–h6 base rule so it
+   wins, below any utility class (0,1,0) so font-semibold etc. still apply. */
+:where(:root:has([data-admin-text])) h1,
+:where(:root:has([data-admin-text])) h2,
+:where(:root:has([data-admin-text])) h3,
+:where(:root:has([data-admin-text])) h4,
+:where(:root:has([data-admin-text])) h5,
+:where(:root:has([data-admin-text])) h6 {
+  font-family: var(--font-ui), Inter, system-ui, sans-serif;
+  font-weight: 550;
   letter-spacing: -0.02em;
+}
+:where(:root:has([data-admin-text])) :where(.font-heading, .font-jakarta) {
+  font-weight: 550;
+  letter-spacing: -0.02em;
+}
+:where(:root:has([data-admin-text])) :where(code, kbd, samp, pre, .font-mono) {
+  font-family: var(--font-ui-mono), ui-monospace, SFMono-Regular, monospace;
+  font-variation-settings: normal;
+}
+/* Prices, times and counts line up in columns. */
+:where(:root:has([data-admin-text])) :where(td, .tabular, [data-numeric]) {
+  font-variant-numeric: tabular-nums;
 }
 html:not(.dark) .admin-theme .hairline-glow::before { display: none; }
 
@@ -899,7 +939,7 @@ html:not(.dark) .admin-theme table thead th {
   background: #fafafc;
   color: #5f5b6b;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: var(--fw-semibold, 600);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -907,7 +947,6 @@ html:not(.dark) .admin-theme table thead th {
 html:not(.dark) .admin-theme table thead tr { border-color: #e9e7ee; }
 html:not(.dark) .admin-theme table tbody tr { border-color: #f0eef4; }
 html:not(.dark) .admin-theme table tbody tr:hover { background: #faf8ff; }
-html:not(.dark) .admin-theme table td { font-variant-numeric: tabular-nums; }
 
 /* Tabs: segmented control */
 html:not(.dark) .admin-theme [role="tablist"] {
@@ -931,5 +970,5 @@ html:not(.dark) .admin-theme :is(input, textarea, select, button[role="combobox"
   box-shadow: 0 0 0 3px rgba(104, 16, 254, 0.14);
   outline: none;
 }
-html:not(.dark) .admin-theme .btn-coss { font-weight: 500; border-radius: 9px; }
+html:not(.dark) .admin-theme .btn-coss { font-weight: var(--fw-medium, 500); border-radius: 9px; }
 html:not(.dark) .admin-theme .btn-trail::after { display: none; }
