@@ -15,7 +15,10 @@ import {
   CommandSeparator,
 } from "@/components/ui/command";
 
-type PageLink = { title: string; url: string; description: string };
+import { searchText, type AdminNavItem } from "@/components/admin/admin-nav";
+
+/** A navigation entry plus the sidebar group it lives in. */
+export type CommandPage = { item: AdminNavItem; group: string };
 
 type BookingHit = {
   id: string;
@@ -37,7 +40,7 @@ function safeQuery(value: string) {
   return value.replace(/[^a-zA-Z0-9@.\- ]/g, "").trim();
 }
 
-export function AdminCommandMenu({ pages }: { pages: PageLink[] }) {
+export function AdminCommandMenu({ pages }: { pages: CommandPage[]; role?: "admin" | "va" }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -97,10 +100,13 @@ export function AdminCommandMenu({ pages }: { pages: PageLink[] }) {
     router.push(href);
   };
 
-  const needle = query.trim().toLowerCase();
-  const pageHits = pages.filter((page) =>
-    `${page.title} ${page.description}`.toLowerCase().includes(needle),
-  );
+  // Pages match on label, help text, group and former labels (CSR, Internal
+  // Booking, Operations, Accounts, Intake …). Every word must appear.
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const pageHits = pages.filter(({ item, group }) => {
+    const hay = searchText(item, group);
+    return words.every((w) => hay.includes(w));
+  });
 
   return (
     <>
@@ -135,12 +141,24 @@ export function AdminCommandMenu({ pages }: { pages: PageLink[] }) {
           <CommandEmpty>No matches.</CommandEmpty>
           {pageHits.length > 0 ? (
             <CommandGroup heading="Pages">
-              {pageHits.slice(0, 8).map((page) => (
-                <CommandItem key={page.url} value={page.title} onSelect={() => go(page.url)}>
-                  <span className="font-medium">{page.title}</span>
-                  <span className="ml-2 truncate text-xs text-muted-foreground">{page.description}</span>
-                </CommandItem>
-              ))}
+              {pageHits.slice(0, 10).map(({ item, group }) => {
+                const matchedAlias = words.length
+                  ? item.aliases?.find((a) => words.every((w) => a.toLowerCase().includes(w)) && !item.title.toLowerCase().includes(words.join(" ")))
+                  : undefined;
+                return (
+                  <CommandItem key={item.id} value={searchText(item, group)} onSelect={() => go(item.url)}>
+                    <item.icon className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden />
+                    <span className="min-w-0 flex-1">
+                      <span className="font-medium">{item.title}</span>
+                      {matchedAlias ? (
+                        <span className="ml-1.5 text-xs text-muted-foreground">(formerly {matchedAlias})</span>
+                      ) : null}
+                      <span className="block truncate text-xs text-muted-foreground">{item.help}</span>
+                    </span>
+                    <span className="ml-2 shrink-0 text-[11px] text-muted-foreground/80">{group}</span>
+                  </CommandItem>
+                );
+              })}
             </CommandGroup>
           ) : null}
           {bookings.length > 0 ? (
@@ -177,7 +195,7 @@ export function AdminCommandMenu({ pages }: { pages: PageLink[] }) {
                     <CommandItem
                       key={cleaner.id}
                       value={`${name} ${cleaner.email || ""}`}
-                      onSelect={() => go("/admin/cleaners")}
+                      onSelect={() => go(`/admin/cleaners?cleaner=${encodeURIComponent(cleaner.id)}`)}
                     >
                       <span className="font-medium">{name}</span>
                       {cleaner.email ? (
