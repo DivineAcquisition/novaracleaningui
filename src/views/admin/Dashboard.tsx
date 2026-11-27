@@ -11,6 +11,7 @@
 // to actual bookings so it is not a strip of empty bars.
 
 import { useEffect, useState } from "react";
+import { buildTodayExceptions, exceptionWindow, type ExceptionJob, type TodayException } from "@/lib/today-exceptions";
 import Link from "next/link";
 import {
   RiCalendarCheckLine,
@@ -42,7 +43,7 @@ interface TodayStats {
   stillOnToday: number;
   completedToday: number;
   revenueTodayCents: number;
-  collectedMtdCents: number;
+  completedMtdCents: number;
   pipelineMtdCents: number;
   upcomingCount: number;
   activeCleaners: number;
@@ -165,6 +166,8 @@ export default function AdminDashboard() {
   const [events, setEvents] = useState<EventRow[]>([]);
   const [todayJobs, setTodayJobs] = useState<JobRow[]>([]);
   const [upcoming, setUpcoming] = useState<JobRow[]>([]);
+  const [exceptions, setExceptions] = useState<TodayException[]>([]);
+  const [exceptionsError, setExceptionsError] = useState<string | null>(null);
 
   useEffect(() => {
     void load();
@@ -216,6 +219,7 @@ export default function AdminDashboard() {
         dispatchAlertsRes,
         trendRes,
         eventsRes,
+        exceptionRes,
       ] = await Promise.all([
         supabase
           .from("bookings")
@@ -256,6 +260,15 @@ export default function AdminDashboard() {
           .select("id,event_type,occurred_at,summary,contact_name,cleaner_name")
           .order("occurred_at", { ascending: false })
           .limit(25),
+        // Work items: unstaffed, unpaid, incomplete or not-closed-out jobs
+        // around today (rules in src/lib/today-exceptions.ts).
+        supabase
+          .from("bookings")
+          .select("id, booking_number, first_name, last_name, business_name, status, service_date, time_slot, cleaner_id")
+          .gte("service_date", exceptionWindow(todayIso).from)
+          .lte("service_date", exceptionWindow(todayIso).to)
+          .in("status", ["pending_payment", "pending_details", "confirmed", "assigned"])
+          .limit(300),
       ]);
 
       const todayList = (todayJobsRes.data || []) as JobRow[];
@@ -263,6 +276,13 @@ export default function AdminDashboard() {
       const mtd = (mtdRes.data || []) as Array<Pick<JobRow, "status" | "final_charge_cents" | "total_estimate_cents" | "is_reclean">>;
       const completedToday = todayList.filter((r) => r.status === "completed").length;
 
+      if (exceptionRes.error) {
+        setExceptionsError(exceptionRes.error.message);
+        setExceptions([]);
+      } else {
+        setExceptionsError(null);
+        setExceptions(buildTodayExceptions((exceptionRes.data || []) as ExceptionJob[], todayIso));
+      }
       setTodayJobs(todayList);
       setUpcoming(upcomingList);
       setStats({
@@ -270,7 +290,7 @@ export default function AdminDashboard() {
         stillOnToday: todayList.length - completedToday,
         completedToday,
         revenueTodayCents: todayList.reduce((s, r) => s + jobCents(r), 0),
-        collectedMtdCents: mtd.filter((r) => r.status === "completed").reduce((s, r) => s + jobCents(r), 0),
+        completedMtdCents: mtd.filter((r) => r.status === "completed").reduce((s, r) => s + jobCents(r), 0),
         pipelineMtdCents: mtd.filter((r) => r.status !== "completed").reduce((s, r) => s + jobCents(r), 0),
         upcomingCount: upcomingList.length,
         activeCleaners: activeCleanersRes.count ?? 0,
@@ -296,14 +316,12 @@ export default function AdminDashboard() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[#5A1FD6]">{todayLabel()}</p>
-          <h1 className="mt-1 text-[1.75rem] font-semibold tracking-[-0.03em] text-foreground">Today at a glance</h1>
-          <p className="text-sm text-muted-foreground">Eastern Time · live operations metrics, not a P&amp;L.</p>
+          <h1 className="mt-1 text-[1.75rem] font-semibold tracking-[-0.03em] text-foreground">Today</h1>
+          <p className="text-sm text-muted-foreground">Eastern Time · what needs a decision first, then the schedule, then metrics.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <QuickLink href="/admin/csr" icon={RiFileEditLine} label="New internal booking" primary />
-          <QuickLink href="/admin/bookings" icon={RiCalendarCheckLine} label="Bookings" />
-          <QuickLink href="/admin/operations" icon={RiAlarmWarningLine} label="Operations" />
-          <QuickLink href="/admin/cleaners" icon={RiToolsLine} label="Cleaners" />
+          <QuickLink href="/admin/csr" icon={RiFileEditLine} label="New booking" primary />
+          <QuickLink href="/admin/operations" icon={RiAlarmWarningLine} label="Dispatch & coverage" />
           <button
             type="button"
             onClick={() => void load()}
@@ -316,104 +334,15 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-        <KpiTile
-          loading={loading}
-          icon={RiCalendarCheckLine}
-          label="Bookings today"
-          value={stats?.bookingsToday}
-          tone="emerald"
-          footer={
-            stats
-              ? `${stats.stillOnToday} still on · ${stats.completedToday} done`
-              : undefined
-          }
-        />
-        <KpiTile
-          loading={loading}
-          icon={RiMoneyDollarCircleLine}
-          label="Revenue today"
-          value={stats ? dollars(stats.revenueTodayCents) : undefined}
-          tone="emerald"
-          footer={
-            stats
-              ? `${dollars(stats.collectedMtdCents)} collected MTD · ${dollars(stats.pipelineMtdCents)} booked`
-              : undefined
-          }
-        />
-        <KpiTile
-          loading={loading}
-          icon={RiTeamLine}
-          label="Active cleaners"
-          value={stats?.activeCleaners}
-          tone="slate"
-          footer="Approved & status=active"
-        />
-        <KpiTile
-          loading={loading}
-          icon={RiPulseLine}
-          label="Pending offers"
-          value={stats?.pendingOffers}
-          tone={stats && stats.openDispatchAlerts ? "amber" : "slate"}
-          footer={
-            stats
-              ? `${stats.openDispatchAlerts} unresolved alerts`
-              : undefined
-          }
-        />
-      </div>
+      <ExceptionsPanel
+        loading={loading}
+        items={exceptions}
+        error={exceptionsError}
+        openAlerts={stats?.openDispatchAlerts ?? 0}
+        pendingOffers={stats?.pendingOffers ?? 0}
+      />
 
       {stats ? <TodayProgress stats={stats} /> : null}
-
-      {stats && (stats.openDispatchAlerts > 0 || stats.pendingOffers > 0) ? (
-        <Link
-          href={stats.openDispatchAlerts > 0 ? "/admin/operations?tab=attention" : "/admin/operations?tab=dispatch"}
-          className="group flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50/70 px-4 py-3 transition hover:border-amber-300"
-        >
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-700">
-            <RiAlarmWarningLine className="h-5 w-5" />
-          </span>
-          <span className="min-w-0 flex-1 text-sm text-amber-900">
-            <span className="font-semibold">Needs attention: </span>
-            {[
-              stats.openDispatchAlerts > 0 ? `${stats.openDispatchAlerts} unresolved dispatch alert${stats.openDispatchAlerts === 1 ? "" : "s"}` : null,
-              stats.pendingOffers > 0 ? `${stats.pendingOffers} offer${stats.pendingOffers === 1 ? "" : "s"} waiting on a cleaner` : null,
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-          </span>
-          <span className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-amber-800">
-            Open Operations
-            <RiArrowRightLine className="h-4 w-4 transition group-hover:translate-x-0.5" />
-          </span>
-        </Link>
-      ) : null}
-
-      {isAdmin ? (
-        <Card className="border-violet-200 bg-violet-50/40">
-          <CardContent className="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-start gap-3 min-w-0">
-              <span className="w-10 h-10 rounded-lg flex items-center justify-center bg-brand-50 text-primary shrink-0">
-                <RiLineChartLine className="w-5 h-5" />
-              </span>
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-slate-900">Profit &amp; Loss</p>
-                <p className="text-xs text-slate-600 mt-0.5">
-                  {stats
-                    ? `${dollarsExact(stats.collectedMtdCents)} collected this month · ${dollarsExact(stats.pipelineMtdCents)} still booked. Ads, contribution, and ROAS live on P&L.`
-                    : "Collected vs pipeline, ad spend, and contribution."}
-                </p>
-              </div>
-            </div>
-            <Link
-              href="/admin/pnl"
-              className="text-sm font-semibold text-primary hover:underline shrink-0"
-            >
-              Open P&amp;L
-            </Link>
-          </CardContent>
-        </Card>
-      ) : null}
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <Card className="xl:col-span-2 border-slate-200">
@@ -506,11 +435,85 @@ export default function AdminDashboard() {
         </Card>
       </div>
 
+      <h2 className="pt-2 text-sm font-semibold text-muted-foreground">Metrics</h2>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+        <KpiTile
+          loading={loading}
+          icon={RiCalendarCheckLine}
+          label="Bookings today"
+          value={stats?.bookingsToday}
+          tone="emerald"
+          footer={
+            stats
+              ? `${stats.stillOnToday} still on · ${stats.completedToday} done`
+              : undefined
+          }
+        />
+        <KpiTile
+          loading={loading}
+          icon={RiMoneyDollarCircleLine}
+          label="Booked value today"
+          value={stats ? dollars(stats.revenueTodayCents) : undefined}
+          tone="emerald"
+          footer={
+            stats
+              ? `Sum of today's job prices · MTD: ${dollars(stats.completedMtdCents)} completed, ${dollars(stats.pipelineMtdCents)} still booked`
+              : undefined
+          }
+        />
+        <KpiTile
+          loading={loading}
+          icon={RiTeamLine}
+          label="Active cleaners"
+          value={stats?.activeCleaners}
+          tone="slate"
+          footer="Approved & status=active"
+        />
+        <KpiTile
+          loading={loading}
+          icon={RiPulseLine}
+          label="Pending offers"
+          value={stats?.pendingOffers}
+          tone={stats && stats.openDispatchAlerts ? "amber" : "slate"}
+          footer={
+            stats
+              ? `${stats.openDispatchAlerts} unresolved alerts`
+              : undefined
+          }
+        />
+      </div>
+
+      {isAdmin ? (
+        <Card className="border-violet-200 bg-violet-50/40">
+          <CardContent className="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-start gap-3 min-w-0">
+              <span className="w-10 h-10 rounded-lg flex items-center justify-center bg-brand-50 text-primary shrink-0">
+                <RiLineChartLine className="w-5 h-5" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-slate-900">Profit &amp; Loss</p>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  {stats
+                    ? `${dollarsExact(stats.completedMtdCents)} in completed jobs this month · ${dollarsExact(stats.pipelineMtdCents)} still booked (job values, not payments received). Collected cash, ads and contribution live on P&L.`
+                    : "Collected vs pipeline, ad spend, and contribution."}
+                </p>
+              </div>
+            </div>
+            <Link
+              href="/admin/pnl"
+              className="text-sm font-semibold text-primary hover:underline shrink-0"
+            >
+              Open P&amp;L
+            </Link>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <Card className="border-slate-200">
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Last 30 days</CardTitle>
           <CardDescription>
-            Jobs on the calendar · completed · revenue collected
+            Jobs on the calendar · completed · completed job value (not payments received)
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -651,7 +654,7 @@ function todayLabel(): string {
 
 const trendConfig = {
   bookings: { label: "Jobs", color: "#6810FE" },
-  revenue: { label: "Revenue ($)", color: "#C9B6FF" },
+  revenue: { label: "Completed job value ($)", color: "#C9B6FF" },
 } satisfies ChartConfig;
 
 function TrendStrip({ rows }: { rows: DailyRow[] }) {
@@ -712,4 +715,120 @@ function formatRel(iso: string): string {
   if (h < 24) return `${h}h ago`;
   const d = Math.floor(h / 24);
   return `${d}d ago`;
+}
+
+const EXCEPTION_TONE: Record<TodayException["kind"], string> = {
+  needs_staffing: "bg-rose-50 text-rose-800 border-rose-200",
+  awaiting_payment: "bg-amber-50 text-amber-800 border-amber-200",
+  missing_details: "bg-amber-50 text-amber-800 border-amber-200",
+  not_closed: "bg-slate-100 text-slate-700 border-slate-200",
+};
+const EXCEPTION_LABEL: Record<TodayException["kind"], string> = {
+  needs_staffing: "Needs staffing",
+  awaiting_payment: "Awaiting deposit",
+  missing_details: "Missing details",
+  not_closed: "Not closed out",
+};
+
+/**
+ * First thing on Today: jobs and customers that need a decision, each with
+ * the job, its deadline, the reason and the next action, linked to the
+ * exact record. Dispatch alerts and open offers are counted here too.
+ */
+function ExceptionsPanel({
+  loading,
+  items,
+  error,
+  openAlerts,
+  pendingOffers,
+}: {
+  loading: boolean;
+  items: TodayException[];
+  error: string | null;
+  openAlerts: number;
+  pendingOffers: number;
+}) {
+  const total = items.length + (openAlerts > 0 ? 1 : 0);
+  return (
+    <Card className="border-slate-200" aria-labelledby="today-exceptions-title">
+      <CardHeader className="pb-2">
+        <CardTitle id="today-exceptions-title" className="flex items-center gap-2 text-base">
+          <RiAlarmWarningLine className="h-4 w-4 text-amber-600" aria-hidden />
+          Needs a decision
+          {!loading ? <span className="text-sm font-normal text-muted-foreground tabular-nums">· {total}</span> : null}
+        </CardTitle>
+        <CardDescription>Unstaffed, unpaid, incomplete or not-closed-out jobs, most urgent first.</CardDescription>
+      </CardHeader>
+      <CardContent className="pt-0">
+        {loading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-12 w-full" />
+            ))}
+          </div>
+        ) : (
+          <>
+            {error ? (
+              <p className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                Couldn&apos;t load the work-item list ({error}). Metrics below are still current; check Bookings directly.
+              </p>
+            ) : null}
+            {openAlerts > 0 || pendingOffers > 0 ? (
+              <Link
+                href={openAlerts > 0 ? "/admin/operations?tab=attention" : "/admin/operations?tab=dispatch"}
+                className="mb-2 flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-2 text-sm text-amber-900 hover:border-amber-300"
+              >
+                <span className="min-w-0 flex-1">
+                  {[
+                    openAlerts > 0 ? `${openAlerts} unresolved dispatch alert${openAlerts === 1 ? "" : "s"}` : null,
+                    pendingOffers > 0 ? `${pendingOffers} offer${pendingOffers === 1 ? "" : "s"} waiting on a cleaner` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </span>
+                <span className="inline-flex shrink-0 items-center gap-1 font-semibold">
+                  Open Dispatch & coverage <RiArrowRightLine className="h-4 w-4" aria-hidden />
+                </span>
+              </Link>
+            ) : null}
+            {items.length === 0 && !error ? (
+              <p className="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-center text-sm text-muted-foreground">
+                Nothing needs a decision right now. Every job in the next three days is paid and staffed.
+              </p>
+            ) : (
+              <ul className="divide-y divide-slate-100" data-testid="today-exceptions">
+                {items.slice(0, 12).map((x) => (
+                  <li key={x.key} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5">
+                    <Badge variant="outline" className={cn("text-[10.5px] font-medium", EXCEPTION_TONE[x.kind])}>
+                      {EXCEPTION_LABEL[x.kind]}
+                    </Badge>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium text-slate-900">
+                        {x.job} · {x.customer}
+                      </span>
+                      <span className="block text-xs text-muted-foreground">
+                        <span className="tabular-nums">{x.deadline}</span> · {x.reason}
+                      </span>
+                    </span>
+                    <Link
+                      href={x.href}
+                      className="inline-flex shrink-0 items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-800 hover:border-violet-300 hover:text-violet-800"
+                    >
+                      {x.action}
+                      <RiArrowRightLine className="h-3.5 w-3.5" aria-hidden />
+                    </Link>
+                  </li>
+                ))}
+                {items.length > 12 ? (
+                  <li className="pt-2 text-xs text-muted-foreground">
+                    {items.length - 12} more — see <Link href="/admin/bookings" className="underline">Bookings</Link>.
+                  </li>
+                ) : null}
+              </ul>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
 }

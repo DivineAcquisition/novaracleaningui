@@ -155,6 +155,23 @@ async function main() {
     console.log("      admin preloads:", (await preloads(page)).map((u) => u.split("/").pop()));
   }
 
+  // ── Today: exceptions first, then schedule, then metrics; honest labels ──
+  {
+    const { page } = await open(browser);
+    await page.goto(`${BASE}/admin/dashboard`, { waitUntil: "domcontentloaded" });
+    await page.getByText("Needs a decision").first().waitFor({ timeout: 60_000 });
+    await page.waitForLoadState("networkidle").catch(() => {});
+    await page.waitForTimeout(1500);
+    const top = async (t: RegExp) => (await page.locator("main").getByText(t).first().boundingBox())?.y ?? -1;
+    const order = { exceptions: await top(/^Needs a decision/), schedule: await top(/^Coming up this week$/), metrics: await top(/^Metrics$/) };
+    check("Today order: exceptions → schedule → metrics", order.exceptions > 0 && order.exceptions < order.schedule && order.schedule < order.metrics, order);
+    const text = await page.locator("main").innerText();
+    check("Today labels booked job value, not revenue/collected", /Booked value today/i.test(text) && !/Revenue today/i.test(text) && !/collected MTD/i.test(text));
+    const items = await page.locator("[data-testid=today-exceptions] li").count();
+    console.log(`      exceptions listed from demo data: ${items}`);
+    await page.screenshot({ path: `${OUT}/today.png`, fullPage: true });
+  }
+
   // ── Radix Select portal ──
   {
     const { page } = await open(browser);
