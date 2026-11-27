@@ -534,8 +534,9 @@
       color 0.12s ease;
   }
 
-  .menu-item[data-disabled],
-  .menu-item[data-disabled="true"] {
+  /* cmdk 1.x writes data-disabled="false" on enabled items; a bare
+     [data-disabled] match made every command-menu option ignore the mouse. */
+  .menu-item[data-disabled]:not([data-disabled="false"]) {
     pointer-events: none;
     opacity: 0.5;
   }

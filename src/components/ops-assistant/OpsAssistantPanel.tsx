@@ -112,7 +112,7 @@ export function OpsAssistantPanel() {
 
   return (
     <aside
-      className="fixed inset-y-0 right-0 z-40 flex w-full max-w-[420px] flex-col border-l border-[color:var(--hairline)] bg-card shadow-[-12px_0_32px_-18px_rgba(0,0,0,0.25)]"
+      className="fixed inset-y-0 right-0 z-40 flex w-full max-w-[420px] lg:max-w-[360px] 2xl:max-w-[420px] flex-col border-l border-[color:var(--hairline)] bg-card shadow-[-12px_0_32px_-18px_rgba(0,0,0,0.25)]"
       role="complementary"
       aria-label="Ops Assistant"
     >

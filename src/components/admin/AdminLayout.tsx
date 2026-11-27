@@ -293,7 +293,10 @@ function AdminMain({
           <UserBadge email={user?.email} />
         </div>
       </header>
-      <div className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">{children}</div>
+      {/* overflow-x-clip, not overflow-auto: an overflow container here became
+          the sticky scroll box while the window scrolled, so sticky headers
+          and rails inside pages never stuck. */}
+      <div className="flex-1 min-w-0 overflow-x-clip p-4 sm:p-6 lg:p-8">{children}</div>
     </main>
   );
 }
