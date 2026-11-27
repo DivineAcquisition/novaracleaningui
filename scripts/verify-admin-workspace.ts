@@ -172,6 +172,41 @@ async function main() {
     await page.screenshot({ path: `${OUT}/today.png`, fullPage: true });
   }
 
+  // ── Bookings views: URL-backed, preserved when opening a job ──
+  {
+    const { page } = await open(browser);
+    await page.goto(`${BASE}/admin/bookings?view=needs_staffing`, { waitUntil: "domcontentloaded" });
+    const tabs = page.locator("[role=tablist][aria-label='Booking views']");
+    await tabs.waitFor({ timeout: 60_000 });
+    await page.waitForLoadState("networkidle").catch(() => {});
+    await page.waitForTimeout(1500);
+    check("?view=needs_staffing selects that view", (await tabs.locator("[aria-selected=true]").innerText()).startsWith("Needs staffing"));
+    const labels = (await tabs.locator("[role=tab]").allInnerTexts()).map((t) => t.replace(/\s*\d+$/, "").trim());
+    check("views: All · Today · Awaiting deposit · Needs staffing · Cleaner done · review", labels.join("|") === "All|Today|Awaiting deposit|Needs staffing|Cleaner done · review", labels);
+    await tabs.getByRole("tab", { name: /Awaiting deposit/ }).click();
+    await page.waitForURL(/view=awaiting_deposit/, { timeout: 10_000 }).catch(() => {});
+    check("switching view updates the URL", page.url().includes("view=awaiting_deposit"), page.url());
+    await tabs.getByRole("tab", { name: /^All/ }).click();
+    await page.waitForTimeout(500);
+    const row = page.locator("main .divide-y > button").first();
+    if (await row.count()) {
+      const states = await row.locator("[data-testid=booking-states]").innerText();
+      check("row shows payment and staffing separately", / · /.test(states), states);
+      await tabs.getByRole("tab", { name: /^Today/ }).click();
+      await page.waitForTimeout(400);
+      const r2 = page.locator("main .divide-y > button").first();
+      if (await r2.count()) {
+        await r2.click();
+        await page.waitForTimeout(800);
+        check("opening a job keeps the view in the URL", page.url().includes("view=today"), page.url());
+        await page.keyboard.press("Escape");
+        await page.waitForTimeout(400);
+        check("closing the job returns to the same view", (await tabs.locator("[aria-selected=true]").innerText()).startsWith("Today"));
+      }
+    }
+    await page.screenshot({ path: `${OUT}/bookings-views.png` });
+  }
+
   // ── Radix Select portal ──
   {
     const { page } = await open(browser);

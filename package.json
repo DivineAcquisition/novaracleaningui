@@ -82,7 +82,8 @@
     "admin-workspace:verify": "tsx scripts/verify-admin-workspace.ts",
     "booker-quote:verify": "tsx scripts/verify-booker-quote.ts",
     "booker:verify:browser": "tsx scripts/verify-booker-browser.ts",
-    "today:verify": "tsx scripts/verify-today-exceptions.ts"
+    "today:verify": "tsx scripts/verify-today-exceptions.ts",
+    "booking-views:verify": "tsx scripts/verify-booking-views.ts"
   },
   "dependencies": {
     "@capacitor/android": "^7.4.4",

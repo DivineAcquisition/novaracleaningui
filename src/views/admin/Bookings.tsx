@@ -9,7 +9,9 @@
 // hard cancel-without-refund.
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { BOOKING_VIEWS, jobState, matchesView, parseBookingView, paymentState, staffingState, type BookingViewId } from "@/lib/booking-views";
+import { ymdInZone } from "@/lib/pnl";
 import {
   RiCalendarCheckLine,
   RiCalendarEventLine,
@@ -297,7 +299,19 @@ export default function AdminBookings({
   newJob?: { label: string; render: () => ReactNode };
 } = {}) {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
   const highlightId = searchParams.get("highlight");
+  // Saved views live in the URL (?view=) so links, back/forward and opening
+  // a job keep the operator's place.
+  const view = parseBookingView(searchParams.get("view"));
+  const setView = (next: BookingViewId) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next === "all") params.delete("view");
+    else params.set("view", next);
+    const q = params.toString();
+    router.replace(q ? `${pathname}?${q}` : pathname || "/admin/bookings", { scroll: false });
+  };
   const [creating, setCreating] = useState(false);
 
   const [bookings, setBookings] = useState<BookingRow[]>([]);
@@ -376,18 +390,30 @@ export default function AdminBookings({
     void load();
   }, [load]);
 
-  const visibleBookings = useMemo(
+  const todayIso = ymdInZone(new Date());
+  const scopedBookings = useMemo(
     () => (scope === "commercial" ? bookings.filter(isCommercialBookingRow) : bookings),
     [bookings, scope],
+  );
+  const viewCounts = useMemo(() => {
+    const counts = {} as Record<BookingViewId, number>;
+    for (const v of BOOKING_VIEWS) counts[v.id] = scopedBookings.filter((b) => matchesView(b, v.id, todayIso)).length;
+    return counts;
+  }, [scopedBookings, todayIso]);
+  const visibleBookings = useMemo(
+    () => scopedBookings.filter((b) => matchesView(b, view, todayIso)),
+    [scopedBookings, view, todayIso],
   );
 
   // Auto-open the highlighted booking when arriving from internal-booking
   // success screen via `?highlight=…`.
   useEffect(() => {
-    if (!highlightId || !visibleBookings.length) return;
-    const match = visibleBookings.find((b) => b.id === highlightId);
+    // Search the whole loaded list, not the current view, so a deep link
+    // from Today or the booker opens even when a view would filter it out.
+    if (!highlightId || !scopedBookings.length) return;
+    const match = scopedBookings.find((b) => b.id === highlightId);
     if (match) setSelected(match);
-  }, [highlightId, visibleBookings]);
+  }, [highlightId, scopedBookings]);
 
   // Keep the open sheet's booking row fresh after mutations (customer info
   // edits, service adjusts, etc.) so the summary reflects the saved values.
@@ -449,6 +475,27 @@ export default function AdminBookings({
             Refresh
           </Button>
         </div>
+      </div>
+
+      {/* Saved views */}
+      <div role="tablist" aria-label="Booking views" className="flex flex-wrap gap-1.5">
+        {BOOKING_VIEWS.map((v) => (
+          <button
+            key={v.id}
+            type="button"
+            role="tab"
+            aria-selected={view === v.id}
+            title={v.hint}
+            onClick={() => setView(v.id)}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px] font-medium transition-colors",
+              view === v.id ? "border-violet-300 bg-violet-50 text-violet-900" : "border-slate-200 bg-white text-slate-600 hover:text-slate-900",
+            )}
+          >
+            {v.label}
+            {!loading ? <span className="tabular-nums text-[11px] text-slate-500">{viewCounts[v.id]}</span> : null}
+          </button>
+        ))}
       </div>
 
       {/* Filters */}
@@ -516,8 +563,10 @@ export default function AdminBookings({
           ) : visibleBookings.length === 0 ? (
             <Empty className="m-6 border-slate-200">
               <EmptyHeader>
-                <EmptyTitle>No bookings matched</EmptyTitle>
-                <EmptyDescription>Try All bookings, or search by name or email.</EmptyDescription>
+                <EmptyTitle>{view === "all" ? "No bookings matched" : `Nothing in ${BOOKING_VIEWS.find((v) => v.id === view)?.label}`}</EmptyTitle>
+                <EmptyDescription>
+                  {view === "all" ? "Try All bookings, or search by name or email." : "That queue is clear for the current filters."}
+                </EmptyDescription>
               </EmptyHeader>
             </Empty>
           ) : (
@@ -600,9 +649,15 @@ export default function AdminBookings({
                         >
                           {STATUS_LABELS[b.status || ""] ?? (b.status || "—").replaceAll("_", " ")}
                         </Badge>
-                        {isAwaitingDeposit(b) ? (
-                          <span className="text-[10px] text-amber-800">Deposit due</span>
-                        ) : null}
+                        {/* Job, payment and staffing are separate questions. */}
+                        <span className="text-[10px] text-slate-500 text-right leading-tight" data-testid="booking-states">
+                          <span className="sr-only">Job: {jobState(b)}. </span>
+                          <span className={cn(paymentState(b) === "Deposit due" && "text-amber-800 font-medium", isAwaitingDeposit(b) && "underline decoration-dotted")}>
+                            {paymentState(b)}
+                          </span>
+                          {" · "}
+                          <span className={cn(staffingState(b) === "Unstaffed" && "text-rose-700 font-medium")}>{staffingState(b)}</span>
+                        </span>
                         {isUnpaidDepositCancel(b) ? (
                           <span className="text-[10px] text-violet-800">Can reinstate</span>
                         ) : null}
