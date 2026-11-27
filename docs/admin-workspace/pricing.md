@@ -317,6 +317,22 @@ live configuration can't be read. Someone should reconcile the two; until then, 
 live figures.
 :::
 
+:::drift First-clean deep clean on Move-In/Out and one-time jobs is unresolved
+The $75 first-clean deep clean is defined for **new Glow members** only. Three places disagree
+about what happens if it ends up on any other job:
+
+- The pricing code's own comment says it **does not stack** on Deep, Combo or Move-In/Out,
+  and the scope-adjustment screen follows that.
+- The calculation itself skips it on Deep and Combo but **still charges $75 on Move-In/Out**
+  (both the app and the server copy).
+- The live quote engine — what a booking is actually charged — has **no price for it**, so
+  on a one-time job it is charged $0, while the older fallback calculator charges $75.
+
+The booking screen no longer offers it as an extra, and an old quote carrying it shows it as
+"not priced". A decision is needed on whether it may ever apply outside a new membership;
+until then, don't add it to non-membership jobs.
+:::
+
 ## How far you can move a price
 
 You can adjust a quote on the booking screen. Three rules govern it:

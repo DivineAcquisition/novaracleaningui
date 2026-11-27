@@ -79,7 +79,9 @@
     "payout-methods:verify": "tsx scripts/verify-payout-methods.ts",
     "w9-onboarding:verify": "tsx scripts/verify-w9-onboarding.ts",
     "eas:supabase:connect": "npm --prefix contractor-app run eas:supabase:connect",
-    "admin-workspace:verify": "tsx scripts/verify-admin-workspace.ts"
+    "admin-workspace:verify": "tsx scripts/verify-admin-workspace.ts",
+    "booker-quote:verify": "tsx scripts/verify-booker-quote.ts",
+    "booker:verify:browser": "tsx scripts/verify-booker-browser.ts"
   },
   "dependencies": {
     "@capacitor/android": "^7.4.4",

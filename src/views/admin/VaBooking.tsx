@@ -75,6 +75,9 @@ import { useAvailability } from "@/hooks/use-availability";
 import { useAdminRole } from "@/hooks/use-admin-role";
 import { useDynamicQuote } from "@/hooks/use-dynamic-quote";
 import { PriceBreakdownCard } from "@/components/admin/PriceBreakdownCard";
+import { ExtrasPicker } from "@/components/admin/booking/ExtrasPicker";
+import { BookingOutcome, BookerQuoteLines, BookerTotals, CompactQuoteBar, CopySummaryButton, LockStatus, SavedQuotePanel } from "@/components/admin/booking/BookerQuoteRail";
+import { deriveQuoteLines, perVisitAddOns, recurringTotals, quoteSummaryText } from "@/lib/booker-quote";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -348,7 +351,11 @@ export default function VaBooking() {
   const quoteIdParam = searchParams.get("quoteId");
 
   // Customer / lead lookup (collapsed by default)
-  const [leadLookupOpen, setLeadLookupOpen] = useState(false);
+  // Existing-customer search comes first on a fresh call; a resumed quote,
+  // linked lead or prefilled email already knows who the customer is.
+  const [leadLookupOpen, setLeadLookupOpen] = useState(
+    () => !quoteIdParam && !leadIdParam && !searchParams.get("email"),
+  );
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -852,7 +859,10 @@ export default function VaBooking() {
     const perCleanCalc = calculatePrice(
       homeSizeId,
       "standard", // recurring plans are always standard cleans
-      addOns,
+      // The first-visit deep clean is the Glow prompt's decision, never a
+      // per-visit add-on — a reopened quote carrying it must not add $75 to
+      // every visit (scripts/verify-booker-quote.ts).
+      perVisitAddOns(addOns),
       "none",
       usesCredit,
       false,
@@ -944,7 +954,7 @@ export default function VaBooking() {
     homeSizeId: serviceType === "focused" ? null : homeSizeId,
     focused: focusedComposition,
     condition,
-    addOns,
+    addOns: isRecurring ? perVisitAddOns(addOns) : addOns,
     serviceDate: serviceDateStr,
     membershipPlan: isRecurring ? cadence : "none",
     firstMonth: isRecurring && deepClean.includeDeepClean,
@@ -997,13 +1007,71 @@ export default function VaBooking() {
     return {
       ...basePricing,
       serviceCents: dynQuote.breakdown!.serviceTotalCents,
-      addOnsCents: dynQuote.breakdown!.addOnsCents + dynQuote.breakdown!.surchargesCents,
+      // Add-ons and surcharges stay separate — the rail shows them on their
+      // own lines (see quoteLines below).
+      addOnsCents: dynQuote.breakdown!.addOnsCents,
+      surchargesCents: dynQuote.breakdown!.surchargesCents,
       computedCents: dynTotalCents,
       totalCents,
       depositCents,
       remainingCents: totalCents - depositCents,
     };
   }, [basePricing, isRecurring, dynTotalCents, dynQuote.breakdown, overrideTotal, depositPercent, invoiceMode, monthlyGlowOverride]);
+
+  // ── Live-quote lines: charged add-ons, included items, surcharges and
+  // adjustments each on their own line, derived from the same breakdown
+  // that sets the total (never re-priced here).
+  const serviceLabel = `${SERVICE_TYPE_OPTIONS.find((o) => o.id === serviceType)?.label || "Service"} · ${
+    HOME_SIZE_RANGES.find((h) => h.id === homeSizeId)?.label?.replace(" sq ft", "") || ""
+  }`;
+  const quoteLines = useMemo(() => {
+    const lines = deriveQuoteLines({
+      breakdown: isRecurring ? null : dynQuote.breakdown,
+      addOns: isRecurring ? perVisitAddOns(addOns) : addOns,
+      serviceType: isRecurring ? "standard" : serviceType,
+      serviceLabel,
+      fallbackServiceCents: basePricing.serviceCents,
+    });
+    if (!isRecurring) {
+      // Whatever separates the itemised lines from the computed total is
+      // shown, not hidden: a held lock price, or the legacy discount.
+      const itemised = lines.service.cents + lines.chargedCents + lines.surchargesCents + lines.adjustmentsCents;
+      const residual = pricing.computedCents - itemised;
+      if (residual !== 0) {
+        lines.adjustments.push({
+          key: "residual",
+          label: dynQuote.lock ? "Held at locked quote price" : lines.source === "fallback" ? "Service discount" : "Pricing adjustment",
+          cents: residual,
+        });
+        lines.adjustmentsCents += residual;
+      }
+      const overrideDelta = pricing.totalCents - pricing.computedCents;
+      if (overrideDelta !== 0) {
+        lines.adjustments.push({ key: "va_override", label: "Price adjustment", cents: overrideDelta, detail: overrideReason || undefined });
+        lines.adjustmentsCents += overrideDelta;
+      }
+    }
+    return lines;
+  }, [isRecurring, dynQuote.breakdown, dynQuote.lock, addOns, serviceType, serviceLabel, basePricing.serviceCents, pricing.computedCents, pricing.totalCents, overrideReason]);
+  const recurringRail = isRecurring
+    ? recurringTotals({
+        perVisitCents: pricing.perCleanCents,
+        includeFirstVisitDeep: !!deepClean.includeDeepClean,
+        firstVisitDeepCents: dynQuote.breakdown?.membership?.firstMonthFeeCents || 7500,
+        cadenceLabel: CADENCE_PLAN_LABEL[cadence] || cadence,
+      })
+    : null;
+  const oneTimeRail = isRecurring
+    ? null
+    : { totalCents: pricing.totalCents, dueTodayCents: pricing.depositCents, remainingCents: pricing.remainingCents };
+  const quoteSummary = quoteSummaryText({
+    customerName: `${firstName} ${lastName}`.trim() || undefined,
+    lines: quoteLines,
+    oneTime: oneTimeRail || undefined,
+    recurring: recurringRail || undefined,
+    serviceDateLabel: selectedDate ? `${format(selectedDate, "EEE, MMM d")}${selectedTime ? ` · ${selectedTime}` : ""}` : undefined,
+    lockedUntilLabel: dynQuote.lock?.lockedUntil ? format(new Date(dynQuote.lock.lockedUntil), "MMM d, h:mm a") : undefined,
+  });
 
   // Submit
   const [submitting, setSubmitting] = useState(false);
@@ -1015,30 +1083,33 @@ export default function VaBooking() {
   const restrictionsLifted = isAdmin && adminOverride;
 
   const requirements = useMemo(() => {
-    const list: string[] = [];
-    if (!firstName.trim()) list.push("First name");
-    if (!isValidEmail(email)) list.push("Valid email");
-    else if (!restrictionsLifted && looksLikeNovaraStaffEmail(email)) list.push("A personal customer email (not @novaracleaning.com)");
-    if (phoneDigits.length < 10) list.push("Phone (10+ digits)");
-    if (zipDigits.length !== 5) list.push("ZIP (5 digits)");
-    if (!selectedDate) list.push(isRecurring ? "First service date" : "Service date");
-    if (!selectedTime) list.push(isRecurring ? "Preferred time window" : "Time slot");
+    // Each unmet requirement names the input that satisfies it, so the
+    // "Still needed" list can move focus straight there.
+    const list: { label: string; target: string }[] = [];
+    const need = (label: string, target: string) => list.push({ label, target });
+    if (!firstName.trim()) need("First name", "bk-first-name");
+    if (!isValidEmail(email)) need("Valid email", "bk-email");
+    else if (!restrictionsLifted && looksLikeNovaraStaffEmail(email)) need("A personal customer email (not @novaracleaning.com)", "bk-email");
+    if (phoneDigits.length < 10) need("Phone (10+ digits)", "bk-phone");
+    if (zipDigits.length !== 5) need("ZIP (5 digits)", "bk-zip");
+    if (!selectedDate) need(isRecurring ? "First service date" : "Service date", "bk-schedule");
+    if (!selectedTime) need(isRecurring ? "Preferred time window" : "Time slot", "bk-schedule");
     // The verbal-agreement attestation is a one-time compliance artifact.
     // Recurring plans send the membership agreement for e-sign instead.
     // An admin override can waive it; the waiver is written on the booking.
-    if (!restrictionsLifted && !isRecurring && !vaAgreedOnPhone) list.push("Confirm client agreed (phone)");
+    if (!restrictionsLifted && !isRecurring && !vaAgreedOnPhone) need("Confirm client agreed (phone)", "bk-agree");
     // Unserved address → no quote, no booking; offer the waitlist instead.
     // An admin override still needs a typed total, because there is no zone price.
     if (zipDigits.length === 5 && !dynQuote.served) {
-      if (!restrictionsLifted) list.push("Serviceable ZIP (area not served — offer waitlist)");
-      else if (!overrideTotal.trim()) list.push("Adjusted total (outside the service area)");
+      if (!restrictionsLifted) need("Serviceable ZIP (area not served — offer waitlist)", "bk-zip");
+      else if (!overrideTotal.trim()) need("Adjusted total (outside the service area)", "bk-adjust-total");
     }
     if (serviceType === "focused" && focusedSelections.length === 0) {
-      list.push("At least one focused-clean area");
+      need("At least one focused-clean area", "bk-service");
     }
     // Any price adjustment needs a reason from the standard list.
-    if (!isRecurring && overrideTotal.trim() && !overrideReason) list.push("Adjustment reason");
-    if (restrictionsLifted && !adminOverrideNote.trim()) list.push("Override note");
+    if (!isRecurring && overrideTotal.trim() && !overrideReason) need("Adjustment reason", "bk-adjust-reason");
+    if (restrictionsLifted && !adminOverrideNote.trim()) need("Override note", "bk-override-note");
     return list;
   }, [firstName, email, phoneDigits, zipDigits, selectedDate, selectedTime, vaAgreedOnPhone, isRecurring, dynQuote.served, serviceType, focusedSelections, overrideTotal, overrideReason, restrictionsLifted, adminOverrideNote]);
 
@@ -1563,7 +1634,7 @@ export default function VaBooking() {
         .single();
       if (error) throw error;
       setSavedQuoteId(data.id);
-      toast.success("Quote saved — find it anytime under Quotes.");
+      toast.success("Quote saved — reopen it from the link under the quote.");
     } catch (err) {
       const m = err instanceof Error ? err.message : String(err);
       toast.error(`Failed to save quote: ${m}`);
@@ -1633,6 +1704,50 @@ export default function VaBooking() {
                   …
                 </div>
               )}
+              {(() => {
+                const optionalMissed = [
+                  result.firstCleanStatus && !firstCleanBooked ? "first clean" : null,
+                  !result.checklistSent ? "checklist" : null,
+                  !result.agreementSent ? "agreement" : null,
+                ].filter(Boolean) as string[];
+                return (
+                  <BookingOutcome
+                    items={[
+                      { key: "booking", label: "Recurring plan", state: "done", detail: `${planLabel} saved. The engine books each cycle.` , href: "/admin/recurring", hrefLabel: "Open plan" },
+                      {
+                        key: "payment",
+                        label: "Payment",
+                        state: payUrl ? "waiting" : result.usesCredit ? "done" : "todo",
+                        detail: payUrl
+                          ? "Sign-and-pay link sent — awaiting the customer."
+                          : result.usesCredit
+                            ? "Covered by membership credit."
+                            : `Pay per clean at ${fmtMoney(result.perCleanCents || 0)}; each visit is invoiced when booked.`,
+                      },
+                      {
+                        key: "staffing",
+                        label: "Staffing",
+                        state: firstCleanBooked ? "done" : result.firstCleanStatus ? "failed" : "todo",
+                        detail: firstCleanBooked
+                          ? "First clean booked and a cleaner assigned."
+                          : result.firstCleanStatus
+                            ? `First clean not booked (${result.firstCleanStatus}). Staff it from Dispatch & coverage.`
+                            : "First clean will be generated by the engine; staff it when it appears.",
+                        href: firstCleanBooked ? undefined : "/admin/operations?tab=dispatch",
+                        hrefLabel: "Dispatch",
+                      },
+                      {
+                        key: "next",
+                        label: optionalMissed.length ? "Setup partially complete" : "Next action",
+                        state: optionalMissed.length ? "failed" : "todo",
+                        detail: optionalMissed.length
+                          ? `Finish: ${optionalMissed.join(", ")}. The plan itself is saved.`
+                          : "Confirm the customer received the agreement and manage link.",
+                      },
+                    ]}
+                  />
+                );
+              })()}
               <ul className="space-y-1.5 pt-1">
                 <ResultLine ok={firstCleanBooked || !result.firstCleanStatus}
                   label={
@@ -1724,6 +1839,50 @@ export default function VaBooking() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5 pb-8">
+            <BookingOutcome
+              warnings={Array.isArray(result.warnings) ? result.warnings.map(String) : undefined}
+              items={[
+                {
+                  key: "booking",
+                  label: `Booking #${result.bookingNumber || String(result.bookingId || "").slice(0, 8)}`,
+                  state: "done",
+                  detail: "Created as pending. It confirms when the first payment clears.",
+                  href: result.bookingId ? `/admin/bookings?highlight=${encodeURIComponent(result.bookingId)}` : undefined,
+                  hrefLabel: "Open booking",
+                },
+                {
+                  key: "payment",
+                  label: "Payment",
+                  state: result.invoiceMode === "none" ? "todo" : "waiting",
+                  detail:
+                    result.invoiceMode === "none"
+                      ? "No invoice was sent. Collect payment before the visit."
+                      : result.preauthSession
+                        ? `Deposit ${fmtMoney(result.totals?.depositCents ?? pricing.depositCents)} and card hold link sent — awaiting the customer.`
+                        : result.fullInvoice
+                          ? `Full invoice ${fmtMoney(result.totals?.totalCents ?? pricing.totalCents)} sent — awaiting payment.`
+                          : `Deposit invoice ${fmtMoney(result.totals?.depositCents ?? pricing.depositCents)} sent — awaiting payment. Remaining ${fmtMoney(result.totals?.remainingCents ?? pricing.remainingCents)} is billed day-of.`,
+                },
+                {
+                  key: "staffing",
+                  label: "Staffing",
+                  state: "todo",
+                  detail:
+                    "Not staffed yet. A pending booking is staffed once its first payment clears; it then appears in Dispatch & coverage.",
+                  href: result.bookingId ? `/admin/operations?tab=dispatch&job=${encodeURIComponent(result.bookingId)}` : "/admin/operations?tab=dispatch",
+                  hrefLabel: "Dispatch",
+                },
+                {
+                  key: "next",
+                  label: "Next action",
+                  state: "todo",
+                  detail:
+                    result.invoiceMode === "none"
+                      ? "Arrange payment with the customer; the job can't be staffed until it's paid."
+                      : "Follow up if the payment hasn't cleared by end of day, then confirm the job in Dispatch & coverage.",
+                },
+              ]}
+            />
             <div className="rounded-xl bg-slate-50 p-5 space-y-2 text-sm border border-slate-100">
               <SummaryRow label="Customer" value={`${firstName} ${lastName}`.trim()} />
               <SummaryRow label="Service" value={`${serviceLabel} — ${homeSizeLabel}`} />
@@ -1930,6 +2089,7 @@ export default function VaBooking() {
             <div className="mt-3">
               <Field label="Why this booking breaks a rule" required>
                 <Input
+                  id="bk-override-note"
                   value={adminOverrideNote}
                   onChange={(e) => setAdminOverrideNote(e.target.value)}
                   placeholder="Example: customer is just outside the zone and approved a custom price"
@@ -2022,11 +2182,40 @@ export default function VaBooking() {
         </Card>
       )}
 
+      {/* Jump links: one call workspace, four sections. Values persist when
+          moving between them. */}
+      <nav aria-label="Booking sections" className="sticky top-14 z-20 -mx-1 mb-4 flex gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white/95 p-1 backdrop-blur">
+        {[
+          { id: "bk-sec-customer", label: "Customer" },
+          { id: "bk-service", label: "Service" },
+          { id: "bk-sec-schedule", label: "Schedule" },
+          { id: "bk-sec-payment", label: isRecurring ? "Billing" : "Payment" },
+        ].map((l, i) => (
+          <button
+            key={l.id}
+            type="button"
+            onClick={() => focusBookerTarget(l.id)}
+            className="shrink-0 rounded-lg px-3 py-1.5 text-[13px] font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/40"
+          >
+            <span className="mr-1.5 text-slate-400 tabular-nums">{i + 1}</span>
+            {l.label}
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => focusBookerTarget("bk-quote")}
+          className="ml-auto shrink-0 rounded-lg px-3 py-1.5 text-[13px] font-medium text-violet-700 hover:bg-violet-50 xl:hidden"
+        >
+          Quote
+        </button>
+      </nav>
+
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
         {/* LEFT — form */}
         <div className="xl:col-span-8 space-y-5">
           {/* 1 — Customer */}
           <FormSection
+            id="bk-sec-customer"
             number={1}
             title="Customer"
             description="Who is this booking for? Serviceable in Maryland, DC, and Northern Virginia."
@@ -2035,6 +2224,7 @@ export default function VaBooking() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Field label="First name" required>
                 <Input
+                  id="bk-first-name"
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
                   placeholder="Anthony"
@@ -2059,6 +2249,7 @@ export default function VaBooking() {
                 }
               >
                 <Input
+                  id="bk-email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -2067,6 +2258,7 @@ export default function VaBooking() {
               </Field>
               <Field label="Phone" required>
                 <Input
+                  id="bk-phone"
                   type="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
@@ -2109,6 +2301,7 @@ export default function VaBooking() {
               <div className="col-span-6 md:col-span-3">
                 <Field label="ZIP" required>
                   <Input
+                    id="bk-zip"
                     value={zipCode}
                     onChange={(e) => setZipCode(e.target.value)}
                     maxLength={5}
@@ -2134,6 +2327,7 @@ export default function VaBooking() {
 
           {/* 2 — Service */}
           <FormSection
+            id="bk-service"
             number={2}
             title="Service"
             description="Type, size, and add-ons. Pricing updates in the rail."
@@ -2389,48 +2583,13 @@ export default function VaBooking() {
             )}
 
             <div className="space-y-2">
-              <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                Add-ons
+              <Label htmlFor="bk-extras" className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                {isRecurring ? "Extras on every visit" : "Extras"}
               </Label>
-              <div className="flex flex-wrap gap-2">
-                {ADD_ON_LIST.filter((a) => !(isRecurring && a.id === "firstCleanDeep")).map((a) => {
-                  const checked = addOns.includes(a.id);
-                  return (
-                    <button
-                      key={a.id}
-                      type="button"
-                      onClick={() =>
-                        setAddOns(
-                          checked
-                            ? addOns.filter((x) => x !== a.id)
-                            : [...addOns, a.id],
-                        )
-                      }
-                      className={cn(
-                        "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors",
-                        checked
-                          ? "border-violet-500 bg-violet-50 text-violet-900"
-                          : "border-slate-200 bg-white text-slate-700 hover:border-violet-300",
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "w-4 h-4 rounded-full inline-flex items-center justify-center border",
-                          checked
-                            ? "bg-violet-600 border-violet-600 text-white"
-                            : "border-slate-300",
-                        )}
-                      >
-                        {checked && <RiCheckLine className="w-2.5 h-2.5" />}
-                      </span>
-                      <span className="font-medium">{a.label}</span>
-                      <span className="text-xs text-slate-500 tabular-nums">
-                        +{fmtMoney(a.priceCents)}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+              {/* Per-visit extras only. The Glow first-visit deep clean is its
+                  own decision above; pest / mold findings go through the
+                  scope adjustment on the job, not this picker. */}
+              <ExtrasPicker id="bk-extras" value={addOns} onChange={setAddOns} serviceType={isRecurring ? "standard" : serviceType} />
             </div>
 
             <div className={cn("grid grid-cols-1 gap-4", isRecurring ? "sm:grid-cols-2" : "sm:grid-cols-3")}>
@@ -2603,6 +2762,7 @@ export default function VaBooking() {
 
           {/* 3 — Schedule (custom violet-themed inline picker) */}
           <FormSection
+            id="bk-sec-schedule"
             number={3}
             title={isRecurring ? "First clean & cadence" : "Schedule"}
             description={
@@ -2612,6 +2772,7 @@ export default function VaBooking() {
             }
             icon={<RiCalendarLine className="w-4 h-4" />}
           >
+            <div id="bk-schedule" tabIndex={-1} aria-label="Date and time" className="h-0 focus:outline-none" />
             <InlineSchedulePicker
               selectedDate={selectedDate}
               selectedTime={selectedTime}
@@ -2646,6 +2807,7 @@ export default function VaBooking() {
 
           {/* 4 — Payment / Billing */}
           <FormSection
+            id="bk-sec-payment"
             number={4}
             title={isRecurring ? "Billing & cleaner" : "Payment"}
             description={
@@ -2727,6 +2889,7 @@ export default function VaBooking() {
                         type="number"
                         min={0}
                         step={0.01}
+                        id="bk-adjust-total"
                         value={overrideTotal}
                         onChange={(e) => setOverrideTotal(e.target.value)}
                         placeholder={(pricing.computedCents / 100).toFixed(2)}
@@ -2735,7 +2898,7 @@ export default function VaBooking() {
                     </Field>
                     <Field label="Reason (required)">
                       <Select value={overrideReason} onValueChange={setOverrideReason}>
-                        <SelectTrigger className="bg-white">
+                        <SelectTrigger id="bk-adjust-reason" className="bg-white">
                           <SelectValue placeholder="Pick a reason…" />
                         </SelectTrigger>
                         <SelectContent>
@@ -2966,8 +3129,8 @@ export default function VaBooking() {
         </div>
 
         {/* RIGHT — sticky quote rail */}
-        <aside className="xl:col-span-4">
-          <div className="xl:sticky xl:top-6 space-y-4">
+        <aside className="xl:col-span-4 pb-20 xl:pb-0" id="bk-quote" tabIndex={-1} aria-label="Live quote">
+          <div className="xl:sticky xl:top-28 space-y-4">
             <Card className="border border-slate-200 rounded-2xl overflow-hidden shadow-[0_4px_24px_-12px_rgba(15,23,42,0.12)]">
               <div className="relative bg-gradient-to-br from-violet-600 via-violet-500 to-teal-500 px-5 py-5 text-white">
                 <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full blur-2xl -translate-y-8 translate-x-8" />
@@ -2997,35 +3160,16 @@ export default function VaBooking() {
                     <RiLoader4Line className="w-3 h-3 animate-spin" /> Updating quote…
                   </p>
                 )}
-                {pricing.isRecurring ? (
-                  <SummaryRow
-                    label={`${CADENCE_PLAN_LABEL[cadence]} · ${HOME_SIZE_RANGES.find((h) => h.id === homeSizeId)?.label?.replace(" sq ft", "") || ""}`}
-                    value={`${fmtMoney(pricing.perCleanCents)}/clean`}
-                  />
-                ) : (
-                  <SummaryRow
-                    label={`${SERVICE_TYPE_OPTIONS.find((s) => s.id === serviceType)?.label} · ${HOME_SIZE_RANGES.find((h) => h.id === homeSizeId)?.label?.replace(" sq ft", "") || ""}`}
-                    value={fmtMoney(pricing.serviceCents)}
-                  />
-                )}
-                {pricing.addOnsCents > 0 && (
-                  <SummaryRow
-                    label={`Add-ons (${addOns.length})${pricing.isRecurring ? " · each visit" : ""}`}
-                    value={pricing.isRecurring ? "included" : `+${fmtMoney(pricing.addOnsCents)}`}
-                  />
-                )}
+                <BookerQuoteLines
+                  lines={quoteLines}
+                  recurring={recurringRail}
+                  perVisitLabel={`${CADENCE_PLAN_LABEL[cadence]} · ${HOME_SIZE_RANGES.find((h) => h.id === homeSizeId)?.label?.replace(" sq ft", "") || ""}`}
+                />
                 <Separator className="my-1.5" />
-                <div className="flex items-center justify-between">
-                  <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
-                    {pricing.isRecurring ? "Per clean" : "Total"}
-                  </span>
-                  <span className="font-jakarta text-2xl font-bold text-slate-900 tabular-nums">
-                    {fmtMoney(pricing.isRecurring ? pricing.perCleanCents : pricing.totalCents)}
-                    {pricing.isRecurring && (
-                      <span className="text-sm font-semibold text-slate-500">/clean</span>
-                    )}
-                  </span>
-                </div>
+                <BookerTotals oneTime={oneTimeRail} recurring={recurringRail} />
+                {!isRecurring && (
+                  <LockStatus savedQuoteId={savedQuoteId} lockedUntil={dynQuote.lock?.lockedUntil} reprice={dynQuote.reprice} />
+                )}
                 {pricing.isRecurring ? (
                   <div className="space-y-2 pt-1">
                     {selectedDate && (
@@ -3058,26 +3202,7 @@ export default function VaBooking() {
                       </div>
                     </div>
                   </div>
-                ) : (
-                  <div className="grid grid-cols-2 gap-2 pt-1">
-                    <div className="rounded-lg bg-slate-50 border border-slate-200 px-2.5 py-1.5">
-                      <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">
-                        Deposit
-                      </p>
-                      <p className="text-sm font-bold text-slate-900 tabular-nums">
-                        {fmtMoney(pricing.depositCents)}
-                      </p>
-                    </div>
-                    <div className="rounded-lg bg-slate-50 border border-slate-200 px-2.5 py-1.5">
-                      <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">
-                        Day-of
-                      </p>
-                      <p className="text-sm font-bold text-slate-900 tabular-nums">
-                        {fmtMoney(pricing.remainingCents)}
-                      </p>
-                    </div>
-                  </div>
-                )}
+                ) : null}
 
                 {!pricing.isRecurring && walletCreditCents > 0 && (
                   <div className="rounded-lg bg-violet-50 border border-violet-200 px-3 py-2 text-xs text-violet-800 flex items-center gap-1.5 mt-2">
@@ -3091,7 +3216,7 @@ export default function VaBooking() {
 
                 {!isRecurring && (
                   <label className="flex items-start gap-2.5 text-sm cursor-pointer rounded-lg border border-primary/20 bg-primary/[0.03] p-3 mt-3">
-                    <Checkbox checked={vaAgreedOnPhone} onCheckedChange={(v) => setVaAgreedOnPhone(v === true)} className="mt-0.5" />
+                    <Checkbox id="bk-agree" checked={vaAgreedOnPhone} onCheckedChange={(v) => setVaAgreedOnPhone(v === true)} className="mt-0.5" />
                     <span>
                       I confirm the client <strong>verbally agreed</strong> to the Terms of Service, Disclaimer, Refund Policy
                       {" & One-Time Service Agreement"}{" "}
@@ -3164,11 +3289,10 @@ export default function VaBooking() {
                     </>
                   )}
                 </Button>
-                {savedQuoteId && (
-                  <p className="text-[11px] text-emerald-700 text-center mt-1">
-                    Quote saved · ID: {savedQuoteId.slice(0, 8)}…
-                  </p>
-                )}
+                {savedQuoteId && <SavedQuotePanel quoteId={savedQuoteId} isAdmin={isAdmin} />}
+                <div className="mt-2">
+                  <CopySummaryButton text={quoteSummary} />
+                </div>
 
                 {!canSubmit && requirements.length > 0 && (
                   <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-[11px] text-amber-900 mt-1">
@@ -3176,9 +3300,17 @@ export default function VaBooking() {
                       <RiInformationLine className="w-3.5 h-3.5" />
                       Still needed
                     </div>
-                    <ul className="list-disc list-inside space-y-0.5">
+                    <ul className="space-y-0.5">
                       {requirements.map((r) => (
-                        <li key={r}>{r}</li>
+                        <li key={r.label}>
+                          <button
+                            type="button"
+                            onClick={() => focusBookerTarget(r.target)}
+                            className="text-left underline decoration-amber-400 underline-offset-2 hover:text-amber-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50 rounded"
+                          >
+                            {r.label}
+                          </button>
+                        </li>
                       ))}
                     </ul>
                   </div>
@@ -3204,6 +3336,16 @@ export default function VaBooking() {
           </div>
         </aside>
       </div>
+      <CompactQuoteBar
+        label={isRecurring ? "First visit" : "Total"}
+        amountCents={isRecurring ? recurringRail?.firstVisitCents ?? 0 : pricing.totalCents}
+        sub={
+          isRecurring
+            ? `Then ${fmtMoney(recurringRail?.laterVisitsCents ?? 0)} / visit · ${CADENCE_PLAN_LABEL[cadence]}`
+            : `Due today ${fmtMoney(pricing.depositCents)} · Remaining ${fmtMoney(pricing.remainingCents)}`
+        }
+        loading={dynQuote.loading}
+      />
     </div>
   );
 }
@@ -3445,13 +3587,23 @@ function InlineSchedulePicker({
 
 // ─── Form section + helpers ────────────────────────────────────────────
 
+/** Scroll a booker section or field into view and move focus to it. */
+function focusBookerTarget(id: string) {
+  const el = document.getElementById(id) as HTMLElement | null;
+  if (!el) return;
+  el.scrollIntoView({ behavior: "smooth", block: "center" });
+  el.focus({ preventScroll: true });
+}
+
 function FormSection({
+  id,
   number,
   title,
   description,
   icon,
   children,
 }: {
+  id?: string;
   number: number;
   title: string;
   description?: string;
@@ -3459,7 +3611,13 @@ function FormSection({
   children: React.ReactNode;
 }) {
   return (
-    <Card className="border border-slate-200 rounded-2xl shadow-[0_1px_2px_0_rgba(15,23,42,0.04)]">
+    <Card
+      id={id}
+      tabIndex={id ? -1 : undefined}
+      aria-labelledby={id ? `${id}-title` : undefined}
+      role={id ? "region" : undefined}
+      className="scroll-mt-24 border border-slate-200 rounded-2xl shadow-[0_1px_2px_0_rgba(15,23,42,0.04)] focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/40"
+    >
       <CardHeader className="pb-3">
         <div className="flex items-start gap-3">
           <span className="relative shrink-0 w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-violet-700 text-white inline-flex items-center justify-center font-jakarta font-bold text-sm shadow-[0_2px_8px_-2px_rgba(16,163,74,0.45)]">
@@ -3468,7 +3626,7 @@ function FormSection({
           <div className="min-w-0 flex-1 pt-0.5">
             <div className="flex items-center gap-1.5">
               <span className="text-violet-700">{icon}</span>
-              <CardTitle className="font-jakarta text-base font-bold text-slate-900 tracking-tight">
+              <CardTitle id={id ? `${id}-title` : undefined} className="font-jakarta text-base font-bold text-slate-900 tracking-tight">
                 {title}
               </CardTitle>
             </div>

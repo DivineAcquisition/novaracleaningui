@@ -5,7 +5,7 @@ category: How the Tool Works
 summary: Taking a booking for a customer on the phone, start to finish, including what blocks the submit button.
 whoCanSee: Admins and VAs
 where: /admin/csr
-lastVerified: 2026-08-29
+lastVerified: 2026-11-27
 order: 4
 ---
 
@@ -13,8 +13,12 @@ Internal Booking is the form you fill in when you're taking a booking yourself �
 the customer on the phone. It does everything the public booking funnel does, plus the things
 only we can do: adjust the price, choose how they're invoiced, and set up a recurring plan.
 
-It is a single screen with four numbered sections and a **Live quote** rail on the right that
-updates as you type.
+It is a single screen — open it from **+ New booking** at the top of the sidebar — with four
+numbered sections (Customer, Service, Schedule, Payment), a row of jump links to move between
+them, and a **Live quote** rail on the right that updates as you type. On a phone or narrow
+window the rail drops below the form and a bar pinned to the bottom keeps the price in view.
+Values you type are kept as you move between sections. On a fresh call the existing-customer
+search is open first.
 
 ## Before you start: one-time or recurring
 
@@ -72,7 +76,18 @@ judgement from what the customer describes, and it's worth asking about directly
 assuming: when was it last cleaned professionally, are there pets, is there build-up in the
 bathrooms and kitchen.
 
-**Add-ons** are the pill toggles with prices on them.
+**Extras** are picked from a searchable checklist: click **Add extras** (or tab to it and
+press Enter), type to filter, and press Enter or click to tick each one — the list stays open
+until you press **Done** or Escape. Extras are grouped into Kitchen, Laundry & linens, Detail
+cleaning and Additional spaces. Each row shows what it will actually cost on this service
+before you pick it: **Included** for inside fridge and inside oven on a Move-In/Out, the unit
+where there is one (laundry is **per load** — one load is priced), and the per-visit price
+otherwise. What you picked appears under the field as chips; the × on a chip removes it.
+
+Two things are deliberately not in the checklist: the Glow **first-visit deep clean** (its own
+yes/no prompt on recurring plans) and on-site findings like light pest or minor mold, which
+are priced through the scope adjustment on the job. An older quote that carries one of these
+shows it as an amber chip so you can see it and remove it.
 
 If you pick **Focused / Single-Area**, the form switches to a list of areas with prices, and
 a minimum is shown. Bedrooms are the only area you can pick more than one of.
@@ -145,8 +160,18 @@ The rail on the right is the customer's price, built in front of you.
 @screenshot internal-booking-quote-rail
 
 It shows the zone the ZIP resolved to, the base rate for the home size, the condition step
-and what it added, a line about demand (currently in shadow mode — not charged), then the
-total, and the deposit and day-of split.
+and what it added, and a line about demand (currently in shadow mode — not charged). Under
+that the quote is itemised on separate lines: **Add-ons** (charged, with a count),
+**Included** (selected but free on this service), **Surcharges** (for example same-day) and
+**Adjustments** (a zone minimum, a held locked price, or your price adjustment). Then:
+
+- **One-time:** Total · Due today · Remaining balance.
+- **Recurring:** First visit · Later visits · Cadence. The $75 first-visit deep clean is
+  counted once, on the first visit only.
+
+If a quote is locked the rail says until when; once it has expired, or you change the
+property, service, extras or date, it tells you the price has been repriced. **Copy quote
+summary** puts the same lines on your clipboard for an email or text.
 
 **Read it before you quote.** It's the difference between "that'll be about three hundred"
 and "it's $298.75 — that's $239 for a home your size, plus 25% because it's a standard
@@ -158,8 +183,9 @@ For a full explanation of every layer, with worked examples, see
 
 ## Before you can submit
 
-The rail lists what's still missing under **Still needed**. The submit button stays disabled
-until that list is empty. It checks:
+The rail lists what's still missing under **Still needed**. Each item is a link: click it and
+the cursor jumps to the field that fixes it. The submit button stays disabled until that list
+is empty. It checks:
 
 - First name
 - A valid email
@@ -187,19 +213,23 @@ way.
 **Save as quote** stores the quote without creating a booking, and **locks the price for 48
 hours**. It needs the customer's name, email, home size and service type.
 
-Reopen it later from [Quotes](/docs/quotes) or via the link it gives you, and the customer
+After saving, the rail shows **Reopen quote** and **Copy resume link** — VAs and admins can
+both use these (the Quotes list itself is admin-only). Reopen it from that link, or an admin
+can find it in [Quotes](/docs/quotes), and the customer
 gets the price you promised — as long as you're inside the window and the details haven't
 changed. Past 48 hours it re-prices and shows you the difference, which you should state to
 the customer before booking.
 
 ## After you submit
 
-**One-time.** You get a confirmation reading **"Booking #NNNNN pending"** with a note that
-the SMS and payment link have been sent and the booking stays pending until the deposit
-clears. From there you can **Book another** or **Open in Bookings**.
+**One-time.** You get a confirmation reading **"Booking #NNNNN pending"** and four separate
+lines: **Booking** (created), **Payment** (which invoice or link went out and that it's
+awaiting the customer), **Staffing** (not staffed until the first payment clears) and **Next
+action**.
 
-**Recurring.** You get **"Recurring plan created"** and a link to the Recurring hub. The
-engine books each cycle from then on.
+**Recurring.** You get **"Recurring plan created"** with the same four lines. If the first
+clean, checklist or agreement didn't go out, the last line reads **Setup partially
+complete** and names what to finish — the plan itself is still saved.
 
 :::note "Pending" is expected, not a problem
 A new one-time booking is pending until the deposit is paid. It won't be staffed while it's
