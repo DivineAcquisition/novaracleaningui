@@ -548,7 +548,7 @@ export function ScopeAdjustmentDialog({
               <div>
                 <Label className="text-xs">Add-ons performed (catalog)</Label>
                 <p className="text-[11px] text-slate-500 mt-0.5 mb-1.5">
-                  Same list as Internal Booking and the Bookings tab. Pest — Light and Mold — Minor (surface)
+                  Same list as New booking and the Bookings tab. Pest — Light and Mold — Minor (surface)
                   are the in-scope site findings ($65, Focused Clean area rate). Selecting the matching reason
                   adds them automatically. First-clean deep is the $75 Glow reset.
                 </p>

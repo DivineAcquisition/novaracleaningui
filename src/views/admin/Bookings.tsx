@@ -3043,7 +3043,7 @@ function BookingSheet({
                     First-clean deep clean
                   </CardTitle>
                   <CardDescription>
-                    Same prompt as public Glow checkout and Internal Booking. $75 one-time reset on this visit only — it does not copy to later membership cleans.
+                    Same prompt as public Glow checkout and New booking. $75 one-time reset on this visit only — it does not copy to later membership cleans.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">

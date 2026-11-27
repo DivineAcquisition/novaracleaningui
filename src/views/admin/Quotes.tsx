@@ -442,7 +442,7 @@ export default function AdminQuotes() {
         <div>
           <h1 className="font-jakarta text-2xl font-bold text-slate-900 tracking-tight">Quotes</h1>
           <p className="text-sm text-slate-500">
-            Saved Internal Booking quotes and website custom-quote requests · send customer
+            Saved New booking quotes and website custom-quote requests · send customer
             checklists by email or SMS.
           </p>
         </div>
@@ -489,7 +489,7 @@ export default function AdminQuotes() {
         <TabsContent value="va" className="mt-4">
           <QuoteTable
             loading={loading}
-            empty="No saved quotes yet. Save one from Internal Booking."
+            empty="No saved quotes yet. Save one from New booking."
             headers={["Customer", "Service", "Price", "Status", "Saved", ""]}
             rows={filteredVa.map((q) => (
               <tr
@@ -843,7 +843,7 @@ function VaQuoteSheet({
               <Separator />
 
               <Button asChild variant="outline" className="w-full border-violet-200 text-violet-800">
-                <Link href={`/admin/csr?quoteId=${quote.id}`}>Open in Internal Booking</Link>
+                <Link href={`/admin/csr?quoteId=${quote.id}`}>Resume in New booking</Link>
               </Button>
             </div>
           </>

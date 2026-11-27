@@ -1653,7 +1653,7 @@ export default function VaBooking() {
       result.firstCleanStatus === "created" || result.firstCleanStatus === "existing";
     return (
       <div className="max-w-2xl mx-auto">
-        <SEO title="Novara Internal Booking" noindex />
+        <SEO title="New booking · Novara" noindex />
         <Card className="border border-slate-200 shadow-[0_4px_24px_-12px_rgba(15,23,42,0.12)] rounded-2xl overflow-hidden">
           <div className="h-1.5 w-full bg-gradient-to-r from-violet-500 via-violet-400 to-teal-400" />
           <CardHeader className="text-center pt-10">
@@ -1821,7 +1821,7 @@ export default function VaBooking() {
     const serviceDate = selectedDate ? format(selectedDate, "MMM d, yyyy") : "";
     return (
       <div className="max-w-2xl mx-auto">
-        <SEO title="Novara Internal Booking" noindex />
+        <SEO title="New booking · Novara" noindex />
         <Card className="border border-slate-200 shadow-[0_4px_24px_-12px_rgba(15,23,42,0.12)] rounded-2xl overflow-hidden">
           <div className="h-1.5 w-full bg-gradient-to-r from-violet-500 via-violet-400 to-teal-400" />
           <CardHeader className="text-center pt-10">
@@ -1964,7 +1964,7 @@ export default function VaBooking() {
   // ─── Form ───────────────────────────────────────────────────────────
   return (
     <div className="max-w-[1240px] mx-auto">
-      <SEO title="Novara Internal Booking" noindex />
+      <SEO title="New booking · Novara" noindex />
 
       {/* Page header — SaaS eyebrow + title + actions */}
       <header className="mb-7">
@@ -1986,7 +1986,7 @@ export default function VaBooking() {
         <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
           <div>
             <h1 className="font-jakarta text-[28px] leading-tight font-bold tracking-tight text-slate-900">
-              Novara Internal Booking
+              New booking
             </h1>
             <p className="text-sm text-slate-500 mt-1 max-w-2xl">
               {isRecurring

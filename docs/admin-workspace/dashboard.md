@@ -1,11 +1,11 @@
 ---
-title: Getting around & the Dashboard
+title: Getting around & Today
 area: Dashboard
 category: How the Tool Works
-summary: What the workspace is, how it's laid out, why you may not see every section, and what the dashboard is telling you.
+summary: What the workspace is, how the sidebar is grouped, why you may not see every section, and what Today is telling you.
 whoCanSee: Admins and VAs
 where: /admin/dashboard
-lastVerified: 2026-09-04
+lastVerified: 2026-11-27
 order: 1
 ---
 
@@ -28,26 +28,43 @@ will tell you — see below.
 
 ## The sidebar
 
-Every section of the workspace is in the left sidebar, with a one-line description of what
-it's for.
+The left sidebar starts with a **+ New booking** button (the call workspace), then five
+groups. Click a group heading to collapse it; the workspace remembers that, and opens a group
+again automatically when you go to a page inside it. On a phone the same menu opens from the
+☰ button and closes as soon as you pick a page.
 
 @screenshot dashboard-sidebar
 
+| Group | Pages, in order |
+|---|---|
+| **Daily work** | Today · Bookings · Dispatch & coverage · Quality control |
+| **Sales & clients** | Quotes · Proposals · Customers · Business accounts · Recurring plans |
+| **Workforce** | Cleaners & crews · Hiring & onboarding |
+| **Finance & reports** | Cleaner pay · Profit & loss · VA performance · Weekly report |
+| **Settings** | Pricing rules · Team access · Email settings & delivery · Booking compliance · Assistant settings |
+
+**Ask Novara** (the assistant) is the button in the top bar, and **Search** (⌘K / Ctrl+K)
+finds any page, booking or cleaner. Search also understands the old names, so typing
+"Internal Booking", "CSR", "Operations", "Accounts", "Payroll" or "Intake" still takes you to
+the right place.
+
 **You may not see all of them.** There are two levels of access:
 
-- **VA** — the operational set: Dashboard, Bookings, Operations, Cleaners, Internal Booking,
-  Proposals, Customers, Recurring, and Quality Control.
-- **Full admin** — all of the above plus the money, roles and commercial surfaces: Quotes,
-  Pricing, Commercial, Payroll, P&L, VA Performance, Weekly Report, and Team.
+- **VA** — Daily work, plus Proposals, Customers and Recurring plans, plus Cleaners & crews
+  and Hiring & onboarding (which for a VA opens the applicant pipeline inside Cleaners).
+  Groups with nothing you can open are hidden.
+- **Full admin** — everything, including Quotes, Business accounts, the whole Finance &
+  reports group and Settings.
 
-If a section isn't in your sidebar, you don't have access to it, and typing the address in
+If a page isn't in your sidebar, you don't have access to it, and typing the address in
 directly won't help. You'll get a message reading **"Admins only — this section is restricted
-to admins"** and get sent back to the dashboard.
+to admins"** and get sent back to Today.
 
 :::note This is not a "you're not trusted" thing
 The split is about blast radius, not seniority. The admin-only sections are the ones where a
-mistake moves money (Payroll), changes what every future customer is charged (Pricing), or
-grants somebody access (Team). Everything you need to run the day is in the VA set.
+mistake moves money (Cleaner pay), changes what every future customer is charged (Pricing
+rules), or grants somebody access (Team access). Everything you need to run the day is in the
+VA set.
 :::
 
 Each guide in this set says at the top who can see that section, so you can check before
@@ -55,64 +72,80 @@ going looking for something.
 
 ## What each section is for
 
-| Section | Use it when |
+| Section (former name) | Use it when |
 |---|---|
-| **Dashboard** | You want a quick read on today. |
+| **+ New booking** (Internal Booking, CSR) | You're on the phone with a customer: quote, save, resume or book. |
+| **Today** (Dashboard) | You want to know what needs a decision now. |
 | **Bookings** | You need to find, change, cancel, refund or staff a specific job. |
-| **Operations** | Something today is at risk, or a job needs a cleaner. |
-| **Cleaners** | Anything about a contractor — their status, scores, onboarding, conduct. |
-| **Internal Booking** | You're on the phone with a customer and taking the booking yourself. |
-| **Proposals** | A business wants a quote for recurring commercial or office work. |
+| **Dispatch & coverage** (Operations) | Something today is at risk, or a job needs a cleaner. |
+| **Quality control** | A customer complained, or a job needs documenting or defending. |
 | **Quotes** | You want to find a quote someone saved earlier. |
-| **Pricing** | You're changing what the business charges. Rare, and admin-only. |
-| **Commercial** | Managing commercial accounts, walkthroughs, insurance, STR turnovers. |
+| **Proposals** | A business wants a quote for recurring commercial or office work. |
 | **Customers** | Account-level things: credits, refunds, billing links, password resets. |
-| **Recurring** | Memberships and repeating cleans. |
-| **Payroll** | Paying contractors. |
-| **P&L** | Collected vs pipeline revenue, ad spend, contribution, ROAS. |
-| **Quality Control** | A customer complained, or a job needs documenting or defending. |
-| **VA Performance** | Reviewing how the VA team is doing. |
-| **Weekly Report** | The weekly sales and growth PDF. |
-| **Team** | Adding or removing people's access. |
+| **Business accounts** (Accounts, Commercial) | Commercial accounts, STR hosts, property managers, insurance. |
+| **Recurring plans** (Recurring) | Memberships and repeating cleans. |
+| **Cleaners & crews** (Cleaners) | Anything about a contractor — status, scores, crews, conduct. |
+| **Hiring & onboarding** (Intake, Applicants) | Applicants and onboarding. |
+| **Cleaner pay** (Payroll) | Paying contractors. |
+| **Profit & loss** (P&L) | Collected vs pipeline, ad spend, contribution, ROAS. |
+| **VA performance** | Reviewing how the VA team is doing. |
+| **Weekly report** | The weekly sales and growth report. |
+| **Pricing rules** (Pricing) | You're changing what the business charges. Rare, and admin-only. |
+| **Team access** (Team) | Adding or removing people's access. |
+| **Email settings & delivery** (Email) | Email types, templates, consent, delivery lookup. |
+| **Booking compliance** (Compliance) | Acceptances, wording, privacy requests. |
+| **Assistant settings** (Assistant) | What Ask Novara may answer, and its review queue. |
 
-## The dashboard
+## Today
 
-The dashboard is a read-only summary of **today in Eastern Time**. There is nothing to click
-that changes anything — it's the "how are we doing" screen, not a working screen.
+Today is a summary of **today in Eastern Time**, in the order you'd work it.
 
 @screenshot dashboard-overview
 
-**Bookings today** counts every booking scheduled for today that is not cancelled, with how
-many are still on and how many are already done underneath.
+**Needs a decision** comes first. Each row is one job: its booking number and customer, when
+it's due, why it's on the list and a button for the next action, which opens that exact
+record. A job lands here when it is:
 
-**Revenue today** adds up today's remaining jobs (final charge where a job has one, estimate
-otherwise). The smaller number underneath is **collected this month** and **still booked this
-month** — two different piles. Re-cleans are $0.
+- **Needs staffing** — paid and confirmed, no cleaner, visit within two days.
+- **Awaiting deposit** — created but unpaid, visit within three days. It can't be staffed
+  until it's paid.
+- **Missing details** — booking details incomplete, visit within three days.
+- **Not closed out** — the visit date passed in the last week and the job isn't marked
+  complete.
+
+Unresolved dispatch alerts and offers still waiting on a cleaner are counted at the top of the
+same card, with a link to Dispatch & coverage. If the list can't load, the card says so
+rather than showing an empty list.
+
+**Coming up this week** lists today's jobs and the next seven days.
+
+**Live activity** is a running feed of bookings created, offers sent and accepted, jobs
+completed and texts going out. It updates by itself.
+
+Then **Metrics**:
+
+**Bookings today** counts every booking scheduled for today that is not cancelled, with how
+many are still on and how many are done.
+
+**Booked value today** adds up the prices of today's jobs (final charge where a job has one,
+estimate otherwise). It is what the jobs are worth, **not money received**. Underneath: this
+month's **completed** job value and **still booked** job value. Re-cleans are $0.
 
 **Active cleaners** is contractors who are both approved and currently active. It is not how
 many are working today.
 
-**Pending offers** is job offers sent to cleaners that nobody has answered yet. If there's an
-amber number under it, there are unresolved dispatch alerts and Operations is where you deal
-with them.
+**Pending offers** is job offers nobody has answered yet.
 
-**Coming up this week** lists today's jobs and the next seven days on the calendar, so a quiet
-today does not look like an empty business.
+**Last 30 days** plots jobs on the calendar and completed job value. If the daily-metrics view
+is empty, the chart is built from bookings instead.
 
-**Last 30 days** plots jobs on the calendar and revenue collected. If the daily-metrics view
-is empty, the chart is built from bookings instead so it is not a strip of blank bars.
+Full admins also see a **Profit & Loss** strip linking to the P&L screen, which is where
+collected cash lives.
 
-**Live activity** is a running feed of things happening right now — bookings created, offers
-sent, offers accepted, jobs completed, texts going out. It updates by itself; you don't need
-to refresh.
-
-Full admins also see a **Profit & Loss** strip with this month's collected and booked totals
-and a link to the P&L screen.
-
-:::note Revenue today and Payroll will not agree, and that's correct
-Revenue today counts what jobs are worth. Payroll counts what contractors are owed. They
-measure different things and neither is wrong. If you need the money picture — ads, job
-profit, contribution, ROAS — use **P&L**, not this tile.
+:::note Booked value and Cleaner pay will not agree, and that's correct
+Booked value counts what jobs are worth. Cleaner pay counts what contractors are owed. Neither
+is money collected. For the money picture — collected, ads, job profit, contribution, ROAS —
+use **Profit & loss**.
 :::
 
 ## Things worth knowing before you start

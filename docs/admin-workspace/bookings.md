@@ -5,7 +5,7 @@ category: How the Tool Works
 summary: Finding a job, changing it, staffing it, refunding it — and the two things that block an assignment.
 whoCanSee: Admins and VAs
 where: /admin/bookings
-lastVerified: 2026-08-29
+lastVerified: 2026-11-27
 order: 2
 ---
 
@@ -17,7 +17,13 @@ If a customer is on the phone about an existing job, this is where you go.
 
 ## Finding a booking
 
-The screen opens as a list with a search box and two filters above it.
+The screen opens as a list with a row of **views**, a search box and two filters above it.
+
+The views are saved queues, each with a count: **All**, **Today**, **Awaiting deposit**
+(created, first payment not received), **Needs staffing** (paid and confirmed, no cleaner)
+and **Cleaner done · review**. The view is part of the page address, so a link to
+`/admin/bookings?view=needs_staffing` opens straight onto that queue, and opening or closing a
+booking leaves you in the same view.
 
 @screenshot bookings-list
 
@@ -48,9 +54,10 @@ property, where it is, the price, and a status badge.
 
 @screenshot bookings-row
 
-Two extra labels appear under the status when they apply: **Deposit due** (the deposit
-invoice is out and unpaid) and **Can reinstate** (this was cancelled for non-payment and can
-be reopened).
+Under the status badge, two short labels answer separate questions: **payment** (Deposit due,
+Paid, Membership credit, No charge) and **staffing** (Assigned, Unstaffed, or Not yet — a
+pending booking isn't staffed until it's paid). **Can reinstate** appears when a booking was
+cancelled for non-payment and can be reopened.
 
 ## Opening a booking
 

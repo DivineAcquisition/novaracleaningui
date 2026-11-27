@@ -58,6 +58,7 @@ export function screenSlugFromPath(path: string): string | null {
     pricing: "pricing",
     commercial: "commercial",
     partner: "commercial",
+    accounts: "commercial",
     customers: "customers",
     recurring: "recurring",
     payroll: "payroll",
