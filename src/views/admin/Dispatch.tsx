@@ -322,7 +322,15 @@ export default function AdminDispatch() {
       });
       if (error) throw error;
       const payload = (data as any) || {};
-      if (payload.noCleanersAvailable) {
+      if (payload.alreadyApproved) {
+        // Another operator (or an earlier click) already approved it; the
+        // server sent nothing new. Refresh to show the offers that are out.
+        toast.info(
+          payload.reason === "approved_by_another_operator"
+            ? "Another operator approved this job a moment ago — no extra offers were sent."
+            : "Offers are already out for this job — no extra offers were sent. Use pick-cleaners to add more.",
+        );
+      } else if (payload.noCleanersAvailable) {
         toast.warning("No eligible cleaners found right now — try again shortly or assign manually from Bookings.");
       } else {
         toast.success(`Approved — ${payload.offersSent ?? 0} offer(s) sent to cleaners.`);

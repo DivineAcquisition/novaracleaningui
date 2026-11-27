@@ -263,6 +263,36 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
+    // ─── Caller authorization ────────────────────────────────────────────
+    // verify_jwt only proves the caller is signed in — a customer or cleaner
+    // session passes it too. Internal callers (auto-dispatch-booking,
+    // qc-reclean) invoke with the service-role key; anyone else must hold
+    // the admin or VA role before this function may text contractors.
+    const bearer = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+    const internalCaller = Boolean(serviceKey) && bearer === serviceKey;
+    let operatorId: string | null = null;
+    if (!internalCaller) {
+      const userClient = createClient(
+        Deno.env.get("SUPABASE_URL") ?? "",
+        Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+        { global: { headers: { Authorization: `Bearer ${bearer}` } } },
+      );
+      const { data: u } = await userClient.auth.getUser();
+      const { data: roles } = u?.user?.id
+        ? await supabase.from("user_roles").select("role").eq("user_id", u.user.id)
+        : { data: null };
+      const allowed = (roles || []).some((r: { role: string }) => r.role === "admin" || r.role === "va");
+      if (!u?.user?.id || !allowed) {
+        logStep("Rejected dispatch from a non-operator session", { userId: u?.user?.id ?? null });
+        return new Response(
+          JSON.stringify({ error: "Admins or VAs only." }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 403 },
+        );
+      }
+      operatorId = u.user.id;
+    }
+
     // ─── HARD GATE (defense-in-depth) ────────────────────────────────────
     // Offer SMS may ONLY leave this function when the call carries the
     // admin-approval flag, or the operator explicitly re-enabled
@@ -297,6 +327,54 @@ serve(async (req) => {
 
     if (jobError || !job) {
       throw new Error(`Job not found: ${jobError?.message}`);
+    }
+
+    // ─── One approval per job (operators) ────────────────────────────────
+    let claimedApproval = false;
+    // If this approval claimed the job but sends nothing (no eligible
+    // cleaner, compliance block), put it back in the approval queue so the
+    // operator still sees the Approve button.
+    const releaseApprovalClaim = async () => {
+      if (!claimedApproval) return;
+      claimedApproval = false;
+      await supabase.from("jobs").update({ status: "Pending Approval" }).eq("id", jobId).eq("status", "Dispatching");
+    };
+    // Two operators can open the same parked job. Claim the approval with a
+    // conditional status flip so only one send happens; a retry or the
+    // second click gets "already approved" instead of texting the next
+    // batch of cleaners. Backfill and hand-picked sends are explicit asks
+    // and keep their existing behaviour.
+    if (!internalCaller && approved && !backfill && !offerExactSelection) {
+      const alreadyApproved = (reason: string) =>
+        new Response(
+          JSON.stringify({ success: true, alreadyApproved: true, offersSent: 0, noCleanersAvailable: false, reason }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
+        );
+      if (String(job.status) === "Pending Approval") {
+        const { data: claimed } = await supabase
+          .from("jobs")
+          .update({ status: "Dispatching" })
+          .eq("id", jobId)
+          .eq("status", "Pending Approval")
+          .select("id");
+        if (!claimed || claimed.length === 0) {
+          logStep("Approval already claimed by another operator", { jobId, operatorId });
+          return alreadyApproved("approved_by_another_operator");
+        }
+        job.status = "Dispatching";
+        claimedApproval = true;
+        logStep("Approval claimed", { jobId, operatorId });
+      } else {
+        const { count: liveOffers } = await supabase
+          .from("job_assignments")
+          .select("id", { count: "exact", head: true })
+          .eq("job_id", jobId)
+          .ilike("status", "offered");
+        if ((liveOffers ?? 0) > 0) {
+          logStep("Approve ignored — offers already out", { jobId, liveOffers, operatorId });
+          return alreadyApproved("offers_already_out");
+        }
+      }
     }
 
     // If the job row is missing coordinates, try one geocode pass before
@@ -423,6 +501,7 @@ serve(async (req) => {
 
     if (!cleaners || cleaners.length === 0) {
       logStep("No cleaners available for this dispatch");
+      await releaseApprovalClaim();
       return new Response(
         JSON.stringify({
           success: false,
@@ -492,6 +571,7 @@ serve(async (req) => {
           bookingId: dispatchBooking.id,
           detail: { job_id: jobId },
         });
+        await releaseApprovalClaim();
         return new Response(
           JSON.stringify({
             success: false,
@@ -603,6 +683,7 @@ serve(async (req) => {
 
     if (scoredCandidates.length === 0) {
       logStep("No new qualified candidates after scoring (pool exhausted for this job)");
+      await releaseApprovalClaim();
       return new Response(
         JSON.stringify({
           success: false,
@@ -628,6 +709,7 @@ serve(async (req) => {
     const selectedCleaners = scoredCandidates.slice(0, slotsToFill);
 
     if (selectedCleaners.length === 0) {
+      await releaseApprovalClaim();
       return new Response(
         JSON.stringify({
           success: false,
