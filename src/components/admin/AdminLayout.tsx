@@ -112,7 +112,12 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     const panel = mobilePanelRef.current;
     const focusables = () =>
       Array.from(panel?.querySelectorAll<HTMLElement>("a[href], button:not([disabled])") || []);
-    const focusTimer = window.setTimeout(() => focusables()[0]?.focus(), 30);
+    // Try again shortly after in case the panel hadn't become visible yet.
+    const focusFirst = () => {
+      if (!panel?.contains(document.activeElement)) focusables()[0]?.focus();
+    };
+    const focusTimer = window.setTimeout(focusFirst, 30);
+    const retryTimer = window.setTimeout(focusFirst, 200);
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
@@ -135,6 +140,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     document.addEventListener("keydown", onKey);
     return () => {
       window.clearTimeout(focusTimer);
+      window.clearTimeout(retryTimer);
       document.removeEventListener("keydown", onKey);
     };
   }, [mobileOpen, closeMobile]);
@@ -158,7 +164,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     <OpsAssistantProvider surface="workspace">
     <div data-admin-text className="admin-theme relative min-h-screen flex w-full bg-background text-foreground font-sans antialiased">
       {/* ─── Desktop sidebar ─────────────────────────────────────────── */}
-      <aside className="sticky top-0 z-10 hidden h-screen lg:flex w-64 flex-col border-r border-[color:var(--hairline)] bg-card shrink-0">
+      <aside className="sticky top-0 z-10 hidden h-screen lg:flex w-[17rem] flex-col border-r border-[#e4e7ef] bg-white shrink-0">
         <SidebarBrand />
         <PrimaryAction active={active?.id === PRIMARY_ACTION.id} />
         <SidebarNav idPrefix="desk" {...navProps} />
@@ -254,7 +260,7 @@ function AdminMain({
         open && "lg:mr-[360px] 2xl:mr-[420px]",
       )}
     >
-      <header className="h-14 flex items-center gap-3 px-4 sm:px-6 border-b border-[color:var(--hairline)] bg-card/90 backdrop-blur-md sticky top-0 z-30">
+      <header className="h-14 flex items-center gap-3 px-4 sm:px-6 border-b border-[#e4e7ef] bg-white/85 backdrop-blur-xl sticky top-0 z-30">
         <Button
           ref={menuButtonRef}
           variant="ghost"
@@ -276,10 +282,8 @@ function AdminMain({
                   <span aria-hidden className="hidden sm:inline text-[13px] text-muted-foreground/50">/</span>
                 </>
               ) : null}
-              <span className="w-7 h-7 rounded-lg text-[#6810FE] inline-flex items-center justify-center shrink-0 bg-[#F3EEFF]">
-                <active.icon className="w-4 h-4" />
-              </span>
-              <h1 className="text-[14px] font-semibold text-foreground truncate tracking-tight">{active.title}</h1>
+              <active.icon aria-hidden className="size-[18px] shrink-0 text-[#6838ef]" />
+              <h1 className="text-sm font-semibold text-[#211a35] truncate tracking-tight">{active.title}</h1>
             </>
           ) : (
             <h1 className="text-[14px] font-semibold text-foreground">Workspace</h1>
@@ -303,11 +307,11 @@ function AdminMain({
 
 function SidebarBrand({ compact = false }: { compact?: boolean }) {
   return (
-    <div className={cn("flex items-center gap-2 px-4 h-16 border-b border-[color:var(--hairline)]", compact && "h-auto border-0 px-0")}>
-      <img src="/novara-logo.png" alt="" className="h-8 w-8 rounded-[9px]" />
-      <span className="whitespace-nowrap text-[14.5px] font-semibold tracking-[-0.02em] text-foreground">Novara Cleaning</span>
-      <span className="rounded-md bg-[#F3EEFF] px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-[0.12em] text-[#5A1FD6]">
-        Admin
+    <div className={cn("flex min-h-16 items-center gap-2.5 border-b border-[#e4e7ef] px-[1.125rem] py-3", compact && "min-h-0 border-0 px-0 py-0")}>
+      <img src="/novara-logo.png" alt="" className="size-7 shrink-0 rounded-lg" />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-semibold leading-snug text-[#211a35]">Novara Cleaning</span>
+        <span className="block text-[11px] text-[#667085]">Admin workspace</span>
       </span>
     </div>
   );
@@ -318,7 +322,7 @@ function UserBadge({ email }: { email?: string | null }) {
   return (
     <span className="flex items-center gap-2" title={email || undefined}>
       <span className="hidden md:inline truncate max-w-[200px] text-[12.5px] text-muted-foreground">{email}</span>
-      <span className="grid h-8 w-8 place-items-center rounded-full bg-gradient-to-b from-[#7A2BFF] to-[#5A0BE6] text-[11px] font-semibold text-white">
+      <span className="grid h-8 w-8 place-items-center rounded-full bg-gradient-to-b from-[#8e6df6] to-[#5126c7] text-[11px] font-semibold text-white">
         {initials || "?"}
       </span>
     </span>
@@ -332,8 +336,8 @@ function PrimaryAction({ active }: { active: boolean }) {
         href={PRIMARY_ACTION.url}
         aria-current={active ? "page" : undefined}
         className={cn(
-          "flex h-10 items-center justify-center gap-2 rounded-[10px] bg-gradient-to-b from-[#7A2BFF] to-[#5A0BE6] px-3 text-[13.5px] font-semibold text-white shadow-[0_6px_14px_-6px_rgba(104,16,254,0.7)] transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6810FE] focus-visible:ring-offset-2",
-          active && "ring-2 ring-[#6810FE]/30 ring-offset-1",
+          "flex h-9 items-center justify-center gap-2 rounded-[10px] border border-[#3f1d9e]/40 bg-gradient-to-b from-[#8e6df6] via-[#6838ef] to-[#5126c7] px-3 text-sm font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_10px_28px_-14px_rgba(104,56,239,0.88)] transition hover:from-[#a08af8] hover:via-[#7a4ff2] hover:to-[#5c2fdb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6838ef] focus-visible:ring-offset-2",
+          active && "ring-2 ring-[#6838ef]/30 ring-offset-1",
         )}
       >
         <RiAddLine className="h-4 w-4" />
@@ -369,7 +373,7 @@ function SidebarNav({
               onClick={() => onToggle(group.id)}
               aria-expanded={!isCollapsed}
               aria-controls={listId}
-              className="flex w-full items-center justify-between rounded-md px-2.5 py-1 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6810FE]/50"
+              className="flex w-full items-center justify-between rounded-md px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-[#8a93a6] hover:text-[#211a35] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6838ef]/50"
             >
               <span>
                 {group.title}
@@ -388,22 +392,16 @@ function SidebarNav({
                     <Link
                       href={item.url}
                       aria-current={isActive ? "page" : undefined}
+                      // Selestial's sidebar row: 36px, plain 18px icon, lavender when current.
                       className={cn(
-                        "group relative flex items-center gap-2.5 rounded-[9px] px-2.5 py-1.5 text-[13.5px] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6810FE]/50",
-                        isActive ? "bg-[#F3EEFF] text-[#0B0A11] font-semibold" : "text-muted-foreground hover:bg-[#F6F5F9] hover:text-foreground",
+                        "group relative flex min-h-9 w-full min-w-0 items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#6838ef]",
+                        isActive ? "bg-[#eee8ff] text-[#5126c7]" : "text-[#667085] hover:bg-[#f1f3f8] hover:text-[#211a35]",
                       )}
                     >
-                      <span
-                        className={cn(
-                          "grid h-7 w-7 shrink-0 place-items-center rounded-lg transition-colors",
-                          isActive
-                            ? "bg-gradient-to-b from-[#7A2BFF] to-[#5A0BE6] text-white"
-                            : "bg-[#F3F2F7] text-[#5F5B6B] group-hover:bg-[#F3EEFF] group-hover:text-[#6810FE]",
-                        )}
-                      >
-                        <item.icon className="w-4 h-4" />
+                      <span className="flex size-6 shrink-0 items-center justify-center">
+                        <item.icon className={cn("size-[18px]", isActive ? "text-[#5126c7]" : "text-[#8a93a6] group-hover:text-[#211a35]")} />
                       </span>
-                      <span className="min-w-0 flex-1 truncate leading-tight tracking-tight">{item.title}</span>
+                      <span className="min-w-0 flex-1 truncate">{item.title}</span>
                     </Link>
                   </li>
                 );

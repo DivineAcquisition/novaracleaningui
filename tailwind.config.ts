@@ -1,5 +1,37 @@
 import type { Config } from "tailwindcss";
+import colors from "tailwindcss/colors";
 import { heroui } from "@heroui/react";
+
+/**
+ * A colour ramp whose shades can be re-pointed by CSS variables. Each shade
+ * compiles to rgb(var(--tw-<name>-<shade>, <default>) / <alpha-value>): with
+ * no variable set (public site, booking flow) it is exactly the default
+ * colour; inside the admin workspace globals.css sets the variables to the
+ * Selestial palette, so the same class names (text-slate-500, bg-violet-600,
+ * bg-brand-50 …) take on the workspace look without touching every screen.
+ */
+const hexToRgb = (hex: string) => {
+  const h = hex.replace("#", "");
+  const n = parseInt(h.length === 3 ? h.split("").map((c) => c + c).join("") : h, 16);
+  return `${(n >> 16) & 255} ${(n >> 8) & 255} ${n & 255}`;
+};
+const themable = (name: string, palette: Record<string, string>) =>
+  Object.fromEntries(
+    Object.entries(palette).map(([shade, hex]) => [shade, `rgb(var(--tw-${name}-${shade}, ${hexToRgb(hex)}) / <alpha-value>)`]),
+  );
+const BRAND_RAMP = {
+  50: "#F6F2FF",
+  100: "#EDE5FF",
+  200: "#D4C4FE",
+  300: "#B49AFE",
+  400: "#8E5BFF",
+  500: "#6810FE",
+  600: "#5A0BE6",
+  700: "#4A0CD0",
+  800: "#3809A0",
+  900: "#26066E",
+  950: "#16043F",
+};
 
 export default {
   darkMode: ["class"],
@@ -40,19 +72,11 @@ export default {
       colors: {
         ink: { DEFAULT: "#0B0A11", muted: "#5F5B6B" },
         line: "#E9E7EE",
-        brand: {
-          50: "#F6F2FF",
-          100: "#EDE5FF",
-          200: "#D4C4FE",
-          300: "#B49AFE",
-          400: "#8E5BFF",
-          500: "#6810FE",
-          600: "#5A0BE6",
-          700: "#4A0CD0",
-          800: "#3809A0",
-          900: "#26066E",
-          950: "#16043F",
-        },
+        brand: themable("brand", BRAND_RAMP),
+        slate: themable("slate", colors.slate),
+        violet: themable("violet", colors.violet),
+        indigo: themable("indigo", colors.indigo),
+        purple: themable("purple", colors.purple),
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",

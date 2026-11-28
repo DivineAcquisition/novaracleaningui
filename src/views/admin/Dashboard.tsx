@@ -315,7 +315,7 @@ export default function AdminDashboard() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[#5A1FD6]">{todayLabel()}</p>
+          <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[#5126c7]">{todayLabel()}</p>
           <h1 className="mt-1 text-[1.75rem] font-semibold tracking-[-0.03em] text-foreground">Today</h1>
           <p className="text-sm text-muted-foreground">Eastern Time · what needs a decision first, then the schedule, then metrics.</p>
         </div>
@@ -327,7 +327,7 @@ export default function AdminDashboard() {
             onClick={() => void load()}
             disabled={loading}
             aria-label="Refresh dashboard"
-            className="grid h-9 w-9 place-items-center rounded-[9px] border border-[#e1dfe8] bg-white text-muted-foreground transition hover:text-foreground disabled:opacity-50"
+            className="grid h-9 w-9 place-items-center rounded-[9px] border border-[#d5dae5] bg-white text-muted-foreground transition hover:text-foreground disabled:opacity-50"
           >
             <RiRefreshLine className={cn("h-4 w-4", loading && "animate-spin")} />
           </button>
@@ -541,7 +541,7 @@ function UpcomingItem({ job, today }: { job: JobRow; today?: boolean }) {
         <span
           className={cn(
             "inline-flex rounded-md px-2 py-1 text-[11px] font-semibold uppercase tracking-wide",
-            today ? "bg-[#F3EEFF] text-[#5A1FD6]" : "bg-[#F6F5F9] text-[#5F5B6B]",
+            today ? "bg-[#eee8ff] text-[#5126c7]" : "bg-[#f1f3f8] text-[#667085]",
           )}
         >
           {today ? "Today" : shortDate(job.service_date)}
@@ -578,9 +578,9 @@ function KpiTile({
   tone: "emerald" | "amber" | "slate";
 }) {
   const toneStyles = {
-    emerald: "bg-[#F3EEFF] text-[#6810FE]",
+    emerald: "bg-[#eee8ff] text-[#6838ef]",
     amber: "bg-amber-50 text-amber-700",
-    slate: "bg-[#F3F2F7] text-[#5F5B6B]",
+    slate: "bg-[#f1f3f8] text-[#667085]",
   }[tone];
   return (
     <Card className="panel panel-hover">
@@ -596,7 +596,7 @@ function KpiTile({
         ) : (
           <p className="mt-1 truncate text-[1.75rem] font-semibold leading-none tracking-[-0.03em] tabular-nums text-foreground">{value ?? "0"}</p>
         )}
-        {footer && <p className="mt-3 truncate border-t border-[#f0eef4] pt-2.5 text-[11.5px] text-muted-foreground">{footer}</p>}
+        {footer && <p className="mt-3 truncate border-t border-[#eef0f5] pt-2.5 text-[11.5px] text-muted-foreground">{footer}</p>}
       </CardContent>
     </Card>
   );
@@ -609,8 +609,8 @@ function QuickLink({ href, icon: Icon, label, primary = false }: { href: string;
       className={cn(
         "inline-flex h-9 items-center gap-1.5 rounded-[9px] px-3 text-[13px] font-medium transition",
         primary
-          ? "bg-gradient-to-b from-[#7A2BFF] to-[#5A0BE6] text-white shadow-[0_8px_18px_-10px_rgba(104,16,254,0.75)] hover:brightness-110"
-          : "border border-[#e1dfe8] bg-white text-foreground hover:bg-[#F6F5F9]",
+          ? "bg-gradient-to-b from-[#8e6df6] to-[#5126c7] text-white shadow-[0_8px_18px_-10px_rgba(104,56,239,0.75)] hover:brightness-110"
+          : "border border-[#d5dae5] bg-white text-foreground hover:bg-[#f1f3f8]",
       )}
     >
       <Icon className="h-4 w-4" />
@@ -624,7 +624,7 @@ function TodayProgress({ stats }: { stats: TodayStats }) {
   const total = stats.bookingsToday;
   const pct = total > 0 ? Math.round((stats.completedToday / total) * 100) : 0;
   return (
-    <div className="rounded-2xl border border-[#e9e7ee] bg-white px-4 py-3.5 shadow-[0_1px_2px_rgba(11,10,17,0.04)] sm:px-5">
+    <div className="rounded-2xl border border-[#e4e7ef] bg-white px-4 py-3.5 shadow-[0_1px_2px_rgba(11,10,17,0.04)] sm:px-5">
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
         <p className="font-medium text-foreground">
           Today’s jobs{" "}
@@ -632,17 +632,17 @@ function TodayProgress({ stats }: { stats: TodayStats }) {
             · {stats.completedToday} of {total} done · {stats.stillOnToday} still on
           </span>
         </p>
-        <p className="tabular-nums text-[13px] font-semibold text-[#5A1FD6]">{total > 0 ? `${pct}%` : "No jobs today"}</p>
+        <p className="tabular-nums text-[13px] font-semibold text-[#5126c7]">{total > 0 ? `${pct}%` : "No jobs today"}</p>
       </div>
       <div
-        className="mt-2.5 h-2 overflow-hidden rounded-full bg-[#F0EEF4]"
+        className="mt-2.5 h-2 overflow-hidden rounded-full bg-[#eef0f5]"
         role="progressbar"
         aria-valuemin={0}
         aria-valuemax={total}
         aria-valuenow={stats.completedToday}
         aria-label="Today's jobs completed"
       >
-        <div className="h-full rounded-full bg-gradient-to-r from-[#7A2BFF] to-[#5A0BE6] transition-[width] duration-700" style={{ width: `${pct}%` }} />
+        <div className="h-full rounded-full bg-gradient-to-r from-[#8e6df6] to-[#5126c7] transition-[width] duration-700" style={{ width: `${pct}%` }} />
       </div>
     </div>
   );
@@ -653,7 +653,7 @@ function todayLabel(): string {
 }
 
 const trendConfig = {
-  bookings: { label: "Jobs", color: "#6810FE" },
+  bookings: { label: "Jobs", color: "#6838ef" },
   revenue: { label: "Completed job value ($)", color: "#C9B6FF" },
 } satisfies ChartConfig;
 

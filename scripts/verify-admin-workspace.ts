@@ -100,7 +100,7 @@ async function main() {
     check("admin body weight 450", body.weight === "450", body.weight);
     check("admin opsz locked to 32, auto optical sizing off", body.opsz.includes("32") && body.optical === "none", body);
     const h1 = await typography(page, "header h1");
-    check("header title (font-semibold) resolves to 650", h1.weight === "650", h1.weight);
+    check("header title uses Selestial's medium title weight (600)", h1.weight === "600", h1.weight);
     const fonts = await page.evaluate(() =>
       Array.from(document.fonts).map((f) => ({ family: f.family, style: f.style, weight: f.weight, status: f.status })),
     );

@@ -492,7 +492,7 @@ export default function PartnerAdmin() {
                   <label className="flex items-center gap-1.5 text-[11px] text-slate-600">
                     <input
                       type="checkbox"
-                      className="h-3.5 w-3.5 accent-[#5500FF]"
+                      className="h-3.5 w-3.5 accent-[#6838ef]"
                       checked={!!host.pay_after_enabled}
                       onChange={(e) => togglePayAfter(host.id, e.target.checked)}
                     />

@@ -58,7 +58,7 @@ import { cn } from "@/lib/utils";
 import { FocusedChecklistEditor } from "@/components/admin/FocusedChecklistEditor";
 import { UrgentHireDialog, useUrgentHireLaunch } from "@/components/admin/UrgentHireDialog";
 
-const RAMP = "linear-gradient(135deg,#6810FE 0%,#8E5BFF 100%)";
+const RAMP = "linear-gradient(135deg,#6838ef 0%,#8e6df6 100%)";
 const CONTRACTOR_BASE = "https://contractor.novaracleaning.com";
 
 // ─── Types ───────────────────────────────────────────────────────────────
@@ -415,11 +415,11 @@ export default function AdminDispatch() {
     <div className="space-y-6 font-sans">
       {/* ─── Command header ─────────────────────────────────────────────── */}
       <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div aria-hidden className="pointer-events-none absolute inset-0" style={{ background: "radial-gradient(120% 140% at 0% 0%, rgba(104, 16, 254,0.10), transparent 55%)" }} />
+        <div aria-hidden className="pointer-events-none absolute inset-0" style={{ background: "radial-gradient(120% 140% at 0% 0%, rgba(104,56,239,0.10), transparent 55%)" }} />
         <div className="relative px-5 py-5 sm:px-6 flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="font-jakarta text-2xl font-extrabold tracking-tight text-slate-900 flex items-center gap-2.5">
-              <span className="w-10 h-10 rounded-xl inline-flex items-center justify-center text-white shadow-[0_4px_12px_-2px_rgba(104, 16, 254,0.5)]" style={{ background: RAMP }}>
+              <span className="w-10 h-10 rounded-xl inline-flex items-center justify-center text-white shadow-[0_4px_12px_-2px_rgba(104,56,239,0.5)]" style={{ background: RAMP }}>
                 <RiRocket2Line className="w-5 h-5" />
               </span>
               Dispatch
@@ -642,7 +642,7 @@ function StatTile({
 }) {
   const toneMap = {
     amber: "text-amber-600 bg-amber-500/10",
-    violet: "text-[#6810FE] bg-[#6810FE]/10",
+    violet: "text-[#6838ef] bg-[#6838ef]/10",
     emerald: "text-emerald-600 bg-emerald-500/10",
     slate: "text-slate-400 bg-slate-100",
   } as const;
@@ -800,7 +800,7 @@ function JobCard({
       shadow="sm"
       className={cn(
         "border h-full",
-        highlighted ? "border-[#6810FE] ring-2 ring-[#6810FE]/30" : "border-slate-200",
+        highlighted ? "border-[#6838ef] ring-2 ring-[#6838ef]/30" : "border-slate-200",
         stage === "awaiting_approval" && !highlighted && "border-amber-300/80",
       )}
     >
@@ -882,7 +882,7 @@ function JobCard({
             </div>
             <div className="h-1.5 rounded-full bg-slate-200 overflow-hidden">
               <div
-                className={cn("h-full rounded-full transition-all", checklist.progress_pct === 100 ? "bg-emerald-500" : "bg-[#6810FE]")}
+                className={cn("h-full rounded-full transition-all", checklist.progress_pct === 100 ? "bg-emerald-500" : "bg-[#6838ef]")}
                 style={{ width: `${checklist.progress_pct}%` }}
               />
             </div>
@@ -896,7 +896,7 @@ function JobCard({
                 href={`${CONTRACTOR_BASE}/cleaner/job-checklist/${checklist.token}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[10px] font-semibold text-[#6810FE] hover:underline inline-flex items-center gap-0.5"
+                className="text-[10px] font-semibold text-[#6838ef] hover:underline inline-flex items-center gap-0.5"
               >
                 View <RiExternalLinkLine className="w-3 h-3" />
               </a>
