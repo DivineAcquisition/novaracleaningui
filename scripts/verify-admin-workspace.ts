@@ -148,7 +148,7 @@ async function main() {
     check("command dialog is portaled outside the shell and inherits admin font", !portaled.insideShell && /interDisplay/i.test(portaled.family), portaled);
     await page.keyboard.type("internal booking");
     const hit = await page.locator("[cmdk-item]").first().innerText();
-    check("command search finds former label 'Internal Booking' → New booking", /New booking/.test(hit), hit);
+    check("command search finds former label 'Internal Booking' → New Booking", /New Booking/.test(hit), hit);
     await page.screenshot({ path: `${OUT}/admin-command-alias.png` });
     await page.keyboard.press("Escape");
     // Radix select portal (if any on the page)
@@ -244,14 +244,14 @@ async function main() {
       }
     }
     await page.goto(`${BASE}/admin/qc`, { waitUntil: "domcontentloaded" });
-    await page.locator("[role=tablist][aria-label='Quality control sections']").waitFor({ timeout: 60_000 });
+    await page.locator("[role=tablist][aria-label='Quality Control sections']").waitFor({ timeout: 60_000 });
     await page.waitForTimeout(800);
-    const qc = await overlap("[role=tablist][aria-label='Quality control sections'] [role=tab]");
+    const qc = await overlap("[role=tablist][aria-label='Quality Control sections'] [role=tab]");
     check(`${width}px: QC tabs don't overlap or clip`, qc.count === 5 && qc.overlaps === 0 && qc.clipped.length === 0, qc);
     await page.keyboard.press("Tab");
-    await page.locator("[role=tablist][aria-label='Quality control sections'] [role=tab][aria-selected=true]").focus();
+    await page.locator("[role=tablist][aria-label='Quality Control sections'] [role=tab][aria-selected=true]").focus();
     await page.keyboard.press("ArrowRight");
-    check(`${width}px: arrow keys move between QC tabs`, (await page.locator("[role=tablist][aria-label='Quality control sections'] [aria-selected=true]").innerText()).includes("Documentation"));
+    check(`${width}px: arrow keys move between QC tabs`, (await page.locator("[role=tablist][aria-label='Quality Control sections'] [aria-selected=true]").innerText()).includes("Documentation"));
   }
 
   // ── Every page's title matches its sidebar label ──
@@ -262,7 +262,7 @@ async function main() {
     await nav.waitFor({ timeout: 60_000 });
     await page.waitForFunction(() => document.querySelectorAll("aside nav[aria-label=Workspace] a").length >= 20, null, { timeout: 30_000 });
     const items = await nav.locator("a").evaluateAll((as) => as.map((a) => ({ label: (a.textContent || "").trim(), href: a.getAttribute("href") || "" })));
-    items.unshift({ label: "New booking", href: "/admin/csr" });
+    items.unshift({ label: "New Booking", href: "/admin/csr" });
     const mismatches: string[] = [];
     for (const item of items) {
       await page.goto(`${BASE}${item.href}`, { waitUntil: "domcontentloaded" });
@@ -308,7 +308,7 @@ async function main() {
     check("admin sees all five groups in order", groups.map((g) => g.trim()).join("|").toLowerCase() === "daily work|sales & clients|workforce|finance & reports|settings", groups);
     const labels = await nav.locator("a").allInnerTexts();
     check("admin sidebar labels in order", labels.map((l) => l.trim()).join(" · ") ===
-      "Today · Bookings · Dispatch & coverage · Quality control · Quotes · Proposals · Customers · Business accounts · Recurring plans · Cleaners & crews · Hiring & onboarding · Cleaner pay · Profit & loss · VA performance · Weekly report · Pricing rules · Team access · Email settings & delivery · Booking compliance · Assistant settings", labels);
+      "Today · Bookings · Dispatch & Coverage · Quality Control · Quotes · Proposals · Customers · Business Accounts · Recurring Plans · Cleaners & Crews · Hiring & Onboarding · Cleaner Pay · Profit & Loss · VA Performance · Weekly Report · Pricing Rules · Team Access · Email Settings & Delivery · Booking Compliance · Assistant Settings", labels);
     check("Today is the current page", (await nav.locator("a[aria-current=page]").innerText()).trim() === "Today");
     // Collapse memory
     await nav.locator("button", { hasText: "Settings" }).click();
@@ -318,12 +318,12 @@ async function main() {
     check("manual collapse is remembered", (await nav.locator("button", { hasText: "Settings" }).getAttribute("aria-expanded")) === "false");
     await page.goto(`${BASE}/admin/pricing`, { waitUntil: "domcontentloaded" });
     await nav.waitFor();
-    await page.waitForFunction(() => document.querySelector("aside nav a[aria-current=page]")?.textContent?.includes("Pricing rules"), null, { timeout: 30_000 }).catch(() => {});
+    await page.waitForFunction(() => document.querySelector("aside nav a[aria-current=page]")?.textContent?.includes("Pricing Rules"), null, { timeout: 30_000 }).catch(() => {});
     check("navigating into a collapsed group expands it", (await nav.locator("button", { hasText: "Settings" }).getAttribute("aria-expanded")) === "true");
     await page.screenshot({ path: `${OUT}/admin-sidebar-desktop.png` });
     await page.goto(`${BASE}/admin/operations?tab=dispatch`, { waitUntil: "domcontentloaded" });
     await page.waitForFunction(() => document.querySelector("aside nav a[aria-current=page]")?.textContent?.includes("Dispatch"), null, { timeout: 30_000 }).catch(() => {});
-    check("query-tab URL lights Dispatch & coverage", ((await nav.locator("a[aria-current=page]").innerText().catch(() => "")) || "").includes("Dispatch & coverage"));
+    check("query-tab URL lights Dispatch & Coverage", ((await nav.locator("a[aria-current=page]").innerText().catch(() => "")) || "").includes("Dispatch & Coverage"));
   }
   {
     const { page } = await open(browser, { role: "va" });
@@ -334,8 +334,8 @@ async function main() {
     const groups = (await nav.locator("button[aria-expanded]").allInnerTexts()).map((g) => g.trim().toLowerCase());
     check("VA: finance and settings groups hidden", groups.join("|") === "daily work|sales & clients|workforce", groups);
     const labels = (await nav.locator("a").allInnerTexts()).map((l) => l.trim());
-    check("VA: admin-only items hidden", !labels.some((l) => ["Quotes", "Business accounts", "Cleaner pay", "Pricing rules"].includes(l)), labels);
-    const hiring = await nav.locator("a", { hasText: "Hiring & onboarding" }).getAttribute("href");
+    check("VA: admin-only items hidden", !labels.some((l) => ["Quotes", "Business Accounts", "Cleaner Pay", "Pricing Rules"].includes(l)), labels);
+    const hiring = await nav.locator("a", { hasText: "Hiring & Onboarding" }).getAttribute("href");
     check("VA: Hiring routes to the applicant pipeline in Cleaners", hiring === "/admin/cleaners?section=applicants", hiring);
     await page.keyboard.press("Control+k");
     await page.locator("[cmdk-input]").waitFor();
@@ -350,7 +350,7 @@ async function main() {
     await page.goto(`${BASE}/admin/cleaners?section=applicants`, { waitUntil: "domcontentloaded" });
     await nav.waitFor({ timeout: 60_000 });
     await page.waitForFunction(() => document.querySelector("aside nav a[aria-current=page]")?.textContent?.includes("Hiring"), null, { timeout: 30_000 }).catch(() => {});
-    check("VA: applicants URL lights Hiring & onboarding", ((await nav.locator("a[aria-current=page]").innerText().catch(() => "")) || "").includes("Hiring"));
+    check("VA: applicants URL lights Hiring & Onboarding", ((await nav.locator("a[aria-current=page]").innerText().catch(() => "")) || "").includes("Hiring"));
     await page.screenshot({ path: `${OUT}/va-sidebar.png` });
   }
 

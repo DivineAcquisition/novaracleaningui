@@ -431,7 +431,7 @@ export default function QualityControl() {
 
       {/* ─── Tabs ──────────────────────────────────────────────────────── */}
       <SectionTabs<typeof tab>
-        label="Quality control sections"
+        label="Quality Control sections"
         value={tab}
         onChange={setTab}
         tabs={[

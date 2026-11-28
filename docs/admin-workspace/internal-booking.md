@@ -1,5 +1,5 @@
 ---
-title: New booking (Internal Booking)
+title: New Booking (Internal Booking)
 area: Internal Booking
 category: How the Tool Works
 summary: Taking a booking for a customer on the phone, start to finish, including what blocks the submit button.

@@ -6,13 +6,13 @@
 // (admin-nav.ts) shared by the sidebar, the mobile menu, ⌘K search and the
 // header title:
 //
-//   + New booking (pinned)
-//   Daily work         Today · Bookings · Dispatch & coverage · Quality control
-//   Sales & clients    Quotes · Proposals · Customers · Business accounts · Recurring plans
-//   Workforce          Cleaners & crews · Hiring & onboarding
-//   Finance & reports  Cleaner pay · Profit & loss · VA performance · Weekly report
-//   Settings           Pricing rules · Team access · Email settings & delivery ·
-//                      Booking compliance · Assistant settings
+//   + New Booking (pinned)
+//   Daily Work         Today · Bookings · Dispatch & Coverage · Quality Control
+//   Sales & Clients    Quotes · Proposals · Customers · Business Accounts · Recurring Plans
+//   Workforce          Cleaners & Crews · Hiring & Onboarding
+//   Finance & Reports  Cleaner Pay · Profit & Loss · VA Performance · Weekly Report
+//   Settings           Pricing Rules · Team Access · Email Settings & Delivery ·
+//                      Booking Compliance · Assistant Settings
 //
 // Groups a role cannot see are hidden. The active group auto-expands; a
 // manual collapse is remembered per browser. Route guards in the page files

@@ -64,7 +64,7 @@ export interface AdminNavGroup {
 /** Pinned primary action above the groups. */
 export const PRIMARY_ACTION: AdminNavItem = {
   id: "new-booking",
-  title: "New booking",
+  title: "New Booking",
   url: "/admin/csr",
   icon: RiFileEditLine,
   help: "Book or quote a customer on a call — price, save, resume, hand to dispatch",
@@ -74,7 +74,7 @@ export const PRIMARY_ACTION: AdminNavItem = {
 export const NAV_GROUPS: AdminNavGroup[] = [
   {
     id: "daily",
-    title: "Daily work",
+    title: "Daily Work",
     items: [
       {
         id: "today",
@@ -94,7 +94,7 @@ export const NAV_GROUPS: AdminNavGroup[] = [
       },
       {
         id: "dispatch",
-        title: "Dispatch & coverage",
+        title: "Dispatch & Coverage",
         url: "/admin/operations",
         icon: RiAlarmWarningLine,
         help: "Needs attention · dispatch offers · coverage map · sync health",
@@ -103,7 +103,7 @@ export const NAV_GROUPS: AdminNavGroup[] = [
       },
       {
         id: "qc",
-        title: "Quality control",
+        title: "Quality Control",
         url: "/admin/qc",
         icon: RiShieldCheckLine,
         help: "Open cases by severity · evidence · statements · re-clean decisions",
@@ -113,7 +113,7 @@ export const NAV_GROUPS: AdminNavGroup[] = [
   },
   {
     id: "sales",
-    title: "Sales & clients",
+    title: "Sales & Clients",
     items: [
       {
         id: "quotes",
@@ -142,7 +142,7 @@ export const NAV_GROUPS: AdminNavGroup[] = [
       },
       {
         id: "accounts",
-        title: "Business accounts",
+        title: "Business Accounts",
         url: "/admin/accounts",
         icon: RiHotelLine,
         help: "Commercial clients · STR hosts · property managers · portfolio · COI",
@@ -152,7 +152,7 @@ export const NAV_GROUPS: AdminNavGroup[] = [
       },
       {
         id: "recurring",
-        title: "Recurring plans",
+        title: "Recurring Plans",
         url: "/admin/recurring",
         icon: RiRepeatLine,
         help: "Memberships · recurring cleans · cadence · pause and resume",
@@ -166,7 +166,7 @@ export const NAV_GROUPS: AdminNavGroup[] = [
     items: [
       {
         id: "cleaners",
-        title: "Cleaners & crews",
+        title: "Cleaners & Crews",
         url: "/admin/cleaners",
         icon: RiToolsLine,
         help: "Directory · availability · crews · readiness · urgent hire",
@@ -175,7 +175,7 @@ export const NAV_GROUPS: AdminNavGroup[] = [
       },
       {
         id: "hiring",
-        title: "Hiring & onboarding",
+        title: "Hiring & Onboarding",
         // Full admins get the contractor intake workspace. VAs keep their
         // existing applicant pipeline inside Cleaners; contractor intake
         // stays admin-only.
@@ -189,11 +189,11 @@ export const NAV_GROUPS: AdminNavGroup[] = [
   },
   {
     id: "finance",
-    title: "Finance & reports",
+    title: "Finance & Reports",
     items: [
       {
         id: "pay",
-        title: "Cleaner pay",
+        title: "Cleaner Pay",
         url: "/admin/payroll",
         icon: RiMoneyDollarCircleLine,
         help: "Money owed · extra pay · pay runs · external payments · rates",
@@ -202,7 +202,7 @@ export const NAV_GROUPS: AdminNavGroup[] = [
       },
       {
         id: "pnl",
-        title: "Profit & loss",
+        title: "Profit & Loss",
         url: "/admin/pnl",
         icon: RiLineChartLine,
         help: "Collected · pipeline · ad spend · contribution by period",
@@ -211,7 +211,7 @@ export const NAV_GROUPS: AdminNavGroup[] = [
       },
       {
         id: "va-performance",
-        title: "VA performance",
+        title: "VA Performance",
         url: "/admin/va-performance",
         icon: RiUserStarLine,
         help: "Verified actuals vs EOD · flags · revenue per VA hour",
@@ -220,7 +220,7 @@ export const NAV_GROUPS: AdminNavGroup[] = [
       },
       {
         id: "weekly-report",
-        title: "Weekly report",
+        title: "Weekly Report",
         url: "/admin/weekly-report",
         icon: RiFileChartLine,
         help: "Sales · retention · growth report generation and delivery",
@@ -235,7 +235,7 @@ export const NAV_GROUPS: AdminNavGroup[] = [
     items: [
       {
         id: "pricing",
-        title: "Pricing rules",
+        title: "Pricing Rules",
         url: "/admin/pricing",
         icon: RiPriceTag3Line,
         help: "Zones · demand-reactive pricing · guardrails · preview on a sample job",
@@ -244,7 +244,7 @@ export const NAV_GROUPS: AdminNavGroup[] = [
       },
       {
         id: "team",
-        title: "Team access",
+        title: "Team Access",
         url: "/admin/team",
         icon: RiTeamLine,
         help: "Admins and VA access · invited, active, revoked",
@@ -253,7 +253,7 @@ export const NAV_GROUPS: AdminNavGroup[] = [
       },
       {
         id: "email",
-        title: "Email settings & delivery",
+        title: "Email Settings & Delivery",
         url: "/admin/email",
         icon: RiMailLine,
         help: "Email types · templates · footers · consent · delivery lookup · suppression",
@@ -262,7 +262,7 @@ export const NAV_GROUPS: AdminNavGroup[] = [
       },
       {
         id: "compliance",
-        title: "Booking compliance",
+        title: "Booking Compliance",
         url: "/admin/compliance",
         icon: RiShieldCheckLine,
         help: "Outstanding reviews · acceptances · wording · privacy requests",
@@ -271,7 +271,7 @@ export const NAV_GROUPS: AdminNavGroup[] = [
       },
       {
         id: "assistant",
-        title: "Assistant settings",
+        title: "Assistant Settings",
         url: "/admin/assistant",
         icon: RiSparklingLine,
         help: "Ask Novara policy · review queue · assistant health",
@@ -315,8 +315,8 @@ function pathMatches(pathname: string, path: string) {
 /**
  * Score how well an item matches the current location. Segment-aware so
  * prefix-colliding routes don't both light up, and query-aware so
- * /admin/cleaners?section=applicants lights "Hiring & onboarding" rather than
- * "Cleaners & crews". 0 = no match; higher = more specific.
+ * /admin/cleaners?section=applicants lights "Hiring & Onboarding" rather than
+ * "Cleaners & Crews". 0 = no match; higher = more specific.
  */
 export function matchScore(item: AdminNavItem, pathname: string | null, search: URLSearchParams | null): number {
   if (!pathname) return 0;

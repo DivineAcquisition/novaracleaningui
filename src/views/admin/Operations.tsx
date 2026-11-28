@@ -63,7 +63,7 @@ export default function Operations() {
     <div className="space-y-4">
       <AdminPageTitle id="dispatch" />
       <Tabs value={tab} onValueChange={(v) => setTab(v as TabId)}>
-        <TabsList variant="chips" aria-label="Dispatch & coverage sections">
+        <TabsList variant="chips" aria-label="Dispatch & Coverage sections">
           {TABS.map(({ id, label, icon: Icon }) => (
             <TabsTrigger key={id} value={id} className="gap-1.5">
               <Icon className="h-4 w-4" />

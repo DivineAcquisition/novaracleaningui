@@ -493,7 +493,7 @@ export default function AdminCleaners() {
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
-          {/* The sidebar's label: Applicants is where "Hiring & onboarding" takes VAs. */}
+          {/* The sidebar's label: Applicants is where "Hiring & Onboarding" takes VAs. */}
           <AdminPageTitle id={section === "applicants" ? "hiring" : "cleaners"} />
           <p className="text-sm text-slate-500">{SECTION_COPY[section].subtitle}</p>
           <SectionTabs

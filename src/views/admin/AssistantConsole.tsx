@@ -117,7 +117,7 @@ export default function AssistantConsole() {
         </p>
       </header>
       <Tabs defaultValue="queue">
-        <TabsList variant="chips" aria-label="Assistant settings sections">
+        <TabsList variant="chips" aria-label="Assistant Settings sections">
           <TabsTrigger value="queue">Review queue</TabsTrigger>
           <TabsTrigger value="health">Health</TabsTrigger>
           <TabsTrigger value="articles">Policy articles</TabsTrigger>

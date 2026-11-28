@@ -321,8 +321,8 @@ export default function AdminDashboard() {
           <p className="text-sm text-muted-foreground">Eastern Time · what needs a decision first, then the schedule, then metrics.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <QuickLink href="/admin/csr" icon={RiFileEditLine} label="New booking" primary />
-          <QuickLink href="/admin/operations" icon={RiAlarmWarningLine} label="Dispatch & coverage" />
+          <QuickLink href="/admin/csr" icon={RiFileEditLine} label="New Booking" primary />
+          <QuickLink href="/admin/operations" icon={RiAlarmWarningLine} label="Dispatch & Coverage" />
           <button
             type="button"
             onClick={() => void load()}
@@ -788,7 +788,7 @@ function ExceptionsPanel({
                     .join(" · ")}
                 </span>
                 <span className="inline-flex shrink-0 items-center gap-1 font-semibold">
-                  Open Dispatch & coverage <RiArrowRightLine className="h-4 w-4" aria-hidden />
+                  Open Dispatch & Coverage <RiArrowRightLine className="h-4 w-4" aria-hidden />
                 </span>
               </Link>
             ) : null}

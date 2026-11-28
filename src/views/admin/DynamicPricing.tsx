@@ -335,7 +335,7 @@ export default function DynamicPricing() {
       )}
 
       <Tabs defaultValue="zones">
-        <TabsList variant="chips" aria-label="Pricing rules sections">
+        <TabsList variant="chips" aria-label="Pricing Rules sections">
           <TabsTrigger value="zones"><RiMapPin2Line className="w-3.5 h-3.5 mr-1.5" />Zones</TabsTrigger>
           <TabsTrigger value="demand"><RiScales3Line className="w-3.5 h-3.5 mr-1.5" />Demand</TabsTrigger>
           <TabsTrigger value="guardrails"><RiShieldCheckLine className="w-3.5 h-3.5 mr-1.5" />Guardrails</TabsTrigger>

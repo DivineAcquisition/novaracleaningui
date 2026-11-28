@@ -1,5 +1,5 @@
 ---
-title: Dispatch & coverage (Operations)
+title: Dispatch & Coverage (Operations)
 area: Operations
 category: How the Tool Works
 summary: Running today — jobs at risk, finding cover, dispatching work, and why a booking might be missing.

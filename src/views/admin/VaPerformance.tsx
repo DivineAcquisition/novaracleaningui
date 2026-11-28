@@ -296,7 +296,7 @@ export default function VaPerformance() {
       </div>
 
       <SectionTabs<Tab>
-        label="VA performance sections"
+        label="VA Performance sections"
         value={tab}
         onChange={setTab}
         tabs={TABS.map((t) => ({

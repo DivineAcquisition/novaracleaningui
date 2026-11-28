@@ -1,5 +1,5 @@
 ---
-title: Cleaner pay (Payroll)
+title: Cleaner Pay (Payroll)
 area: Payroll
 category: How the Tool Works
 summary: How contractor pay is calculated, what each of the four tabs actually does, and which one moves money.

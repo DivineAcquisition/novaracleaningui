@@ -1,5 +1,5 @@
 ---
-title: Business accounts (Accounts)
+title: Business Accounts (Accounts)
 area: Accounts
 category: How the Tool Works
 summary: Business accounts, commercial jobs, insurance certificates, STR hosts, and property-manager portfolios.

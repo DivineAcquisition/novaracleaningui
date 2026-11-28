@@ -28,7 +28,7 @@ will tell you — see below.
 
 ## The sidebar
 
-The left sidebar starts with a **+ New booking** button (the call workspace), then five
+The left sidebar starts with a **+ New Booking** button (the call workspace), then five
 groups. Click a group heading to collapse it; the workspace remembers that, and opens a group
 again automatically when you go to a page inside it. On a phone the same menu opens from the
 ☰ button and closes as soon as you pick a page.
@@ -37,11 +37,11 @@ again automatically when you go to a page inside it. On a phone the same menu op
 
 | Group | Pages, in order |
 |---|---|
-| **Daily work** | Today · Bookings · Dispatch & coverage · Quality control |
-| **Sales & clients** | Quotes · Proposals · Customers · Business accounts · Recurring plans |
-| **Workforce** | Cleaners & crews · Hiring & onboarding |
-| **Finance & reports** | Cleaner pay · Profit & loss · VA performance · Weekly report |
-| **Settings** | Pricing rules · Team access · Email settings & delivery · Booking compliance · Assistant settings |
+| **Daily Work** | Today · Bookings · Dispatch & Coverage · Quality Control |
+| **Sales & Clients** | Quotes · Proposals · Customers · Business Accounts · Recurring Plans |
+| **Workforce** | Cleaners & Crews · Hiring & Onboarding |
+| **Finance & Reports** | Cleaner Pay · Profit & Loss · VA Performance · Weekly Report |
+| **Settings** | Pricing Rules · Team Access · Email Settings & Delivery · Booking Compliance · Assistant Settings |
 
 **Ask Novara** (the assistant) is the button in the top bar, and **Search** (⌘K / Ctrl+K)
 finds any page, booking or cleaner. Search also understands the old names, so typing
@@ -50,10 +50,10 @@ the right place.
 
 **You may not see all of them.** There are two levels of access:
 
-- **VA** — Daily work, plus Proposals, Customers and Recurring plans, plus Cleaners & crews
-  and Hiring & onboarding (which for a VA opens the applicant pipeline inside Cleaners).
+- **VA** — Daily Work, plus Proposals, Customers and Recurring Plans, plus Cleaners & Crews
+  and Hiring & Onboarding (which for a VA opens the applicant pipeline inside Cleaners).
   Groups with nothing you can open are hidden.
-- **Full admin** — everything, including Quotes, Business accounts, the whole Finance &
+- **Full admin** — everything, including Quotes, Business Accounts, the whole Finance &
   reports group and Settings.
 
 If a page isn't in your sidebar, you don't have access to it, and typing the address in
@@ -62,8 +62,8 @@ to admins"** and get sent back to Today.
 
 :::note This is not a "you're not trusted" thing
 The split is about blast radius, not seniority. The admin-only sections are the ones where a
-mistake moves money (Cleaner pay), changes what every future customer is charged (Pricing
-rules), or grants somebody access (Team access). Everything you need to run the day is in the
+mistake moves money (Cleaner Pay), changes what every future customer is charged (Pricing
+rules), or grants somebody access (Team Access). Everything you need to run the day is in the
 VA set.
 :::
 
@@ -74,27 +74,27 @@ going looking for something.
 
 | Section (former name) | Use it when |
 |---|---|
-| **+ New booking** (Internal Booking, CSR) | You're on the phone with a customer: quote, save, resume or book. |
+| **+ New Booking** (Internal Booking, CSR) | You're on the phone with a customer: quote, save, resume or book. |
 | **Today** (Dashboard) | You want to know what needs a decision now. |
 | **Bookings** | You need to find, change, cancel, refund or staff a specific job. |
-| **Dispatch & coverage** (Operations) | Something today is at risk, or a job needs a cleaner. |
-| **Quality control** | A customer complained, or a job needs documenting or defending. |
+| **Dispatch & Coverage** (Operations) | Something today is at risk, or a job needs a cleaner. |
+| **Quality Control** | A customer complained, or a job needs documenting or defending. |
 | **Quotes** | You want to find a quote someone saved earlier. |
 | **Proposals** | A business wants a quote for recurring commercial or office work. |
 | **Customers** | Account-level things: credits, refunds, billing links, password resets. |
-| **Business accounts** (Accounts, Commercial) | Commercial accounts, STR hosts, property managers, insurance. |
-| **Recurring plans** (Recurring) | Memberships and repeating cleans. |
-| **Cleaners & crews** (Cleaners) | Anything about a contractor — status, scores, crews, conduct. |
-| **Hiring & onboarding** (Intake, Applicants) | Applicants and onboarding. |
-| **Cleaner pay** (Payroll) | Paying contractors. |
-| **Profit & loss** (P&L) | Collected vs pipeline, ad spend, contribution, ROAS. |
-| **VA performance** | Reviewing how the VA team is doing. |
-| **Weekly report** | The weekly sales and growth report. |
-| **Pricing rules** (Pricing) | You're changing what the business charges. Rare, and admin-only. |
-| **Team access** (Team) | Adding or removing people's access. |
-| **Email settings & delivery** (Email) | Email types, templates, consent, delivery lookup. |
-| **Booking compliance** (Compliance) | Acceptances, wording, privacy requests. |
-| **Assistant settings** (Assistant) | What Ask Novara may answer, and its review queue. |
+| **Business Accounts** (Accounts, Commercial) | Commercial accounts, STR hosts, property managers, insurance. |
+| **Recurring Plans** (Recurring) | Memberships and repeating cleans. |
+| **Cleaners & Crews** (Cleaners) | Anything about a contractor — status, scores, crews, conduct. |
+| **Hiring & Onboarding** (Intake, Applicants) | Applicants and onboarding. |
+| **Cleaner Pay** (Payroll) | Paying contractors. |
+| **Profit & Loss** (P&L) | Collected vs pipeline, ad spend, contribution, ROAS. |
+| **VA Performance** | Reviewing how the VA team is doing. |
+| **Weekly Report** | The weekly sales and growth report. |
+| **Pricing Rules** (Pricing) | You're changing what the business charges. Rare, and admin-only. |
+| **Team Access** (Team) | Adding or removing people's access. |
+| **Email Settings & Delivery** (Email) | Email types, templates, consent, delivery lookup. |
+| **Booking Compliance** (Compliance) | Acceptances, wording, privacy requests. |
+| **Assistant Settings** (Assistant) | What Ask Novara may answer, and its review queue. |
 
 ## Today
 
@@ -114,7 +114,7 @@ record. A job lands here when it is:
   complete.
 
 Unresolved dispatch alerts and offers still waiting on a cleaner are counted at the top of the
-same card, with a link to Dispatch & coverage. If the list can't load, the card says so
+same card, with a link to Dispatch & Coverage. If the list can't load, the card says so
 rather than showing an empty list.
 
 **Coming up this week** lists today's jobs and the next seven days.
@@ -142,10 +142,10 @@ is empty, the chart is built from bookings instead.
 Full admins also see a **Profit & Loss** strip linking to the P&L screen, which is where
 collected cash lives.
 
-:::note Booked value and Cleaner pay will not agree, and that's correct
-Booked value counts what jobs are worth. Cleaner pay counts what contractors are owed. Neither
+:::note Booked value and Cleaner Pay will not agree, and that's correct
+Booked value counts what jobs are worth. Cleaner Pay counts what contractors are owed. Neither
 is money collected. For the money picture — collected, ads, job profit, contribution, ROAS —
-use **Profit & loss**.
+use **Profit & Loss**.
 :::
 
 ## Things worth knowing before you start

@@ -40,7 +40,7 @@ export default function AdminPayroll() {
         </p>
       </div>
       <Tabs defaultValue="payout" className="space-y-4">
-        <TabsList variant="chips" aria-label="Cleaner pay sections">
+        <TabsList variant="chips" aria-label="Cleaner Pay sections">
           <TabsTrigger value="payout">Custom Payout</TabsTrigger>
           <TabsTrigger value="cleaner">Extra Pay</TabsTrigger>
           <TabsTrigger value="rates">Pay Rates</TabsTrigger>

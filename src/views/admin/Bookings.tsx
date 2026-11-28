@@ -454,7 +454,7 @@ export default function AdminBookings({
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
-          {/* Same style as AdminPageTitle; the title is a prop because Business accounts reuses this list as "Jobs". */}
+          {/* Same style as AdminPageTitle; the title is a prop because Business Accounts reuses this list as "Jobs". */}
           <h1 className="font-heading text-2xl tracking-tight break-words text-slate-900">{title}</h1>
           <p className="text-sm text-slate-500 mt-0.5">
             {totalCount != null
@@ -3030,7 +3030,7 @@ function BookingSheet({
                     First-clean deep clean
                   </CardTitle>
                   <CardDescription>
-                    Same prompt as public Glow checkout and New booking. $75 one-time reset on this visit only — it does not copy to later membership cleans.
+                    Same prompt as public Glow checkout and New Booking. $75 one-time reset on this visit only — it does not copy to later membership cleans.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
