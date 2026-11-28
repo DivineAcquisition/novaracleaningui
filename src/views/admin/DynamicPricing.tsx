@@ -24,6 +24,7 @@
 // quotes keep pointing at the version that priced them, so any past price is
 // reconstructable exactly.
 
+import { AdminPageTitle } from "@/components/admin/AdminPageTitle";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -293,7 +294,7 @@ export default function DynamicPricing() {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="font-jakarta text-2xl font-bold text-slate-900">Dynamic Pricing</h1>
+          <AdminPageTitle id="pricing" />
           <p className="text-sm text-slate-500 mt-0.5">
             Zones · demand-reactive adjustment · guardrails. Active config{" "}
             <Badge variant="outline" className="align-middle">v{configVersion}</Badge>

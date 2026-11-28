@@ -1,5 +1,6 @@
 "use client";
 
+import { AdminPageTitle } from "@/components/admin/AdminPageTitle";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -79,7 +80,7 @@ export default function ComplianceCenter() {
   return (
     <div className="space-y-8 p-4 md:p-6 max-w-5xl">
       <header>
-        <h1 className="text-2xl font-semibold text-foreground">Booking compliance</h1>
+        <AdminPageTitle id="compliance" />
         <p className="mt-1 text-sm text-muted-foreground">
           Legal text on this page is a draft until counsel marks it reviewed. Customers never see the draft label.
         </p>

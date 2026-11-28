@@ -14,6 +14,7 @@
 // zero, because reading a source outage as a zero is how you end up in a
 // performance conversation about nothing.
 
+import { AdminPageTitle } from "@/components/admin/AdminPageTitle";
 import { SectionTabs } from "@/components/ui/section-tabs";
 import {
   RiAlertLine,
@@ -273,9 +274,7 @@ export default function VaPerformance() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-start gap-3">
         <div className="min-w-0">
-          <h1 className="font-jakarta text-xl font-bold tracking-tight text-slate-900">
-            VA Performance
-          </h1>
+          <AdminPageTitle id="va-performance" />
           <p className="mt-0.5 text-sm text-slate-500">
             Verified actuals beside self-reported EOD. Flags ask for an explanation — you decide the
             outcome.

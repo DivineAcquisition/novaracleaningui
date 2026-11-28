@@ -20,6 +20,7 @@
 // deployed yet, the Members tab is built client-side from
 // customer_recurring_schedules so the page never errors out.
 
+import { AdminPageTitle } from "@/components/admin/AdminPageTitle";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -673,9 +674,7 @@ export default function AdminRecurringSchedules() {
     <div className="max-w-6xl mx-auto px-2 sm:px-4 py-4 sm:py-8 space-y-4 sm:space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <RiVipCrownLine className="w-6 h-6 text-violet-700" /> Memberships &amp; recurring
-          </h1>
+          <AdminPageTitle id="recurring" />
           <p className="text-sm text-muted-foreground mt-1">
             Every recurring client and their schedule in one hub. Each cycle auto-creates a confirmed booking,
             assigns the previous/preferred cleaner, syncs GHL · Airtable · Calendar, and texts the customer their

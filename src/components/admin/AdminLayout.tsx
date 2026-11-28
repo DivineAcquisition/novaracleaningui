@@ -283,10 +283,11 @@ function AdminMain({
                 </>
               ) : null}
               <active.icon aria-hidden className="size-[18px] shrink-0 text-[#6838ef]" />
-              <h1 className="text-sm font-semibold text-[#211a35] truncate tracking-tight">{active.title}</h1>
+              {/* Each page renders its own <h1> (AdminPageTitle); this is the location label. */}
+              <p className="text-sm font-semibold text-[#211a35] truncate tracking-tight">{active.title}</p>
             </>
           ) : (
-            <h1 className="text-[14px] font-semibold text-foreground">Workspace</h1>
+            <p className="text-[14px] font-semibold text-foreground">Workspace</p>
           )}
         </div>
         <div className="ml-auto flex items-center gap-2.5 text-xs text-muted-foreground">

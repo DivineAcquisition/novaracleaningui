@@ -925,7 +925,7 @@ export default function NeedsAttention() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Needs Attention</h1>
+          <h2 className="text-xl font-semibold tracking-tight text-slate-900">Needs Attention</h2>
           <p className="text-sm text-slate-600 mt-0.5 max-w-2xl">
             Bookings a delay has put at risk, with the customer message already written. One delay
             should cost minutes, not customers — so the fastest thing on this page is telling the

@@ -1,5 +1,6 @@
 "use client";
 
+import { AdminPageTitle } from "@/components/admin/AdminPageTitle";
 import { SectionTabs } from "@/components/ui/section-tabs";
 import { useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -106,15 +107,9 @@ export default function ProposalsHub() {
     <div className="max-w-[1240px] mx-auto px-1 sm:px-4 py-2 space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] font-bold tracking-[0.12em] uppercase text-violet-700/80 bg-violet-50 border border-violet-200/70 rounded-full px-2 py-0.5">
-              Proposals
-            </span>
-            <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-400">
-              STR · Office · Commercial · Property Manager
-            </span>
-          </div>
-          <p className="text-sm text-muted-foreground">
+          <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-400">STR · Office · Commercial · Property Manager</p>
+          <AdminPageTitle id="proposals" />
+          <p className="mt-1 text-sm text-muted-foreground">
             Office and commercial: request creates a searchable prospect, then queue → firm price → send.
             STR and property managers start on Send with the home details. A request never creates a job.
           </p>

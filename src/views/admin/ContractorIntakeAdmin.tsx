@@ -1,5 +1,6 @@
 "use client";
 
+import { AdminPageTitle } from "@/components/admin/AdminPageTitle";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { PIPELINE_STAGES } from "@/lib/contractor-intake/verification";
@@ -45,7 +46,7 @@ export default function ContractorIntakeAdmin() {
   return (
     <div className="mx-auto max-w-5xl space-y-8 p-4 md:p-6">
       <header>
-        <h1 className="font-heading text-2xl font-semibold">Contractor intake</h1>
+        <AdminPageTitle id="hiring" />
         <p className="mt-1 text-sm text-slate-600">Thresholds and pay rates are settings. Applicants do not see the draft label.</p>
       </header>
       {wording.some((row) => row.status !== "reviewed") && (

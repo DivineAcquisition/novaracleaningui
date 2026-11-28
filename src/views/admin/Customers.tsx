@@ -18,6 +18,7 @@
 //
 // Zero hardcoded data.
 
+import { AdminPageTitle } from "@/components/admin/AdminPageTitle";
 import {
   RiSearchLine,
   RiMailLine,
@@ -196,7 +197,7 @@ export default function AdminCustomers() {
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="font-jakarta text-2xl font-bold text-slate-900 tracking-tight">Customers</h1>
+          <AdminPageTitle id="customers" />
           <p className="text-sm text-slate-500">
             {customers.length} total accounts · only people who have completed a service
             with us. Search, manage credits, refund bookings, send password resets.

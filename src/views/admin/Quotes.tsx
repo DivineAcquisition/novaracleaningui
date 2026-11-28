@@ -9,6 +9,7 @@
 // benefits block is highlighted automatically on membership quotes
 // (weekly / biweekly / monthly frequency).
 
+import { AdminPageTitle } from "@/components/admin/AdminPageTitle";
 import {
   RiSearchLine,
   RiMailLine,
@@ -440,7 +441,7 @@ export default function AdminQuotes() {
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="font-jakarta text-2xl font-bold text-slate-900 tracking-tight">Quotes</h1>
+          <AdminPageTitle id="quotes" />
           <p className="text-sm text-slate-500">
             Saved New booking quotes and website custom-quote requests · send customer
             checklists by email or SMS.

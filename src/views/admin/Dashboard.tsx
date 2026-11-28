@@ -10,6 +10,7 @@
 // evening Eastern, and on days with no jobs the 30-day chart now falls back
 // to actual bookings so it is not a strip of empty bars.
 
+import { AdminPageTitle } from "@/components/admin/AdminPageTitle";
 import { useEffect, useState } from "react";
 import { buildTodayExceptions, exceptionWindow, type ExceptionJob, type TodayException } from "@/lib/today-exceptions";
 import Link from "next/link";
@@ -316,7 +317,7 @@ export default function AdminDashboard() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[#5126c7]">{todayLabel()}</p>
-          <h1 className="mt-1 text-[1.75rem] font-semibold tracking-[-0.03em] text-foreground">Today</h1>
+          <AdminPageTitle id="today" />
           <p className="text-sm text-muted-foreground">Eastern Time · what needs a decision first, then the schedule, then metrics.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

@@ -14,6 +14,7 @@
 // - All actions hit the existing cleaner-admin-action edge fn.
 // - Zero hardcoded data. Realtime row updates via Supabase channel.
 
+import { AdminPageTitle } from "@/components/admin/AdminPageTitle";
 import { SectionTabs } from "@/components/ui/section-tabs";
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -492,9 +493,8 @@ export default function AdminCleaners() {
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
-          <h1 className="font-jakarta text-2xl font-bold text-slate-900 tracking-tight">
-            {SECTION_COPY[section].title}
-          </h1>
+          {/* The sidebar's label: Applicants is where "Hiring & onboarding" takes VAs. */}
+          <AdminPageTitle id={section === "applicants" ? "hiring" : "cleaners"} />
           <p className="text-sm text-slate-500">{SECTION_COPY[section].subtitle}</p>
           <SectionTabs
             className="mt-2"

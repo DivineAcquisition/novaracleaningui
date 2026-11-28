@@ -7,6 +7,7 @@
 // the va_admin_portal_access migration). Only admins can manage the team
 // — the admin-create-team-user edge function enforces this server-side.
 
+import { AdminPageTitle } from "@/components/admin/AdminPageTitle";
 import { useEffect, useState } from "react";
 import {
   RiUserAddLine,
@@ -179,9 +180,7 @@ export default function AdminTeam() {
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
-          <h1 className="font-jakarta text-2xl font-bold text-slate-900 tracking-tight">
-            Team &amp; access
-          </h1>
+          <AdminPageTitle id="team" />
           <p className="text-sm text-slate-500">
             Admins and VAs who can sign into this console. VAs get the same
             workspace; only admins can manage the team.

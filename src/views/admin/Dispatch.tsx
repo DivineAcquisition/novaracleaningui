@@ -418,12 +418,12 @@ export default function AdminDispatch() {
         <div aria-hidden className="pointer-events-none absolute inset-0" style={{ background: "radial-gradient(120% 140% at 0% 0%, rgba(104,56,239,0.10), transparent 55%)" }} />
         <div className="relative px-5 py-5 sm:px-6 flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="font-jakarta text-2xl font-extrabold tracking-tight text-slate-900 flex items-center gap-2.5">
+            <h2 className="font-jakarta text-xl font-extrabold tracking-tight text-slate-900 flex items-center gap-2.5">
               <span className="w-10 h-10 rounded-xl inline-flex items-center justify-center text-white shadow-[0_4px_12px_-2px_rgba(104,56,239,0.5)]" style={{ background: RAMP }}>
                 <RiRocket2Line className="w-5 h-5" />
               </span>
               Dispatch
-            </h1>
+            </h2>
             <p className="text-sm text-slate-500 mt-1.5 max-w-xl">
               Approval-first staffing. New jobs wait here (and ping the dispatch channel) — cleaners are only
               texted when <span className="font-semibold text-slate-700">you</span> approve.

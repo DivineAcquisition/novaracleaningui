@@ -21,6 +21,7 @@
 //   * sticky right rail with the live quote in a brand-gradient card,
 //     premium CTA, and an inline "still needed" requirements list.
 
+import { AdminPageTitle } from "@/components/admin/AdminPageTitle";
 import {
   RiArrowRightLine,
   RiArrowLeftSLine,
@@ -1985,9 +1986,7 @@ export default function VaBooking() {
         </div>
         <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
           <div>
-            <h1 className="font-jakarta text-[28px] leading-tight font-bold tracking-tight text-slate-900">
-              New booking
-            </h1>
+            <AdminPageTitle id="new-booking" />
             <p className="text-sm text-slate-500 mt-1 max-w-2xl">
               {isRecurring
                 ? "Set up a recurring plan on behalf of a customer — the engine auto-books every cycle and assigns the preferred cleaner."

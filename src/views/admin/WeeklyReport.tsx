@@ -4,6 +4,7 @@
 // weekly-report-generate edge function (cron + on demand). This page lists
 // history, opens the PDF, and lets admin change the Monday-morning window.
 
+import { AdminPageTitle } from "@/components/admin/AdminPageTitle";
 import {
   RiExternalLinkLine,
   RiFileChartLine,
@@ -172,9 +173,8 @@ export default function WeeklyReport() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-[11px] uppercase tracking-[0.12em] font-bold text-[#6838ef]">Reporting</p>
-          <h2 className="font-jakarta text-xl font-semibold text-slate-900 mt-0.5">
-            Weekly Sales, Retention &amp; Growth
-          </h2>
+          <AdminPageTitle id="weekly-report" className="mt-0.5" />
+          <p className="text-sm font-medium text-slate-700">Sales, retention &amp; growth</p>
           <p className="text-sm text-slate-500 mt-1 max-w-2xl">
             Auto-generated Monday morning covering the prior Mon–Sun. Every figure is pulled from
             live systems; missing sources show as unavailable. Insights cite those numbers and do

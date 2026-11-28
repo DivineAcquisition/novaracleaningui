@@ -99,8 +99,8 @@ async function main() {
     check("admin body uses the local Inter Display", /interDisplay/i.test(body.family), body.family);
     check("admin body weight 450", body.weight === "450", body.weight);
     check("admin opsz locked to 32, auto optical sizing off", body.opsz.includes("32") && body.optical === "none", body);
-    const h1 = await typography(page, "header h1");
-    check("header title uses Selestial's medium title weight (600)", h1.weight === "600", h1.weight);
+    const h1 = await typography(page, "main h1");
+    check("page title uses Selestial's title weight (550)", h1.weight === "550", h1.weight);
     const fonts = await page.evaluate(() =>
       Array.from(document.fonts).map((f) => ({ family: f.family, style: f.style, weight: f.weight, status: f.status })),
     );
@@ -252,6 +252,26 @@ async function main() {
     await page.locator("[role=tablist][aria-label='Quality control sections'] [role=tab][aria-selected=true]").focus();
     await page.keyboard.press("ArrowRight");
     check(`${width}px: arrow keys move between QC tabs`, (await page.locator("[role=tablist][aria-label='Quality control sections'] [aria-selected=true]").innerText()).includes("Documentation"));
+  }
+
+  // ── Every page's title matches its sidebar label ──
+  {
+    const { page } = await open(browser);
+    await page.goto(`${BASE}/admin/dashboard`, { waitUntil: "domcontentloaded" });
+    const nav = page.locator("aside nav[aria-label=Workspace]");
+    await nav.waitFor({ timeout: 60_000 });
+    await page.waitForFunction(() => document.querySelectorAll("aside nav[aria-label=Workspace] a").length >= 20, null, { timeout: 30_000 });
+    const items = await nav.locator("a").evaluateAll((as) => as.map((a) => ({ label: (a.textContent || "").trim(), href: a.getAttribute("href") || "" })));
+    items.unshift({ label: "New booking", href: "/admin/csr" });
+    const mismatches: string[] = [];
+    for (const item of items) {
+      await page.goto(`${BASE}${item.href}`, { waitUntil: "domcontentloaded" });
+      const title = await page.locator("main h1").first().innerText({ timeout: 90_000 }).catch(() => "(no h1)");
+      const count = await page.locator("h1").count();
+      if (title.trim() !== item.label) mismatches.push(`${item.href}: "${title.trim()}" ≠ "${item.label}"`);
+      if (count !== 1) mismatches.push(`${item.href}: ${count} h1 elements`);
+    }
+    check(`all ${items.length} page titles match the sidebar, one h1 each`, mismatches.length === 0, mismatches);
   }
 
   // ── Radix Select portal ──

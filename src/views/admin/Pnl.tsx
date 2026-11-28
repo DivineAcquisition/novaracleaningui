@@ -7,6 +7,7 @@
 // jobs show up before they finish). Contribution = job profit − ads − paid
 // expenses. The sheet is a one-way mirror of the same numbers.
 
+import { AdminPageTitle } from "@/components/admin/AdminPageTitle";
 import {
   RiExternalLinkLine,
   RiLineChartLine,
@@ -146,7 +147,7 @@ export default function AdminPnl() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-[11px] uppercase tracking-[0.12em] font-bold text-[#6838ef]">Reporting</p>
-          <h1 className="font-jakarta text-2xl font-bold text-slate-900 tracking-tight">Profit &amp; Loss</h1>
+          <AdminPageTitle id="pnl" />
           <p className="text-sm text-slate-500 mt-1 max-w-2xl">
             Collected jobs, still-booked pipeline, ad spend, and contribution — Eastern Time, from
             May 2026 on. The Google Sheet is a mirror of these numbers, not the source.

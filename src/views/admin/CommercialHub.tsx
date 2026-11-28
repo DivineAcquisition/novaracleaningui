@@ -6,6 +6,7 @@
 // ongoing account: clients, jobs, book-a-site, recurring, COI, STR hosts,
 // property-manager portfolios, published checklists, and comms.
 
+import { AdminPageTitle } from "@/components/admin/AdminPageTitle";
 import { SectionTabs } from "@/components/ui/section-tabs";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -59,15 +60,8 @@ export default function CommercialHub() {
   return (
     <div className="max-w-[1240px] mx-auto px-1 sm:px-4 py-2 space-y-4">
       <div>
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-[10px] font-bold tracking-[0.12em] uppercase text-violet-700/80 bg-violet-50 border border-violet-200/70 rounded-full px-2 py-0.5">
-            Accounts
-          </span>
-          <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-400">
-            Management
-          </span>
-        </div>
-        <p className="text-sm text-muted-foreground">
+        <AdminPageTitle id="accounts" />
+        <p className="mt-1 text-sm text-muted-foreground">
           Business accounts, commercial jobs, STR hosts, property-manager portfolios, certificates, and recurring schedules. Sending an offer lives on Proposals.
         </p>
       </div>

@@ -8,6 +8,7 @@
 //   Pay Rates     — crew-size revenue-share configuration
 //   Run Payroll   — Stripe Connect batch of Extra Pay (Custom Payout Stripe paused)
 
+import { AdminPageTitle } from "@/components/admin/AdminPageTitle";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -31,7 +32,7 @@ export default function AdminPayroll() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="font-jakarta text-2xl font-bold text-slate-900 tracking-tight">Payroll</h1>
+        <AdminPageTitle id="pay" />
         <p className="text-sm text-slate-500 mt-1">
           Confirm amounts in Custom Payout (notifies the cleaner) and Extra Pay.
           Stripe transfers for Custom Payout are paused — mark paid when you&apos;ve paid them.

@@ -356,3 +356,13 @@ export function findActiveItem(
 export function searchText(item: AdminNavItem, groupTitle?: string): string {
   return [item.title, item.help, groupTitle, ...(item.aliases || [])].filter(Boolean).join(" ").toLowerCase();
 }
+
+/** The sidebar label for a nav item id — the page title every screen shows. */
+export function navTitle(id: string): string {
+  if (id === PRIMARY_ACTION.id) return PRIMARY_ACTION.title;
+  for (const group of NAV_GROUPS) {
+    const item = group.items.find((i) => i.id === id);
+    if (item) return item.title;
+  }
+  throw new Error(`Unknown admin nav id: ${id}`);
+}

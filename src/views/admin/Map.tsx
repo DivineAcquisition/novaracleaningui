@@ -366,10 +366,10 @@ export default function AdminMap() {
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
-          <h1 className="font-jakarta text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+          <h2 className="font-jakarta text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
             <RiMapPin2Line className="w-6 h-6 text-violet-700" />
             Operational map
-          </h1>
+          </h2>
           <p className="text-sm text-slate-500">
             Cleaner coverage cross-referenced with the next 14 days of bookings. Coverage gaps surface zips you should recruit in.
           </p>

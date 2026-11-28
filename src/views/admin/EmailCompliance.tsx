@@ -1,5 +1,6 @@
 "use client";
 
+import { AdminPageTitle } from "@/components/admin/AdminPageTitle";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -126,7 +127,16 @@ export default function EmailCompliance() {
     }
   };
 
-  if (loading || !identity) return <p className="p-6 text-sm text-slate-500">Loading email settings…</p>;
+  if (loading || !identity) {
+    return (
+      <div className="space-y-2">
+        <AdminPageTitle id="email" />
+        <p className="text-sm text-slate-500" role="status">
+          {loading ? "Loading email settings…" : "Email settings aren’t available right now. Refresh to try again."}
+        </p>
+      </div>
+    );
+  }
 
   const address = identity.mailingAddress;
   const setAddress = (key: keyof Identity["mailingAddress"], value: string) =>
@@ -135,7 +145,7 @@ export default function EmailCompliance() {
   return (
     <div className="mx-auto max-w-5xl space-y-8 p-4 md:p-6">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Email</h1>
+        <AdminPageTitle id="email" />
         <p className="mt-1 text-sm text-slate-600">Every send has one type. The type builds the footer from these details.</p>
       </div>
 

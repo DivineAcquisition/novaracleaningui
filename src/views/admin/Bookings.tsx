@@ -8,6 +8,7 @@
 // in the customer portal, plus the admin-only refund-and-cancel and
 // hard cancel-without-refund.
 
+import { navTitle } from "@/components/admin/admin-nav";
 import { SectionTabs } from "@/components/ui/section-tabs";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -292,7 +293,7 @@ function propertySummary(booking: BookingRow): string | null {
 
 export default function AdminBookings({
   scope = "all",
-  title = "Bookings",
+  title = navTitle("bookings"),
   newJob,
 }: {
   scope?: "all" | "commercial";
@@ -453,10 +454,8 @@ export default function AdminBookings({
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
-          <h1 className="font-jakarta text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <RiCalendarCheckLine className="w-6 h-6 text-violet-700" />
-            {title}
-          </h1>
+          {/* Same style as AdminPageTitle; the title is a prop because Business accounts reuses this list as "Jobs". */}
+          <h1 className="font-heading text-2xl tracking-tight break-words text-slate-900">{title}</h1>
           <p className="text-sm text-slate-500 mt-0.5">
             {totalCount != null
               ? `${totalCount} ${scope === "commercial" ? "commercial " : ""}booking${totalCount === 1 ? "" : "s"} match current filters`

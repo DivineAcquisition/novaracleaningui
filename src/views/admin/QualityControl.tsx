@@ -14,6 +14,7 @@
 // Dashboard: open issues by severity, issues by cleaner, issue rate, and
 // documentation compliance (undocumented completed jobs surfaced loudly).
 
+import { AdminPageTitle } from "@/components/admin/AdminPageTitle";
 import { SectionTabs } from "@/components/ui/section-tabs";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -353,9 +354,7 @@ export default function QualityControl() {
     <div className="p-4 lg:p-6 space-y-5 max-w-[1400px] mx-auto">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <RiShieldCheckLine className="w-6 h-6 text-violet-600" /> Quality Control
-          </h1>
+          <AdminPageTitle id="qc" />
           <p className="text-sm text-slate-500 mt-0.5">
             A documented job is a defensible job — photos and checklist in Supabase, a Stripe evidence set of one file per evidence type.
           </p>

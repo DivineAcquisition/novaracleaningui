@@ -18,6 +18,7 @@
 // Dispatch's ?job= parameter still lands on the right card, because those URLs
 // are in sent emails and Discord alerts that we don't get to edit.
 
+import { AdminPageTitle } from "@/components/admin/AdminPageTitle";
 import { RiAlarmWarningLine, RiMapPin2Line, RiRefreshLine, RiRocket2Line } from "@/components/icons";
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -60,6 +61,7 @@ export default function Operations() {
 
   return (
     <div className="space-y-4">
+      <AdminPageTitle id="dispatch" />
       <Tabs value={tab} onValueChange={(v) => setTab(v as TabId)}>
         <TabsList variant="chips" aria-label="Dispatch & coverage sections">
           {TABS.map(({ id, label, icon: Icon }) => (
