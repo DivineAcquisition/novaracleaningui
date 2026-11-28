@@ -763,7 +763,7 @@ export default function AdminRecurringSchedules() {
       </div>
 
       <Tabs defaultValue="members" className="w-full">
-        <TabsList className="flex flex-wrap h-auto">
+        <TabsList variant="chips" aria-label="Recurring plan sections">
           <TabsTrigger value="members" className="gap-1.5">
             <RiUserHeartLine className="w-4 h-4" /> Members ({filteredMembers.length})
           </TabsTrigger>

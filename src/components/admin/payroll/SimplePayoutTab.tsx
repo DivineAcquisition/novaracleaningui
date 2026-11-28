@@ -408,7 +408,7 @@ export default function SimplePayoutTab() {
       {/* Dashboard */}
       <div>
         <Tabs value={period} onValueChange={(v) => setPeriod(v as typeof period)}>
-          <TabsList>
+          <TabsList variant="chips">
             <TabsTrigger value="week">This Week</TabsTrigger>
             <TabsTrigger value="month">This Month</TabsTrigger>
             <TabsTrigger value="year">This Year</TabsTrigger>

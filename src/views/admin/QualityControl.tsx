@@ -14,6 +14,7 @@
 // Dashboard: open issues by severity, issues by cleaner, issue rate, and
 // documentation compliance (undocumented completed jobs surfaced loudly).
 
+import { SectionTabs } from "@/components/ui/section-tabs";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
@@ -430,20 +431,18 @@ export default function QualityControl() {
       </div>
 
       {/* ─── Tabs ──────────────────────────────────────────────────────── */}
-      <div className="flex gap-1 border-b border-slate-200">
-        {([["issues", "Issues"], ["docs", "Documentation"], ["cleaners", "By Cleaner"], ["recleans", "Re-cleans"], ["scope", "Scope Adjustments"]] as const).map(([id, t]) => (
-          <button
-            key={id}
-            onClick={() => setTab(id)}
-            className={cn(
-              "px-4 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors",
-              tab === id ? "border-violet-600 text-violet-700" : "border-transparent text-slate-500 hover:text-slate-800",
-            )}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
+      <SectionTabs<typeof tab>
+        label="Quality control sections"
+        value={tab}
+        onChange={setTab}
+        tabs={[
+          { id: "issues", label: "Issues" },
+          { id: "docs", label: "Documentation" },
+          { id: "cleaners", label: "By Cleaner" },
+          { id: "recleans", label: "Re-cleans" },
+          { id: "scope", label: "Scope Adjustments" },
+        ]}
+      />
 
       {loading ? (
         <div className="space-y-2">{[...Array(6)].map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}</div>

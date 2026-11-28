@@ -28,6 +28,7 @@
 // nudged at, called at, what they said — because a no-show declared without
 // that trail is a guess, and this product does not punish people on guesses.
 
+import { SectionTabs } from "@/components/ui/section-tabs";
 import {
   RiAlarmWarningLine,
   RiAlertLine,
@@ -1006,31 +1007,18 @@ export default function NeedsAttention() {
         </Card>
       ) : null}
 
-      <div className="flex flex-wrap gap-1 border-b border-slate-200">
-        {(
-          [
-            ["risk", "At risk", RiAlertLine],
-            ["coverage", "Coverage", RiUserSharedLine],
-            ["backups", "On call", RiLifebuoyLine],
-            ["projections", "Projections", RiRulerLine],
-            ["settings", "Thresholds", RiSettings3Line],
-          ] as [Tab, string, typeof RiAlertLine][]
-        ).map(([key, label, Icon]) => (
-          <button
-            key={key}
-            onClick={() => setTab(key)}
-            className={cn(
-              "flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
-              tab === key
-                ? "border-indigo-600 text-indigo-700"
-                : "border-transparent text-slate-500 hover:text-slate-800",
-            )}
-          >
-            <Icon className="w-4 h-4" />
-            {label}
-          </button>
-        ))}
-      </div>
+      <SectionTabs<Tab>
+        label="Needs attention sections"
+        value={tab}
+        onChange={setTab}
+        tabs={[
+          { id: "risk", label: "At risk", icon: RiAlertLine },
+          { id: "coverage", label: "Coverage", icon: RiUserSharedLine },
+          { id: "backups", label: "On call", icon: RiLifebuoyLine },
+          { id: "projections", label: "Projections", icon: RiRulerLine },
+          { id: "settings", label: "Thresholds", icon: RiSettings3Line },
+        ]}
+      />
 
       {loading && !payload ? (
         <div className="space-y-3">

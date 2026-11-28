@@ -14,6 +14,7 @@
 // zero, because reading a source outage as a zero is how you end up in a
 // performance conversation about nothing.
 
+import { SectionTabs } from "@/components/ui/section-tabs";
 import {
   RiAlertLine,
   RiCheckboxCircleLine,
@@ -295,27 +296,16 @@ export default function VaPerformance() {
         </div>
       </div>
 
-      <div className="flex gap-1 overflow-x-auto border-b border-slate-200">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={cn(
-              "-mb-px whitespace-nowrap border-b-2 px-4 py-2 text-sm font-semibold transition-colors",
-              tab === t.id
-                ? "border-violet-600 text-violet-700"
-                : "border-transparent text-slate-500 hover:text-slate-800",
-            )}
-          >
-            {t.label}
-            {t.id === "queue" && overview?.today.openFlagTotal ? (
-              <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">
-                {overview.today.openFlagTotal}
-              </span>
-            ) : null}
-          </button>
-        ))}
-      </div>
+      <SectionTabs<Tab>
+        label="VA performance sections"
+        value={tab}
+        onChange={setTab}
+        tabs={TABS.map((t) => ({
+          id: t.id,
+          label: t.label,
+          badge: t.id === "queue" && overview?.today.openFlagTotal ? overview.today.openFlagTotal : undefined,
+        }))}
+      />
 
       {loading && !overview ? (
         <div className="space-y-3">

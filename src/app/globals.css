@@ -173,9 +173,16 @@
 
   body {
     @apply bg-background text-foreground font-sans;
-    font-feature-settings: "ss01", "ss02";
-    font-optical-sizing: auto;
+    /* Inter Display everywhere (src/lib/fonts.ts). Chromium ignores the
+       @font-face opsz descriptor, so the Display cut is locked here too. */
+    font-feature-settings: "liga" 1, "calt" 1;
+    font-optical-sizing: none;
+    font-variation-settings: "opsz" 32;
     -webkit-font-smoothing: antialiased;
+  }
+  code, kbd, samp, pre {
+    font-family: var(--font-mono), ui-monospace, SFMono-Regular, monospace;
+    font-variation-settings: normal;
   }
 
   ::selection {
@@ -867,11 +874,11 @@ html:not(.dark) .admin-theme {
   --shadow-card: 0 1px 2px rgba(11, 10, 17, 0.04), 0 12px 32px -28px rgba(11, 10, 17, 0.35);
   --shadow-lavender: 0 10px 24px -12px rgba(104, 16, 254, 0.5);
 }
-/* ─── Admin typography (all appearance modes) ───────────────────────────
-   Inter Display, matching the Selestial operator app. Scoped by :has() to
-   documents that contain the admin shell ([data-admin-text]), so the public
-   site and booking flow are untouched, while portaled menus, dialogs, sheets
-   and toasts mounted under <body> still inherit it. Selectors are kept at
+/* ─── Admin type scale (all appearance modes) ────────────────────────────
+   The face is Inter Display site-wide; inside the admin workspace every
+   weight moves up by 50, as in the Selestial operator app. Scoped by :has()
+   to documents containing the admin shell ([data-admin-text]) so portaled
+   menus, dialogs, sheets and toasts under <body> follow it too. Selectors are kept at
    zero or element specificity (:where) so an explicit utility on an element
    (font-semibold, font-mono, tabular-nums) still wins. */
 :where(:root:has([data-admin-text])) {
@@ -881,13 +888,7 @@ html:not(.dark) .admin-theme {
   --fw-bold: 750;
 }
 :root:has([data-admin-text]) body {
-  /* Specific enough to beat the public body rule (ss01/ss02, auto opsz);
-     body carries no weight or feature utilities, so nothing is shadowed. */
   font-weight: 450;
-  font-feature-settings: "liga" 1, "calt" 1;
-  /* Chromium ignores the @font-face opsz descriptor; lock it here. */
-  font-optical-sizing: none;
-  font-variation-settings: "opsz" 32;
 }
 /* Element specificity (0,0,1): later than the public h1–h6 base rule so it
    wins, below any utility class (0,1,0) so font-semibold etc. still apply. */
@@ -897,17 +898,12 @@ html:not(.dark) .admin-theme {
 :where(:root:has([data-admin-text])) h4,
 :where(:root:has([data-admin-text])) h5,
 :where(:root:has([data-admin-text])) h6 {
-  font-family: var(--font-ui), Inter, system-ui, sans-serif;
   font-weight: 550;
   letter-spacing: -0.02em;
 }
 :where(:root:has([data-admin-text])) :where(.font-heading, .font-jakarta) {
   font-weight: 550;
   letter-spacing: -0.02em;
-}
-:where(:root:has([data-admin-text])) :where(code, kbd, samp, pre, .font-mono) {
-  font-family: var(--font-ui-mono), ui-monospace, SFMono-Regular, monospace;
-  font-variation-settings: normal;
 }
 /* Prices, times and counts line up in columns. */
 :where(:root:has([data-admin-text])) :where(td, .tabular, [data-numeric]) {
@@ -950,12 +946,12 @@ html:not(.dark) .admin-theme table tbody tr { border-color: #f0eef4; }
 html:not(.dark) .admin-theme table tbody tr:hover { background: #faf8ff; }
 
 /* Tabs: segmented control */
-html:not(.dark) .admin-theme [role="tablist"] {
+html:not(.dark) .admin-theme [role="tablist"]:not([data-variant="chips"]) {
   background: #f3f2f7;
   border: 1px solid #ecebf1;
   border-radius: 0.75rem;
 }
-html:not(.dark) .admin-theme [role="tab"][data-state="active"] {
+html:not(.dark) .admin-theme [role="tab"][data-state="active"]:not([data-variant="chips"]) {
   background: #ffffff;
   color: #0b0a11;
   box-shadow: 0 1px 2px rgba(11, 10, 17, 0.08), 0 0 0 1px rgba(11, 10, 17, 0.04);

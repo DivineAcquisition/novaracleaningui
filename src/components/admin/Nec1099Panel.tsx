@@ -19,7 +19,8 @@ type Preview = {
   box1cCodes: string[] | null;
   box1dCents: null;
   box3Cents: null;
-  w9: { validated: boolean; legalName?: string; tinMasked?: string };
+  /** Missing when no W-9 has been submitted; treat as not validated. */
+  w9?: { validated: boolean; legalName?: string; tinMasked?: string } | null;
   payerReady: boolean;
   payer?: {
     name: string;
@@ -92,7 +93,13 @@ export function Nec1099Panel({ cleanerId }: { cleanerId: string }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = (await invoke({ action: "preview", cleanerId, taxYear: year })) as unknown as Preview;
+      const raw = (await invoke({ action: "preview", cleanerId, taxYear: year })) as unknown as Partial<Preview> | null;
+      // An unexpected response must not take the whole contractor panel
+      // down with it: show an error for this section instead.
+      if (!raw || typeof raw.taxYear !== "number" || typeof raw.combinedCents !== "number") {
+        throw new Error("The 1099 preview came back incomplete. The rest of this contractor record is unaffected.");
+      }
+      const data: Preview = { ...(raw as Preview), blockers: Array.isArray(raw.blockers) ? raw.blockers : [] };
       setPreview(data);
       setLoadError(null);
     } catch (err) {
@@ -204,7 +211,7 @@ export function Nec1099Panel({ cleanerId }: { cleanerId: string }) {
           <p>Box 1c occupation code {preview.box1cCodes?.length ? preview.box1cCodes.join(", ") : "Blank"}.</p>
           <p>Box 1d overtime compensation Blank. Box 3 excess golden parachute payments Blank.</p>
           <p>Combined for the $2,000 threshold: {money(preview.combinedCents)}. {preview.eligible ? "At or above the threshold." : "Under the threshold."}</p>
-          {preview.w9.validated ? (
+          {preview.w9?.validated ? (
             <p>W-9 on file for {preview.w9.legalName}. TIN {preview.w9.tinMasked}.</p>
           ) : (
             <p>No validated W-9 on file.</p>
@@ -215,7 +222,7 @@ export function Nec1099Panel({ cleanerId }: { cleanerId: string }) {
         </div>
       ) : null}
 
-      {preview && (!preview.w9.validated || showW9) ? (
+      {preview && (!preview.w9?.validated || showW9) ? (
         <div className="grid grid-cols-2 gap-2">
           <Input placeholder="Legal name on the W-9" value={w9.legalName} onChange={(event) => setW9({ ...w9, legalName: event.target.value })} />
           <Input placeholder="TIN" value={w9.tin} onChange={(event) => setW9({ ...w9, tin: event.target.value })} />

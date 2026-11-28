@@ -1,5 +1,6 @@
 "use client";
 
+import { SectionTabs } from "@/components/ui/section-tabs";
 import { useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -135,26 +136,12 @@ export default function ProposalsHub() {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-1 rounded-xl border border-slate-200 bg-white p-1">
-        {WORK_TABS.map((t) => {
-          const Icon = t.icon;
-          const on = tab === t.id;
-          return (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setTab(t.id)}
-              className={cn(
-                "flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium",
-                on ? "bg-violet-600 text-white" : "text-slate-600 hover:bg-slate-50",
-              )}
-            >
-              <Icon className="w-4 h-4" />
-              {t.label}
-            </button>
-          );
-        })}
-      </div>
+      <SectionTabs
+        label="Proposal sections"
+        value={tab}
+        onChange={(id) => setTab(id)}
+        tabs={WORK_TABS.map((t) => ({ id: t.id as Tab, label: t.label, icon: t.icon }))}
+      />
 
       {onConfig && (
         <p className="text-xs text-slate-500 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">

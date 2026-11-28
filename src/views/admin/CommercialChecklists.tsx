@@ -13,6 +13,7 @@
 //             signal before that edit vs after it. This is the loop closing:
 //             edit → observe → confirm or revisit.
 
+import { SectionTabs } from "@/components/ui/section-tabs";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
@@ -207,27 +208,17 @@ export default function CommercialChecklists() {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap gap-1">
-          {([
-            ["standard", "Standard"],
-            ["review", openCount > 0 ? `Review (${openCount})` : "Review"],
-            ["health", "Health"],
-          ] as Array<[View, string]>).map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setView(id)}
-              className={cn(
-                "rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
-                view === id
-                  ? "bg-violet-50 text-violet-800 ring-1 ring-violet-200"
-                  : "text-slate-500 hover:bg-slate-100 hover:text-slate-800",
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <SectionTabs<View>
+          className="w-auto"
+          label="Checklist views"
+          value={view}
+          onChange={setView}
+          tabs={[
+            { id: "standard", label: "Standard" },
+            { id: "review", label: "Review", badge: openCount > 0 ? openCount : undefined },
+            { id: "health", label: "Health" },
+          ]}
+        />
         <div className="flex items-center gap-2">
           {items.length === 0 && !loading && (
             <span className="text-xs text-amber-700">Catalog not seeded yet —</span>

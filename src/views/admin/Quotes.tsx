@@ -481,7 +481,7 @@ export default function AdminQuotes() {
       </Card>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as "va" | "custom")}>
-        <TabsList className="bg-slate-100">
+        <TabsList variant="chips" aria-label="Quote sources">
           <TabsTrigger value="va">Saved quotes ({filteredVa.length})</TabsTrigger>
           <TabsTrigger value="custom">Website requests ({filteredCustom.length})</TabsTrigger>
         </TabsList>

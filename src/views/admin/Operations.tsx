@@ -61,7 +61,7 @@ export default function Operations() {
   return (
     <div className="space-y-4">
       <Tabs value={tab} onValueChange={(v) => setTab(v as TabId)}>
-        <TabsList className="flex h-auto flex-wrap">
+        <TabsList variant="chips" aria-label="Dispatch & coverage sections">
           {TABS.map(({ id, label, icon: Icon }) => (
             <TabsTrigger key={id} value={id} className="gap-1.5">
               <Icon className="h-4 w-4" />

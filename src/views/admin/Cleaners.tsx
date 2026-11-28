@@ -14,6 +14,7 @@
 // - All actions hit the existing cleaner-admin-action edge fn.
 // - Zero hardcoded data. Realtime row updates via Supabase channel.
 
+import { SectionTabs } from "@/components/ui/section-tabs";
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -495,30 +496,19 @@ export default function AdminCleaners() {
             {SECTION_COPY[section].title}
           </h1>
           <p className="text-sm text-slate-500">{SECTION_COPY[section].subtitle}</p>
-          <div className="mt-2 inline-flex flex-wrap gap-1 bg-slate-100 rounded-lg p-1">
-            {(
-              [
-                { id: "contractors", label: "Contractors" },
-                { id: "applicants", label: "Applicants" },
-                { id: "urgent-hire", label: "Urgent Hire" },
-                { id: "pulse-check", label: "Pulse check" },
-                { id: "crews", label: "Crews" },
-              ] as const
-            ).map((s) => (
-              <button
-                key={s.id}
-                onClick={() => setSection(s.id)}
-                className={cn(
-                  "px-3 py-1.5 text-xs font-medium rounded-md transition-colors",
-                  section === s.id
-                    ? "bg-white text-slate-900 shadow-sm"
-                    : "text-slate-600 hover:text-slate-900",
-                )}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
+          <SectionTabs
+            className="mt-2"
+            label="Cleaner sections"
+            value={section}
+            onChange={setSection}
+            tabs={[
+              { id: "contractors", label: "Contractors" },
+              { id: "applicants", label: "Applicants" },
+              { id: "urgent-hire", label: "Urgent Hire" },
+              { id: "pulse-check", label: "Pulse check" },
+              { id: "crews", label: "Crews" },
+            ]}
+          />
         </div>
         {section === "contractors" && (
           <div className="flex flex-wrap items-center gap-3">
@@ -833,23 +823,23 @@ function CleanerSheet({
               <ContactSection cleaner={cleaner} />
 
               <Tabs defaultValue="jobs">
-                <TabsList className="grid grid-cols-3 sm:grid-cols-6 h-auto bg-slate-100">
-                  <TabsTrigger value="jobs" className="data-[state=active]:bg-white">
+                <TabsList variant="chips" aria-label="Cleaner details">
+                  <TabsTrigger value="jobs">
                     Jobs
                   </TabsTrigger>
-                  <TabsTrigger value="onboarding" className="data-[state=active]:bg-white">
+                  <TabsTrigger value="onboarding">
                     Onboarding
                   </TabsTrigger>
-                  <TabsTrigger value="performance" className="data-[state=active]:bg-white">
+                  <TabsTrigger value="performance">
                     Performance
                   </TabsTrigger>
-                  <TabsTrigger value="accountability" className="data-[state=active]:bg-white">
+                  <TabsTrigger value="accountability">
                     Accountability
                   </TabsTrigger>
-                  <TabsTrigger value="ghl" className="data-[state=active]:bg-white">
+                  <TabsTrigger value="ghl">
                     GHL
                   </TabsTrigger>
-                  <TabsTrigger value="operations" className="data-[state=active]:bg-white">
+                  <TabsTrigger value="operations">
                     Operations
                   </TabsTrigger>
                 </TabsList>

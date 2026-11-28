@@ -720,11 +720,11 @@ function CustomerSheet({
 
               {/* Tabs */}
               <Tabs defaultValue="bookings">
-                <TabsList className="grid grid-cols-2 bg-slate-100">
-                  <TabsTrigger value="bookings" className="data-[state=active]:bg-white">
+                <TabsList variant="chips">
+                  <TabsTrigger value="bookings">
                     Bookings ({bookings.length})
                   </TabsTrigger>
-                  <TabsTrigger value="wallet" className="data-[state=active]:bg-white">
+                  <TabsTrigger value="wallet">
                     Credit wallet
                   </TabsTrigger>
                 </TabsList>

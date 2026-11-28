@@ -8,6 +8,7 @@
 // in the customer portal, plus the admin-only refund-and-cancel and
 // hard cancel-without-refund.
 
+import { SectionTabs } from "@/components/ui/section-tabs";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { BOOKING_VIEWS, jobState, matchesView, parseBookingView, paymentState, staffingState, type BookingViewId } from "@/lib/booking-views";
@@ -478,25 +479,12 @@ export default function AdminBookings({
       </div>
 
       {/* Saved views */}
-      <div role="tablist" aria-label="Booking views" className="flex flex-wrap gap-1.5">
-        {BOOKING_VIEWS.map((v) => (
-          <button
-            key={v.id}
-            type="button"
-            role="tab"
-            aria-selected={view === v.id}
-            title={v.hint}
-            onClick={() => setView(v.id)}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px] font-medium transition-colors",
-              view === v.id ? "border-violet-300 bg-violet-50 text-violet-900" : "border-slate-200 bg-white text-slate-600 hover:text-slate-900",
-            )}
-          >
-            {v.label}
-            {!loading ? <span className="tabular-nums text-[11px] text-slate-500">{viewCounts[v.id]}</span> : null}
-          </button>
-        ))}
-      </div>
+      <SectionTabs<BookingViewId>
+        label="Booking views"
+        value={view}
+        onChange={setView}
+        tabs={BOOKING_VIEWS.map((v) => ({ id: v.id, label: v.label, title: v.hint, badge: loading ? undefined : viewCounts[v.id] }))}
+      />
 
       {/* Filters */}
       <Card className="border-slate-200 shadow-sm rounded-2xl">
