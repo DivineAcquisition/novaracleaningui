@@ -74,6 +74,7 @@ export default {
         line: "#E9E7EE",
         brand: themable("brand", BRAND_RAMP),
         slate: themable("slate", colors.slate),
+        zinc: themable("zinc", colors.zinc),
         violet: themable("violet", colors.violet),
         indigo: themable("indigo", colors.indigo),
         purple: themable("purple", colors.purple),

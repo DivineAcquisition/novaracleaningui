@@ -99,7 +99,7 @@ export default function AssistantKnowledge() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <header>
-        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary">Ops Assistant</p>
+        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary">Ask Novara</p>
         <h1 className="mt-1 font-heading text-2xl font-bold tracking-tight">Policy & escalation articles</h1>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
           How-the-tool-works answers come from the generated guides at docs.novaracleaning.com — those

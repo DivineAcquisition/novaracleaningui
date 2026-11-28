@@ -54,7 +54,7 @@ function persist(choice: StoredCookieChoice) {
 }
 
 const choiceButton =
-  "min-h-10 rounded-xl border border-zinc-200 bg-white px-2 py-2 text-center text-[13px] font-semibold leading-tight text-zinc-900 transition hover:border-[#6810FE]/40 hover:bg-[#6810FE]/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6810FE] focus-visible:ring-offset-2";
+  "min-h-10 rounded-xl border border-zinc-200 bg-white px-2 py-2 text-center text-[13px] font-semibold leading-tight text-zinc-900 transition hover:border-brand-500/40 hover:bg-brand-500/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2";
 
 function ChoiceRow({
   title,
@@ -83,7 +83,7 @@ function ChoiceRow({
         disabled={disabled}
         aria-label={label}
         onChange={onChange ? (event) => onChange(event.target.checked) : undefined}
-        className="h-5 w-5 shrink-0 accent-[#6810FE]"
+        className="h-5 w-5 shrink-0 accent-brand-500"
       />
     </label>
   );
@@ -143,16 +143,16 @@ export function CookieNotice() {
   if (!mounted || !open || typeof document === "undefined") return null;
 
   return createPortal(
-    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[200] flex justify-end p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-5">
+    <div data-cookie-notice className="pointer-events-none fixed inset-x-0 bottom-0 z-[200] flex justify-end p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-5">
       <div
         role="dialog"
         aria-labelledby="cookie-notice-title"
-        className="pointer-events-auto w-full max-w-sm animate-in fade-in slide-in-from-bottom-4 overflow-hidden rounded-2xl border border-[rgba(104, 16, 254,0.16)] bg-white text-zinc-900 shadow-[0_18px_50px_rgba(36,16,72,0.18)] duration-300"
+        className="pointer-events-auto w-full max-w-sm animate-in fade-in slide-in-from-bottom-4 overflow-hidden rounded-2xl border border-brand-500/15 bg-white text-zinc-900 shadow-[0_18px_50px_rgba(36,16,72,0.18)] duration-300"
       >
-        <div className="h-1 bg-[linear-gradient(90deg,#6810FE,#8E5BFF)]" />
+        <div className="h-1 bg-gradient-to-r from-brand-500 to-brand-400" />
         <div className="p-4">
           <div className="flex items-start gap-3">
-            <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#6810FE]/10 text-[#6810FE]" aria-hidden="true">
+            <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-500/10 text-brand-500" aria-hidden="true">
               <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
                 <circle cx="12" cy="12" r="8" />
                 <circle cx="9" cy="10" r="0.8" fill="currentColor" stroke="none" />
@@ -162,7 +162,7 @@ export function CookieNotice() {
               </svg>
             </span>
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#6810FE]">Novara Cleaning</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-500">Novara Cleaning</p>
               <h2 id="cookie-notice-title" className="text-base font-semibold leading-5">
                 Cookie choices
               </h2>
@@ -170,7 +170,7 @@ export function CookieNotice() {
           </div>
           <p className="mt-3 text-[13px] leading-5 text-zinc-600">{summary}</p>
           {gpc ? (
-            <p className="mt-3 rounded-xl bg-[#6810FE]/[0.06] px-3 py-2 text-xs leading-5 text-zinc-700">
+            <p className="mt-3 rounded-xl bg-brand-500/[0.06] px-3 py-2 text-xs leading-5 text-zinc-700">
               Your browser sent Global Privacy Control, so analytics and advertising stay off unless you accept them here.
             </p>
           ) : null}

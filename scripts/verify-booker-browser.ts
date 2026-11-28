@@ -179,10 +179,10 @@ async function main() {
   {
     const { page } = await open(browser, { width: 1280, height: 800 });
     await gotoBooker(page);
-    await page.getByRole("button", { name: "Open the assistant" }).click();
+    await page.getByRole("button", { name: "Open Ask Novara" }).click();
     await page.waitForTimeout(800);
     const box = await page.locator("#bk-first-name").boundingBox();
-    const panel = await page.locator("aside, div").filter({ has: page.getByRole("button", { name: "Close the assistant" }) }).last().boundingBox().catch(() => null);
+    const panel = await page.locator("aside, div").filter({ has: page.getByRole("button", { name: "Close Ask Novara" }) }).last().boundingBox().catch(() => null);
     const width = await page.evaluate(() => document.querySelector("main")!.getBoundingClientRect().width);
     check("laptop + assistant: form keeps ≥ 560px and first-name input is clickable", width >= 560 && !!box && box.width > 120, { width, input: box?.width });
     await page.locator("#bk-first-name").click();

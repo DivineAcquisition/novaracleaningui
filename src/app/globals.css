@@ -893,6 +893,17 @@
   --tw-slate-800: 44 37 66;
   --tw-slate-900: 33 26 53;
   --tw-slate-950: 21 16 36;
+  --tw-zinc-50: var(--tw-slate-50);
+  --tw-zinc-100: var(--tw-slate-100);
+  --tw-zinc-200: var(--tw-slate-200);
+  --tw-zinc-300: var(--tw-slate-300);
+  --tw-zinc-400: var(--tw-slate-400);
+  --tw-zinc-500: var(--tw-slate-500);
+  --tw-zinc-600: var(--tw-slate-600);
+  --tw-zinc-700: var(--tw-slate-700);
+  --tw-zinc-800: var(--tw-slate-800);
+  --tw-zinc-900: var(--tw-slate-900);
+  --tw-zinc-950: var(--tw-slate-950);
 
   /* One brand hue: violet, indigo, purple and Novara's brand ramp all map to
      the Selestial violet scale. */
@@ -995,14 +1006,15 @@ html:not(.dark) .admin-theme [role="tab"][data-state="active"]:not([data-variant
 }
 
 /* Fields: white, Selestial field border, violet focus ring. */
-html:not(.dark) .admin-theme :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), textarea, select, button[role="combobox"]) {
+/* [data-bare] fields sit inside their own styled box (the assistant composer). */
+html:not(.dark) .admin-theme :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), textarea, select, button[role="combobox"]):not([data-bare]) {
   background-color: #ffffff;
   border-color: #d5dae5;
 }
-html:not(.dark) .admin-theme :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), textarea, select, button[role="combobox"]):hover {
+html:not(.dark) .admin-theme :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), textarea, select, button[role="combobox"]):not([data-bare]):hover {
   border-color: #b9c0cf;
 }
-html:not(.dark) .admin-theme :is(input, textarea, select, button[role="combobox"]):focus-visible {
+html:not(.dark) .admin-theme :is(input, textarea, select, button[role="combobox"]):not([data-bare]):focus-visible {
   border-color: rgba(104, 56, 239, 0.55);
   box-shadow: 0 0 0 3px rgba(104, 56, 239, 0.14);
   outline: none;
@@ -1076,4 +1088,17 @@ html:not(.dark) .admin-theme .btn-coss.bg-secondary {
 /* Headings: Selestial titles are medium weight, not bold. */
 :root:not(.dark):has([data-admin-text]) :is(h1, h2, h3, h4, .font-heading, .font-jakarta):is(.font-bold, .font-extrabold, .font-semibold) {
   font-weight: 600;
+}
+
+/* While Ask Novara is open in the admin, the cookie notice moves left of the
+   panel so it never covers the composer (panel: 360px, 420px from 2xl). */
+@media (min-width: 1024px) {
+  :root:has([data-admin-text] aside[aria-label="Ask Novara"]) [data-cookie-notice] {
+    padding-right: calc(360px + 1.25rem);
+  }
+}
+@media (min-width: 1536px) {
+  :root:has([data-admin-text] aside[aria-label="Ask Novara"]) [data-cookie-notice] {
+    padding-right: calc(420px + 1.25rem);
+  }
 }

@@ -108,7 +108,7 @@ export default function AssistantConsole() {
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <header>
-        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary">Ops Assistant</p>
+        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary">Ask Novara</p>
         <AdminPageTitle id="assistant" />
         <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted-foreground">
           Policy articles, the review queue (nothing changes until you act), and Assistant Health.
