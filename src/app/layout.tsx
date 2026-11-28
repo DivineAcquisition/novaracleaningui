@@ -1,27 +1,9 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, JetBrains_Mono, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import { UTMTracker } from "@/components/UTMTracker";
 import { INBOUND_PHONE } from "@/config/brand-config";
-
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-  weight: ["300", "400", "500", "600", "700", "800"],
-});
-
-const jakarta = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  variable: "--font-jakarta",
-  weight: ["500", "600", "700", "800"],
-});
-
-const jetbrains = JetBrains_Mono({
-  subsets: ["latin"],
-  variable: "--font-mono",
-  weight: ["400", "500", "600"],
-});
+import { geistMono, interDisplay } from "@/lib/fonts";
 
 export const metadata: Metadata = {
   title: "Novara Cleaning | Professional Home Cleaning in Maryland & DMV",
@@ -82,7 +64,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning className={`${interDisplay.variable} ${geistMono.variable}`}>
       <head>
         <link rel="canonical" href="https://novaracleaning.com" />
         <script
@@ -113,7 +95,7 @@ export default function RootLayout({
         />
       </head>
       <body
-        className={`${inter.variable} ${jakarta.variable} ${jetbrains.variable} font-sans antialiased`}
+        className="font-sans antialiased"
       >
         {/* Advertising tags load from TrackerGate only after consent.
             UTM capture is first-party and does not call an ad network. */}

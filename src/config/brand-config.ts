@@ -111,8 +111,9 @@ export const EFFECTS = {
 
 export const TYPOGRAPHY = {
   fontFamily: {
-    primary: "'Inter', system-ui, sans-serif",
-    display: "'Plus Jakarta Sans', 'Inter', sans-serif",
+    // Inter Display (local, src/lib/fonts.ts) is the only face on the site.
+    primary: "var(--font-inter), 'Inter', system-ui, sans-serif",
+    display: "var(--font-inter), 'Inter', system-ui, sans-serif",
   },
   borderRadius: "0.75rem",
 } as const;

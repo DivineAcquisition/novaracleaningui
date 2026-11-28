@@ -36,7 +36,6 @@ import { cn } from "@/lib/utils";
 import { useAdminRole } from "@/hooks/use-admin-role";
 import { OpsAssistantProvider, useOpsAssistant } from "@/components/ops-assistant/OpsAssistantProvider";
 import { OpsAssistantPanel, OpsAssistantToggle } from "@/components/ops-assistant/OpsAssistantPanel";
-import { AdminTypography } from "@/components/admin/AdminTypography";
 import {
   PRIMARY_ACTION,
   allItemsForRole,
@@ -158,7 +157,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
     <OpsAssistantProvider surface="workspace">
     <div data-admin-text className="admin-theme relative min-h-screen flex w-full bg-background text-foreground font-sans antialiased">
-      <AdminTypography />
       {/* ─── Desktop sidebar ─────────────────────────────────────────── */}
       <aside className="sticky top-0 z-10 hidden h-screen lg:flex w-64 flex-col border-r border-[color:var(--hairline)] bg-card shrink-0">
         <SidebarBrand />

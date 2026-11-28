@@ -20,13 +20,12 @@ export default {
     },
     extend: {
       fontFamily: {
-        // --font-ui / --font-ui-mono exist only while the admin shell is
-        // mounted (AdminTypography). Everywhere else these fall back to the
-        // public Inter and JetBrains Mono, unchanged.
-        sans: ['var(--font-ui, var(--font-inter))', 'Inter', 'system-ui', 'sans-serif'],
-        jakarta: ['var(--font-ui, var(--font-inter))', 'Inter', 'system-ui', 'sans-serif'],
-        heading: ['var(--font-ui, var(--font-inter))', 'Inter', 'system-ui', 'sans-serif'],
-        mono: ['var(--font-ui-mono, var(--font-mono))', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        // One face site-wide: Inter Display (src/lib/fonts.ts) is registered
+        // as --font-inter, Geist Mono as --font-mono.
+        sans: ['var(--font-inter)', 'Inter', 'system-ui', 'sans-serif'],
+        jakarta: ['var(--font-inter)', 'Inter', 'system-ui', 'sans-serif'],
+        heading: ['var(--font-inter)', 'Inter', 'system-ui', 'sans-serif'],
+        mono: ['var(--font-mono)', 'ui-monospace', 'SFMono-Regular', 'monospace'],
       },
       // Tailwind 3 compiles weights to static numbers, unlike Selestial's
       // Tailwind 4 --font-weight-* theme variables. Routing them through

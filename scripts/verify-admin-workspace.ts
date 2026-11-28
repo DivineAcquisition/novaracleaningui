@@ -96,7 +96,7 @@ async function main() {
     await page.waitForLoadState("networkidle").catch(() => {});
     await page.evaluate(() => document.fonts.ready);
     const body = await typography(page, "body");
-    check("admin body uses the local admin Inter", /adminInter/i.test(body.family), body.family);
+    check("admin body uses the local Inter Display", /interDisplay/i.test(body.family), body.family);
     check("admin body weight 450", body.weight === "450", body.weight);
     check("admin opsz locked to 32, auto optical sizing off", body.opsz.includes("32") && body.optical === "none", body);
     const h1 = await typography(page, "header h1");
@@ -104,7 +104,7 @@ async function main() {
     const fonts = await page.evaluate(() =>
       Array.from(document.fonts).map((f) => ({ family: f.family, style: f.style, weight: f.weight, status: f.status })),
     );
-    const loaded = fonts.filter((f) => /adminInter/i.test(f.family) && f.status === "loaded");
+    const loaded = fonts.filter((f) => /interDisplay/i.test(f.family) && f.status === "loaded");
     check("admin Inter upright file loaded", loaded.some((f) => f.style === "normal"), loaded);
     // Which files back the admin @font-face rules, and were they fetched?
     const faceSrcs = await page.evaluate(() => {
@@ -113,7 +113,7 @@ async function main() {
         let rules: CSSRuleList;
         try { rules = sheet.cssRules; } catch { continue; }
         for (const r of Array.from(rules)) {
-          if (r instanceof CSSFontFaceRule && /adminInter/.test(r.style.getPropertyValue("font-family"))) {
+          if (r instanceof CSSFontFaceRule && /interDisplay/.test(r.style.getPropertyValue("font-family"))) {
             out.push({ style: r.style.getPropertyValue("font-style"), src: r.style.getPropertyValue("src") });
           }
         }
@@ -133,7 +133,7 @@ async function main() {
       document.querySelector("main")!.appendChild(em);
       await document.fonts.ready;
       await new Promise((r) => setTimeout(r, 300));
-      const faces = Array.from(document.fonts).filter((f) => /adminInter/i.test(f.family) && f.style === "italic");
+      const faces = Array.from(document.fonts).filter((f) => /interDisplay/i.test(f.family) && f.style === "italic");
       return { style: getComputedStyle(em).fontStyle, italicStatus: faces.map((f) => f.status) };
     });
     check("italic uses the Inter italic face", italic.style === "italic" && italic.italicStatus.includes("loaded"), italic);
@@ -145,7 +145,7 @@ async function main() {
       const cs = getComputedStyle(el.querySelector("input") || el);
       return { insideShell: !!el.closest("[data-admin-text]"), family: cs.fontFamily.split(",")[0], weight: cs.fontWeight };
     });
-    check("command dialog is portaled outside the shell and inherits admin font", !portaled.insideShell && /adminInter/i.test(portaled.family), portaled);
+    check("command dialog is portaled outside the shell and inherits admin font", !portaled.insideShell && /interDisplay/i.test(portaled.family), portaled);
     await page.keyboard.type("internal booking");
     const hit = await page.locator("[cmdk-item]").first().innerText();
     check("command search finds former label 'Internal Booking' → New booking", /New booking/.test(hit), hit);
@@ -181,7 +181,7 @@ async function main() {
     await page.waitForLoadState("networkidle").catch(() => {});
     await page.waitForTimeout(1500);
     check("?view=needs_staffing selects that view", (await tabs.locator("[aria-selected=true]").innerText()).startsWith("Needs staffing"));
-    const labels = (await tabs.locator("[role=tab]").allInnerTexts()).map((t) => t.replace(/\s*\d+$/, "").trim());
+    const labels = (await tabs.locator("[role=tab]").allInnerTexts()).map((t) => t.replace(/\s*\d+\s*$/, "").trim());
     check("views: All · Today · Awaiting deposit · Needs staffing · Cleaner done · review", labels.join("|") === "All|Today|Awaiting deposit|Needs staffing|Cleaner done · review", labels);
     await tabs.getByRole("tab", { name: /Awaiting deposit/ }).click();
     await page.waitForURL(/view=awaiting_deposit/, { timeout: 10_000 }).catch(() => {});
@@ -207,6 +207,53 @@ async function main() {
     await page.screenshot({ path: `${OUT}/bookings-views.png` });
   }
 
+  // ── Tab rows never overlap or clip (cleaner panel, QC) ──
+  for (const width of [1440, 390]) {
+    const { page } = await open(browser, { width, height: 900 });
+    const overlap = async (selector: string) =>
+      page.$$eval(selector, (els) => {
+        const boxes = els.map((e) => e.getBoundingClientRect());
+        let overlaps = 0;
+        for (let i = 0; i < boxes.length; i++)
+          for (let j = i + 1; j < boxes.length; j++) {
+            const a = boxes[i], b = boxes[j];
+            if (a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1) overlaps++;
+          }
+        const clipped = els.filter((e) => e.scrollWidth > e.clientWidth + 1).map((e) => e.textContent);
+        return { count: els.length, overlaps, clipped };
+      });
+    await page.goto(`${BASE}/admin/cleaners`, { waitUntil: "domcontentloaded" });
+    await page.locator("[role=tablist][aria-label='Cleaner sections']").waitFor({ timeout: 60_000 });
+    await page.waitForLoadState("networkidle").catch(() => {});
+    await page.waitForTimeout(1500);
+    const sections = await overlap("[role=tablist][aria-label='Cleaner sections'] [role=tab]");
+    check(`${width}px: cleaner section tabs don't overlap or clip`, sections.count === 5 && sections.overlaps === 0 && sections.clipped.length === 0, sections);
+    const row = page.locator("main table tbody tr, main [data-cleaner-row], main li button, main .divide-y > button").first();
+    if (await row.count()) {
+      await row.click();
+      const tl = page.locator("[role=tablist][aria-label='Cleaner details']");
+      if (await tl.waitFor({ timeout: 15_000 }).then(() => true).catch(() => false)) {
+        await page.waitForTimeout(500);
+        const r = await overlap("[role=tablist][aria-label='Cleaner details'] [role=tab]");
+        check(`${width}px: cleaner panel's 6 tabs don't overlap or clip`, r.count === 6 && r.overlaps === 0 && r.clipped.length === 0, r);
+        await page.getByRole("tab", { name: "Accountability" }).click();
+        check(`${width}px: cleaner panel tab switches`, (await page.getByRole("tab", { name: "Accountability" }).getAttribute("data-state")) === "active");
+        await page.screenshot({ path: `${OUT}/cleaner-panel-tabs-${width}.png` });
+      } else {
+        check(`${width}px: cleaner panel opened from the list`, false);
+      }
+    }
+    await page.goto(`${BASE}/admin/qc`, { waitUntil: "domcontentloaded" });
+    await page.locator("[role=tablist][aria-label='Quality control sections']").waitFor({ timeout: 60_000 });
+    await page.waitForTimeout(800);
+    const qc = await overlap("[role=tablist][aria-label='Quality control sections'] [role=tab]");
+    check(`${width}px: QC tabs don't overlap or clip`, qc.count === 5 && qc.overlaps === 0 && qc.clipped.length === 0, qc);
+    await page.keyboard.press("Tab");
+    await page.locator("[role=tablist][aria-label='Quality control sections'] [role=tab][aria-selected=true]").focus();
+    await page.keyboard.press("ArrowRight");
+    check(`${width}px: arrow keys move between QC tabs`, (await page.locator("[role=tablist][aria-label='Quality control sections'] [aria-selected=true]").innerText()).includes("Documentation"));
+  }
+
   // ── Radix Select portal ──
   {
     const { page } = await open(browser);
@@ -223,7 +270,7 @@ async function main() {
         const cs = getComputedStyle(opt);
         return { insideShell: !!el.closest("[data-admin-text]"), family: cs.fontFamily.split(",")[0], weight: cs.fontWeight };
       });
-      check("Radix Select listbox (portaled) inherits admin font", !t.insideShell && /adminInter/i.test(t.family), t);
+      check("Radix Select listbox (portaled) inherits admin font", !t.insideShell && /interDisplay/i.test(t.family), t);
       await page.screenshot({ path: `${OUT}/admin-select-portal.png` });
     } else {
       check("Radix Select trigger present on /admin/bookings", false);
@@ -322,15 +369,19 @@ async function main() {
   }
 
   // ── Public pages: no admin fonts, unchanged public Inter ──
-  for (const path of ["/", "/book"]) {
+  for (const path of ["/", "/book/sqft", "/book/zip", "/membership", "/home", "/portfolio", "/hiring", "/cleaner/auth"]) {
     const { page, fontRequests } = await open(browser, { signedIn: false });
     await page.goto(`${BASE}${path}`, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle").catch(() => {});
     const body = await typography(page, "body");
     const pre = await preloads(page);
-    check(`${path}: body font is public Inter`, /__Inter_/i.test(body.family) && !/adminInter/i.test(body.family), body.family);
-    check(`${path}: body weight 400`, body.weight === "400", body.weight);
-    check(`${path}: no admin font preloaded or fetched`, adminFontFiles.length > 0 && !pre.concat(fontRequests).some((u) => adminFontFiles.includes(u.split("/").pop()!)), { pre: pre.map((u) => u.split("/").pop()), fetched: fontRequests.map((u) => u.split("/").pop()) });
+    check(`${path}: body uses the same Inter Display face as admin`, /interDisplay/i.test(body.family), body.family);
+    check(`${path}: Display cut (opsz 32, auto optical sizing off)`, body.opsz.includes("32") && body.optical === "none", body);
+    check(`${path}: public weight scale unchanged (400)`, body.weight === "400", body.weight);
+    check(`${path}: no Google Fonts requests`, !fontRequests.some((u) => /gstatic|googleapis/.test(u)), fontRequests.map((u) => u.split("/").pop()));
+    check(`${path}: Inter Display file is what loads`, adminFontFiles.length > 0 && fontRequests.some((u) => adminFontFiles.includes(u.split("/").pop()!)), { fetched: fontRequests.map((u) => u.split("/").pop()) });
+    const heading = await page.$eval("h1", (el) => getComputedStyle(el).fontFamily.split(",")[0]).catch(() => "none");
+    check(`${path}: headings use the same face`, heading === "none" || /interDisplay/i.test(heading), heading);
     await page.screenshot({ path: `${OUT}/public${path === "/" ? "-home" : path.replace(/\//g, "-")}.png` });
   }
 
